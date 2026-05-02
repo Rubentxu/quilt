@@ -1,0 +1,398 @@
+{
+  "modules": [
+    {
+      "id": "graph-parser",
+      "name": "graph-parser",
+      "path": "deps/graph-parser/",
+      "type": "dependency",
+      "language": "ClojureScript",
+      "purpose": "Parser que convierte archivos de un grafo Logseq a la DB Datascript. Maneja sintaxis Logseq (bullets, properties, timestamps, page refs, block refs)",
+      "confidence": "confirmed",
+      "interfaces": [
+        {
+          "name": "extract",
+          "file": "extract.cljc",
+          "signature": "(extract file-path content options) => {:pages [], :blocks [], :ast []}",
+          "description": "Función principal. Recibe ruta de archivo y contenido, retorna pages, blocks y AST del archivo parseado"
+        },
+        {
+          "name": "parse-json",
+          "file": "mldoc.cljc",
+          "signature": "(parse-json content config) => js/Object",
+          "description": "Envuelve el parser mldoc para convertir contenido a AST"
+        },
+        {
+          "name": "extract-blocks",
+          "file": "block.cljs",
+          "signature": "(extract-blocks ast content format options) => [blocks]",
+          "description": "Extrae headings del AST como blocks con jerarquía y referencias"
+        },
+        {
+          "name": "page-name->map",
+          "file": "block.cljs",
+          "signature": "(page-name->map original-page-name db with-timestamp? date-formatter & opts) => page-map",
+          "description": "Crea estructura de mapa para una página dado su nombre original"
+        },
+        {
+          "name": "extract-properties",
+          "file": "block.cljs",
+          "signature": "(extract-properties properties user-config) => property-map",
+          "description": "Extrae y parsea propiedades de un block"
+        }
+      ],
+      "exports": [
+        "logseq.graph-parser.extract/extract",
+        "logseq.graph-parser.extract/with-ref-pages",
+        "logseq.graph-parser.block/extract-blocks",
+        "logseq.graph-parser.block/extract-properties",
+        "logseq.graph-parser.block/page-name->map",
+        "logseq.graph-parser.mldoc/->edn",
+        "logseq.graph-parser.mldoc/inline->edn"
+      ],
+      "dataStructures": [
+        {
+          "name": "BlockMap",
+          "schema": {
+            ":block/uuid": "uuid?",
+            ":block/title": "string?",
+            ":block/level": "int?",
+            ":block/parent": "[:block/uuid uuid]",
+            ":block/page": "[:block/name string]",
+            ":block/order": "string?",
+            ":block/refs": "[ref-map*]",
+            ":block/tags": "[tag-map*]",
+            ":block/properties": "map?",
+            ":block/properties-order": "[keyword*]",
+            ":block/properties-text-values": "map?",
+            ":block/journal-day": "int?",
+            ":block.pre-block?": "boolean?",
+            ":block/type": "string?"
+          },
+          "file": "block.cljs"
+        },
+        {
+          "name": "PageMap",
+          "schema": {
+            ":block/name": "string?",
+            ":block/title": "string?",
+            ":block/uuid": "uuid?",
+            ":block/namespace": "{:block/name string}",
+            ":block/file": "{:file/path string}",
+            ":block/properties": "map?",
+            ":block/alias": "[{:block/name :block/title}]",
+            ":block/tags": "[tag-map*]",
+            ":block/journal-day": "int?",
+            ":block/type": "string?"
+          },
+          "file": "block.cljs"
+        },
+        {
+          "name": "MldocASTNode",
+          "schema": "[\"Type\" node-data position-meta]",
+          "positionMeta": "{:start_pos int, :end_pos int, :start_line int}",
+          "file": "mldoc.cljc"
+        },
+        {
+          "name": "PropertyMap",
+          "schema": {
+            ":properties": "map?",
+            ":properties-order": "vector?",
+            ":properties-text-values": "map?",
+            ":invalid-properties": "set?",
+            ":page-refs": "vector?",
+            ":block-refs": "vector?"
+          },
+          "file": "block.cljs"
+        }
+      ],
+      "keyDependencies": [
+        "mldoc (external)",
+        "datascript",
+        "logseq.db",
+        "logseq.common"
+      ],
+      "testFiles": [
+        "test/logseq/graph_parser/text_test.cljs",
+        "test/logseq/graph_parser/extract_test.cljs",
+        "test/logseq/graph_parser/mldoc_test.cljs",
+        "test/logseq/graph_parser/property_test.cljs",
+        "test/logseq/graph_parser/block_test.cljs",
+        "test/logseq/graph_parser/exporter_test.cljs"
+      ]
+    },
+    {
+      "id": "outliner",
+      "name": "outliner",
+      "path": "deps/outliner/",
+      "type": "dependency",
+      "language": "ClojureScript",
+      "purpose": "Sistema de estructura jerárquica (árbol de blocks). Operaciones de outliner: indent, outdent, move, insert, delete. Manejo de transacciones Datascript",
+      "confidence": "confirmed",
+      "interfaces": [
+        {
+          "name": "save-block!",
+          "file": "core.cljs",
+          "signature": "(save-block! db block opts) => {:tx-data [...]}",
+          "description": "Guarda un block en la DB. Maneja validación, tags, referencias y timestamps"
+        },
+        {
+          "name": "insert-blocks!",
+          "file": "core.cljs",
+          "signature": "(insert-blocks! db blocks target-block opts) => {:tx-data [...], :blocks [...]}",
+          "description": "Inserta blocks como hijos o siblings de target-block"
+        },
+        {
+          "name": "delete-blocks!",
+          "file": "core.cljs",
+          "signature": "(delete-blocks! db blocks opts) => {:tx-data [...]}",
+          "description": "Elimina blocks del árbol. Maneja blocks huérfanos y referencias"
+        },
+        {
+          "name": "move-blocks!",
+          "file": "core.cljs",
+          "signature": "(move-blocks! conn blocks target-block opts) => nil",
+          "description": "Mueve blocks a una nueva ubicación como siblings o hijos"
+        },
+        {
+          "name": "indent-outdent-blocks!",
+          "file": "core.cljs",
+          "signature": "(indent-outdent-blocks! conn blocks indent? opts) => ... ",
+          "description": "Indenta o outdenta blocks. Cambia la jerarquía del árbol"
+        },
+        {
+          "name": "apply-ops!",
+          "file": "op.cljs",
+          "signature": "(apply-ops! conn ops opts) => result",
+          "description": "Dispatcher principal para todas las operaciones del outliner"
+        },
+        {
+          "name": "blocks->vec-tree",
+          "file": "tree.cljs",
+          "signature": "(blocks->vec-tree db blocks root-id & opts) => tree-vec",
+          "description": "Convierte blocks a estructura de árbol con :block/children"
+        },
+        {
+          "name": "batch-set-property!",
+          "file": "property.cljs",
+          "signature": "(batch-set-property! conn block-ids property-id v options) => ... ",
+          "description": "Establece propiedad en múltiples blocks. Maneja refs automáticamente"
+        },
+        {
+          "name": "upsert-property!",
+          "file": "property.cljs",
+          "signature": "(upsert-property! conn property-id schema opts) => property-entity",
+          "description": "Crea o actualiza una propiedad con su schema"
+        }
+      ],
+      "exports": [
+        "logseq.outliner.core/save-block!",
+        "logseq.outliner.core/insert-blocks!",
+        "logseq.outliner.core/delete-blocks!",
+        "logseq.outliner.core/move-blocks!",
+        "logseq.outliner.core/indent-outdent-blocks!",
+        "logseq.outliner.op/apply-ops!",
+        "logseq.outliner.tree/blocks->vec-tree",
+        "logseq.outliner.property/batch-set-property!",
+        "logseq.outliner.property/upsert-property!",
+        "logseq.outliner.page/create!",
+        "logseq.outliner.page/delete!"
+      ],
+      "protocols": [
+        {
+          "name": "INode",
+          "file": "tree.cljs",
+          "methods": [
+            "(-save [this *txs-state db opts])",
+            "(-del [this *txs-state db])"
+          ],
+          "description": "Protocolo para operaciones atómicas de tree en entities Datascript. Extendido por Entity."
+        }
+      ],
+      "dataStructures": [
+        {
+          "name": "TreeVec",
+          "schema": "[{:block/uuid uuid, :block/level int, :block/children [TreeVec*]}]",
+          "file": "tree.cljs"
+        },
+        {
+          "name": "OutlinerTxState",
+          "schema": "atom? containing vector of transaction data",
+          "file": "datascript.cljs"
+        },
+        {
+          "name": "BlockOperation",
+          "schema": {
+            ":outliner-op": "keyword",
+            ":sibling?": "boolean?",
+            ":block/order": "string?"
+          },
+          "file": "core.cljs"
+        }
+      ],
+      "keyDependencies": [
+        "datascript",
+        "logseq.db",
+        "logseq.db.frontend",
+        "malli"
+      ],
+      "testFiles": [
+        "test/logseq/outliner/core_test.cljs",
+        "test/logseq/outliner/op_test.cljs",
+        "test/logseq/outliner/op_construct_test.cljs",
+        "test/logseq/outliner/page_test.cljs",
+        "test/logseq/outliner/pipeline_test.cljs",
+        "test/logseq/outliner/property_test.cljs",
+        "test/logseq/outliner/recycle_test.cljs",
+        "test/logseq/outliner/validate_test.cljs"
+      ]
+    },
+    {
+      "id": "electron",
+      "name": "electron",
+      "path": "src/electron/",
+      "type": "application",
+      "language": "ClojureScript (Electron Main Process)",
+      "purpose": "Aplicación de escritorio Electron. Maneja window management, IPC con renderer, file system access, DB management, plugin system, auto-updates",
+      "confidence": "confirmed",
+      "interfaces": [
+        {
+          "name": "main",
+          "file": "core.cljs",
+          "signature": "(main [])",
+          "description": "Punto de entrada principal. Inicializa la aplicación Electron"
+        },
+        {
+          "name": "set-ipc-handler!",
+          "file": "handler.cljs",
+          "signature": "(set-ipc-handler! window) => cleanup-fn",
+          "description": "Establece el handler principal de IPC. Registra todos los métodos de manejo"
+        },
+        {
+          "name": "open-new-window!",
+          "file": "handler.cljs",
+          "signature": "(open-new-window! repo) => BrowserWindow",
+          "description": "Crea una nueva ventana principal"
+        },
+        {
+          "name": "get-db",
+          "file": "db.cljs",
+          "signature": "(get-db db-name) => bytes?",
+          "description": "Obtiene la DB SQLite para un graph"
+        },
+        {
+          "name": "backup-db!",
+          "file": "db.cljs",
+          "signature": "(backup-db! db-name opts)",
+          "description": "Realiza backup de la DB"
+        },
+        {
+          "name": "handle",
+          "file": "handler.cljs",
+          "signature": "(handle window message) => result",
+          "description": "Multi-method que dispatch sobre el tipo de mensaje IPC"
+        }
+      ],
+      "exports": [
+        "electron.core/main",
+        "electron.core/start",
+        "electron.core/stop",
+        "electron.handler/set-ipc-handler!",
+        "electron.handler/open-new-window!",
+        "electron.db/get-db",
+        "electron.db/backup-db!"
+      ],
+      "ipcHandlers": [
+        {
+          "keyword": ":mkdir",
+          "description": "Crear directorio"
+        },
+        {
+          "keyword": ":writeFile",
+          "description": "Escribir archivo con backup automático"
+        },
+        {
+          "keyword": ":readFile",
+          "description": "Leer archivo"
+        },
+        {
+          "keyword": ":db-worker-runtime",
+          "description": "Obtener runtime de DB para window"
+        },
+        {
+          "keyword": ":openDir",
+          "description": "Abrir diálogo de selección de directorio"
+        },
+        {
+          "keyword": ":setCurrentGraph",
+          "description": "Cambiar graph activo"
+        },
+        {
+          "keyword": ":userAppCfgs",
+          "description": "Gestionar configuración de usuario"
+        },
+        {
+          "keyword": ":plugin/*",
+          "description": "Handlers de plugins (install, uninstall, update)"
+        }
+      ],
+      "dataStructures": [
+        {
+          "name": "AppState",
+          "schema": {
+            ":window/graph": "map<window-id, graph-path>",
+            ":config": "map",
+            ":window/once-graph-ready": "fn?"
+          },
+          "file": "state.cljs"
+        },
+        {
+          "name": "AutoBackup",
+          "schema": {
+            ":window->repo": "map<window-id, repo>",
+            ":interval-id": "number?"
+          },
+          "file": "db.cljs"
+        }
+      ],
+      "keyDependencies": [
+        "electron (npm)",
+        "fs-extra",
+        "promesa",
+        "electron-updater",
+        "electron-window-state"
+      ],
+      "testFiles": [
+        "No test files found in src/electron"
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "from": "electron",
+      "to": "graph-parser",
+      "type": "uses",
+      "description": "Electron handler usa graph-parser para parsear archivos cuando se leen del filesystem"
+    },
+    {
+      "from": "graph-parser",
+      "to": "outliner",
+      "type": "uses-indirectly",
+      "description": "El output del graph-parser (blocks, pages) se carga en Datascript DB que luego es manipulada por outliner"
+    },
+    {
+      "from": "electron",
+      "to": "outliner",
+      "type": "uses",
+      "description": "Electron db-worker interactúa con la DB que outliner usa para sus transacciones"
+    }
+  ],
+  "metadata": {
+    "generated": "2026-05-02",
+    "generator": "reversa-archaeologist",
+    "confidenceScale": {
+      "confirmed": "Code analysis performed, patterns confirmed",
+      "inferred": "Patterns identified from context and naming",
+      "gap": "Missing information, requires further investigation"
+    }
+  }
+}

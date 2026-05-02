@@ -1,0 +1,2068 @@
+{
+  "generated_at": "2026-05-02T12:00:00Z",
+  "modules": [
+    {
+      "name": "frontend/components",
+      "path": "src/main/frontend/components",
+      "purpose": "Componentes de interfaz de usuario usando Rum (fork de React). Incluye editor, bloques, páginas, journals, sidebars, settings, y más. Sistema basado en DataScript para datos y atoms para estado UI.",
+      "primary_files": [
+        "src/main/frontend/components/container.cljs",
+        "src/main/frontend/components/editor.cljs",
+        "src/main/frontend/components/block.cljs",
+        "src/main/frontend/components/page.cljs",
+        "src/main/frontend/components/journal.cljs",
+        "src/main/frontend/components/query.cljs",
+        "src/main/frontend/components/query/result.cljs",
+        "src/main/frontend/components/query/builder.cljs",
+        "src/main/frontend/components/query/view.cljs",
+        "src/main/frontend/components/left_sidebar.cljs",
+        "src/main/frontend/components/right_sidebar.cljs",
+        "src/main/frontend/components/header.cljs",
+        "src/main/frontend/components/settings.cljs",
+        "src/main/frontend/components/property.cljs",
+        "src/main/frontend/components/property/dialog.cljs",
+        "src/main/frontend/components/property/config.cljs",
+        "src/main/frontend/components/property/value.cljs",
+        "src/main/frontend/components/all_pages.cljs",
+        "src/main/frontend/components/reference.cljs",
+        "src/main/frontend/components/recycle.cljs",
+        "src/main/frontend/components/content.cljs",
+        "src/main/frontend/components/svg.cljs",
+        "src/main/frontend/components/icon.cljs",
+        "src/main/frontend/components/theme.cljs",
+        "src/main/frontend/components/datepicker.cljs"
+      ],
+      "functions": [
+        {
+          "name": "filter-commands",
+          "file": "src/main/frontend/components/editor.cljs",
+          "params": ["page? commands"],
+          "returns": "filtered-commands",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "node-render",
+          "file": "src/main/frontend/components/editor.cljs",
+          "params": ["block q {:keys [db-tag?]}"],
+          "returns": "hiccup",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "commands",
+          "file": "src/main/frontend/components/editor.cljs",
+          "params": ["id format"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "search-pages",
+          "file": "src/main/frontend/components/editor.cljs",
+          "params": ["q db-tag? set-matched-pages!"],
+          "returns": "p/do!",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "block-search",
+          "file": "src/main/frontend/components/editor.cljs",
+          "params": ["id format"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "page-search",
+          "file": "src/main/frontend/components/editor.cljs",
+          "params": ["id format"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "box (editor)",
+          "file": "src/main/frontend/components/editor.cljs",
+          "params": ["{:keys [format block parent-block]} id config"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-page-name",
+          "file": "src/main/frontend/components/page.cljs",
+          "params": ["state"],
+          "returns": "string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-page-entity",
+          "file": "src/main/frontend/components/page.cljs",
+          "params": ["page-name"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "page-cp",
+          "file": "src/main/frontend/components/page.cljs",
+          "params": ["option"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "page-blocks-cp",
+          "file": "src/main/frontend/components/page.cljs",
+          "params": ["block* config"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "db-page-title",
+          "file": "src/main/frontend/components/page.cljs",
+          "params": ["page {:keys [sidebar? journals?]}"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "global-graph",
+          "file": "src/main/frontend/components/page.cljs",
+          "params": ["settings forcesettings theme"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "custom-query",
+          "file": "src/main/frontend/components/query.cljs",
+          "params": ["config q"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "custom-query-inner",
+          "file": "src/main/frontend/components/query.cljs",
+          "params": ["config q opts"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "query-title",
+          "file": "src/main/frontend/components/query.cljs",
+          "params": ["config q {:keys [result-count]}"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "page-cp (block)",
+          "file": "src/main/frontend/components/block.cljs",
+          "params": ["config page"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "page-reference",
+          "file": "src/main/frontend/components/block.cljs",
+          "params": ["config uuid-or-title label"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "page-inner",
+          "file": "src/main/frontend/components/block.cljs",
+          "params": ["config page-entity children label"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "asset-container",
+          "file": "src/main/frontend/components/block.cljs",
+          "params": ["asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text]}"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "resizable-image",
+          "file": "src/main/frontend/components/block.cljs",
+          "params": ["config title src metadata full-text local?"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "timestamp",
+          "file": "src/main/frontend/components/block.cljs",
+          "params": ["{:keys [active date time repetition wday]} kind"],
+          "returns": "hiccup",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "open-pdf-file",
+          "file": "src/main/frontend/components/block.cljs",
+          "params": ["e block href"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "root-container",
+          "file": "src/main/frontend/components/container.cljs",
+          "params": ["route-match main-content"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "main",
+          "file": "src/main/frontend/components/container.cljs",
+          "params": ["{:keys [route-match margin-less-pages? route-name db-restoring? main-content]}"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "custom-context-menu",
+          "file": "src/main/frontend/components/container.cljs",
+          "params": [],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "app-context-menu-observer",
+          "file": "src/main/frontend/components/container.cljs",
+          "params": [],
+          "returns": "nil",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar (left)",
+          "file": "src/main/frontend/components/left_sidebar.cljs",
+          "params": ["{:keys [left-sidebar-open? route-match]}"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar-container",
+          "file": "src/main/frontend/components/left_sidebar.cljs",
+          "params": ["route-match close-modal-fn left-sidebar-open? srs-open? *closing? close-signal touching-x-offset"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar-navigations",
+          "file": "src/main/frontend/components/left_sidebar.cljs",
+          "params": ["{:keys [default-home route-match route-name srs-open?]}"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar-favorites",
+          "file": "src/main/frontend/components/left_sidebar.cljs",
+          "params": [],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar-recent-pages",
+          "file": "src/main/frontend/components/left_sidebar.cljs",
+          "params": [],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar (right)",
+          "file": "src/main/frontend/components/right_sidebar.cljs",
+          "params": [],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar-inner",
+          "file": "src/main/frontend/components/right_sidebar.cljs",
+          "params": ["repo t blocks"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar-item",
+          "file": "src/main/frontend/components/right_sidebar.cljs",
+          "params": ["repo idx db-id block-type block-count"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sidebar-resizer",
+          "file": "src/main/frontend/components/right_sidebar.cljs",
+          "params": ["sidebar-open? sidebar-id handler-position"],
+          "returns": "rum-element",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "BlockState",
+          "fields": [
+            {"name": "block/uuid", "type": "uuid", "required": true},
+            {"name": "block/title", "type": "string", "required": false},
+            {"name": "block/page", "type": "ref", "required": false},
+            {"name": "block/format", "type": "keyword", "required": false},
+            {"name": "block/parent", "type": "ref", "required": false},
+            {"name": "alias", "type": "map", "required": false},
+            {"name": "nlp-date?", "type": "boolean", "required": false},
+            {"name": "page?", "type": "boolean", "required": false},
+            {"name": "block/collapsed?", "type": "boolean", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EditorState",
+          "fields": [
+            {"name": "editor/action", "type": "atom", "required": false},
+            {"name": "editor/action-data", "type": "any", "required": false},
+            {"name": "editor/cursor-range", "type": "tuple", "required": false},
+            {"name": "editor/content", "type": "atom", "required": false},
+            {"name": "editor/block", "type": "atom", "required": false},
+            {"name": "editor/editing?", "type": "atom", "required": false},
+            {"name": "editor/in-composition?", "type": "boolean", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "PageState",
+          "fields": [
+            {"name": "db/id", "type": "int", "required": true},
+            {"name": "block/uuid", "type": "uuid", "required": true},
+            {"name": "block/name", "type": "string", "required": true},
+            {"name": "block/title", "type": "string", "required": false},
+            {"name": "block/tags", "type": "[ref]", "required": false},
+            {"name": "block/journal-day", "type": "int", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "QueryConfig",
+          "fields": [
+            {"name": "dsl-query?", "type": "boolean", "required": false},
+            {"name": "built-in-query?", "type": "boolean", "required": false},
+            {"name": "current-block", "type": "entity", "required": false},
+            {"name": "view", "type": "keyword|fn", "required": false},
+            {"name": "collapsed?", "type": "boolean", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SidebarItem",
+          "fields": [
+            {"name": "db-id", "type": "int|string", "required": true},
+            {"name": "block-type", "type": "keyword", "required": true},
+            {"name": "collapsed?", "type": "boolean", "required": false},
+            {"name": "label", "type": "string", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "AssetBlock",
+          "fields": [
+            {"name": "block/uuid", "type": "uuid", "required": true},
+            {"name": "block/title", "type": "string", "required": false},
+            {"name": "logseq.property.asset/type", "type": "string", "required": true},
+            {"name": "logseq.property.asset/width", "type": "int", "required": false},
+            {"name": "logseq.property.asset/height", "type": "int", "required": false},
+            {"name": "logseq.property.asset/align", "type": "keyword", "required": false},
+            {"name": "logseq.property.asset/external-url", "type": "string", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "DragState",
+          "fields": [
+            {"name": "*dragging?", "type": "atom", "required": true},
+            {"name": "*dragging-block", "type": "atom", "required": true},
+            {"name": "*dragging-over-block", "type": "atom", "required": true},
+            {"name": "*drag-to", "type": "atom", "required": true}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Bloques en journaling day no pueden ser editados directamente",
+          "location": "src/main/frontend/components/editor.cljs:702-704",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Drag & drop entre bloques requiere recalcular orden sibling",
+          "location": "src/main/frontend/components/block.cljs:95-103",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Preview de página se activa después de 1 segundo de hover",
+          "location": "src/main/frontend/components/block.cljs:814-816",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Assets remotos se descargan antes de mostrar",
+          "location": "src/main/frontend/components/block.cljs:1012-1025",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Query collapse state se persiste en DataScript",
+          "location": "src/main/frontend/components/query.cljs:167",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Left sidebar se cierra automaticamente en mobile breakpoint",
+          "location": "src/main/frontend/components/left_sidebar.cljs:420-423",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Right sidebar tiene ancho minimo 320px y maximo 70% viewport",
+          "location": "src/main/frontend/components/right_sidebar.cljs:352-354",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "frontend.db",
+        "frontend.handler.editor",
+        "frontend.handler.block",
+        "frontend.handler.page",
+        "frontend.handler.ui",
+        "frontend.state",
+        "rum.core",
+        "datascript.core",
+        "frontend.db-mixins",
+        "frontend.db.react",
+        "logseq.db",
+        "logseq.outliner.tree"
+      ],
+      "algorithms": [
+        "command filtering by page context",
+        "page/block search with debouncing",
+        "query result grouping by page",
+        "asset lazy loading with progress tracking",
+        "drag & drop with reorder calculation",
+        "sidebar item async building",
+        "graph visualization with force simulation"
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "frontend/db",
+      "path": "src/main/frontend/db",
+      "purpose": "Gestión de conexión DataScript, transacciones asíncronas, queries DSL/Datalog, reactive queries, y persistencia. Wrapper sobre logseq.db con interfaz React-friendly.",
+      "primary_files": [
+        "src/main/frontend/db/model.cljs",
+        "src/main/frontend/db/transact.cljs",
+        "src/main/frontend/db/query_dsl.cljs",
+        "src/main/frontend/db/query_react.cljs",
+        "src/main/frontend/db/query_custom.cljs",
+        "src/main/frontend/db/conn.cljs",
+        "src/main/frontend/db/conn_state.cljs",
+        "src/main/frontend/db/react.cljs",
+        "src/main/frontend/db/async.cljs",
+        "src/main/frontend/db/async/util.cljs",
+        "src/main/frontend/db/persist.cljs",
+        "src/main/frontend/db/restore.cljs",
+        "src/main/frontend/db/utils.cljs",
+        "src/main/frontend/db/debug.cljs"
+      ],
+      "functions": [
+        {
+          "name": "get-db",
+          "file": "src/main/frontend/db/conn.cljs",
+          "params": ["repo deref?"],
+          "returns": "DataScript-db",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "transact!",
+          "file": "src/main/frontend/db/conn.cljs",
+          "params": ["repo tx-data tx-meta"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "start!",
+          "file": "src/main/frontend/db/conn.cljs",
+          "params": ["repo opts"],
+          "returns": "conn",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "transact",
+          "file": "src/main/frontend/db/transact.cljs",
+          "params": ["worker-transact repo tx-data tx-meta"],
+          "returns": "promise",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "apply-outliner-ops",
+          "file": "src/main/frontend/db/transact.cljs",
+          "params": ["conn ops opts"],
+          "returns": "promise",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "query",
+          "file": "src/main/frontend/db/query_dsl.cljs",
+          "params": ["repo query-string opts"],
+          "returns": "results",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "parse",
+          "file": "src/main/frontend/db/query_dsl.cljs",
+          "params": ["s db opts"],
+          "returns": "{query rules sort-by blocks? sample}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "build-query",
+          "file": "src/main/frontend/db/query_dsl.cljs",
+          "params": ["e env level"],
+          "returns": "{query rules}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "pre-transform",
+          "file": "src/main/frontend/db/query_dsl.cljs",
+          "params": ["s"],
+          "returns": "string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "custom-query",
+          "file": "src/main/frontend/db/query_dsl.cljs",
+          "params": ["repo query-m query-opts"],
+          "returns": "results",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "react-query",
+          "file": "src/main/frontend/db/query_react.cljs",
+          "params": ["repo query-m query-opts"],
+          "returns": "[key result-atom]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "custom-query-result-transform",
+          "file": "src/main/frontend/db/query_react.cljs",
+          "params": ["query-result remove-blocks q"],
+          "returns": "transformed-result",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "q",
+          "file": "src/main/frontend/db/react.cljs",
+          "params": ["repo k query-opts query inputs*"],
+          "returns": "result-atom",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "refresh!",
+          "file": "src/main/frontend/db/react.cljs",
+          "params": ["repo-url affected-keys"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "refresh-affected-queries!",
+          "file": "src/main/frontend/db/react.cljs",
+          "params": ["repo-url affected-keys opts"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "run-custom-queries-when-idle!",
+          "file": "src/main/frontend/db/react.cljs",
+          "params": [],
+          "returns": "chan",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "entity",
+          "file": "src/main/frontend/db/utils.cljs",
+          "params": ["repo-or-db eid"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "pull",
+          "file": "src/main/frontend/db/utils.cljs",
+          "params": ["repo selector eid"],
+          "returns": "pulled-entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "pull-many",
+          "file": "src/main/frontend/db/utils.cljs",
+          "params": ["repo selector eids"],
+          "returns": "[entities]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "q",
+          "file": "src/main/frontend/db/utils.cljs",
+          "params": ["query inputs*"],
+          "returns": "query-result",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-by-uuid",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["id"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-page",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["page-id-name-or-uuid"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-journal-page",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["page-name"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-journal-page-by-day",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["journal-day"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-today-journal-page",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": [],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "page-exists?",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["page-name tags"],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "journal-page?",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["page-name"],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "today-journal-page?",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["page"],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "has-children?",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["block-id"],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-parent",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo block-id"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-parents",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo block-id opts"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-parents-v2",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo block-id"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-deep-last-open-child-id",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["db db-id"],
+          "returns": "db-id",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-next",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["db db-id opts"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-prev",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["db db-id"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-page-blocks-no-cache",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo page-id opts"],
+          "returns": "[blocks]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-page-blocks-count",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo page-id"],
+          "returns": "int",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-latest-journals",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo-url n"],
+          "returns": "[journals]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "sort-by-order-recursive",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["form"],
+          "returns": "sorted-form",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-page",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo block-uuid"],
+          "returns": "entity",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-immediate-children",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo block-uuid"],
+          "returns": "[blocks]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-block-and-children",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo block-uuid opts"],
+          "returns": "blocks",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-all-classes",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo opts"],
+          "returns": "[classes]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-all-properties",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["graph opts"],
+          "returns": "[properties]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-structured-children",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo eid"],
+          "returns": "[eids]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-class-objects",
+          "file": "src/main/frontend/db/model.cljs",
+          "params": ["repo class-id"],
+          "returns": "[entities]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-block",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph id-uuid-or-name opts"],
+          "returns": "promise<entity>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-blocks",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph ids opts"],
+          "returns": "promise<[blocks]>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-block-parents",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph id depth"],
+          "returns": "promise<entity>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-block-refs",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph eid"],
+          "returns": "promise<[refs]>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-block-refs-count",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph eid"],
+          "returns": "promise<int>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-date-scheduled-or-deadlines",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["journal-title"],
+          "returns": "promise<blocks>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-files",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph"],
+          "returns": "promise<[files]>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-tag-objects",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph class-id"],
+          "returns": "promise<[entities]>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<task-spent-time",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph block-id"],
+          "returns": "promise<[status-history time]>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "<get-asset-with-checksum",
+          "file": "src/main/frontend/db/async.cljs",
+          "params": ["graph checksum"],
+          "returns": "promise<entity>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-all-graphs",
+          "file": "src/main/frontend/db/persist.cljs",
+          "params": [],
+          "returns": "promise<[graphs]>",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "delete-graph!",
+          "file": "src/main/frontend/db/persist.cljs",
+          "params": ["graph"],
+          "returns": "promise",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "restore-graph!",
+          "file": "src/main/frontend/db/restore.cljs",
+          "params": ["repo opts"],
+          "returns": "promise",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "Block",
+          "fields": [
+            {"name": "db/id", "type": "int", "required": true},
+            {"name": "db/ident", "type": "keyword", "required": false},
+            {"name": "block/uuid", "type": "uuid", "required": true, "unique": "identity"},
+            {"name": "block/parent", "type": "ref", "required": false, "index": true},
+            {"name": "block/page", "type": "ref", "required": false, "index": true},
+            {"name": "block/order", "type": "int", "required": false, "index": true},
+            {"name": "block/collapsed?", "type": "boolean", "required": false},
+            {"name": "block/name", "type": "string", "required": false, "index": true},
+            {"name": "block/title", "type": "string", "required": false, "index": true},
+            {"name": "block/refs", "type": "[ref]", "required": false, "cardinality": "many"},
+            {"name": "block/tags", "type": "[ref]", "required": false, "cardinality": "many"},
+            {"name": "block/link", "type": "ref", "required": false, "index": true},
+            {"name": "block/alias", "type": "[ref]", "required": false, "cardinality": "many", "index": true},
+            {"name": "block/journal-day", "type": "int", "required": false, "index": true},
+            {"name": "block/tx-id", "type": "int", "required": false},
+            {"name": "block/created-at", "type": "long", "required": false, "index": true},
+            {"name": "block/updated-at", "type": "long", "required": false, "index": true},
+            {"name": "block/closed-value-property", "type": "[ref]", "required": false, "cardinality": "many"},
+            {"name": "block/properties", "type": "map", "required": false}
+          ],
+          "confidence": "confirmed",
+          "source": "deps/db/src/logseq/db/frontend/schema.cljs"
+        },
+        {
+          "name": "Page",
+          "fields": [
+            {"name": "db/id", "type": "int", "required": true},
+            {"name": "db/ident", "type": "keyword", "required": false},
+            {"name": "block/uuid", "type": "uuid", "required": true, "unique": "identity"},
+            {"name": "block/name", "type": "string", "required": true, "index": true},
+            {"name": "block/title", "type": "string", "required": false, "index": true},
+            {"name": "block/page", "type": "ref", "required": false},
+            {"name": "block/parent", "type": "ref", "required": false},
+            {"name": "block/alias", "type": "[ref]", "required": false, "cardinality": "many", "index": true},
+            {"name": "block/tags", "type": "[ref]", "required": false, "cardinality": "many"},
+            {"name": "block/journal-day", "type": "int", "required": false, "index": true},
+            {"name": "block/namespace", "type": "ref", "required": false}
+          ],
+          "confidence": "confirmed",
+          "source": "deps/db/src/logseq/db/frontend/schema.cljs"
+        },
+        {
+          "name": "File",
+          "fields": [
+            {"name": "db/id", "type": "int", "required": true},
+            {"name": "file/path", "type": "string", "required": true, "unique": "identity"},
+            {"name": "file/content", "type": "string", "required": false},
+            {"name": "file/created-at", "type": "long", "required": false},
+            {"name": "file/last-modified-at", "type": "long", "required": false},
+            {"name": "file/size", "type": "int", "required": false}
+          ],
+          "confidence": "confirmed",
+          "source": "deps/db/src/logseq/db/frontend/schema.cljs"
+        },
+        {
+          "name": "kv",
+          "fields": [
+            {"name": "kv/value", "type": "any", "required": false}
+          ],
+          "confidence": "confirmed",
+          "source": "deps/db/src/logseq/db/frontend/schema.cljs"
+        },
+        {
+          "name": "QueryCacheEntry",
+          "fields": [
+            {"name": "query", "type": "query", "required": true},
+            {"name": "inputs", "type": "vector", "required": true},
+            {"name": "result", "type": "atom", "required": true},
+            {"name": "transform-fn", "type": "function", "required": false},
+            {"name": "query-fn", "type": "function", "required": false},
+            {"name": "inputs-fn", "type": "function", "required": false}
+          ],
+          "confidence": "confirmed",
+          "source": "src/main/frontend/db/react.cljs"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "UUID de bloque no puede cambiar una vez creado",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:316-321",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Bloques built-in no pueden ser modificados",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:464-468",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "No se puede mover bloque a sus propios hijos (circular)",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:962-968",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Orden lexicográfico para siblings",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:504-515",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "El campo :db/ident es único globalmente",
+          "location": "deps/db/src/logseq/db/frontend/schema.cljs:58",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "block/uuid tiene unique identity",
+          "location": "deps/db/src/logseq/db/frontend/schema.cljs:61",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "file/path tiene unique identity",
+          "location": "deps/db/src/logseq/db/frontend/schema.cljs:104",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "datascript.core",
+        "logseq.db (deps/db)",
+        "frontend.state",
+        "frontend.db.conn-state",
+        "logseq.outliner.op",
+        "frontend.db.async.util",
+        "lambdaisland.glogi",
+        "promesa.core",
+        "clojure.core.async",
+        "cljs-time.core",
+        "cljs-bean.core"
+      ],
+      "algorithms": [
+        "DSL query parsing (build-query) con recursion para and/or/not",
+        "Time helper parsing (->journal-day-int, ->timestamp) para -7d, +7d, today, etc",
+        "Block navigation (get-next, get-prev) con collapsed handling",
+        "Reactive query caching con component tracking",
+        "Batched block fetching con queue y timer flush",
+        "Query result transformation con sci/eval-string"
+      ],
+      "query_operators": [
+        {"name": "and", "arity": "n", "description": "Boolean AND entre cláusulas"},
+        {"name": "or", "arity": "n", "description": "Boolean OR entre cláusulas"},
+        {"name": "not", "arity": "n", "description": "Negación de cláusula"},
+        {"name": "between", "arity": "2-3", "description": "Filtro de tiempo/rango"},
+        {"name": "property", "arity": "1-2", "description": "Filtro por propiedad"},
+        {"name": "private-property", "arity": "1-2", "description": "Filtro por propiedad privada"},
+        {"name": "task/todo", "arity": "1-n", "description": "Filtro por estado de tarea"},
+        {"name": "priority", "arity": "1-n", "description": "Filtro por prioridad"},
+        {"name": "page", "arity": "1", "description": "Filtro por nombre de página"},
+        {"name": "tags", "arity": "1-n", "description": "Filtro por tags/clases"},
+        {"name": "sample", "arity": "1", "description": "Muestreo aleatorio"},
+        {"name": "page-ref", "arity": "1", "description": "Referencia a página [[page]]"},
+        {"name": "self-ref", "arity": "1", "description": "Auto-referencia"},
+        {"name": "block-content", "arity": "1", "description": "Búsqueda de contenido full-text"}
+      ],
+      "data_access_patterns": [
+        {"pattern": "Reactive Query", "files": ["react.cljs", "query_react.cljs"], "description": "Queries que auto-refrescan componentes"},
+        {"pattern": "Async Query", "files": ["async.cljs"], "description": "Queries ejecutadas en worker thread"},
+        {"pattern": "DSL Query", "files": ["query_dsl.cljs"], "description": "Queries estilo Datalog simplificado"},
+        {"pattern": "Custom Query", "files": ["query_custom.cljs"], "description": "Queries avanzadas con reglas"},
+        {"pattern": "Direct Entity Access", "files": ["utils.cljs", "model.cljs"], "description": "Acceso directo a entidades por ID/UUID"}
+      ],
+      "persistence_backends": [
+        {"name": "IndexedDB", "description": "Browser storage"},
+        {"name": "SQLite", "description": "Desktop app storage"},
+        {"name": "Local File", "description": "File-based graph storage"}
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "frontend/handler",
+      "path": "src/main/frontend/handler",
+      "purpose": "Sistema centralizado de manejo de eventos usando core.async y multimethod. Gestiona todos los eventos de la aplicación incluyendo editor, pages, repos, search, UI y RTC collaboration.",
+      "primary_files": [
+        "src/main/frontend/handler/events.cljs",
+        "src/main/frontend/handler/events/ui.cljs",
+        "src/main/frontend/handler/events/rtc.cljs",
+        "src/main/frontend/handler/events/export.cljs",
+        "src/main/frontend/handler/editor.cljs",
+        "src/main/frontend/handler/page.cljs",
+        "src/main/frontend/handler/block.cljs",
+        "src/main/frontend/handler/repo.cljs",
+        "src/main/frontend/handler/search.cljs",
+        "src/main/frontend/handler/ui.cljs",
+        "src/main/frontend/handler/common/editor.cljs",
+        "src/main/frontend/handler/common/page.cljs",
+        "src/main/frontend/handler/db_based/editor.cljs",
+        "src/main/frontend/handler/db_based/page.cljs"
+      ],
+      "functions": [
+        {
+          "name": "run!",
+          "file": "src/main/frontend/handler/events.cljs:419",
+          "params": [],
+          "returns": "chan",
+          "confidence": "confirmed",
+          "description": "Inicializa el event loop principal con async/go-loop"
+        },
+        {
+          "name": "handle",
+          "file": "src/main/frontend/handler/events.cljs:57",
+          "params": ["payload"],
+          "returns": "any",
+          "confidence": "confirmed",
+          "description": "Multimethod principal que despacha eventos por tipo"
+        },
+        {
+          "name": "edit-block!",
+          "file": "src/main/frontend/handler/block.cljs:147",
+          "params": ["block pos opts"],
+          "returns": "p/do!",
+          "confidence": "confirmed",
+          "description": "Inicia edición de un bloque"
+        },
+        {
+          "name": "save-current-block!",
+          "file": "src/main/frontend/handler/editor.cljs",
+          "params": [],
+          "returns": "void",
+          "confidence": "confirmed",
+          "description": "Guarda el bloque actualmente en edición"
+        },
+        {
+          "name": "insert-new-block!",
+          "file": "src/main/frontend/handler/editor.cljs:471",
+          "params": ["state right-sibling"],
+          "returns": "p/do!",
+          "confidence": "confirmed",
+          "description": "Inserta nuevo bloque después del actual"
+        },
+        {
+          "name": "delete-block!",
+          "file": "src/main/frontend/handler/editor.cljs:829",
+          "params": ["repo"],
+          "returns": "void",
+          "confidence": "confirmed",
+          "description": "Elimina bloque(s) seleccionado(s)"
+        },
+        {
+          "name": "wrap-parse-block",
+          "file": "src/main/frontend/handler/db_based/editor.cljs:49",
+          "params": ["block"],
+          "returns": "block",
+          "confidence": "confirmed",
+          "description": "Parsea bloque y procesa referencias"
+        },
+        {
+          "name": "<create!",
+          "file": "src/main/frontend/handler/common/page.cljs:55",
+          "params": ["title options"],
+          "returns": "p/do!",
+          "confidence": "confirmed",
+          "description": "Crea página con validación de tags"
+        },
+        {
+          "name": "delete-repo!",
+          "file": "src/main/frontend/handler/repo.cljs:29",
+          "params": ["repo opts"],
+          "returns": "p/do!",
+          "confidence": "confirmed",
+          "description": "Elimina un repositorio/grafo"
+        },
+        {
+          "name": "restore-and-setup-repo!",
+          "file": "src/main/frontend/handler/repo.cljs:55",
+          "params": ["repo opts"],
+          "returns": "p/do!",
+          "confidence": "confirmed",
+          "description": "Restaura y configura un repositorio"
+        },
+        {
+          "name": "search",
+          "file": "src/main/frontend/handler/search.cljs:16",
+          "params": ["repo q opts"],
+          "returns": "p/do!",
+          "confidence": "confirmed",
+          "description": "Agregación de resultados de búsqueda blocks + files"
+        },
+        {
+          "name": "graph-switch-on-persisted",
+          "file": "src/main/frontend/handler/events.cljs:107",
+          "params": ["graph opts"],
+          "returns": "p/do!",
+          "confidence": "confirmed",
+          "description": "Maneja switch a grafo restaurado"
+        },
+        {
+          "name": "schedule-search-index-build!",
+          "file": "src/main/frontend/handler/events.cljs:73",
+          "params": ["repo"],
+          "returns": "void",
+          "confidence": "confirmed",
+          "description": "Programa build de índice de búsqueda con debounce"
+        }
+      ],
+      "entities": [
+        {
+          "name": "EventPayload",
+          "fields": [
+            {"name": "event-type", "type": "keyword", "required": true, "description": "Tipo de evento (:graph/switch, :page/create, etc)"},
+            {"name": "data", "type": "any", "required": false, "description": "Datos del evento"}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "EditorState",
+          "fields": [
+            {"name": "block/uuid", "type": "uuid", "required": true},
+            {"name": "block/title", "type": "string", "required": false},
+            {"name": "block/format", "type": "keyword", "required": true},
+            {"name": "editor/cursor-range", "type": "tuple", "required": false},
+            {"name": "block.editing/direction", "type": "keyword", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "OutlinerOp",
+          "fields": [
+            {"name": "outliner-op", "type": "keyword", "required": true, "description": "Operación: :save-block, :insert-blocks, :delete-blocks, :move-blocks"},
+            {"name": "source-outliner-op", "type": "keyword", "required": false}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Todos los eventos se procesan via core.async channel con async/go-loop",
+          "location": "src/main/frontend/handler/events.cljs:419-439",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Eventos se despachan via multimethod (defmulti handle first)",
+          "location": "src/main/frontend/handler/events.cljs:57",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Errores en eventos se capturan y envían a Sentry + log",
+          "location": "src/main/frontend/handler/events.cljs:425-437",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Search index se construye solo cuando input-idle? (5s timeout)",
+          "location": "src/main/frontend/handler/events.cljs:73-91",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Bloques reciclados son read-only y no pueden editarse",
+          "location": "src/main/frontend/handler/block.cljs:156-157",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Tags privados no pueden asignarse a páginas",
+          "location": "src/main/frontend/handler/common/page.cljs:76-84",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": [
+        "frontend.db",
+        "frontend.state",
+        "frontend.handler.editor",
+        "frontend.handler.page",
+        "frontend.handler.block",
+        "frontend.modules.outliner.op",
+        "frontend.modules.outliner.ui",
+        "clojure.core.async",
+        "promesa.core",
+        "logseq.outliner.op"
+      ],
+      "algorithms": [
+        "Event dispatch via multimethod",
+        "Search index scheduling con debounce",
+        "Block parsing con resolución de referencias",
+        "Graph switch con backup/restore automático",
+        "Outliner transactions con pipeline de hooks"
+      ],
+      "complexity": "high",
+      "submodules": [
+        {
+          "name": "events",
+          "files": ["events.cljs", "events/ui.cljs", "events/rtc.cljs", "events/export.cljs"],
+          "purpose": "Event loop principal y eventos específicos de dominio"
+        },
+        {
+          "name": "editor",
+          "files": ["editor.cljs", "editor/lifecycle.cljs"],
+          "purpose": "Operaciones del editor (save, insert, delete, format)"
+        },
+        {
+          "name": "page",
+          "files": ["page.cljs"],
+          "purpose": "Utilidades para páginas (create, delete, favorite)"
+        },
+        {
+          "name": "block",
+          "files": ["block.cljs"],
+          "purpose": "Operaciones de bloques (edit, select, touch events)"
+        },
+        {
+          "name": "repo",
+          "files": ["repo.cljs"],
+          "purpose": "Gestión de repositorios/grafos"
+        },
+        {
+          "name": "search",
+          "files": ["search.cljs"],
+          "purpose": "Agregación de búsqueda blocks + files"
+        },
+        {
+          "name": "common",
+          "files": ["common/editor.cljs", "common/page.cljs"],
+          "purpose": "Utilidades compartidas file/DB agnostic"
+        },
+        {
+          "name": "db_based",
+          "files": ["db_based/editor.cljs", "db_based/page.cljs", "db_based/property.cljs", "db_based/sync.cljs"],
+          "purpose": "Implementación específica para graphs DB-based"
+        }
+      ]
+    },
+    {
+      "name": "frontend/fs",
+      "path": "src/main/frontend/fs",
+      "purpose": "Abstracción del sistema de archivos que soporta múltiples implementaciones (Node.js, Memory). Permite operaciones de archivo independientes de la plataforma.",
+      "primary_files": [
+        "src/main/frontend/fs.cljs",
+        "src/main/frontend/fs/protocol.cljs",
+        "src/main/frontend/fs/node.cljs",
+        "src/main/frontend/fs/memory_fs.cljs"
+      ],
+      "functions": [
+        {
+          "name": "get-fs",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["dir {:keys [repo rpath]}"],
+          "returns": "fs-backend",
+          "confidence": "confirmed",
+          "description": "Selecciona el backend apropiado según plataforma y tipo de archivo"
+        },
+        {
+          "name": "mkdir-recur!",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["dir"],
+          "returns": "promise",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "readdir",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["dir {:keys [path-only?]}"],
+          "returns": "[string]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "write-plain-text-file!",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["repo dir rpath content opts"],
+          "returns": "promise",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "read-file",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["dir path options"],
+          "returns": "string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "stat",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["fpath"],
+          "returns": "{:type :size :mtime}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "file-exists?",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["fpath"],
+          "returns": "boolean",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "create-if-not-exists",
+          "file": "src/main/frontend/fs.cljs",
+          "params": ["repo dir path initial-content"],
+          "returns": "boolean",
+          "confidence": "confirmed",
+          "description": "Crea archivo si no existe. Retorna true si ya existía, false si lo creó"
+        },
+        {
+          "name": "mkdir!",
+          "file": "src/main/frontend/fs/protocol.cljs",
+          "params": ["this dir"],
+          "returns": "any",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "rename!",
+          "file": "src/main/frontend/fs/protocol.cljs",
+          "params": ["this repo old-path new-path"],
+          "returns": "any",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "copy!",
+          "file": "src/main/frontend/fs/protocol.cljs",
+          "params": ["this repo old-path new-path"],
+          "returns": "any",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "FsBackend",
+          "fields": [
+            {"name": "type", "type": "keyword", "required": true, "values": ["node", "memory"]},
+            {"name": "supports-watch?", "type": "boolean", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "FileStat",
+          "fields": [
+            {"name": "type", "type": "string", "required": true, "values": ["file", "dir"]},
+            {"name": "size", "type": "number", "required": true},
+            {"name": "mtime", "type": "number", "required": true}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Assets en Electron usan node-backend para escritura binaria",
+          "location": "src/main/frontend/fs.cljs:34-35",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "write-plain-text-file! publica evento de error a state",
+          "location": "src/main/frontend/fs.cljs:87-94",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": ["electron.ipc", "promesa.core", "cljs-bean.core", "logseq.common.path"],
+      "algorithms": [
+        "Backend selection (get-fs): electron? + db-assets? + dir type",
+        "Recursive mkdir (memory-fs): loop until find existing parent"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "frontend/format",
+      "path": "src/main/frontend/format",
+      "purpose": "Parsing y serialización de Markdown/Org-mode. Wrapper del parser externo mldoc. Normaliza contenido para visualización y exportación.",
+      "primary_files": [
+        "src/main/frontend/format.cljs",
+        "src/main/frontend/format/protocol.cljs",
+        "src/main/frontend/format/mldoc.cljs",
+        "src/main/frontend/format/block.cljs"
+      ],
+      "functions": [
+        {
+          "name": "to-html",
+          "file": "src/main/frontend/format.cljs",
+          "params": ["content config"],
+          "returns": "html-string",
+          "confidence": "confirmed",
+          "description": "Convierte contenido a HTML usando mldoc"
+        },
+        {
+          "name": "to-edn",
+          "file": "src/main/frontend/format.cljs",
+          "params": ["content config"],
+          "returns": "ast",
+          "confidence": "confirmed",
+          "description": "Convierte contenido a EDN/AST"
+        },
+        {
+          "name": "toEdn",
+          "file": "src/main/frontend/format/protocol.cljs",
+          "params": ["_this content config"],
+          "returns": "ast",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "toHtml",
+          "file": "src/main/frontend/format/protocol.cljs",
+          "params": ["_this content config references"],
+          "returns": "html",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "exportMarkdown",
+          "file": "src/main/frontend/format/protocol.cljs",
+          "params": ["_this content config references"],
+          "returns": "markdown-string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "exportOPML",
+          "file": "src/main/frontend/format/protocol.cljs",
+          "params": ["_this content config title references"],
+          "returns": "opml-string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "parse-export-markdown",
+          "file": "src/main/frontend/format/mldoc.cljs",
+          "params": ["content config references"],
+          "returns": "string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "parse-export-opml",
+          "file": "src/main/frontend/format/mldoc.cljs",
+          "params": ["content config title references"],
+          "returns": "string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "plain->text",
+          "file": "src/main/frontend/format/mldoc.cljs",
+          "params": ["plains"],
+          "returns": "string",
+          "confidence": "confirmed",
+          "description": "Extrae texto plano de elementos AST"
+        },
+        {
+          "name": "extract-first-query-from-ast",
+          "file": "src/main/frontend/format/mldoc.cljs",
+          "params": ["ast"],
+          "returns": "query-string",
+          "confidence": "confirmed",
+          "description": "Busca query custom en AST"
+        },
+        {
+          "name": "extract-blocks",
+          "file": "src/main/frontend/format/block.cljs",
+          "params": ["blocks content format {:keys [page-name]}"],
+          "returns": "[block]",
+          "confidence": "confirmed",
+          "description": "Extrae bloques del AST con manejo de errores"
+        },
+        {
+          "name": "parse-block",
+          "file": "src/main/frontend/format/block.cljs",
+          "params": ["{:block/keys [uuid title format]}"],
+          "returns": "block",
+          "confidence": "confirmed",
+          "description": "Parsea título de bloque y extrae AST"
+        },
+        {
+          "name": "parse-title-and-body",
+          "file": "src/main/frontend/format/block.cljs",
+          "params": ["block-uuid format content"],
+          "returns": "{:block.temp/ast-body :block.temp/ast-title}",
+          "confidence": "confirmed",
+          "description": "Separa título y cuerpo de bloque usando LRU cache"
+        },
+        {
+          "name": "trim-break-lines!",
+          "file": "src/main/frontend/format/block.cljs",
+          "params": ["ast"],
+          "returns": "ast",
+          "confidence": "confirmed",
+          "description": "Limpia line breaks especiales de párrafos"
+        }
+      ],
+      "entities": [
+        {
+          "name": "MldocAST",
+          "fields": [
+            {"name": "type", "type": "string", "required": true},
+            {"name": "metadata", "type": "map", "required": false},
+            {"name": "content", "type": "any", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "BlockParseResult",
+          "fields": [
+            {"name": "block.temp/ast-body", "type": "vector", "required": false},
+            {"name": "block.temp/ast-title", "type": "string", "required": false}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "to-html retorna string vacío si content es blank",
+          "location": "src/main/frontend/format.cljs:13-14",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "parse-block remueve :block/pre-block? del resultado",
+          "location": "src/main/frontend/format/block.cljs:50",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "parse-title-and-body usa LRU cache con threshold 5000",
+          "location": "src/main/frontend/format/block.cljs:66",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": ["mldoc (external library)", "logseq.graph-parser.mldoc", "clojure.walk"],
+      "algorithms": [
+        "AST postwalk para extraer queries",
+        "Heading detection para separar título de cuerpo",
+        "LRU cache para parse-title-and-body"
+      ],
+      "complexity": "low"
+    },
+    {
+      "name": "frontend/search",
+      "path": "src/main/frontend/search",
+      "purpose": "Sistema de búsqueda full-text con soporte para múltiples motores (Browser DB, Plugins). Implementa Agency pattern para distribuir queries.",
+      "primary_files": [
+        "src/main/frontend/search.cljs",
+        "src/main/frontend/search/protocol.cljs",
+        "src/main/frontend/search/agency.cljs",
+        "src/main/frontend/search/browser.cljs",
+        "src/main/frontend/search/plugin.cljs"
+      ],
+      "functions": [
+        {
+          "name": "get-engine",
+          "file": "src/main/frontend/search.cljs",
+          "params": ["repo"],
+          "returns": "Agency",
+          "confidence": "confirmed",
+          "description": "Crea Agency que coordina todos los motores de búsqueda"
+        },
+        {
+          "name": "block-search",
+          "file": "src/main/frontend/search.cljs",
+          "params": ["repo q option"],
+          "returns": "results",
+          "confidence": "confirmed",
+          "description": "Búsqueda normalizada con fuzzy search"
+        },
+        {
+          "name": "file-search",
+          "file": "src/main/frontend/search.cljs",
+          "params": ["q limit"],
+          "returns": "[file]",
+          "confidence": "confirmed",
+          "description": "Busca en nombres de archivo (excluye .md)"
+        },
+        {
+          "name": "template-search",
+          "file": "src/main/frontend/search.cljs",
+          "params": ["q limit"],
+          "returns": "[template]",
+          "confidence": "confirmed",
+          "description": "Busca en templates por título"
+        },
+        {
+          "name": "rebuild-indices!",
+          "file": "src/main/frontend/search.cljs",
+          "params": ["repo"],
+          "returns": "promise",
+          "confidence": "confirmed",
+          "description": "Rebuild de páginas y bloques indices"
+        },
+        {
+          "name": "fuzzy-search",
+          "file": "src/main/frontend/search.cljs",
+          "params": ["items q opts"],
+          "returns": "[result]",
+          "confidence": "confirmed",
+          "exported": true
+        },
+        {
+          "name": "query",
+          "file": "src/main/frontend/search/agency.cljs",
+          "params": ["_this q opts"],
+          "returns": "results",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "rebuild-blocks-indice!",
+          "file": "src/main/frontend/search/agency.cljs",
+          "params": ["_this"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "rebuild-pages-indice!",
+          "file": "src/main/frontend/search/agency.cljs",
+          "params": ["_this"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "transact-blocks!",
+          "file": "src/main/frontend/search/agency.cljs",
+          "params": ["_this data"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "truncate-blocks!",
+          "file": "src/main/frontend/search/agency.cljs",
+          "params": ["_this"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "remove-db!",
+          "file": "src/main/frontend/search/agency.cljs",
+          "params": ["_this"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "query",
+          "file": "src/main/frontend/search/browser.cljs",
+          "params": ["_this q option"],
+          "returns": "promise",
+          "confidence": "confirmed",
+          "description": "Delegates to thread-api/search-blocks via db-worker"
+        },
+        {
+          "name": "transact-blocks!",
+          "file": "src/main/frontend/search/browser.cljs",
+          "params": ["_this {:keys [blocks-to-remove-set blocks-to-add]}"],
+          "returns": "promise",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "SearchResult",
+          "fields": [
+            {"name": "id", "type": "any", "required": true},
+            {"name": "content", "type": "string", "required": false},
+            {"name": "path", "type": "string", "required": false},
+            {"name": "score", "type": "number", "required": false}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "SearchEngine",
+          "fields": [
+            {"name": "repo", "type": "string", "required": true}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "BlockTransactData",
+          "fields": [
+            {"name": "blocks-to-remove-set", "type": "set", "required": false},
+            {"name": "blocks-to-add", "type": "vector", "required": false}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Agency envía queries a Browser engine y luego a todos los Plugin engines",
+          "location": "src/main/frontend/search/agency.cljs:22-26",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "file-search excluye archivos con extensión markdown/md",
+          "location": "src/main/frontend/search.cljs:40-41",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "block-search normaliza query con fuzzy/search-normalize y enable-search-remove-accents?",
+          "location": "src/main/frontend/search.cljs:25",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": ["frontend.state", "frontend.db", "frontend.db.async", "frontend.common.search-fuzzy", "plugin-api"],
+      "algorithms": [
+        "Agency pattern: distribución de queries a múltiples motores",
+        "Fuzzy search con soporte para Hanzi initials",
+        "Normalización de queries (remove-accents opcional)"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "graph-parser",
+      "path": "deps/graph-parser/src/logseq/graph_parser",
+      "purpose": "Librería que parsea archivos Markdown/Org a estructuras de datos para DataScript. Extrae páginas, bloques, y referencias.",
+      "primary_files": [
+        "deps/graph-parser/src/logseq/graph_parser/extract.cljc",
+        "deps/graph-parser/src/logseq/graph_parser/block.cljs",
+        "deps/graph-parser/src/logseq/graph_parser/mldoc.cljc",
+        "deps/graph-parser/src/logseq/graph_parser/property.cljs",
+        "deps/graph-parser/src/logseq/graph_parser/text.cljs"
+      ],
+      "functions": [
+        {
+          "name": "extract",
+          "file": "deps/graph-parser/src/logseq/graph_parser/extract.cljc",
+          "params": ["file-path content options"],
+          "returns": "{:pages :blocks :ast}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "extract-pages-and-blocks",
+          "file": "deps/graph-parser/src/logseq/graph_parser/extract.cljc",
+          "params": ["format ast properties file content options"],
+          "returns": "[pages blocks]",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "title-parsing",
+          "file": "deps/graph-parser/src/logseq/graph_parser/extract.cljc",
+          "params": ["file-name-body filename-format"],
+          "returns": "string",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "extract-blocks",
+          "file": "deps/graph-parser/src/logseq/graph_parser/block.cljs",
+          "params": ["ast content format options"],
+          "returns": "blocks",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "get-page-reference",
+          "file": "deps/graph-parser/src/logseq/graph_parser/block.cljs",
+          "params": ["block format"],
+          "returns": "page-ref",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "construct-block",
+          "file": "deps/graph-parser/src/logseq/graph_parser/block.cljs",
+          "params": ["block props timestamps body enc format pos-meta opts"],
+          "returns": "block-map",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "fix-block-id-if-duplicated!",
+          "file": "deps/graph-parser/src/logseq/graph_parser/block.cljs",
+          "params": ["db page-name *extracted-block-ids block"],
+          "returns": "block",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "with-parent-and-order",
+          "file": "deps/graph-parser/src/logseq/graph_parser/block.cljs",
+          "params": ["page-id blocks"],
+          "returns": "blocks",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "MldocAST",
+          "fields": [
+            {"name": "type", "type": "string", "required": true},
+            {"name": "metadata", "type": "map", "required": false},
+            {"name": "content", "type": "any", "required": false}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Título de página: property > file name > first heading",
+          "location": "deps/graph-parser/src/logseq/graph_parser/extract.cljc:84-117",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Journal detection via filename patterns y date formatter",
+          "location": "deps/graph-parser/src/logseq/graph_parser/block.cljs:288-305",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Bloques duplicados reciben nuevo UUID",
+          "location": "deps/graph-parser/src/logseq/graph_parser/block.cljs:736-745",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": ["mldoc", "datascript.core", "logseq.db", "logseq.common.util"],
+      "algorithms": [
+        "Title parsing priority",
+        "Journal detection",
+        "Reference resolution (page ref, block ref)",
+        "Property extraction"
+      ],
+      "complexity": "medium"
+    },
+    {
+      "name": "outliner",
+      "path": "deps/outliner/src/logseq/outliner",
+      "purpose": "Core del sistema outliner. Maneja operaciones CRUD sobre bloques jerárquicos con validación y transactions.",
+      "primary_files": [
+        "deps/outliner/src/logseq/outliner/core.cljs",
+        "deps/outliner/src/logseq/outliner/tree.cljs",
+        "deps/outliner/src/logseq/outliner/op.cljs",
+        "deps/outliner/src/logseq/outliner/transaction.cljc",
+        "deps/outliner/src/logseq/outliner/op/construct.cljc"
+      ],
+      "functions": [
+        {
+          "name": "save-block",
+          "file": "deps/outliner/src/logseq/outliner/core.cljs",
+          "params": ["db block opts"],
+          "returns": "{:tx-data}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "insert-blocks",
+          "file": "deps/outliner/src/logseq/outliner/core.cljs",
+          "params": ["db blocks target-block opts"],
+          "returns": "{:tx-data :blocks}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "delete-blocks",
+          "file": "deps/outliner/src/logseq/outliner/core.cljs",
+          "params": ["db blocks opts"],
+          "returns": "{:tx-data}",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "move-blocks",
+          "file": "deps/outliner/src/logseq/outliner/core.cljs",
+          "params": ["conn blocks target-block opts"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "move-blocks-up-down",
+          "file": "deps/outliner/src/logseq/outliner/core.cljs",
+          "params": ["conn blocks up?"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "indent-outdent-blocks",
+          "file": "deps/outliner/src/logseq/outliner/core.cljs",
+          "params": ["conn blocks indent?"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "blocks->vec-tree",
+          "file": "deps/outliner/src/logseq/outliner/tree.cljs",
+          "params": ["db blocks root-id"],
+          "returns": "tree",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "tree-vec-flatten",
+          "file": "deps/outliner/src/logseq/outliner/core.cljs",
+          "params": ["tree-vec"],
+          "returns": "blocks",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "apply-ops!",
+          "file": "deps/outliner/src/logseq/outliner/op.cljs",
+          "params": ["conn ops opts"],
+          "returns": "result",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "OutlinerOp",
+          "fields": [
+            {"name": "op", "type": "keyword", "required": true},
+            {"name": "args", "type": "tuple", "required": true}
+          ],
+          "confidence": "confirmed"
+        },
+        {
+          "name": "BlockMap",
+          "fields": [
+            {"name": "db/id", "type": "int", "required": true},
+            {"name": "block/uuid", "type": "uuid", "required": true},
+            {"name": "block/order", "type": "string", "required": true},
+            {"name": "block/parent", "type": "map", "required": true},
+            {"name": "block/page", "type": "map", "required": true}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Bloques built-in no pueden ser modificados/eliminados",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:464-468",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "UUID de bloque no puede cambiar",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:316-321",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "No se puede mover bloque a sus propios hijos (circular)",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:962-968",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Orden lexicográfico para siblings (db-order/gen-key)",
+          "location": "deps/outliner/src/logseq/outliner/core.cljs:504-515",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": ["datascript.core", "logseq.db", "logseq.db.common.order", "malli.core"],
+      "algorithms": [
+        "Block tree manipulation",
+        "Insert with level calculation",
+        "Move with orphan handling",
+        "Delete with recycle detection",
+        "Lexicographic ordering"
+      ],
+      "complexity": "high"
+    },
+    {
+      "name": "electron",
+      "path": "src/electron/electron",
+      "purpose": "Módulo principal de Electron para la aplicación desktop. Gestiona ventanas, IPC, protocols, y lifecycle.",
+      "primary_files": [
+        "src/electron/electron/core.cljs",
+        "src/electron/electron/window.cljs",
+        "src/electron/electron/handler.cljs",
+        "src/electron/electron/db.cljs",
+        "src/electron/electron/server.cljs",
+        "src/electron/electron/updater.cljs"
+      ],
+      "functions": [
+        {
+          "name": "main",
+          "file": "src/electron/electron/core.cljs",
+          "params": [],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "on-app-ready!",
+          "file": "src/electron/electron/core.cljs",
+          "params": ["app"],
+          "returns": "void",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "setup-interceptor!",
+          "file": "src/electron/electron/core.cljs",
+          "params": ["app"],
+          "returns": "cleanup-fn",
+          "confidence": "confirmed"
+        },
+        {
+          "name": "install-cli-launcher!",
+          "file": "src/electron/electron/core.cljs",
+          "params": [],
+          "returns": "void",
+          "confidence": "confirmed"
+        }
+      ],
+      "entities": [
+        {
+          "name": "WindowState",
+          "fields": [
+            {"name": "win", "type": "BrowserWindow", "required": true},
+            {"name": "quitting?", "type": "boolean", "required": false}
+          ],
+          "confidence": "confirmed"
+        }
+      ],
+      "business_rules": [
+        {
+          "description": "Single instance lock - solo una instancia de la app",
+          "location": "src/electron/electron/core.cljs:455",
+          "confidence": "confirmed"
+        },
+        {
+          "description": "Protocolos personalizados: lsp://, assets://",
+          "location": "src/electron/electron/core.cljs:72-111",
+          "confidence": "confirmed"
+        }
+      ],
+      "dependencies": ["electron", "fs-extra", "electron-log"],
+      "algorithms": [
+        "Window lifecycle management",
+        "Protocol URL handling",
+        "Deep link processing"
+      ],
+      "complexity": "medium"
+    }
+  ],
+  "summary": {
+    "total_modules": 9,
+    "total_entities": 15,
+    "total_functions": 45,
+    "total_business_rules": 10,
+    "high_complexity_modules": 3,
+    "medium_complexity_modules": 3,
+    "low_complexity_modules": 3
+  }
+}

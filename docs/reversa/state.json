@@ -1,0 +1,241 @@
+{
+  "version": "1.2.14",
+  "project": "quilt",
+  "user_name": "logseq-analysis",
+  "chat_language": "es",
+  "doc_language": "Español",
+  "answer_mode": "chat",
+  "doc_level": "completo",
+  "output_folder": "_reversa_sdd",
+  "phase": "interpretacion",
+  "completed": [
+    "reconocimiento",
+    "escavacion",
+    "interpretacion"
+  ],
+  "pending": [
+    "revision"
+  ],
+  "redator_progress": {
+    "started_at": "2026-05-02T15:26:00Z",
+    "finished_at": "2026-05-02T15:30:00Z",
+    "doc_level": "detalhado",
+    "modules_completed": [
+      "graph-parser",
+      "outliner",
+      "electron"
+    ],
+    "artifacts": [
+      "_reversa_sdd/sdd/graph-parser.md",
+      "_reversa_sdd/sdd/outliner.md",
+      "_reversa_sdd/sdd/electron.md",
+      "_reversa_sdd/user-stories/edicion-bloques.md",
+      "_reversa_sdd/user-stories/busqueda.md",
+      "_reversa_sdd/user-stories/navegacion.md",
+      "_reversa_sdd/traceability/code-spec-matrix.md"
+    ]
+  },
+  "checkpoints": {
+    "reconocimiento": {
+      "finished_at": "2026-05-02T00:00:00Z",
+      "artifacts": [
+        "_reversa_sdd/inventory.md",
+        "_reversa_sdd/dependencies.md",
+        ".reversa/context/surface.json"
+      ]
+    },
+    "escavacion": {
+      "finished_at": "2026-05-02T15:10:00Z",
+      "modules_analyzed": [
+        "frontend/components",
+        "frontend/db",
+        "frontend/handler",
+        "frontend/fs",
+        "frontend/format",
+        "frontend/search",
+        "graph-parser",
+        "outliner",
+        "electron"
+      ],
+      "artifacts": [
+        "_reversa_sdd/code-analysis.md",
+        "_reversa_sdd/data-dictionary.md",
+        "_reversa_sdd/flowcharts/db.md",
+        "_reversa_sdd/flowcharts/handler.md",
+        "_reversa_sdd/flowcharts/graph-parser.md",
+        "_reversa_sdd/flowcharts/outliner.md",
+        "_reversa_sdd/flowcharts/electron.md",
+        "_reversa_sdd/flowcharts/other-modules.md",
+        "_reversa_sdd/flowcharts/components.md",
+        ".reversa/context/modules.json"
+      ],
+      "module_checkpoints": {
+        "frontend/handler": {
+          "finished_at": "2026-05-02T16:00:00Z",
+          "event_types_count": 30,
+          "handler_files": 57,
+          "key_functions": [
+            "run!", "handle", "edit-block!", "save-current-block!",
+            "insert-new-block!", "delete-block!", "wrap-parse-block",
+            "<create!", "delete-repo!", "restore-and-setup-repo!",
+            "search", "graph-switch-on-persisted", "schedule-search-index-build!"
+          ],
+          "submodules": [
+            "events", "editor", "page", "block", "repo",
+            "search", "common", "db_based"
+          ]
+        },
+        "frontend/components": {
+          "finished_at": "2026-05-02T18:00:00Z",
+          "component_files": 69,
+          "lines_analyzed": 4300,
+          "key_components": [
+            "container", "block", "editor", "page", "query",
+            "left_sidebar", "right_sidebar", "property", "reference"
+          ],
+          "key_functions": 35,
+          "entities": 7,
+          "patterns": [
+            "rum/defc", "rum/defcs", "rum/local", "rum/react",
+            "db-mixins/query", "mixins/event-mixin"
+          ]
+        },
+        "frontend/db": {
+          "finished_at": "2026-05-02T17:00:00Z",
+          "files_analyzed": 14,
+          "entities": [
+            {"name": "Block", "fields": 18},
+            {"name": "Page", "fields": 11},
+            {"name": "File", "fields": 6},
+            {"name": "kv", "fields": 1},
+            {"name": "QueryCacheEntry", "fields": 6}
+          ],
+          "query_operators": [
+            "and", "or", "not", "between", "property", "private-property",
+            "task/todo", "priority", "page", "tags", "sample", "page-ref",
+            "self-ref", "block-content"
+          ],
+          "key_functions": [
+            "get-db", "transact!", "start!", "transact", "apply-outliner-ops",
+            "query", "parse", "build-query", "pre-transform", "custom-query",
+            "react-query", "q", "refresh!", "refresh-affected-queries!",
+            "entity", "pull", "pull-many", "get-block-by-uuid", "get-page",
+            "get-journal-page", "page-exists?", "has-children?", "get-next",
+            "get-prev", "sort-by-order-recursive", "<get-block", "<get-blocks",
+            "restore-graph!", "get-all-graphs"
+          ],
+          "layers": [
+            {"name": "Connection", "files": ["conn.cljs", "conn_state.cljs"]},
+            {"name": "Model", "files": ["model.cljs", "utils.cljs"]},
+            {"name": "Transaction", "files": ["transact.cljs"]},
+            {"name": "Query DSL", "files": ["query_dsl.cljs", "query_custom.cljs"]},
+            {"name": "Query React", "files": ["query_react.cljs", "react.cljs"]},
+            {"name": "Async", "files": ["async.cljs", "async/util.cljs"]},
+            {"name": "Persistence", "files": ["persist.cljs", "restore.cljs"]}
+          ],
+          "algorithms": [
+            "DSL query parsing con recursion",
+            "Time helper parsing (-7d, today, etc)",
+            "Block navigation con collapsed handling",
+            "Reactive query caching con component tracking",
+            "Batched block fetching"
+          ],
+          "complexity": "medium"
+        }
+      }
+    },
+    "interpretacion": {
+      "finished_at": "2026-05-02T15:30:00Z",
+      "artifacts": [
+        "_reversa_sdd/domain.md",
+        "_reversa_sdd/state-machines.md",
+        "_reversa_sdd/permissions.md",
+        "_reversa_sdd/adrs/adr-001-e2ee-sync.md",
+        "_reversa_sdd/adrs/adr-002-sync-conflict-resolution.md",
+        "_reversa_sdd/adrs/adr-003-task-markers.md",
+        "_reversa_sdd/adrs/adr-004-publishing-system.md",
+        "_reversa_sdd/adrs/adr-005-logseq-cli.md",
+        "_reversa_sdd/adrs/adr-006-datascript-database.md",
+        "_reversa_sdd/adrs/adr-007-plugin-system.md"
+      ],
+      "rules_identified": [
+        "Task markers: NOW/LATER/TODO/DONE/CANCELLED",
+        "Page title validation: no /#?:|<>*\"\\",
+        "Property name normalization: lowercase, - replaces / and spaces",
+        "Block UUID immutability after creation",
+        "Journal protected attributes: :block/journal-day, :block/name",
+        "E2EE encryption for sync (paid feature)",
+        "Publishing visibility: per-page and global default"
+      ],
+      "state_machines": [
+        "Task status lifecycle",
+        "Sync state lifecycle",
+        "Publish state machine",
+        "Editor state machine",
+        "Journal page creation",
+        "Undo/redo transaction history",
+        "Plugin lifecycle"
+      ],
+      "key_findings": [
+        "NO RBAC multi-user system",
+        "Logseq is a personal PKM (no shared workspaces)",
+        "E2EE is a paid feature for sync",
+        "Publishing has granular per-page visibility",
+        "Plugin system uses hooks API"
+      ]
+    }
+  },
+  "engines": [
+    "claude-code",
+    "opencode"
+  ],
+  "agents": [
+    "reversa",
+    "reversa-scout",
+    "reversa-archaeologist",
+    "reversa-detective",
+    "reversa-architect",
+    "reversa-writer",
+    "reversa-reviewer",
+    "reversa-visor",
+    "reversa-data-master",
+    "reversa-design-system",
+    "reversa-agents-help",
+    "reversa-reconstructor"
+  ],
+  "created_files": [
+    "_reversa_sdd/inventory.md",
+    "_reversa_sdd/dependencies.md",
+    ".reversa/context/surface.json",
+    ".reversa/plan.md",
+    ".reversa/state.json",
+    "_reversa_sdd/code-analysis.md",
+    "_reversa_sdd/data-dictionary.md",
+    "_reversa_sdd/flowcharts/db.md",
+    "_reversa_sdd/flowcharts/handler.md",
+    "_reversa_sdd/flowcharts/graph-parser.md",
+    "_reversa_sdd/flowcharts/outliner.md",
+    "_reversa_sdd/flowcharts/electron.md",
+    "_reversa_sdd/flowcharts/other-modules.md",
+    "_reversa_sdd/flowcharts/fs-format-search.md",
+    "_reversa_sdd/flowcharts/components.md",
+    ".reversa/context/modules.json",
+    "_reversa_sdd/domain.md",
+    "_reversa_sdd/state-machines.md",
+    "_reversa_sdd/permissions.md",
+    "_reversa_sdd/adrs/adr-001-e2ee-sync.md",
+    "_reversa_sdd/adrs/adr-002-sync-conflict-resolution.md",
+    "_reversa_sdd/adrs/adr-003-task-markers.md",
+    "_reversa_sdd/adrs/adr-004-publishing-system.md",
+    "_reversa_sdd/adrs/adr-005-logseq-cli.md",
+    "_reversa_sdd/adrs/adr-006-datascript-database.md",
+    "_reversa_sdd/adrs/adr-007-plugin-system.md",
+    "_reversa_sdd/sdd/graph-parser.md",
+    "_reversa_sdd/sdd/outliner.md",
+    "_reversa_sdd/sdd/electron.md",
+    "_reversa_sdd/user-stories/edicion-bloques.md",
+    "_reversa_sdd/user-stories/busqueda.md",
+    "_reversa_sdd/user-stories/navegacion.md",
+    "_reversa_sdd/traceability/code-spec-matrix.md"
+  ]
+}

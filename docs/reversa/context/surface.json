@@ -1,0 +1,75 @@
+{
+  "generated_at": "2026-05-02T00:00:00Z",
+  "project_root": "/home/rubentxu/Proyectos/reversa/logseq",
+  "languages": [
+    { "name": "ClojureScript", "extensions": [".cljs", ".cljc"], "file_count": 539 },
+    { "name": "Clojure", "extensions": [".clj"], "file_count": 8 },
+    { "name": "JavaScript", "extensions": [".js"], "file_count": 25 },
+    { "name": "TypeScript", "extensions": [".ts", ".tsx"], "file_count": 30 },
+    { "name": "CSS", "extensions": [".css"], "file_count": 45 }
+  ],
+  "primary_language": "ClojureScript",
+  "frameworks": [
+    { "name": "React", "version": "fork", "source": "rum" },
+    { "name": "Rum", "version": "fork", "source": "deps.edn" },
+    { "name": "Shadow CLJS", "version": "3.4.4", "source": "deps.edn" },
+    { "name": "DataScript", "version": "fork", "source": "deps.edn" },
+    { "name": "Malli", "version": "git", "source": "deps.edn" },
+    { "name": "Electron", "version": "unknown", "source": "package.json" },
+    { "name": "Vite", "version": "8.0.0", "source": "package.json" },
+    { "name": "TailwindCSS", "version": "3.3.5", "source": "package.json" }
+  ],
+  "package_manager": "pnpm",
+  "entry_points": [
+    { "path": "static/electron.js", "type": "electron_main" },
+    { "path": "src/main/frontend/core.cljs", "type": "frontend_core" },
+    { "path": "src/main/frontend/state.cljs", "type": "state_management" },
+    { "path": "src/main/frontend/handler/events.cljs", "type": "event_loop" }
+  ],
+  "config_files": [
+    "deps.edn",
+    "package.json",
+    "shadow-cljs.edn",
+    "gulpfile.js",
+    "bb.edn",
+    "capacitor.config.ts",
+    ".cljfmt.edn",
+    ".clj-kondo/config.edn"
+  ],
+  "ci_cd": [
+    ".github/workflows/"
+  ],
+  "docker": null,
+  "database_hints": [
+    { "path": "src/main/frontend/db/", "type": "datascript_models" },
+    { "path": "deps/graph-parser/", "type": "parsing_library" }
+  ],
+  "test_framework": "clojure.test + Playwright",
+  "test_file_count": 15,
+  "modules": [
+    "frontend/components",
+    "frontend/db",
+    "frontend/handler",
+    "frontend/fs",
+    "frontend/format",
+    "frontend/search",
+    "frontend/state",
+    "frontend/publishing",
+    "frontend/extensions",
+    "frontend/util",
+    "frontend/worker",
+    "graph-parser",
+    "outliner",
+    "electron",
+    "mobile",
+    "plugins-api",
+    "packages/ui"
+  ],
+  "total_files": 617,
+  "notes": [
+    "Proyecto maduro con arquitectura bien definida",
+    "Estado dividido: DataScript (documentos) + Atoms (UI)",
+    "Soporta desktop (Electron), web, iOS y Android",
+    "Sistema de plugins con API pública"
+  ]
+}
