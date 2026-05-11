@@ -249,9 +249,7 @@ mod tests {
             _id: Uuid,
         ) -> Result<(quilt_domain::entities::Block, Vec<Uuid>), quilt_domain::errors::DomainError>
         {
-            Err(quilt_domain::errors::DomainError::NotImplemented(
-                "mock".into(),
-            ))
+            Err(quilt_domain::errors::DomainError::NotImplemented("mock"))
         }
         async fn insert(
             &self,
@@ -281,6 +279,9 @@ mod tests {
             &self,
             _since: chrono::DateTime<chrono::Utc>,
         ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+        async fn recycle_bin(&self) -> Result<Vec<Block>, DomainError> {
             Ok(vec![])
         }
         async fn move_block(

@@ -352,7 +352,327 @@ logseq://graph                        → Full graph
 
 ---
 
-## 7. Próximos Pasos de Implementación
+## 7. Sistema de Plugins — Extensibilidad del MCP Server
+
+### 7.1 Overview del Sistema de Plugins
+
+El servidor MCP de Quilt soporta un sistema de plugins que permite extender
+las capacidades del agente sin modificar el código core. Los plugins pueden:
+
+- Añadir nuevas tools para que el agente las use
+- Proporcionar resources (fuentes de datos)
+- Enviar notificaciones asíncronas al cliente
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   McpServer                          │
+│                                                      │
+│  ┌─────────────┐    ┌─────────────────────────┐   │
+│  │ Built-in    │    │    PluginRegistry        │   │
+│  │ Tools       │    │                          │   │
+│  │             │    │  ┌────────────────────┐  │   │
+│  │ - query     │    │  │ GitPlugin          │  │   │
+│  │ - search    │    │  │ name: "git"        │  │   │
+│  │ - create    │    │  │ tools: [status,    │  │   │
+│  │ - ...       │    │  │        log, diff]   │  │   │
+│  └─────────────┘    │  └────────────────────┘  │   │
+│         │            │           │               │   │
+│         │            │  ┌────────────────────┐  │   │
+│         │            │  │ Future: Zotero     │  │   │
+│         └──────────┬──│  │ Future: PDF        │  │   │
+│                    │  │  └────────────────────┘  │   │
+│                    │  └─────────────────────────┘   │
+│                    │                                │
+│         ┌──────────┴────────────────────────────┐   │
+│         │  Tool Dispatch (execute_tool)          │   │
+│         │                                        │   │
+│         │  1. Check built-in tools               │   │
+│         │  2. If not found → PluginRegistry      │   │
+│         │  3. Lookup tool in index               │   │
+│         │  4. Dispatch to plugin.execute_tool() │   │
+│         └────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘
+```
+
+### 7.2 Plugin Trait Contract
+
+Para crear un plugin, implementa el trait `Plugin`:
+
+```rust
+use quilt_mcp::plugin::{Plugin, PluginContext, PluginError};
+
+pub struct MyPlugin {
+    name: String,
+    version: String,
+}
+
+impl Plugin for MyPlugin {
+    fn name(&self) -> &str {
+        &self.name  // "my_plugin"
+    }
+
+    fn version(&self) -> &str {
+        &self.version  // "0.1.0"
+    }
+
+    fn tools(&self) -> Vec<Tool> {
+        vec![
+            Tool {
+                name: "my_plugin::do_something".to_string(),
+                description: "Does something useful".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "arg1": { "type": "string" }
+                    }
+                }),
+            }
+        ]
+    }
+
+    fn execute_tool(
+        &self,
+        name: &str,
+        args: serde_json::Value
+    ) -> Result<serde_json::Value, PluginError> {
+        match name {
+            "my_plugin::do_something" => {
+                // Tool logic here
+                Ok(serde_json::json!({ "result": "done" }))
+            }
+            _ => Err(PluginError::NotFound(name.to_string())),
+        }
+    }
+}
+```
+
+### 7.3 Registro de Plugins
+
+Los plugins se registran en el `PluginRegistry`:
+
+```rust
+use std::sync::Arc;
+
+let mut registry = PluginRegistry::new();
+registry.register(Arc::new(MyPlugin { name: "my_plugin".to_string(), version: "0.1.0".to_string() })).unwrap();
+```
+
+### 7.4 Plugin Git Incorporado
+
+El plugin `quilt-git-extension` proporciona tools de solo lectura para git:
+
+| Tool | Descripción | Argumentos |
+|------|-------------|------------|
+| `git::status` | Estado actual del repo | None |
+| `git::log` | Commits recientes | `max_count`, `author` |
+| `git::diff` | Cambios no commiteados | `staged`, `path` |
+| `git::blame` | Información de autor por línea | `path` (requerido) |
+
+**Ejemplo de uso:**
+```json
+{
+  "name": "git::status",
+  "arguments": {}
+}
+```
+```json
+{
+  "branch": "main",
+  "clean": false,
+  "staged": ["src/main.rs"],
+  "modified": ["Cargo.toml"],
+  "untracked": ["notes.md"]
+}
+```
+
+### 7.5 Convenciones para Plugins de Comunidad
+
+Para crear un plugin comunitario:
+
+1. **Nombre del crate**: `quilt-{plugin-name}-extension` (e.g., `quilt-zotero-extension`)
+2. **Nombre del plugin**: Usar el dominio sin prefijos (e.g., "zotero", no "quilt_zotero")
+3. **Tool names**: `{plugin_name}::{tool_name}` (e.g., `zotero::search`)
+4. **Documentación**: Incluir README con examples de uso
+5. **Tests**: Tests de integración usando temp directories
+
+### 7.6 Puntos de Extensión Futuros
+
+| Plugin | Descripción | Dependencias |
+|--------|-------------|--------------|
+| PDF | Extracción de metadata y texto de PDFs | `pdf-extract` o `lopdf` |
+| LaTeX | Parsing y extracción de ecuaciones | `tex-parser` |
+| Zotero | Integración con biblioteca de referencias | `zotero-api` |
+| ArXiv | Búsqueda y descarga de papers | `arxiv-api` |
+
+---
+
+### 7.7 Sistema de Hooks — Reacción a Eventos del Grafo
+
+El sistema de hooks permite a los plugins reaccionar a cambios en el knowledge graph (bloques creados, páginas eliminadas, transacciones committed, etc.). Mientras `Plugin::notifications()` cubre la dirección servidor→cliente, los hooks cubren la dirección core→plugin.
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     Core Domain                                │
+│                                                               │
+│  Block created ──┐                                           │
+│  Page deleted ──┼──► HookDispatcher ──► Plugin::on_hook()    │
+│  Tx committed ──┘          │                                 │
+│                             │                                 │
+│              ┌──────────────┴──────────────┐                 │
+│              │                             │                 │
+│         Priority                       Filters               │
+│         Ordering                       (block_ids,           │
+│                                      page_ids,              │
+│                                      content_contains)       │
+└──────────────────────────────────────────────────────────────┘
+```
+
+#### 7.7.1 Hooks Disponibles
+
+| Hook | Descripción | Payload |
+|------|-------------|---------|
+| `BlockChanged` | Bloque creado, actualizado o eliminado | `BlockPayload { id, page_id, change_type, content }` |
+| `PageChanged` | Página creada, actualizada, eliminada o renombrada | `PagePayload { id, name, change_type }` |
+| `DbTransaction` | Transacción de base de datos commiteada | `TransactionPayload { tx_id, block_changes[], page_changes[], committed_at }` |
+| `SearchIndexUpdated` | Índice de búsqueda actualizado | `SearchIndexPayload { update_type, blocks_affected, pages_affected }` |
+
+#### 7.7.2 Tipos de Cambio
+
+Cada hook incluye un `ChangeType` que indica la naturaleza del cambio:
+
+| Tipo | Descripción |
+|------|-------------|
+| `Created` | Entidad fue creada |
+| `Updated` | Entidad fue actualizada |
+| `Deleted` | Entidad fue eliminada |
+
+#### 7.7.3 Cómo Suscribirse a Hooks
+
+Implementa `subscribed_hooks()` y `on_hook()` en tu plugin:
+
+```rust
+use quilt_mcp::hooks::{
+    HookEvent, HookEventKind, HookSubscription, HookPayload,
+    BlockPayload, Priority, ChangeType,
+};
+use quilt_mcp::plugin::{Plugin, PluginError, PluginContext};
+
+pub struct BlockTracker {
+    name: String,
+    version: String,
+}
+
+impl Plugin for BlockTracker {
+    fn name(&self) -> &str {
+        &self.name  // "block_tracker"
+    }
+
+    fn version(&self) -> &str {
+        &self.version  // "0.1.0"
+    }
+
+    /// Declare which hooks this plugin wants to receive
+    fn subscribed_hooks(&self) -> Vec<HookSubscription> {
+        vec![
+            HookSubscription {
+                event: HookEventKind::BlockChanged,
+                priority: Priority::NORMAL,
+                filter: None,  // Receive all block changes
+            },
+            HookSubscription {
+                event: HookEventKind::PageChanged,
+                priority: Priority::HIGH,
+                filter: Some(HookFilter {
+                    block_ids: None,
+                    page_ids: None,
+                    content_contains: Some(vec!["TODO".to_string(), "FIXME".to_string()]),
+                }),
+            },
+        ]
+    }
+
+    /// Handle hook events
+    fn on_hook(&self, event: HookEvent) -> Result<(), HookError> {
+        match event {
+            HookEvent::BlockChanged(payload) => {
+                tracing::info!(
+                    block_id = %payload.id,
+                    change = %payload.change_type.name(),
+                    "Block changed"
+                );
+            }
+            HookEvent::PageChanged(payload) => {
+                tracing::info!(
+                    page_id = %payload.id,
+                    change = %payload.change_type.name(),
+                    "Page changed"
+                );
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn execute_tool(&self, name: &str, args: serde_json::Value) -> Result<serde_json::Value, PluginError> {
+        Err(PluginError::NotFound(name.to_string()))
+    }
+}
+```
+
+#### 7.7.4 Filtros de Hook
+
+Los filtros permiten suscribirse a un subconjunto de eventos:
+
+```rust
+HookSubscription {
+    event: HookEventKind::BlockChanged,
+    priority: Priority::NORMAL,
+    filter: Some(HookFilter {
+        // Solo bloques específicos
+        block_ids: Some(vec!["block-123".to_string(), "block-456".to_string()]),
+        // Solo páginas específicas
+        page_ids: Some(vec!["page-abc".to_string()]),
+        // Solo si el contenido contiene ciertas cadenas
+        content_contains: Some(vec!["TODO".to_string()]),
+    }),
+}
+```
+
+#### 7.7.5 Prioridades de Dispatch
+
+Los plugins se ejecutan en orden de prioridad (mayor primero). Prioridades reservadas:
+
+| Prioridad | Rango | Uso |
+|-----------|-------|-----|
+| `SYSTEM` | 100 | Logging de auditoría, sistemas críticos |
+| `HIGH` | 75 | Indexación de búsqueda |
+| `NORMAL` | 50 | Plugins normales (default) |
+| `LOW` | 25 | Plugins no-críticos |
+
+```rust
+HookSubscription {
+    event: HookEventKind::BlockChanged,
+    priority: Priority::HIGH,  // Se ejecuta antes que NORMAL
+    filter: None,
+}
+```
+
+#### 7.7.6 Aislamiento de Panics
+
+Si un plugin hace panic en `on_hook()`, el panic es capturado y el dispatch continúa a los siguientes plugins. El panic se registra como error en el `HookResult`:
+
+```rust
+// Plugin que hace panic
+fn on_hook(&self, event: HookEvent) -> Result<(), HookError> {
+    panic!("intentional panic for testing");
+}
+
+// Resultado: HookResult { success: false, error: Some("Plugin panicked: intentional panic...") }
+```
+
+---
+
+## 7b. Próximos Pasos de Implementación
 
 1. [ ] `quilt_query` + `quilt_search` — Base (Fase 1 MVP)
 2. [ ] `quilt_cognitive_mirror` — Primera capacidad diferenciadora

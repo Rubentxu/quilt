@@ -1,0 +1,22 @@
+[package]
+name = "quilt-infrastructure"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+description = "Infrastructure layer - database implementations and external services"
+
+[dependencies]
+quilt-domain = { path = "../quilt-domain" }
+sqlx.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+async-trait.workspace = true

@@ -58,7 +58,7 @@ impl DeepLinkParser {
     ///
     /// # Examples
     /// ```
-    /// use quilt_tauri::deep_link::{DeepLinkParser, DeepLinkTarget};
+    /// use quilt_desktop::deep_link::{DeepLinkParser, DeepLinkTarget};
     ///
     /// let target = DeepLinkParser::parse("quilt://page/Home").unwrap();
     /// assert!(matches!(target, DeepLinkTarget::Page { page_name, .. } if page_name == "Home"));

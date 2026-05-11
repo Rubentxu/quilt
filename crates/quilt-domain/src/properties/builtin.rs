@@ -1,0 +1,181 @@
+//! Builtin properties - predefined system properties
+
+use super::definition::PropertyDefinition;
+use super::types::{Cardinality, ClosedValue, PropertyType, ViewContext};
+use crate::value_objects::Uuid;
+use std::collections::HashMap;
+use std::sync::OnceLock;
+
+/// BUILTIN_PROPERTIES contains all predefined system properties.
+///
+/// These are seeded into the database on migration and provide
+/// the foundation for typed property system.
+pub static BUILTIN_PROPERTIES: OnceLock<HashMap<String, PropertyDefinition>> = OnceLock::new();
+
+/// Get the builtin properties map, initializing it on first access.
+fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
+    BUILTIN_PROPERTIES.get_or_init(|| {
+        let mut map = HashMap::new();
+
+        // status property with closed values: TODO, DOING, DONE, LATER, CANCELLED
+        let status_closed = vec![
+            ClosedValue::new(Uuid::new_v4(), "todo", "To Do")
+                .with_icon("📋")
+                .with_order(1.0),
+            ClosedValue::new(Uuid::new_v4(), "doing", "Doing")
+                .with_icon("🏃")
+                .with_order(2.0),
+            ClosedValue::new(Uuid::new_v4(), "done", "Done")
+                .with_icon("✅")
+                .with_order(3.0),
+            ClosedValue::new(Uuid::new_v4(), "later", "Later")
+                .with_icon("⏰")
+                .with_order(4.0),
+            ClosedValue::new(Uuid::new_v4(), "cancelled", "Cancelled")
+                .with_icon("❌")
+                .with_order(5.0),
+        ];
+        let status = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "logseq.property/status",
+            "Status",
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_closed_values(status_closed)
+        .with_view_context(ViewContext::Page)
+        .with_visibility(true, true, false);
+        map.insert("logseq.property/status".to_string(), status);
+
+        // priority property with closed values: A, B, C
+        let priority_closed = vec![
+            ClosedValue::new(Uuid::new_v4(), "a", "A")
+                .with_icon("🔴")
+                .with_order(1.0),
+            ClosedValue::new(Uuid::new_v4(), "b", "B")
+                .with_icon("🟡")
+                .with_order(2.0),
+            ClosedValue::new(Uuid::new_v4(), "c", "C")
+                .with_icon("🟢")
+                .with_order(3.0),
+        ];
+        let priority = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "logseq.property/priority",
+            "Priority",
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_closed_values(priority_closed)
+        .with_view_context(ViewContext::Page)
+        .with_visibility(true, true, false);
+        map.insert("logseq.property/priority".to_string(), priority);
+
+        // deadline property (Date type)
+        let deadline = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "logseq.property/deadline",
+            "Deadline",
+            PropertyType::Date,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Page)
+        .with_visibility(true, true, false);
+        map.insert("logseq.property/deadline".to_string(), deadline);
+
+        // scheduled property (Date type)
+        let scheduled = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "logseq.property/scheduled",
+            "Scheduled",
+            PropertyType::Date,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Page)
+        .with_visibility(true, true, false);
+        map.insert("logseq.property/scheduled".to_string(), scheduled);
+
+        // url property (Url type)
+        let url = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "logseq.property/url",
+            "URL",
+            PropertyType::Url,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Page)
+        .with_visibility(true, true, false);
+        map.insert("logseq.property/url".to_string(), url);
+
+        map
+    })
+}
+
+/// Get a builtin property definition by its database identifier
+pub fn get_builtin_property(db_ident: &str) -> Option<&'static PropertyDefinition> {
+    get_builtin_properties().get(db_ident)
+}
+
+/// Get all builtin property definitions
+pub fn get_all_builtin_properties() -> Vec<&'static PropertyDefinition> {
+    get_builtin_properties().values().collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builtin_properties_exist() {
+        let props = get_builtin_properties();
+        assert!(props.contains_key("logseq.property/status"));
+        assert!(props.contains_key("logseq.property/priority"));
+        assert!(props.contains_key("logseq.property/deadline"));
+        assert!(props.contains_key("logseq.property/scheduled"));
+        assert!(props.contains_key("logseq.property/url"));
+    }
+
+    #[test]
+    fn test_status_has_closed_values() {
+        let props = get_builtin_properties();
+        let status = props.get("logseq.property/status").unwrap();
+        assert!(status.has_closed_values());
+        assert_eq!(status.closed_values.len(), 5);
+        assert!(status.is_value_allowed("To Do"));
+        assert!(status.is_value_allowed("todo"));
+        assert!(status.is_value_allowed("Done"));
+        assert!(!status.is_value_allowed("Invalid"));
+    }
+
+    #[test]
+    fn test_priority_has_closed_values() {
+        let props = get_builtin_properties();
+        let priority = props.get("logseq.property/priority").unwrap();
+        assert!(priority.has_closed_values());
+        assert_eq!(priority.closed_values.len(), 3);
+        assert!(priority.is_value_allowed("A"));
+        assert!(priority.is_value_allowed("B"));
+        assert!(priority.is_value_allowed("C"));
+        assert!(!priority.is_value_allowed("D"));
+    }
+
+    #[test]
+    fn test_date_properties_no_closed_values() {
+        let props = get_builtin_properties();
+        let deadline = props.get("logseq.property/deadline").unwrap();
+        assert!(!deadline.has_closed_values());
+        assert_eq!(deadline.property_type, PropertyType::Date);
+
+        let scheduled = props.get("logseq.property/scheduled").unwrap();
+        assert!(!scheduled.has_closed_values());
+        assert_eq!(scheduled.property_type, PropertyType::Date);
+    }
+
+    #[test]
+    fn test_url_property() {
+        let props = get_builtin_properties();
+        let url = props.get("logseq.property/url").unwrap();
+        assert_eq!(url.property_type, PropertyType::Url);
+        assert!(!url.has_closed_values());
+    }
+}

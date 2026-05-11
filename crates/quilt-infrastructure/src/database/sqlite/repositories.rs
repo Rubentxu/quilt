@@ -31,13 +31,13 @@ use std::collections::HashMap;
 
 use crate::database::sqlite::connection::DbPool;
 use quilt_domain::classes::types::Class;
-use quilt_domain::entities::{Block, File, Page};
+use quilt_domain::entities::{Block, BlockSummary, DeepLink, File, Page, ScheduledTask, TaskType, LinkSourceType, LinkType};
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::types::{Cardinality, ClosedValue, PropertyType, ViewContext};
 use quilt_domain::repositories::{
-    BlockRepository, ClassRepository, FileRepository, PageRepository, PropertyRepository,
-    TagRepository,
+    BlockRepository, BlockSummaryRepository, ClassRepository, DeepLinkRepository, FileRepository, PageRepository,
+    PropertyRepository, ScheduledTaskRepository, TagRepository,
 };
 use quilt_domain::value_objects::{
     BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
@@ -207,6 +207,7 @@ struct BlockRow {
     updated_at: i64,
     refs: Vec<u8>,
     tags: Vec<u8>,
+    #[allow(dead_code)]
     deleted_at: Option<i64>,
 }
 
@@ -277,6 +278,8 @@ struct PageRow {
     journal: i64,
     created_at: i64,
     updated_at: i64,
+    #[allow(dead_code)]
+    deleted_at: Option<i64>,
 }
 
 impl PageRow {
@@ -293,6 +296,7 @@ impl PageRow {
             journal: row.get("journal"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            deleted_at: row.get("deleted_at"),
         })
     }
 
@@ -552,10 +556,7 @@ impl BlockRepository for SqliteBlockRepository {
         Ok(())
     }
 
-    async fn get_deleted_since(
-        &self,
-        since: DateTime<Utc>,
-    ) -> Result<Vec<Block>, DomainError> {
+    async fn get_deleted_since(&self, since: DateTime<Utc>) -> Result<Vec<Block>, DomainError> {
         let rows = sqlx::query(
             "SELECT * FROM blocks WHERE deleted_at IS NOT NULL AND deleted_at >= ? ORDER BY deleted_at DESC",
         )
@@ -563,6 +564,19 @@ impl BlockRepository for SqliteBlockRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DomainError::Database(format!("get_deleted_since: {}", e)))?;
+
+        rows.iter()
+            .map(|r| BlockRow::from_row(r)?.to_block())
+            .collect()
+    }
+
+    async fn recycle_bin(&self) -> Result<Vec<Block>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM blocks WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("recycle_bin: {}", e)))?;
 
         rows.iter()
             .map(|r| BlockRow::from_row(r)?.to_block())
@@ -643,11 +657,13 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn count_by_page(&self, page_id: Uuid) -> Result<usize, DomainError> {
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM blocks WHERE page_id = ? AND deleted_at IS NULL")
-            .bind(uuid_to_blob(&page_id))
-            .fetch_one(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("count_by_page: {}", e)))?;
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM blocks WHERE page_id = ? AND deleted_at IS NULL",
+        )
+        .bind(uuid_to_blob(&page_id))
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("count_by_page: {}", e)))?;
 
         Ok(count as usize)
     }
@@ -690,7 +706,7 @@ impl SqlitePageRepository {
 #[async_trait]
 impl PageRepository for SqlitePageRepository {
     async fn get_by_id(&self, id: Uuid) -> Result<Option<Page>, DomainError> {
-        let row = sqlx::query("SELECT * FROM pages WHERE id = ?")
+        let row = sqlx::query("SELECT * FROM pages WHERE id = ? AND deleted_at IS NULL")
             .bind(uuid_to_blob(&id))
             .fetch_optional(&self.pool)
             .await
@@ -703,7 +719,7 @@ impl PageRepository for SqlitePageRepository {
     }
 
     async fn get_by_name(&self, name: &str) -> Result<Option<Page>, DomainError> {
-        let row = sqlx::query("SELECT * FROM pages WHERE name = ?")
+        let row = sqlx::query("SELECT * FROM pages WHERE name = ? AND deleted_at IS NULL")
             .bind(name)
             .fetch_optional(&self.pool)
             .await
@@ -716,11 +732,13 @@ impl PageRepository for SqlitePageRepository {
     }
 
     async fn get_journal(&self, day: JournalDay) -> Result<Option<Page>, DomainError> {
-        let row = sqlx::query("SELECT * FROM pages WHERE journal_day = ? AND journal = 1")
-            .bind(day.as_i32())
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("get_journal: {}", e)))?;
+        let row = sqlx::query(
+            "SELECT * FROM pages WHERE journal_day = ? AND journal = 1 AND deleted_at IS NULL",
+        )
+        .bind(day.as_i32())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_journal: {}", e)))?;
 
         match row {
             Some(r) => Ok(Some(PageRow::from_row(&r)?.to_page()?)),
@@ -729,7 +747,7 @@ impl PageRepository for SqlitePageRepository {
     }
 
     async fn get_all(&self) -> Result<Vec<Page>, DomainError> {
-        let rows = sqlx::query("SELECT * FROM pages ORDER BY name")
+        let rows = sqlx::query("SELECT * FROM pages WHERE deleted_at IS NULL ORDER BY name")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| DomainError::Database(format!("get_all: {}", e)))?;
@@ -740,11 +758,13 @@ impl PageRepository for SqlitePageRepository {
     }
 
     async fn get_namespace_pages(&self, namespace_id: Uuid) -> Result<Vec<Page>, DomainError> {
-        let rows = sqlx::query("SELECT * FROM pages WHERE namespace_id = ? ORDER BY name")
-            .bind(uuid_to_blob(&namespace_id))
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("get_namespace_pages: {}", e)))?;
+        let rows = sqlx::query(
+            "SELECT * FROM pages WHERE namespace_id = ? AND deleted_at IS NULL ORDER BY name",
+        )
+        .bind(uuid_to_blob(&namespace_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_namespace_pages: {}", e)))?;
 
         rows.iter()
             .map(|r| PageRow::from_row(r)?.to_page())
@@ -814,16 +834,67 @@ impl PageRepository for SqlitePageRepository {
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
+        let now = Utc::now().timestamp();
+        sqlx::query("UPDATE pages SET deleted_at = ? WHERE id = ?")
+            .bind(now)
+            .bind(uuid_to_blob(&id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("soft_delete page: {}", e)))?;
+        Ok(())
+    }
+
+    async fn soft_delete(&self, id: Uuid) -> Result<(), DomainError> {
+        self.delete(id).await
+    }
+
+    async fn hard_delete(&self, id: Uuid) -> Result<(), DomainError> {
         sqlx::query("DELETE FROM pages WHERE id = ?")
             .bind(uuid_to_blob(&id))
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::Database(format!("delete page: {}", e)))?;
+            .map_err(|e| DomainError::Database(format!("hard_delete page: {}", e)))?;
         Ok(())
     }
 
+    async fn restore(&self, id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("UPDATE pages SET deleted_at = NULL WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("restore page: {}", e)))?;
+        Ok(())
+    }
+
+    async fn recycle_bin(&self) -> Result<Vec<Page>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM pages WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("recycle_bin: {}", e)))?;
+
+        rows.iter()
+            .map(|r| PageRow::from_row(r)?.to_page())
+            .collect()
+    }
+
+    async fn get_deleted_since(&self, since: DateTime<Utc>) -> Result<Vec<Page>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM pages WHERE deleted_at IS NOT NULL AND deleted_at >= ? ORDER BY deleted_at DESC",
+        )
+        .bind(since.timestamp())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_deleted_since: {}", e)))?;
+
+        rows.iter()
+            .map(|r| PageRow::from_row(r)?.to_page())
+            .collect()
+    }
+
     async fn get_updated_since(&self, since: DateTime<Utc>) -> Result<Vec<Page>, DomainError> {
-        let rows = sqlx::query("SELECT * FROM pages WHERE updated_at > ? ORDER BY updated_at DESC")
+        let rows = sqlx::query("SELECT * FROM pages WHERE updated_at > ? AND deleted_at IS NULL ORDER BY updated_at DESC")
             .bind(since.timestamp())
             .fetch_all(&self.pool)
             .await
@@ -835,11 +906,13 @@ impl PageRepository for SqlitePageRepository {
     }
 
     async fn get_recent(&self, limit: usize) -> Result<Vec<Page>, DomainError> {
-        let rows = sqlx::query("SELECT * FROM pages ORDER BY updated_at DESC LIMIT ?")
-            .bind(limit as i64)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("get_recent: {}", e)))?;
+        let rows = sqlx::query(
+            "SELECT * FROM pages WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT ?",
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_recent: {}", e)))?;
 
         rows.iter()
             .map(|r| PageRow::from_row(r)?.to_page())
@@ -847,7 +920,7 @@ impl PageRepository for SqlitePageRepository {
     }
 
     async fn count(&self) -> Result<usize, DomainError> {
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages")
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pages WHERE deleted_at IS NULL")
             .fetch_one(&self.pool)
             .await
             .map_err(|e| DomainError::Database(format!("count: {}", e)))?;
@@ -857,12 +930,32 @@ impl PageRepository for SqlitePageRepository {
 
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<Page>, DomainError> {
         let like = format!("%{}%", query);
-        let rows = sqlx::query("SELECT * FROM pages WHERE name LIKE ? ORDER BY name LIMIT ?")
-            .bind(&like)
-            .bind(limit as i64)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("search: {}", e)))?;
+        let rows = sqlx::query(
+            "SELECT * FROM pages WHERE name LIKE ? AND deleted_at IS NULL ORDER BY name LIMIT ?",
+        )
+        .bind(&like)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("search: {}", e)))?;
+
+        rows.iter()
+            .map(|r| PageRow::from_row(r)?.to_page())
+            .collect()
+    }
+
+    async fn get_orphan_pages(&self) -> Result<Vec<Page>, DomainError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT p.* FROM pages p
+            LEFT JOIN blocks b ON p.id = b.page_id AND b.deleted_at IS NULL
+            WHERE b.id IS NULL AND p.deleted_at IS NULL
+            ORDER BY p.updated_at DESC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_orphan_pages: {}", e)))?;
 
         rows.iter()
             .map(|r| PageRow::from_row(r)?.to_page())
@@ -1154,6 +1247,491 @@ impl TagRepository for SqliteTagRepository {
                 .map_err(|e| DomainError::Database(format!("search_tags: {}", e)))?;
 
         Ok(rows.iter().map(|r| r.get::<String, _>("tag")).collect())
+    }
+}
+
+// ── SqlitePropertyRepository ─────────────────────────────────────────────
+
+/// SQLite implementation of the [`PropertyRepository`] trait.
+pub struct SqlitePropertyRepository {
+    pool: DbPool,
+}
+
+impl SqlitePropertyRepository {
+    /// Creates a new `SqlitePropertyRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    fn row_to_property_def(
+        row: &sqlx::sqlite::SqliteRow,
+    ) -> Result<PropertyDefinition, DomainError> {
+        let id = blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?;
+        let property_type = PropertyType::from_str(&row.get::<String, _>("property_type"))
+            .ok_or_else(|| {
+                DomainError::InvalidData(format!(
+                    "Invalid property type: {}",
+                    row.get::<String, _>("property_type")
+                ))
+            })?;
+        let cardinality =
+            Cardinality::from_str(&row.get::<String, _>("cardinality")).ok_or_else(|| {
+                DomainError::InvalidData(format!(
+                    "Invalid cardinality: {}",
+                    row.get::<String, _>("cardinality")
+                ))
+            })?;
+        let view_context = ViewContext::from_str(&row.get::<String, _>("view_context"))
+            .ok_or_else(|| {
+                DomainError::InvalidData(format!(
+                    "Invalid view context: {}",
+                    row.get::<String, _>("view_context")
+                ))
+            })?;
+
+        Ok(PropertyDefinition {
+            id,
+            db_ident: row.get("db_ident"),
+            title: row.get("title"),
+            property_type,
+            cardinality,
+            closed_values: Vec::new(), // Loaded separately
+            view_context,
+            public: row.get::<i64, _>("public") != 0,
+            queryable: row.get::<i64, _>("queryable") != 0,
+            hidden: row.get::<i64, _>("hidden") != 0,
+            attribute: row.get("attribute"),
+        })
+    }
+}
+
+#[async_trait]
+impl PropertyRepository for SqlitePropertyRepository {
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
+        let row = sqlx::query("SELECT * FROM property_definitions WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_by_id: {}", e)))?;
+
+        match row {
+            Some(r) => Ok(Some(Self::row_to_property_def(&r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_by_db_ident(
+        &self,
+        ident: &str,
+    ) -> Result<Option<PropertyDefinition>, DomainError> {
+        let row = sqlx::query("SELECT * FROM property_definitions WHERE db_ident = ?")
+            .bind(ident)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_by_db_ident: {}", e)))?;
+
+        match row {
+            Some(r) => Ok(Some(Self::row_to_property_def(&r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
+        let rows = sqlx::query("SELECT * FROM property_definitions ORDER BY title")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_all: {}", e)))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let mut def = Self::row_to_property_def(&row)?;
+            // Load closed values
+            let closed_values = self.get_closed_values(def.id).await?;
+            def.closed_values = closed_values;
+            results.push(def);
+        }
+        Ok(results)
+    }
+
+    async fn insert(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
+        let now = Utc::now().timestamp();
+        sqlx::query(
+            r#"INSERT INTO property_definitions
+            (id, db_ident, title, property_type, cardinality, view_context, public, queryable, hidden, attribute, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(uuid_to_blob(&def.id))
+        .bind(&def.db_ident)
+        .bind(&def.title)
+        .bind(def.property_type.as_str())
+        .bind(def.cardinality.as_str())
+        .bind(def.view_context.as_str())
+        .bind(def.public as i64)
+        .bind(def.queryable as i64)
+        .bind(def.hidden as i64)
+        .bind(&def.attribute)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("insert property_definitions: {}", e)))?;
+
+        // Insert closed values
+        for cv in &def.closed_values {
+            sqlx::query(
+                r#"INSERT INTO closed_values (id, property_id, db_ident, value, icon, "order", created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(uuid_to_blob(&cv.id))
+            .bind(uuid_to_blob(&def.id))
+            .bind(&cv.db_ident)
+            .bind(&cv.value)
+            .bind(&cv.icon)
+            .bind(cv.order)
+            .bind(now)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("insert closed_values: {}", e)))?;
+        }
+
+        Ok(())
+    }
+
+    async fn update(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
+        let now = Utc::now().timestamp();
+        sqlx::query(
+            r#"UPDATE property_definitions SET
+            db_ident = ?, title = ?, property_type = ?, cardinality = ?, view_context = ?,
+            public = ?, queryable = ?, hidden = ?, attribute = ?, updated_at = ?
+            WHERE id = ?"#,
+        )
+        .bind(&def.db_ident)
+        .bind(&def.title)
+        .bind(def.property_type.as_str())
+        .bind(def.cardinality.as_str())
+        .bind(def.view_context.as_str())
+        .bind(def.public as i64)
+        .bind(def.queryable as i64)
+        .bind(def.hidden as i64)
+        .bind(&def.attribute)
+        .bind(now)
+        .bind(uuid_to_blob(&def.id))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("update property_definitions: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn get_closed_values(&self, property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
+        let rows =
+            sqlx::query("SELECT * FROM closed_values WHERE property_id = ? ORDER BY \"order\"")
+                .bind(uuid_to_blob(&property_id))
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| DomainError::Database(format!("get_closed_values: {}", e)))?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(ClosedValue {
+                    id: blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?,
+                    db_ident: row.get("db_ident"),
+                    value: row.get("value"),
+                    icon: row.get("icon"),
+                    order: row.get("order"),
+                })
+            })
+            .collect()
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM property_definitions WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("delete property_definitions: {}", e)))?;
+        Ok(())
+    }
+}
+
+// ── SqliteClassRepository ────────────────────────────────────────────────
+
+/// SQLite implementation of the [`ClassRepository`] trait.
+pub struct SqliteClassRepository {
+    pool: DbPool,
+}
+
+impl SqliteClassRepository {
+    /// Creates a new `SqliteClassRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    fn row_to_class(row: &sqlx::sqlite::SqliteRow) -> Result<Class, DomainError> {
+        let id = blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?;
+        let extends: Option<Uuid> = row
+            .get::<Option<Vec<u8>>, _>("extends")
+            .and_then(|b| if b.is_empty() { None } else { Some(b) })
+            .map(|b| blob_to_uuid(&b))
+            .transpose()?;
+
+        Ok(Class {
+            id,
+            db_ident: row.get("db_ident"),
+            title: row.get("title"),
+            extends,
+            required_properties: Vec::new(), // Loaded separately
+            default_properties: Vec::new(),  // Loaded separately
+            icon: row.get("icon"),
+            builtin: row.get::<i64, _>("builtin") != 0,
+            user_defined: row.get::<i64, _>("user_defined") != 0,
+        })
+    }
+}
+
+#[async_trait]
+impl ClassRepository for SqliteClassRepository {
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<Class>, DomainError> {
+        let row = sqlx::query("SELECT * FROM class_definitions WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_by_id: {}", e)))?;
+
+        match row {
+            Some(r) => {
+                let mut class = Self::row_to_class(&r)?;
+                class.required_properties = self.get_required_properties(class.id).await?;
+                class.default_properties = self.get_default_properties(class.id).await?;
+                Ok(Some(class))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_by_db_ident(&self, ident: &str) -> Result<Option<Class>, DomainError> {
+        let row = sqlx::query("SELECT * FROM class_definitions WHERE db_ident = ?")
+            .bind(ident)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_by_db_ident: {}", e)))?;
+
+        match row {
+            Some(r) => {
+                let mut class = Self::row_to_class(&r)?;
+                class.required_properties = self.get_required_properties(class.id).await?;
+                class.default_properties = self.get_default_properties(class.id).await?;
+                Ok(Some(class))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn get_ancestors(&self, class_id: Uuid) -> Result<Vec<Uuid>, DomainError> {
+        // Use recursive CTE to get all ancestors
+        let rows = sqlx::query(
+            r#"
+            WITH RECURSIVE ancestors AS (
+                SELECT id, extends FROM class_definitions WHERE id = ?
+                UNION ALL
+                SELECT c.id, c.extends FROM class_definitions c
+                JOIN ancestors a ON c.id = a.extends
+            )
+            SELECT id FROM ancestors
+            "#,
+        )
+        .bind(uuid_to_blob(&class_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_ancestors: {}", e)))?;
+
+        rows.iter()
+            .map(|row| blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref()))
+            .collect()
+    }
+
+    async fn get_required_properties(&self, class_id: Uuid) -> Result<Vec<Uuid>, DomainError> {
+        let rows =
+            sqlx::query("SELECT property_id FROM class_required_properties WHERE class_id = ?")
+                .bind(uuid_to_blob(&class_id))
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| DomainError::Database(format!("get_required_properties: {}", e)))?;
+
+        rows.iter()
+            .map(|row| blob_to_uuid(row.get::<Vec<u8>, _>("property_id").as_ref()))
+            .collect()
+    }
+
+    async fn get_default_properties(
+        &self,
+        class_id: Uuid,
+    ) -> Result<Vec<(Uuid, String)>, DomainError> {
+        let rows = sqlx::query("SELECT property_id, default_value_json FROM class_default_properties WHERE class_id = ?")
+            .bind(uuid_to_blob(&class_id))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_default_properties: {}", e)))?;
+
+        rows.iter()
+            .map(|row| {
+                let prop_id = blob_to_uuid(row.get::<Vec<u8>, _>("property_id").as_ref())?;
+                let default_json: String = row.get("default_value_json");
+                Ok((prop_id, default_json))
+            })
+            .collect()
+    }
+
+    async fn insert(&self, class: &Class) -> Result<(), DomainError> {
+        let now = Utc::now().timestamp();
+        sqlx::query(
+            r#"INSERT INTO class_definitions
+            (id, db_ident, title, extends, icon, builtin, user_defined, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(uuid_to_blob(&class.id))
+        .bind(&class.db_ident)
+        .bind(&class.title)
+        .bind(class.extends.as_ref().map(uuid_to_blob))
+        .bind(&class.icon)
+        .bind(class.builtin as i64)
+        .bind(class.user_defined as i64)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("insert class_definitions: {}", e)))?;
+
+        // Insert inheritance
+        if let Some(parent_id) = class.extends {
+            self.add_inheritance(class.id, parent_id).await?;
+        }
+
+        // Insert required properties
+        for prop_id in &class.required_properties {
+            self.add_required_property(class.id, *prop_id).await?;
+        }
+
+        // Insert default properties
+        for (prop_id, default_json) in &class.default_properties {
+            self.add_default_property(class.id, *prop_id, default_json)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn update(&self, class: &Class) -> Result<(), DomainError> {
+        let now = Utc::now().timestamp();
+        sqlx::query(
+            r#"UPDATE class_definitions SET
+            db_ident = ?, title = ?, extends = ?, icon = ?, builtin = ?, user_defined = ?, updated_at = ?
+            WHERE id = ?"#,
+        )
+        .bind(&class.db_ident)
+        .bind(&class.title)
+        .bind(class.extends.as_ref().map(uuid_to_blob))
+        .bind(&class.icon)
+        .bind(class.builtin as i64)
+        .bind(class.user_defined as i64)
+        .bind(now)
+        .bind(uuid_to_blob(&class.id))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("update class_definitions: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM class_definitions WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("delete class_definitions: {}", e)))?;
+        Ok(())
+    }
+
+    async fn add_inheritance(&self, child_id: Uuid, parent_id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("INSERT OR IGNORE INTO class_inheritance (class_id, parent_id) VALUES (?, ?)")
+            .bind(uuid_to_blob(&child_id))
+            .bind(uuid_to_blob(&parent_id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("add_inheritance: {}", e)))?;
+        Ok(())
+    }
+
+    async fn remove_inheritance(&self, child_id: Uuid, parent_id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM class_inheritance WHERE class_id = ? AND parent_id = ?")
+            .bind(uuid_to_blob(&child_id))
+            .bind(uuid_to_blob(&parent_id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("remove_inheritance: {}", e)))?;
+        Ok(())
+    }
+
+    async fn add_required_property(
+        &self,
+        class_id: Uuid,
+        property_id: Uuid,
+    ) -> Result<(), DomainError> {
+        sqlx::query(
+            "INSERT OR IGNORE INTO class_required_properties (class_id, property_id) VALUES (?, ?)",
+        )
+        .bind(uuid_to_blob(&class_id))
+        .bind(uuid_to_blob(&property_id))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("add_required_property: {}", e)))?;
+        Ok(())
+    }
+
+    async fn remove_required_property(
+        &self,
+        class_id: Uuid,
+        property_id: Uuid,
+    ) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM class_required_properties WHERE class_id = ? AND property_id = ?")
+            .bind(uuid_to_blob(&class_id))
+            .bind(uuid_to_blob(&property_id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("remove_required_property: {}", e)))?;
+        Ok(())
+    }
+
+    async fn add_default_property(
+        &self,
+        class_id: Uuid,
+        property_id: Uuid,
+        default_json: &str,
+    ) -> Result<(), DomainError> {
+        sqlx::query(
+            "INSERT OR REPLACE INTO class_default_properties (class_id, property_id, default_value_json) VALUES (?, ?, ?)",
+        )
+        .bind(uuid_to_blob(&class_id))
+        .bind(uuid_to_blob(&property_id))
+        .bind(default_json)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("add_default_property: {}", e)))?;
+        Ok(())
+    }
+
+    async fn remove_default_property(
+        &self,
+        class_id: Uuid,
+        property_id: Uuid,
+    ) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM class_default_properties WHERE class_id = ? AND property_id = ?")
+            .bind(uuid_to_blob(&class_id))
+            .bind(uuid_to_blob(&property_id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("remove_default_property: {}", e)))?;
+        Ok(())
     }
 }
 
@@ -2050,8 +2628,8 @@ mod tests {
         let repo = SqlitePageRepository::new(pool.clone());
 
         let namespace_id = Uuid::new_v4();
-        let page1 = make_page("ns-page-1");
-        let page2 = make_page("ns-page-2");
+        let _page1 = make_page("ns-page-1");
+        let _page2 = make_page("ns-page-2");
 
         // Note: Page doesn't have namespace_id field in this test helper
         // This test would require modifying make_page or using direct insertion
@@ -2146,498 +2724,537 @@ mod tests {
         assert_eq!(results.len(), 2);
     }
 
-    // Note: PropertyRepository and ClassRepository tests are omitted because the
-    // schema migrations (001_initial_schema.sql) do not include the required tables:
-    // - property_definitions
-    // - closed_values
-    // - class_definitions
-    // - class_inheritance
-    // - class_required_properties
-    // - class_default_properties
-    //
-    // These tables are referenced by the repository implementations but the
-    // corresponding migration has not been created yet.
-}
+} // end of mod tests
 
-// ── SqlitePropertyRepository ─────────────────────────────────────────────
+// ── SqliteBlockSummaryRepository ───────────────────────────────────────────
 
-/// SQLite implementation of the [`PropertyRepository`] trait.
-pub struct SqlitePropertyRepository {
+/// SQLite implementation of the [`BlockSummaryRepository`] trait.
+///
+/// Stores LLM-generated block summaries with content hashes for staleness detection.
+#[derive(Clone)]
+pub struct SqliteBlockSummaryRepository {
     pool: DbPool,
 }
 
-impl SqlitePropertyRepository {
-    /// Creates a new `SqlitePropertyRepository` with the given connection pool.
+impl SqliteBlockSummaryRepository {
     pub fn new(pool: DbPool) -> Self {
         Self { pool }
     }
 
-    fn row_to_property_def(
-        row: &sqlx::sqlite::SqliteRow,
-    ) -> Result<PropertyDefinition, DomainError> {
-        let id = blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?;
-        let property_type = PropertyType::from_str(&row.get::<String, _>("property_type"))
-            .ok_or_else(|| {
-                DomainError::InvalidData(format!(
-                    "Invalid property type: {}",
-                    row.get::<String, _>("property_type")
-                ))
-            })?;
-        let cardinality =
-            Cardinality::from_str(&row.get::<String, _>("cardinality")).ok_or_else(|| {
-                DomainError::InvalidData(format!(
-                    "Invalid cardinality: {}",
-                    row.get::<String, _>("cardinality")
-                ))
-            })?;
-        let view_context = ViewContext::from_str(&row.get::<String, _>("view_context"))
-            .ok_or_else(|| {
-                DomainError::InvalidData(format!(
-                    "Invalid view context: {}",
-                    row.get::<String, _>("view_context")
-                ))
-            })?;
-
-        Ok(PropertyDefinition {
-            id,
-            db_ident: row.get("db_ident"),
-            title: row.get("title"),
-            property_type,
-            cardinality,
-            closed_values: Vec::new(), // Loaded separately
-            view_context,
-            public: row.get::<i64, _>("public") != 0,
-            queryable: row.get::<i64, _>("queryable") != 0,
-            hidden: row.get::<i64, _>("hidden") != 0,
-            attribute: row.get("attribute"),
+    fn row_to_summary(row: &sqlx::sqlite::SqliteRow) -> Result<BlockSummary, DomainError> {
+        let block_id = blob_to_uuid(row.get::<Vec<u8>, _>("block_id").as_ref())?;
+        let content_hash: Vec<u8> = row.get("content_hash");
+        Ok(BlockSummary {
+            block_id,
+            summary: row.get("summary"),
+            content_hash,
+            generated_at: ts_to_datetime(row.get::<i64, _>("generated_at")),
         })
     }
 }
 
 #[async_trait]
-impl PropertyRepository for SqlitePropertyRepository {
-    async fn get_by_id(&self, id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
-        let row = sqlx::query("SELECT * FROM property_definitions WHERE id = ?")
-            .bind(uuid_to_blob(&id))
+impl BlockSummaryRepository for SqliteBlockSummaryRepository {
+    async fn get(&self, block_id: Uuid) -> Result<Option<BlockSummary>, DomainError> {
+        let row = sqlx::query("SELECT * FROM block_summaries WHERE block_id = ?")
+            .bind(uuid_to_blob(&block_id))
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| DomainError::Database(format!("get_by_id: {}", e)))?;
+            .map_err(|e| DomainError::Database(format!("get summary: {}", e)))?;
 
         match row {
-            Some(r) => Ok(Some(Self::row_to_property_def(&r)?)),
+            Some(r) => Ok(Some(Self::row_to_summary(&r)?)),
             None => Ok(None),
         }
     }
 
-    async fn get_by_db_ident(
-        &self,
-        ident: &str,
-    ) -> Result<Option<PropertyDefinition>, DomainError> {
-        let row = sqlx::query("SELECT * FROM property_definitions WHERE db_ident = ?")
-            .bind(ident)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("get_by_db_ident: {}", e)))?;
-
-        match row {
-            Some(r) => Ok(Some(Self::row_to_property_def(&r)?)),
-            None => Ok(None),
+    async fn get_batch(&self, block_ids: &[Uuid]) -> Result<Vec<BlockSummary>, DomainError> {
+        if block_ids.is_empty() {
+            return Ok(vec![]);
         }
-    }
+        let blobs: Vec<Vec<u8>> = block_ids.iter().map(|id| uuid_to_blob(id)).collect();
+        let placeholders: Vec<String> = blobs.iter().map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "SELECT * FROM block_summaries WHERE block_id IN ({})",
+            placeholders.join(", ")
+        );
 
-    async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
-        let rows = sqlx::query("SELECT * FROM property_definitions ORDER BY title")
+        let mut query = sqlx::query(&sql);
+        for blob in &blobs {
+            query = query.bind(blob);
+        }
+
+        let rows = query
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| DomainError::Database(format!("get_all: {}", e)))?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            let mut def = Self::row_to_property_def(&row)?;
-            // Load closed values
-            let closed_values = self.get_closed_values(def.id).await?;
-            def.closed_values = closed_values;
-            results.push(def);
-        }
-        Ok(results)
-    }
-
-    async fn insert(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
-        let now = Utc::now().timestamp();
-        sqlx::query(
-            r#"INSERT INTO property_definitions
-            (id, db_ident, title, property_type, cardinality, view_context, public, queryable, hidden, attribute, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
-        )
-        .bind(uuid_to_blob(&def.id))
-        .bind(&def.db_ident)
-        .bind(&def.title)
-        .bind(def.property_type.as_str())
-        .bind(def.cardinality.as_str())
-        .bind(def.view_context.as_str())
-        .bind(def.public as i64)
-        .bind(def.queryable as i64)
-        .bind(def.hidden as i64)
-        .bind(&def.attribute)
-        .bind(now)
-        .bind(now)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DomainError::Database(format!("insert property_definitions: {}", e)))?;
-
-        // Insert closed values
-        for cv in &def.closed_values {
-            sqlx::query(
-                r#"INSERT INTO closed_values (id, property_id, db_ident, value, icon, "order", created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)"#,
-            )
-            .bind(uuid_to_blob(&cv.id))
-            .bind(uuid_to_blob(&def.id))
-            .bind(&cv.db_ident)
-            .bind(&cv.value)
-            .bind(&cv.icon)
-            .bind(cv.order)
-            .bind(now)
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("insert closed_values: {}", e)))?;
-        }
-
-        Ok(())
-    }
-
-    async fn update(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
-        let now = Utc::now().timestamp();
-        sqlx::query(
-            r#"UPDATE property_definitions SET
-            db_ident = ?, title = ?, property_type = ?, cardinality = ?, view_context = ?,
-            public = ?, queryable = ?, hidden = ?, attribute = ?, updated_at = ?
-            WHERE id = ?"#,
-        )
-        .bind(&def.db_ident)
-        .bind(&def.title)
-        .bind(def.property_type.as_str())
-        .bind(def.cardinality.as_str())
-        .bind(def.view_context.as_str())
-        .bind(def.public as i64)
-        .bind(def.queryable as i64)
-        .bind(def.hidden as i64)
-        .bind(&def.attribute)
-        .bind(now)
-        .bind(uuid_to_blob(&def.id))
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DomainError::Database(format!("update property_definitions: {}", e)))?;
-
-        Ok(())
-    }
-
-    async fn get_closed_values(&self, property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
-        let rows =
-            sqlx::query("SELECT * FROM closed_values WHERE property_id = ? ORDER BY \"order\"")
-                .bind(uuid_to_blob(&property_id))
-                .fetch_all(&self.pool)
-                .await
-                .map_err(|e| DomainError::Database(format!("get_closed_values: {}", e)))?;
+            .map_err(|e| DomainError::Database(format!("get_batch summaries: {}", e)))?;
 
         rows.iter()
-            .map(|row| {
-                Ok(ClosedValue {
-                    id: blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?,
-                    db_ident: row.get("db_ident"),
-                    value: row.get("value"),
-                    icon: row.get("icon"),
-                    order: row.get("order"),
-                })
+            .map(|r| Self::row_to_summary(r))
+            .collect()
+    }
+
+    async fn upsert(&self, summary: &BlockSummary) -> Result<(), DomainError> {
+        sqlx::query(
+            r#"INSERT INTO block_summaries (block_id, summary, content_hash, generated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(block_id) DO UPDATE SET
+            summary = excluded.summary,
+            content_hash = excluded.content_hash,
+            generated_at = excluded.generated_at"#,
+        )
+        .bind(uuid_to_blob(&summary.block_id))
+        .bind(&summary.summary)
+        .bind(&summary.content_hash)
+        .bind(datetime_to_ts(&summary.generated_at))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("upsert summary: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn delete(&self, block_id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM block_summaries WHERE block_id = ?")
+            .bind(uuid_to_blob(&block_id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("delete summary: {}", e)))?;
+        Ok(())
+    }
+
+    async fn list_stale(
+        &self,
+        before: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<Uuid>, DomainError> {
+        let rows =
+            sqlx::query("SELECT block_id FROM block_summaries WHERE generated_at < ?")
+                .bind(datetime_to_ts(&before))
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| DomainError::Database(format!("list_stale: {}", e)))?;
+
+        rows.iter()
+            .map(|r| {
+                let blob: Vec<u8> = r.get("block_id");
+                blob_to_uuid(&blob)
             })
             .collect()
     }
 
-    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
-        sqlx::query("DELETE FROM property_definitions WHERE id = ?")
-            .bind(uuid_to_blob(&id))
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("delete property_definitions: {}", e)))?;
-        Ok(())
+    async fn count(&self) -> Result<usize, DomainError> {
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM block_summaries")
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| DomainError::Database(format!("count summaries: {}", e)))?;
+        Ok(count as usize)
+    }
+
+    async fn count_since(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<usize, DomainError> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM block_summaries WHERE generated_at >= ?",
+        )
+        .bind(datetime_to_ts(&since))
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("count_since: {}", e)))?;
+        Ok(count as usize)
     }
 }
 
-// ── SqliteClassRepository ────────────────────────────────────────────────
+// ── SqliteScheduledTaskRepository ──────────────────────────────────────────
 
-/// SQLite implementation of the [`ClassRepository`] trait.
-pub struct SqliteClassRepository {
+/// SQLite implementation of the [`ScheduledTaskRepository`] trait.
+#[derive(Clone)]
+pub struct SqliteScheduledTaskRepository {
     pool: DbPool,
 }
 
-impl SqliteClassRepository {
-    /// Creates a new `SqliteClassRepository` with the given connection pool.
+impl SqliteScheduledTaskRepository {
     pub fn new(pool: DbPool) -> Self {
         Self { pool }
     }
 
-    fn row_to_class(row: &sqlx::sqlite::SqliteRow) -> Result<Class, DomainError> {
-        let id = blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?;
-        let extends: Option<Uuid> = row
-            .get::<Option<Vec<u8>>, _>("extends")
-            .and_then(|b| if b.is_empty() { None } else { Some(b) })
-            .map(|b| blob_to_uuid(&b))
-            .transpose()?;
+    fn row_to_task(row: &sqlx::sqlite::SqliteRow) -> Result<ScheduledTask, DomainError> {
+        let task_type_str: String = row.get("task_type");
+        let task_type = match task_type_str.as_str() {
+            "RebuildIndex" => TaskType::RebuildIndex,
+            "CleanStaleSummaries" => TaskType::CleanStaleSummaries,
+            "HealthCheck" => TaskType::HealthCheck,
+            _ => {
+                return Err(DomainError::InvalidData(format!(
+                    "Unknown task_type: {}",
+                    task_type_str
+                )))
+            }
+        };
 
-        Ok(Class {
-            id,
-            db_ident: row.get("db_ident"),
-            title: row.get("title"),
-            extends,
-            required_properties: Vec::new(), // Loaded separately
-            default_properties: Vec::new(),  // Loaded separately
-            icon: row.get("icon"),
-            builtin: row.get::<i64, _>("builtin") != 0,
-            user_defined: row.get::<i64, _>("user_defined") != 0,
+        Ok(ScheduledTask {
+            id: blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?,
+            name: row.get("name"),
+            cron_expr: row.get("cron_expr"),
+            task_type,
+            enabled: row.get::<i64, _>("enabled") != 0,
+            last_run: optional_ts_to_datetime(row.get("last_run")),
+            next_run: ts_to_datetime(row.get::<i64, _>("next_run")),
+            created_at: ts_to_datetime(row.get::<i64, _>("created_at")),
         })
     }
 }
 
 #[async_trait]
-impl ClassRepository for SqliteClassRepository {
-    async fn get_by_id(&self, id: Uuid) -> Result<Option<Class>, DomainError> {
-        let row = sqlx::query("SELECT * FROM class_definitions WHERE id = ?")
-            .bind(uuid_to_blob(&id))
+impl ScheduledTaskRepository for SqliteScheduledTaskRepository {
+    async fn get_by_name(&self, name: &str) -> Result<Option<ScheduledTask>, DomainError> {
+        let row = sqlx::query("SELECT * FROM scheduled_tasks WHERE name = ?")
+            .bind(name)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| DomainError::Database(format!("get_by_id: {}", e)))?;
+            .map_err(|e| DomainError::Database(format!("get_by_name task: {}", e)))?;
 
         match row {
-            Some(r) => {
-                let mut class = Self::row_to_class(&r)?;
-                class.required_properties = self.get_required_properties(class.id).await?;
-                class.default_properties = self.get_default_properties(class.id).await?;
-                Ok(Some(class))
-            }
+            Some(r) => Ok(Some(Self::row_to_task(&r)?)),
             None => Ok(None),
         }
     }
 
-    async fn get_by_db_ident(&self, ident: &str) -> Result<Option<Class>, DomainError> {
-        let row = sqlx::query("SELECT * FROM class_definitions WHERE db_ident = ?")
-            .bind(ident)
-            .fetch_optional(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("get_by_db_ident: {}", e)))?;
-
-        match row {
-            Some(r) => {
-                let mut class = Self::row_to_class(&r)?;
-                class.required_properties = self.get_required_properties(class.id).await?;
-                class.default_properties = self.get_default_properties(class.id).await?;
-                Ok(Some(class))
-            }
-            None => Ok(None),
-        }
-    }
-
-    async fn get_ancestors(&self, class_id: Uuid) -> Result<Vec<Uuid>, DomainError> {
-        // Use recursive CTE to get all ancestors
+    async fn list_due(&self) -> Result<Vec<ScheduledTask>, DomainError> {
+        let now = chrono::Utc::now().timestamp();
         let rows = sqlx::query(
-            r#"
-            WITH RECURSIVE ancestors AS (
-                SELECT id, extends FROM class_definitions WHERE id = ?
-                UNION ALL
-                SELECT c.id, c.extends FROM class_definitions c
-                JOIN ancestors a ON c.id = a.extends
-            )
-            SELECT id FROM ancestors
-            "#,
+            "SELECT * FROM scheduled_tasks WHERE enabled = 1 AND next_run <= ? ORDER BY next_run",
         )
-        .bind(uuid_to_blob(&class_id))
+        .bind(now)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| DomainError::Database(format!("get_ancestors: {}", e)))?;
+        .map_err(|e| DomainError::Database(format!("list_due: {}", e)))?;
 
-        rows.iter()
-            .map(|row| blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref()))
-            .collect()
+        rows.iter().map(|r| Self::row_to_task(r)).collect()
     }
 
-    async fn get_required_properties(&self, class_id: Uuid) -> Result<Vec<Uuid>, DomainError> {
-        let rows =
-            sqlx::query("SELECT property_id FROM class_required_properties WHERE class_id = ?")
-                .bind(uuid_to_blob(&class_id))
-                .fetch_all(&self.pool)
-                .await
-                .map_err(|e| DomainError::Database(format!("get_required_properties: {}", e)))?;
-
-        rows.iter()
-            .map(|row| blob_to_uuid(row.get::<Vec<u8>, _>("property_id").as_ref()))
-            .collect()
-    }
-
-    async fn get_default_properties(
-        &self,
-        class_id: Uuid,
-    ) -> Result<Vec<(Uuid, String)>, DomainError> {
-        let rows = sqlx::query("SELECT property_id, default_value_json FROM class_default_properties WHERE class_id = ?")
-            .bind(uuid_to_blob(&class_id))
+    async fn list_all(&self) -> Result<Vec<ScheduledTask>, DomainError> {
+        let rows = sqlx::query("SELECT * FROM scheduled_tasks ORDER BY name")
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| DomainError::Database(format!("get_default_properties: {}", e)))?;
+            .map_err(|e| DomainError::Database(format!("list_all tasks: {}", e)))?;
 
-        rows.iter()
-            .map(|row| {
-                let prop_id = blob_to_uuid(row.get::<Vec<u8>, _>("property_id").as_ref())?;
-                let default_json: String = row.get("default_value_json");
-                Ok((prop_id, default_json))
-            })
-            .collect()
+        rows.iter().map(|r| Self::row_to_task(r)).collect()
     }
 
-    async fn insert(&self, class: &Class) -> Result<(), DomainError> {
-        let now = Utc::now().timestamp();
+    async fn upsert(&self, task: &ScheduledTask) -> Result<(), DomainError> {
+        let type_str = match &task.task_type {
+            TaskType::RebuildIndex => "RebuildIndex",
+            TaskType::CleanStaleSummaries => "CleanStaleSummaries",
+            TaskType::HealthCheck => "HealthCheck",
+        };
+
         sqlx::query(
-            r#"INSERT INTO class_definitions
-            (id, db_ident, title, icon, builtin, user_defined, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)"#,
+            r#"INSERT INTO scheduled_tasks
+            (id, name, cron_expr, task_type, task_config_json, enabled, last_run, next_run, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(name) DO UPDATE SET
+            cron_expr = excluded.cron_expr,
+            task_type = excluded.task_type,
+            task_config_json = excluded.task_config_json,
+            enabled = excluded.enabled,
+            last_run = excluded.last_run,
+            next_run = excluded.next_run"#,
         )
-        .bind(uuid_to_blob(&class.id))
-        .bind(&class.db_ident)
-        .bind(&class.title)
-        .bind(&class.icon)
-        .bind(class.builtin as i64)
-        .bind(class.user_defined as i64)
-        .bind(now)
-        .bind(now)
+        .bind(uuid_to_blob(&task.id))
+        .bind(&task.name)
+        .bind(&task.cron_expr)
+        .bind(type_str)
+        .bind(String::new())
+        .bind(task.enabled as i64)
+        .bind(task.last_run.as_ref().map(datetime_to_ts))
+        .bind(datetime_to_ts(&task.next_run))
+        .bind(datetime_to_ts(&task.created_at))
         .execute(&self.pool)
         .await
-        .map_err(|e| DomainError::Database(format!("insert class_definitions: {}", e)))?;
-
-        // Insert inheritance
-        if let Some(parent_id) = class.extends {
-            self.add_inheritance(class.id, parent_id).await?;
-        }
-
-        // Insert required properties
-        for prop_id in &class.required_properties {
-            self.add_required_property(class.id, *prop_id).await?;
-        }
-
-        // Insert default properties
-        for (prop_id, default_json) in &class.default_properties {
-            self.add_default_property(class.id, *prop_id, default_json)
-                .await?;
-        }
+        .map_err(|e| DomainError::Database(format!("upsert task: {}", e)))?;
 
         Ok(())
     }
 
-    async fn update(&self, class: &Class) -> Result<(), DomainError> {
-        let now = Utc::now().timestamp();
-        sqlx::query(
-            r#"UPDATE class_definitions SET
-            db_ident = ?, title = ?, icon = ?, builtin = ?, user_defined = ?, updated_at = ?
-            WHERE id = ?"#,
+    async fn delete(&self, name: &str) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM scheduled_tasks WHERE name = ?")
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("delete task: {}", e)))?;
+        Ok(())
+    }
+
+    async fn mark_executed(
+        &self,
+        name: &str,
+        next_run: chrono::DateTime<chrono::Utc>,
+    ) -> Result<(), DomainError> {
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query("UPDATE scheduled_tasks SET last_run = ?, next_run = ? WHERE name = ?")
+            .bind(now)
+            .bind(datetime_to_ts(&next_run))
+            .bind(name)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("mark_executed: {}", e)))?;
+        Ok(())
+    }
+}
+
+// ── SqliteDeepLinkRepository ──────────────────────────────────────────
+
+/// SQLite implementation of the [`DeepLinkRepository`] trait.
+///
+/// This repository provides persistent storage for deep links
+/// using SQLite via the sqlx async driver.
+#[derive(Clone)]
+pub struct SqliteDeepLinkRepository {
+    pool: DbPool,
+}
+
+impl SqliteDeepLinkRepository {
+    /// Creates a new `SqliteDeepLinkRepository` with the given connection pool.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - A SQLite connection pool ([`DbPool`])
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quilt_infrastructure::database::sqlite::repositories::SqliteDeepLinkRepository;
+    /// use quilt_infrastructure::database::sqlite::connection::create_pool;
+    ///
+    /// async {
+    ///     let pool = create_pool("/tmp/test.db").await.unwrap();
+    ///     let repo = SqliteDeepLinkRepository::new(pool);
+    /// };
+    /// ```
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl DeepLinkRepository for SqliteDeepLinkRepository {
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<DeepLink>, DomainError> {
+        let row = sqlx::query("SELECT * FROM deep_links WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_by_id: {}", e)))?;
+
+        match row {
+            Some(r) => Ok(Some(self.row_to_deep_link(&r)?)),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_by_source(
+        &self,
+        source_id: Uuid,
+        source_type: LinkSourceType,
+    ) -> Result<Vec<DeepLink>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM deep_links WHERE source_id = ? AND source_type = ? ORDER BY created_at DESC",
         )
-        .bind(&class.db_ident)
-        .bind(&class.title)
-        .bind(&class.icon)
-        .bind(class.builtin as i64)
-        .bind(class.user_defined as i64)
-        .bind(now)
-        .bind(uuid_to_blob(&class.id))
+        .bind(uuid_to_blob(&source_id))
+        .bind(source_type.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_by_source: {}", e)))?;
+
+        rows.iter().map(|r| self.row_to_deep_link(r)).collect()
+    }
+
+    async fn get_by_target(&self, target_id: Uuid) -> Result<Vec<DeepLink>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM deep_links WHERE target_id = ? ORDER BY created_at DESC",
+        )
+        .bind(uuid_to_blob(&target_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_by_target: {}", e)))?;
+
+        rows.iter().map(|r| self.row_to_deep_link(r)).collect()
+    }
+
+    async fn get_by_type(&self, link_type: LinkType) -> Result<Vec<DeepLink>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM deep_links WHERE link_type = ? ORDER BY created_at DESC",
+        )
+        .bind(link_type.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_by_type: {}", e)))?;
+
+        rows.iter().map(|r| self.row_to_deep_link(r)).collect()
+    }
+
+    async fn get_by_source_and_type(
+        &self,
+        source_id: Uuid,
+        source_type: LinkSourceType,
+        link_type: LinkType,
+    ) -> Result<Vec<DeepLink>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM deep_links WHERE source_id = ? AND source_type = ? AND link_type = ? ORDER BY created_at DESC",
+        )
+        .bind(uuid_to_blob(&source_id))
+        .bind(source_type.as_str())
+        .bind(link_type.as_str())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_by_source_and_type: {}", e)))?;
+
+        rows.iter().map(|r| self.row_to_deep_link(r)).collect()
+    }
+
+    async fn insert(&self, link: &DeepLink) -> Result<(), DomainError> {
+        sqlx::query(
+            r#"INSERT INTO deep_links
+            (id, source_id, source_type, target_id, target_page_name, link_type, external_url, link_text, context, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(uuid_to_blob(&link.id))
+        .bind(uuid_to_blob(&link.source_id))
+        .bind(link.source_type.as_str())
+        .bind(link.target_id.as_ref().map(uuid_to_blob))
+        .bind(&link.target_page_name)
+        .bind(link.link_type.as_str())
+        .bind(&link.external_url)
+        .bind(&link.link_text)
+        .bind(&link.context)
+        .bind(datetime_to_ts(&link.created_at))
         .execute(&self.pool)
         .await
-        .map_err(|e| DomainError::Database(format!("update class_definitions: {}", e)))?;
+        .map_err(|e| DomainError::Database(format!("insert deep_link: {}", e)))?;
 
         Ok(())
     }
 
     async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
-        sqlx::query("DELETE FROM class_definitions WHERE id = ?")
+        sqlx::query("DELETE FROM deep_links WHERE id = ?")
             .bind(uuid_to_blob(&id))
             .execute(&self.pool)
             .await
-            .map_err(|e| DomainError::Database(format!("delete class_definitions: {}", e)))?;
+            .map_err(|e| DomainError::Database(format!("delete deep_link: {}", e)))?;
         Ok(())
     }
 
-    async fn add_inheritance(&self, child_id: Uuid, parent_id: Uuid) -> Result<(), DomainError> {
-        sqlx::query("INSERT OR IGNORE INTO class_inheritance (class_id, parent_id) VALUES (?, ?)")
-            .bind(uuid_to_blob(&child_id))
-            .bind(uuid_to_blob(&parent_id))
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("add_inheritance: {}", e)))?;
-        Ok(())
-    }
-
-    async fn remove_inheritance(&self, child_id: Uuid, parent_id: Uuid) -> Result<(), DomainError> {
-        sqlx::query("DELETE FROM class_inheritance WHERE class_id = ? AND parent_id = ?")
-            .bind(uuid_to_blob(&child_id))
-            .bind(uuid_to_blob(&parent_id))
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("remove_inheritance: {}", e)))?;
-        Ok(())
-    }
-
-    async fn add_required_property(
+    async fn delete_by_source(
         &self,
-        class_id: Uuid,
-        property_id: Uuid,
+        source_id: Uuid,
+        source_type: LinkSourceType,
     ) -> Result<(), DomainError> {
-        sqlx::query(
-            "INSERT OR IGNORE INTO class_required_properties (class_id, property_id) VALUES (?, ?)",
+        sqlx::query("DELETE FROM deep_links WHERE source_id = ? AND source_type = ?")
+            .bind(uuid_to_blob(&source_id))
+            .bind(source_type.as_str())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("delete_by_source: {}", e)))?;
+        Ok(())
+    }
+
+    async fn delete_by_target(&self, target_id: Uuid) -> Result<(), DomainError> {
+        sqlx::query("DELETE FROM deep_links WHERE target_id = ?")
+            .bind(uuid_to_blob(&target_id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("delete_by_target: {}", e)))?;
+        Ok(())
+    }
+
+    async fn count_by_source(
+        &self,
+        source_id: Uuid,
+        source_type: LinkSourceType,
+    ) -> Result<usize, DomainError> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM deep_links WHERE source_id = ? AND source_type = ?",
         )
-        .bind(uuid_to_blob(&class_id))
-        .bind(uuid_to_blob(&property_id))
-        .execute(&self.pool)
+        .bind(uuid_to_blob(&source_id))
+        .bind(source_type.as_str())
+        .fetch_one(&self.pool)
         .await
-        .map_err(|e| DomainError::Database(format!("add_required_property: {}", e)))?;
-        Ok(())
+        .map_err(|e| DomainError::Database(format!("count_by_source: {}", e)))?;
+
+        Ok(count as usize)
     }
 
-    async fn remove_required_property(
-        &self,
-        class_id: Uuid,
-        property_id: Uuid,
-    ) -> Result<(), DomainError> {
-        sqlx::query("DELETE FROM class_required_properties WHERE class_id = ? AND property_id = ?")
-            .bind(uuid_to_blob(&class_id))
-            .bind(uuid_to_blob(&property_id))
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("remove_required_property: {}", e)))?;
-        Ok(())
-    }
-
-    async fn add_default_property(
-        &self,
-        class_id: Uuid,
-        property_id: Uuid,
-        default_json: &str,
-    ) -> Result<(), DomainError> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO class_default_properties (class_id, property_id, default_value_json) VALUES (?, ?, ?)",
+    async fn count_by_target(&self, target_id: Uuid) -> Result<usize, DomainError> {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM deep_links WHERE target_id = ?",
         )
-        .bind(uuid_to_blob(&class_id))
-        .bind(uuid_to_blob(&property_id))
-        .bind(default_json)
-        .execute(&self.pool)
+        .bind(uuid_to_blob(&target_id))
+        .fetch_one(&self.pool)
         .await
-        .map_err(|e| DomainError::Database(format!("add_default_property: {}", e)))?;
-        Ok(())
+        .map_err(|e| DomainError::Database(format!("count_by_target: {}", e)))?;
+
+        Ok(count as usize)
     }
 
-    async fn remove_default_property(
+    async fn get_page(
         &self,
-        class_id: Uuid,
-        property_id: Uuid,
-    ) -> Result<(), DomainError> {
-        sqlx::query("DELETE FROM class_default_properties WHERE class_id = ? AND property_id = ?")
-            .bind(uuid_to_blob(&class_id))
-            .bind(uuid_to_blob(&property_id))
-            .execute(&self.pool)
-            .await
-            .map_err(|e| DomainError::Database(format!("remove_default_property: {}", e)))?;
-        Ok(())
+        source_id: Uuid,
+        source_type: LinkSourceType,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Vec<DeepLink>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM deep_links WHERE source_id = ? AND source_type = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        )
+        .bind(uuid_to_blob(&source_id))
+        .bind(source_type.as_str())
+        .bind(limit as i64)
+        .bind(offset as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_page: {}", e)))?;
+
+        rows.iter().map(|r| self.row_to_deep_link(r)).collect()
+    }
+
+    async fn search_by_text(&self, query: &str, limit: usize) -> Result<Vec<DeepLink>, DomainError> {
+        let pattern = format!("%{}%", query);
+        let rows = sqlx::query(
+            "SELECT * FROM deep_links WHERE link_text LIKE ? OR context LIKE ? ORDER BY created_at DESC LIMIT ?",
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("search_by_text: {}", e)))?;
+
+        rows.iter().map(|r| self.row_to_deep_link(r)).collect()
+    }
+}
+
+impl SqliteDeepLinkRepository {
+    fn row_to_deep_link(&self, row: &sqlx::sqlite::SqliteRow) -> Result<DeepLink, DomainError> {
+        let source_type_str: String = row.get("source_type");
+        let link_type_str: String = row.get("link_type");
+
+        let source_type = LinkSourceType::from_str(&source_type_str)
+            .ok_or_else(|| DomainError::InvalidData(format!("Invalid source type: {}", source_type_str)))?;
+        let link_type = LinkType::from_str(&link_type_str)
+            .ok_or_else(|| DomainError::InvalidData(format!("Invalid link type: {}", link_type_str)))?;
+
+        Ok(DeepLink {
+            id: blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?,
+            source_id: blob_to_uuid(row.get::<Vec<u8>, _>("source_id").as_ref())?,
+            source_type,
+            target_id: optional_blob_to_uuid(row.get::<Option<Vec<u8>>, _>("target_id").as_deref())?,
+            target_page_name: row.get("target_page_name"),
+            link_type,
+            external_url: row.get("external_url"),
+            link_text: row.get("link_text"),
+            context: row.get("context"),
+            created_at: ts_to_datetime(row.get("created_at")),
+        })
     }
 }

@@ -142,3 +142,13 @@ pub async fn get_availability(
         knowledge_evolution_tracker: status.knowledge_evolution_tracker,
     })
 }
+
+/// Get morning briefing with cognitive pulse, serendipity highlights, and decay alerts
+#[tauri::command]
+pub async fn morning_briefing(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let mcp = &*state.mcp_server;
+
+    let result = mcp.morning_briefing().await.map_err(|e| e.to_string())?;
+
+    Ok(result)
+}

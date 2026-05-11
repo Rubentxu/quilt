@@ -1,0 +1,43 @@
+[package]
+name = "quilt-application"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+description = "Application layer - use cases, commands, and queries"
+
+[dependencies]
+quilt-domain = { path = "../quilt-domain" }
+quilt-query = { path = "../quilt-query" }
+quilt-search = { path = "../quilt-search" }
+quilt-sync = { path = "../quilt-sync" }
+uuid.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# tokio is only available on non-WASM targets
+tokio = { version = "1", features = ["sync", "time"], optional = true }
+
+[features]
+# tokio-runtime enables tokio-based async features (event bridge)
+# Not available on wasm32 targets
+tokio-runtime = ["dep:tokio"]
+# Default feature for non-wasm32 targets
+default = ["tokio-runtime"]
+
+[target.'cfg(target_arch = "wasm32")'.features]
+# wasm32 targets should NOT have tokio-runtime enabled by default
+default = []
+
+# Dev dependencies - only needed for native testing
+# Note: tokio-test requires tokio, so we only include it on non-wasm32
+[dev-dependencies]
+quilt-infrastructure = { path = "../quilt-infrastructure" }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio-test = "0.4"

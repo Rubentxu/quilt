@@ -1,5 +1,5 @@
 [package]
-name = "quilt-tauri"
+name = "quilt-desktop"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -43,5 +43,5 @@ tempfile = { workspace = true }
 tokio-test = { workspace = true }
 
 [[bin]]
-name = "quilt"
+name = "quilt-desktop"
 path = "src/main.rs"

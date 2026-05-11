@@ -1,0 +1,19 @@
+[package]
+name = "quilt-search"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+description = "Full-text search - FTS5 indexing and search service"
+
+[dependencies]
+quilt-domain = { path = "../quilt-domain" }
+sqlx.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+lru.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+chrono.workspace = true

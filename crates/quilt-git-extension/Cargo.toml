@@ -1,0 +1,24 @@
+[package]
+name = "quilt-git-extension"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+description = "Git extension plugin for quilt-mcp"
+
+[dependencies]
+quilt-mcp = { path = "../quilt-mcp" }
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+
+# git2 is not available on wasm32 targets - use target-specific dependency
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+git2 = "0.19"
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-test.workspace = true

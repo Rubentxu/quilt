@@ -1,0 +1,18 @@
+[package]
+name = "quilt-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+description = "Quilt CLI binary"
+
+[[bin]]
+name = "quilt"
+path = "src/main.rs"
+
+[dependencies]
+quilt-platform = { path = "../quilt-platform" }
+anyhow.workspace = true
+tokio.workspace = true
+clap.workspace = true

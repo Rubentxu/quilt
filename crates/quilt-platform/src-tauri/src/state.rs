@@ -24,7 +24,11 @@ pub struct AppState {
 
 impl AppState {
     /// Create a new AppState
-    pub fn new(pool: DbPool, mcp_server: Arc<McpServer>, search_index: Arc<SearchIndexManager>) -> Self {
+    pub fn new(
+        pool: DbPool,
+        mcp_server: Arc<McpServer>,
+        search_index: Arc<SearchIndexManager>,
+    ) -> Self {
         Self {
             pool,
             mcp_server,

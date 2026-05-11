@@ -1,6 +1,6 @@
 //! AgentMemory Engine — Main Interface
 
-use crate::agent_memory::store::{self, find_by_key};
+use crate::agent_memory::store::{self, find_by_key, load_all};
 use crate::agent_memory::types::{InteractionProfile, MemoryEntry, MemoryQuery, ThinkingPattern};
 use crate::ai_client::AIClient;
 use quilt_domain::entities::Block;
@@ -45,6 +45,14 @@ impl AgentMemory {
             block_repo,
             ai_client,
         }
+    }
+
+    /// Load all memory entries for an agent from persistent storage.
+    /// This should be called on startup to restore memory state.
+    #[instrument(skip(self))]
+    pub async fn load_all(&self, agent_id: &str) -> Result<Vec<MemoryEntry>, MemoryError> {
+        let entries = load_all(self.block_repo.as_ref(), agent_id).await?;
+        Ok(entries)
     }
 
     #[instrument(skip(self, entry))]
@@ -318,6 +326,9 @@ mod tests {
             &self,
             _since: chrono::DateTime<chrono::Utc>,
         ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+        async fn recycle_bin(&self) -> Result<Vec<Block>, DomainError> {
             Ok(vec![])
         }
         async fn move_block(

@@ -1,0 +1,33 @@
+{
+  "name": "quilt-e2e-tests",
+  "version": "0.1.0",
+  "description": "Playwright E2E tests for Quilt UI",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:chromium": "playwright test --project=chromium",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:list": "playwright test --list",
+    "test:ui": "playwright test --ui",
+    "test:smoke": "playwright test --grep @smoke",
+    "test:ci": "playwright test --reporter=line,junit --output=test-results",
+    "report": "playwright show-report",
+    "install:browsers": "playwright install --with-deps",
+    "codegen": "playwright codegen http://localhost:1420"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.42.0"
+  },
+  "keywords": [
+    "e2e",
+    "playwright",
+    "quilt",
+    "testing"
+  ],
+  "engines": {
+    "node": ">=18",
+    "npm": ">=9"
+  }
+}

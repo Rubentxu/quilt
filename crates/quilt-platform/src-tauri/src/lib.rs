@@ -22,7 +22,7 @@ use quilt_cognitive::{
 };
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqliteTagRepository,
+    SqliteBlockRepository, SqliteDeepLinkRepository, SqlitePageRepository, SqliteTagRepository,
 };
 use quilt_mcp::McpServer;
 use quilt_search::{SearchIndexManager, SearchService};
@@ -61,6 +61,7 @@ pub async fn create_app_state(
     let block_repo = Arc::new(SqliteBlockRepository::new(pool.clone()));
     let page_repo = Arc::new(SqlitePageRepository::new(pool.clone()));
     let tag_repo = Arc::new(SqliteTagRepository::new(pool.clone()));
+    let deep_link_repo = Arc::new(SqliteDeepLinkRepository::new(pool.clone()));
     let search_service = Arc::new(SearchService::new(pool.clone()));
 
     // Create AI client for cognitive engines
@@ -95,7 +96,8 @@ pub async fn create_app_state(
 
     // Create MCP server with cognitive engines
     let mcp_server = Arc::new(
-        McpServer::new(block_repo, page_repo.clone(), tag_repo, search_service).with_cognitive(
+        McpServer::new(block_repo, page_repo.clone(), tag_repo, deep_link_repo, search_service)
+            .with_cognitive(
             Some(cognitive_mirror),
             Some(serendipity_engine),
             Some(agent_memory),
@@ -168,21 +170,24 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             // Start file watcher and event bridge for external change detection
             let graph_path = app_data_dir.clone();
             std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().expect("Failed to create runtime for watcher");
+                let rt =
+                    tokio::runtime::Runtime::new().expect("Failed to create runtime for watcher");
                 rt.block_on(async {
-                    use quilt_platform::watcher::FileWatcher;
                     use quilt_application::event_bridge::EventBridge;
+                    use quilt_platform::watcher::FileWatcher;
 
                     let mut watcher = FileWatcher::new(vec![graph_path.clone()]);
                     match watcher.start_async().await {
                         Ok(sender) => {
                             info!("File watcher started for {:?}", graph_path);
                             let search_index = quilt_search::SearchIndexManager::new(
-                                quilt_infrastructure::database::sqlite::connection::create_pool(&graph_path.join("quilt.db"))
-                                    .await
-                                    .expect("Failed to create pool for watcher"),
+                                quilt_infrastructure::database::sqlite::connection::create_pool(
+                                    &graph_path.join("quilt.db"),
+                                )
+                                .await
+                                .expect("Failed to create pool for watcher"),
                             );
-                            let mut receiver = sender.subscribe();
+                            let receiver = sender.subscribe();
                             let bridge = EventBridge::new(search_index, receiver);
                             if let Err(e) = bridge.run().await {
                                 tracing::error!("EventBridge error: {}", e);

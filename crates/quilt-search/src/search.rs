@@ -154,9 +154,20 @@ where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = Result<T, sqlx::Error>>,
 {
-    let delays = [100u64, 200, 400]; // ms
+    // Spec: 5s base delay, 60s max per retry, 300s max total elapsed
+    // Delays: [5s, 10s, 20s, 40s, 60s] (5 retries, doubling each time)
+    let delays = [5_000u64, 10_000, 20_000, 40_000, 60_000]; // ms
+    let max_elapsed = 300_000; // 300s in ms
+    let start = std::time::Instant::now();
 
     for (i, delay) in delays.iter().enumerate() {
+        // Check if we've exceeded max elapsed time
+        if start.elapsed().as_millis() as u64 > max_elapsed {
+            return Err(SearchError::DatabaseError(
+                "Retry operation exceeded max elapsed time of 300s".to_string(),
+            ));
+        }
+
         match op().await {
             Ok(result) => return Ok(result),
             Err(e) if i == delays.len() - 1 => {
@@ -177,6 +188,7 @@ where
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     pub block_id: String,
+    pub page_id: String,
     pub page_name: String,
     pub content: String,
     pub snippet: String,
@@ -187,6 +199,7 @@ pub struct SearchResult {
 #[derive(Debug, sqlx::FromRow)]
 pub struct FtsSearchRow {
     pub block_id: String,
+    pub page_id: String,
     pub page_name: String,
     pub content: String,
     pub rank: f64,
@@ -260,7 +273,7 @@ impl SearchService {
             async move {
                 let rows: Vec<FtsSearchRow> = sqlx::query_as::<_, FtsSearchRow>(
                     r#"
-                    SELECT hex(b.id) as block_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
+                    SELECT hex(b.id) as block_id, hex(b.page_id) as page_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
                     FROM blocks_fts fts
                     JOIN blocks b ON fts.rowid = b.rowid
                     JOIN pages p ON b.page_id = p.id
@@ -309,16 +322,16 @@ impl SearchService {
         limit: usize,
     ) -> Result<Vec<SearchResult>, SearchError> {
         let rows: Vec<FtsSearchRow> = sqlx::query_as::<_, FtsSearchRow>(
-            r#"
-            SELECT hex(b.id) as block_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
-            FROM blocks_fts fts
-            JOIN blocks b ON fts.rowid = b.rowid
-            JOIN pages p ON b.page_id = p.id
-            WHERE blocks_fts MATCH ?
-            ORDER BY rank
-            LIMIT ?
-            "#,
-        )
+                    r#"
+                    SELECT hex(b.id) as block_id, hex(b.page_id) as page_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
+                    FROM blocks_fts fts
+                    JOIN blocks b ON fts.rowid = b.rowid
+                    JOIN pages p ON b.page_id = p.id
+                    WHERE blocks_fts MATCH ?
+                    ORDER BY rank
+                    LIMIT ?
+                    "#,
+                )
         .bind(query)
         .bind(limit as i64)
         .fetch_all(&self.pool)
@@ -372,7 +385,7 @@ impl SearchService {
             async move {
                 let rows: Vec<FtsSearchRow> = sqlx::query_as::<_, FtsSearchRow>(
                     r#"
-                    SELECT hex(b.id) as block_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
+                    SELECT hex(b.id) as block_id, hex(b.page_id) as page_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
                     FROM blocks_fts fts
                     JOIN blocks b ON fts.rowid = b.rowid
                     JOIN pages p ON b.page_id = p.id
@@ -526,6 +539,7 @@ impl SearchService {
     pub fn row_to_result(row: FtsSearchRow, query: &str, snippet_len: usize) -> SearchResult {
         SearchResult {
             block_id: row.block_id,
+            page_id: row.page_id,
             page_name: row.page_name,
             content: row.content.clone(),
             snippet: Self::generate_snippet(&row.content, query, snippet_len),
@@ -761,12 +775,14 @@ mod tests {
     fn test_row_to_result() {
         let row = FtsSearchRow {
             block_id: "abc".to_string(),
+            page_id: "def".to_string(),
             page_name: "Test Page".to_string(),
             content: "This is test content".to_string(),
             rank: -1.5,
         };
         let result = SearchService::row_to_result(row, "test", 50);
         assert_eq!(result.block_id, "abc");
+        assert_eq!(result.page_id, "def");
         assert_eq!(result.page_name, "Test Page");
         assert_eq!(result.score, -1.5);
     }

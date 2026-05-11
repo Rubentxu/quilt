@@ -165,25 +165,22 @@ impl KnowledgeEvolutionTracker {
             topic, old, new
         );
 
-        match self
+        if let Ok(response) = self
             .ai_client
             .chat("You are a knowledge evolution analyst.", &prompt)
             .await
         {
-            Ok(response) => {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
-                    return BeliefChange::new(
-                        chrono::Utc::now(),
-                        json.get("from").and_then(|v| v.as_str()).unwrap_or(old),
-                        json.get("to").and_then(|v| v.as_str()).unwrap_or(new),
-                        json.get("confidence")
-                            .and_then(|v| v.as_f64())
-                            .unwrap_or(0.5) as f32,
-                        None,
-                    );
-                }
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response) {
+                return BeliefChange::new(
+                    chrono::Utc::now(),
+                    json.get("from").and_then(|v| v.as_str()).unwrap_or(old),
+                    json.get("to").and_then(|v| v.as_str()).unwrap_or(new),
+                    json.get("confidence")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.5) as f32,
+                    None,
+                );
             }
-            Err(_) => {}
         }
 
         // Fallback
@@ -196,8 +193,6 @@ impl KnowledgeEvolutionTracker {
         let mut reinforced = Vec::new();
 
         // Heuristic: count positive/negative indicators in content
-        let mut positive_count = 0;
-        let mut negative_count = 0;
 
         for block in blocks {
             let content_lower = block.content.to_lowercase();
@@ -208,7 +203,6 @@ impl KnowledgeEvolutionTracker {
                 || content_lower.contains("reinforced")
             {
                 reinforced.push(block.content.chars().take(50).collect());
-                positive_count += 1;
             }
             // Indicators of abandonment
             if content_lower.contains("changed")
@@ -217,7 +211,6 @@ impl KnowledgeEvolutionTracker {
                 || content_lower.contains("rejected")
             {
                 abandoned.push(block.content.chars().take(50).collect());
-                negative_count += 1;
             }
         }
 
@@ -309,9 +302,7 @@ mod tests {
             &self,
             _id: Uuid,
         ) -> Result<(Block, Vec<Uuid>), quilt_domain::errors::DomainError> {
-            Err(quilt_domain::errors::DomainError::NotImplemented(
-                "mock".into(),
-            ))
+            Err(quilt_domain::errors::DomainError::NotImplemented("mock"))
         }
         async fn insert(&self, _block: &Block) -> Result<(), quilt_domain::errors::DomainError> {
             Ok(())
@@ -335,6 +326,9 @@ mod tests {
             &self,
             _since: chrono::DateTime<chrono::Utc>,
         ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+        async fn recycle_bin(&self) -> Result<Vec<Block>, DomainError> {
             Ok(vec![])
         }
         async fn move_block(

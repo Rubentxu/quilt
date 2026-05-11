@@ -4,7 +4,7 @@ query = { SOI ~ expr ~ EOI }
 
 WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
 
-expr = _{ page_ref | self_ref | task | priority | page | tags | block_content | sample | between | property | and | or | not }
+expr = _{ page_ref | self_ref | task | priority | page | tags | block_content | sample | between | property | and | or | not | table | sort_by | exists | missing | namespace }
 
 and = { "(" ~ "and" ~ expr+ ~ ")" }
 or = { "(" ~ "or" ~ expr+ ~ ")" }
@@ -21,6 +21,13 @@ page_ref = { "[[" ~ page_name ~ "]]" }
 self_ref = { "self" }
 block_content = { "(" ~ "full-text-search" ~ string ~ ")" }
 sample = { "(" ~ "sample" ~ integer ~ ")" }
+
+table = { "(" ~ "table" ~ expr+ ~ ")" }
+sort_by = { "(" ~ "sort-by" ~ (string | integer) ~ direction? ~ expr ~ ")" }
+direction = { "asc" | "desc" }
+exists = { "(" ~ "exists" ~ string ~ ")" }
+missing = { "(" ~ "missing" ~ string ~ ")" }
+namespace = { "(" ~ "namespace" ~ string ~ ")" }
 
 task_marker = { "now" | "later" | "todo" | "done" | "cancelled" }
 priority_level = { "a" | "b" | "c" }

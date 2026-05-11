@@ -3,17 +3,19 @@
 //! Implements the Model Context Protocol for AI agent integration.
 //! Wired to real repositories, search, and query services.
 
-use crate::errors::McpError;
+use crate::hooks::HookEvent;
 use crate::notifications::{
     BlockChangedEvent, ChangeType, Notification, NotificationEvent, NotificationParams,
     PageCreatedEvent,
 };
+use crate::plugin::PluginRegistry;
 use crate::resources::Resource;
 use crate::tools::Tool;
 use quilt_application::query_service::QueryService;
-use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
-use quilt_domain::repositories::{BlockRepository, PageRepository, TagRepository};
+use quilt_domain::entities::{Block, BlockCreate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate};
+use quilt_domain::repositories::{BlockRepository, DeepLinkRepository, PageRepository, TagRepository};
 use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker, Uuid};
+use quilt_cognitive::tree_rag::{ReportRequest, ReportScope};
 use quilt_search::{SearchIndexManager, SearchService};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -181,6 +183,12 @@ pub struct CognitiveEngineStatus {
     pub counterfactual_explorer: bool,
     /// Whether the KnowledgeEvolutionTracker is available.
     pub knowledge_evolution_tracker: bool,
+    /// Whether the MorningBriefing service is available.
+    pub morning_briefing: bool,
+    /// Whether the TreeRAG engine is available.
+    pub tree_rag: bool,
+    /// Whether the TaskScheduler is available.
+    pub task_scheduler: bool,
 }
 
 // ── McpServer ──────────────────────────────────────────────────────────
@@ -215,11 +223,13 @@ pub struct McpServer {
     block_repo: Arc<dyn BlockRepository>,
     page_repo: Arc<dyn PageRepository>,
     tag_repo: Arc<dyn TagRepository>,
+    deep_link_repo: Arc<dyn DeepLinkRepository>,
     search_service: Arc<SearchService>,
     search_index: Option<Arc<SearchIndexManager>>,
     query_service: QueryService,
     pool: Option<sqlx::SqlitePool>,
     notification_sender: broadcast::Sender<Notification>,
+    plugin_registry: PluginRegistry,
     // Cognitive services (optional)
     #[allow(dead_code)]
     cognitive_mirror: Option<Arc<quilt_cognitive::CognitiveMirror>>,
@@ -235,6 +245,12 @@ pub struct McpServer {
     counterfactual_explorer: Option<Arc<quilt_cognitive::CounterfactualExplorer>>,
     #[allow(dead_code)]
     knowledge_evolution_tracker: Option<Arc<quilt_cognitive::KnowledgeEvolutionTracker>>,
+    #[allow(dead_code)]
+    morning_briefing: Option<Arc<quilt_cognitive::MorningBriefing>>,
+    #[allow(dead_code)]
+    tree_rag: Option<Arc<quilt_cognitive::TreeRagEngine>>,
+    #[allow(dead_code)]
+    task_scheduler: Option<Arc<quilt_cognitive::TaskScheduler>>,
 }
 
 impl McpServer {
@@ -262,6 +278,7 @@ impl McpServer {
         block_repo: Arc<dyn BlockRepository>,
         page_repo: Arc<dyn PageRepository>,
         tag_repo: Arc<dyn TagRepository>,
+        deep_link_repo: Arc<dyn DeepLinkRepository>,
         search_service: Arc<SearchService>,
     ) -> Self {
         let (notification_sender, _) = broadcast::channel(100);
@@ -269,11 +286,13 @@ impl McpServer {
             block_repo,
             page_repo,
             tag_repo,
+            deep_link_repo,
             search_service,
             search_index: None,
             query_service: QueryService::new(),
             pool: None,
             notification_sender,
+            plugin_registry: PluginRegistry::new(),
             cognitive_mirror: None,
             serendipity_engine: None,
             agent_memory: None,
@@ -281,6 +300,9 @@ impl McpServer {
             mental_model_gardener: None,
             counterfactual_explorer: None,
             knowledge_evolution_tracker: None,
+            morning_briefing: None,
+            tree_rag: None,
+            task_scheduler: None,
         }
     }
 
@@ -307,6 +329,7 @@ impl McpServer {
     /// All cognitive services are optional — the server works without them,
     /// but cognitive tools and resources will only appear when their corresponding
     /// engine is provided.
+    #[allow(clippy::too_many_arguments)]
     pub fn with_cognitive(
         self,
         cognitive_mirror: Option<Arc<quilt_cognitive::CognitiveMirror>>,
@@ -327,6 +350,28 @@ impl McpServer {
             knowledge_evolution_tracker,
             ..self
         }
+    }
+
+    /// Set the morning briefing service for daily cognitive summaries.
+    ///
+    /// When set, the `logseq_morning_briefing` tool becomes available
+    /// for AI agents to get a daily cognitive pulse of the knowledge graph.
+    pub fn with_morning_briefing(
+        mut self,
+        morning_briefing: Arc<quilt_cognitive::MorningBriefing>,
+    ) -> Self {
+        self.morning_briefing = Some(morning_briefing);
+        self
+    }
+
+    pub fn with_tree_rag(mut self, tree_rag: Arc<quilt_cognitive::TreeRagEngine>) -> Self {
+        self.tree_rag = Some(tree_rag);
+        self
+    }
+
+    pub fn with_task_scheduler(mut self, scheduler: Arc<quilt_cognitive::TaskScheduler>) -> Self {
+        self.task_scheduler = Some(scheduler);
+        self
     }
 
     /// Subscribe to notifications.
@@ -390,6 +435,29 @@ impl McpServer {
         let _ = self.notification_sender.send(notification);
     }
 
+    /// Emit a hook event to all subscribed plugins.
+    ///
+    /// This dispatches the event to the hook dispatcher, which will
+    /// call each subscribed plugin's `on_hook` method in priority order.
+    ///
+    /// # Arguments
+    ///
+    /// * `event` - The hook event to emit
+    #[instrument(skip(self, event), fields(event_kind = event.kind().name()))]
+    pub fn emit_hook(&self, event: HookEvent) {
+        let results = self.plugin_registry.hook_dispatcher().dispatch(&event);
+        // Log any failures
+        for result in results {
+            if !result.success {
+                tracing::warn!(
+                    plugin = %result.plugin_name,
+                    error = ?result.error,
+                    "Hook handler failed"
+                );
+            }
+        }
+    }
+
     // ── Cognitive Engine Delegation Methods ──────────────────────
     // These public methods delegate to internal tool implementations but return
     // typed Results instead of JSON strings, providing a clean API for Tauri commands.
@@ -416,6 +484,9 @@ impl McpServer {
             mental_model_gardener: self.mental_model_gardener.is_some(),
             counterfactual_explorer: self.counterfactual_explorer.is_some(),
             knowledge_evolution_tracker: self.knowledge_evolution_tracker.is_some(),
+            morning_briefing: self.morning_briefing.is_some(),
+            tree_rag: self.tree_rag.is_some(),
+            task_scheduler: self.task_scheduler.is_some(),
         }
     }
 
@@ -554,6 +625,21 @@ impl McpServer {
         serde_json::from_str(&json_string).map_err(|e| format!("Failed to parse response: {}", e))
     }
 
+    /// Generate a morning briefing with aggregated cognitive insights.
+    ///
+    /// Returns a comprehensive daily briefing including cognitive pulse,
+    /// serendipity highlights, decay alerts, and activity stats.
+    #[instrument(skip(self))]
+    pub async fn morning_briefing(&self) -> Result<serde_json::Value, String> {
+        let briefing = self
+            .morning_briefing
+            .as_ref()
+            .ok_or_else(|| "MorningBriefing not configured".to_string())?;
+
+        let dto = briefing.generate().await;
+        serde_json::to_value(&dto).map_err(|e| format!("Failed to serialize briefing: {}", e))
+    }
+
     // ── Tool definitions ──────────────────────────────────────────
 
     fn tools(&self) -> Vec<Tool> {
@@ -684,6 +770,27 @@ impl McpServer {
                 }),
             },
             Tool {
+                name: "logseq_restore_block".to_string(),
+                description: "Restore a soft-deleted block from the recycle bin".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "block_id": { "type": "string", "description": "Block UUID to restore" }
+                    },
+                    "required": ["block_id"]
+                }),
+            },
+            Tool {
+                name: "logseq_recycle_bin".to_string(),
+                description: "List all soft-deleted blocks in the recycle bin".to_string(),
+                input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            },
+            Tool {
+                name: "logseq_orphan_pages".to_string(),
+                description: "List all orphan pages (pages with no blocks)".to_string(),
+                input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            },
+            Tool {
                 name: "logseq_rebuild_index".to_string(),
                 description: "Rebuild the full-text search index. Use 'incremental' mode to re-index only blocks updated since a timestamp, or 'full' mode to rebuild everything.".to_string(),
                 input_schema: serde_json::json!({
@@ -698,6 +805,50 @@ impl McpServer {
                 name: "logseq_index_health".to_string(),
                 description: "Check the health of the search index. Returns FTS entry count, block count, and whether they are in sync.".to_string(),
                 input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            },
+            // Deep link tools
+            Tool {
+                name: "logseq_create_deep_link".to_string(),
+                description: "Create a deep link from a source block or page to a target".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "source_id": { "type": "string", "description": "Source block or page UUID" },
+                        "source_type": { "type": "string", "description": "Source type: 'block' or 'page'", "enum": ["block", "page"] },
+                        "target_id": { "type": "string", "description": "Target block UUID (for internal block links)" },
+                        "target_page_name": { "type": "string", "description": "Target page name (for internal page links)" },
+                        "link_type": { "type": "string", "description": "Link type: 'block', 'page', or 'url'", "enum": ["block", "page", "url"] },
+                        "external_url": { "type": "string", "description": "External URL (for url links)" },
+                        "link_text": { "type": "string", "description": "Display text for the link (optional)" },
+                        "context": { "type": "string", "description": "Surrounding context for the link (optional)" }
+                    },
+                    "required": ["source_id", "source_type", "link_type"]
+                }),
+            },
+            Tool {
+                name: "logseq_get_deep_links".to_string(),
+                description: "Get all deep links from a source block/page or to a target".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "source_id": { "type": "string", "description": "Source block or page UUID (optional)" },
+                        "source_type": { "type": "string", "description": "Filter by source type: 'block' or 'page' (optional)" },
+                        "target_id": { "type": "string", "description": "Filter by target block UUID (optional)" },
+                        "link_type": { "type": "string", "description": "Filter by link type: 'block', 'page', or 'url' (optional)" },
+                        "limit": { "type": "integer", "description": "Max results to return", "default": 50 }
+                    }
+                }),
+            },
+            Tool {
+                name: "logseq_delete_deep_link".to_string(),
+                description: "Delete a deep link by its ID".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string", "description": "Deep link UUID to delete" }
+                    },
+                    "required": ["id"]
+                }),
             },
         ];
 
@@ -807,6 +958,133 @@ impl McpServer {
                 }),
             });
         }
+
+        if self.morning_briefing.is_some() {
+            tools.push(Tool {
+                name: "logseq_morning_briefing".to_string(),
+                description: "Get a daily cognitive briefing with pulse, serendipity highlights, and decay alerts".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {}
+                }),
+            });
+        }
+
+        if self.tree_rag.is_some() {
+            tools.push(Tool {
+                name: "logseq_explore_topic".to_string(),
+                description: "Explore a topic in the knowledge graph: discover pages, retrieve blocks, and cluster them by FTS/tags (NO LLM synthesis)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "topic": { "type": "string", "description": "Topic to explore" },
+                        "scope": { "type": "string", "description": "Scope: auto, all, pages:name1,name2, journal:N, tagged:tag", "default": "auto" }
+                    },
+                    "required": ["topic"]
+                }),
+            });
+            tools.push(Tool {
+                name: "logseq_build_tree".to_string(),
+                description: "Build a navigable tree from a page's blocks".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "page_id": { "type": "string", "description": "Page UUID to build tree from" }
+                    },
+                    "required": ["page_id"]
+                }),
+            });
+            tools.push(Tool {
+                name: "logseq_query_tree".to_string(),
+                description: "Query/filter a TreeIndex by searching for a query string in titles and summaries".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "page_id": { "type": "string", "description": "Page UUID to query" },
+                        "query": { "type": "string", "description": "Search query string (case-insensitive)" }
+                    },
+                    "required": ["page_id", "query"]
+                }),
+            });
+            tools.push(Tool {
+                name: "logseq_assemble_report".to_string(),
+                description: "Assemble a Markdown document from agent-provided AssembledSections, optionally render PDF".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "title": { "type": "string", "description": "Report title" },
+                        "description": { "type": "string", "description": "Report description/abstract" },
+                        "sections": {
+                            "type": "array",
+                            "description": "Array of AssembledSection objects synthesized by the AI agent",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "heading": { "type": "string", "description": "Section heading" },
+                                    "level": { "type": "integer", "description": "Heading level (1 = top, 2 = subsection)" },
+                                    "content": { "type": "string", "description": "Content text synthesized by the agent" },
+                                    "source_block_ids": { "type": "array", "items": { "type": "string" }, "description": "Source block UUIDs for citations" },
+                                    "subsections": { "type": "array", "description": "Nested subsections" }
+                                }
+                            }
+                        },
+                        "render_pdf": { "type": "boolean", "description": "Whether to render PDF (default: false)", "default": false }
+                    },
+                    "required": ["title", "description", "sections"]
+                }),
+            });
+            tools.push(Tool {
+                name: "logseq_tree_status".to_string(),
+                description: "Get the current status of the TreeRAG index (blocks indexed, pending, etc.)".to_string(),
+                input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            });
+            tools.push(Tool {
+                name: "logseq_save_block_summary".to_string(),
+                description: "Save a block summary generated by the AI agent".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "block_id": { "type": "string", "description": "Block UUID" },
+                        "summary": { "type": "string", "description": "AI-generated summary text" }
+                    },
+                    "required": ["block_id", "summary"]
+                }),
+            });
+            tools.push(Tool {
+                name: "logseq_rebuild_index".to_string(),
+                description: "Rebuild the TreeRAG index — counts stale blocks (agent must call save_block_summary to update)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "scope": { "type": "string", "description": "Optional scope to limit indexing" }
+                    }
+                }),
+            });
+        }
+
+        if self.task_scheduler.is_some() {
+            tools.push(Tool {
+                name: "logseq_schedule_task".to_string(),
+                description: "Schedule a recurring background task (rebuild index, health check, etc.)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "name": { "type": "string", "description": "Task name (e.g., tree_rag_rebuild_index)" },
+                        "cron_expr": { "type": "string", "description": "Cron expression (e.g., 0 3 * * *)" },
+                        "task_type": { "type": "string", "description": "Task type: RebuildIndex, CleanStaleSummaries, or HealthCheck" }
+                    },
+                    "required": ["name", "cron_expr", "task_type"]
+                }),
+            });
+            tools.push(Tool {
+                name: "logseq_list_tasks".to_string(),
+                description: "List all scheduled background tasks".to_string(),
+                input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            });
+        }
+
+        // Merge in plugin-provided tools
+        tools.extend(self.plugin_registry.list_tools());
 
         tools
     }
@@ -945,8 +1223,15 @@ impl McpServer {
             "logseq_link_blocks" => self.tool_link_blocks(&params.arguments).await,
             "logseq_get_backlinks" => self.tool_get_backlinks(&params.arguments).await,
             "logseq_delete_block" => self.tool_delete_block(&params.arguments).await,
+            "logseq_restore_block" => self.tool_restore_block(&params.arguments).await,
+            "logseq_recycle_bin" => self.tool_recycle_bin(&params.arguments).await,
+            "logseq_orphan_pages" => self.tool_orphan_pages(&params.arguments).await,
             "logseq_rebuild_index" => self.tool_rebuild_index(&params.arguments).await,
             "logseq_index_health" => self.tool_index_health(&params.arguments).await,
+            // Deep link tools
+            "logseq_create_deep_link" => self.tool_create_deep_link(&params.arguments).await,
+            "logseq_get_deep_links" => self.tool_get_deep_links(&params.arguments).await,
+            "logseq_delete_deep_link" => self.tool_delete_deep_link(&params.arguments).await,
             // Cognitive tools
             "logseq_cognitive_mirror" => self.tool_cognitive_mirror(&params.arguments).await,
             "logseq_serendipity" => self.tool_serendipity(&params.arguments).await,
@@ -955,15 +1240,23 @@ impl McpServer {
             "logseq_mental_model" => self.tool_mental_model(&params.arguments).await,
             "logseq_counterfactual" => self.tool_counterfactual_explore(&params.arguments).await,
             "logseq_knowledge_evolution" => self.tool_knowledge_evolution(&params.arguments).await,
-            // Unknown tool - return proper MCP error
-            _ => {
-                return McpResponse::ToolsCall(ToolsCallResult {
-                    content: vec![ContentBlock::Text {
-                        text: McpError::method_not_found(&params.name).to_string(),
-                    }],
-                    is_error: Some(true),
-                })
-            }
+            "logseq_morning_briefing" => self.tool_morning_briefing(&params.arguments).await,
+            // TreeRAG tools
+            "logseq_explore_topic" => self.tool_explore_topic(&params.arguments).await,
+            "logseq_build_tree" => self.tool_build_tree(&params.arguments).await,
+            "logseq_query_tree" => self.tool_query_tree(&params.arguments).await,
+            "logseq_assemble_report" => self.tool_assemble_report(&params.arguments).await,
+            "logseq_tree_status" => self.tool_tree_status(&params.arguments).await,
+            "logseq_save_block_summary" => self.tool_save_block_summary(&params.arguments).await,
+            // TaskScheduler tools
+            "logseq_schedule_task" => self.tool_schedule_task(&params.arguments).await,
+            "logseq_list_tasks" => self.tool_list_tasks(&params.arguments).await,
+            // Unknown tool - try plugin registry
+            _ => self
+                .plugin_registry
+                .execute_tool(&params.name, params.arguments.clone())
+                .map(|result| result.to_string())
+                .map_err(|e| e.to_mcp_string()),
         };
 
         match result {
@@ -1378,13 +1671,78 @@ impl McpServer {
             .await
             .map_err(|e| e.to_string())?;
 
-        let deleted_at = chrono::Utc::now().to_rfc3339();
-
         Ok(serde_json::json!({
             "status": "deleted",
             "block_id": block_id.to_string(),
         })
         .to_string())
+    }
+
+    async fn tool_restore_block(&self, args: &serde_json::Value) -> Result<String, String> {
+        let block_id = parse_uuid(args, "block_id")?;
+
+        self.block_repo
+            .restore(block_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(serde_json::json!({
+            "status": "restored",
+            "block_id": block_id.to_string(),
+        })
+        .to_string())
+    }
+
+    async fn tool_recycle_bin(&self, _args: &serde_json::Value) -> Result<String, String> {
+        let blocks = self
+            .block_repo
+            .recycle_bin()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let items: Vec<serde_json::Value> = blocks
+            .iter()
+            .map(|b| {
+                serde_json::json!({
+                    "block_id": b.id.to_string(),
+                    "page_id": b.page_id.to_string(),
+                    "content": b.content,
+                    "deleted_at": b.updated_at.to_rfc3339(),
+                })
+            })
+            .collect();
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "recycle_bin": items,
+            "count": items.len(),
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    async fn tool_orphan_pages(&self, _args: &serde_json::Value) -> Result<String, String> {
+        let pages = self
+            .page_repo
+            .get_orphan_pages()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let items: Vec<serde_json::Value> = pages
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "page_id": p.id.to_string(),
+                    "name": p.name,
+                    "title": p.title,
+                    "journal": p.journal,
+                })
+            })
+            .collect();
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "orphan_pages": items,
+            "count": items.len(),
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
     }
 
     async fn tool_rebuild_index(&self, args: &serde_json::Value) -> Result<String, String> {
@@ -1433,6 +1791,221 @@ impl McpServer {
             "blocks_count": health.blocks_count,
             "in_sync": health.in_sync,
             "status": if health.in_sync { "healthy" } else { "out_of_sync" },
+        })
+        .to_string())
+    }
+
+    // ── Deep link tool implementations ────────────────────────────
+
+    async fn tool_create_deep_link(&self, args: &serde_json::Value) -> Result<String, String> {
+        let source_id = parse_uuid(args, "source_id")?;
+        let source_type_str = args
+            .get("source_type")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "source_type is required".to_string())?;
+        let source_type = match source_type_str {
+            "block" => LinkSourceType::Block,
+            "page" => LinkSourceType::Page,
+            other => {
+                return Err(format!(
+                    "Invalid source_type: {}. Use 'block' or 'page'.",
+                    other
+                ))
+            }
+        };
+
+        let link_type_str = args
+            .get("link_type")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "link_type is required".to_string())?;
+        let link_type = match link_type_str {
+            "block" => LinkType::InternalBlock,
+            "page" => LinkType::InternalPage,
+            "url" => LinkType::ExternalUrl,
+            other => {
+                return Err(format!(
+                    "Invalid link_type: {}. Use 'block', 'page', or 'url'.",
+                    other
+                ))
+            }
+        };
+
+        let target_id = args
+            .get("target_id")
+            .and_then(|v| v.as_str())
+            .and_then(|s| Uuid::parse_str(s));
+
+        let target_page_name = args
+            .get("target_page_name")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let external_url = args
+            .get("external_url")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let link_text = args
+            .get("link_text")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let context = args
+            .get("context")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let create = DeepLinkCreate {
+            source_id,
+            source_type,
+            target_id,
+            target_page_name,
+            link_type,
+            external_url,
+            link_text,
+            context,
+        };
+
+        let deep_link = DeepLink::new(create).map_err(|e| e.to_string())?;
+        self.deep_link_repo
+            .insert(&deep_link)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(serde_json::json!({
+            "status": "created",
+            "deep_link": deep_link_to_json(&deep_link),
+        })
+        .to_string())
+    }
+
+    async fn tool_get_deep_links(&self, args: &serde_json::Value) -> Result<String, String> {
+        let limit = args
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(50) as usize;
+
+        let links = if let Some(source_id_str) = args.get("source_id").and_then(|v| v.as_str()) {
+            let source_id = Uuid::parse_str(source_id_str)
+                .ok_or_else(|| format!("Invalid source_id: {}", source_id_str))?;
+
+            let source_type_str = args
+                .get("source_type")
+                .and_then(|v| v.as_str());
+
+            let link_type_str = args.get("link_type").and_then(|v| v.as_str());
+
+            match (source_type_str, link_type_str) {
+                (Some(st), Some(lt)) => {
+                    let source_type = match st {
+                        "block" => LinkSourceType::Block,
+                        "page" => LinkSourceType::Page,
+                        other => {
+                            return Err(format!(
+                                "Invalid source_type: {}. Use 'block' or 'page'.",
+                                other
+                            ))
+                        }
+                    };
+                    let link_type = match lt {
+                        "block" => LinkType::InternalBlock,
+                        "page" => LinkType::InternalPage,
+                        "url" => LinkType::ExternalUrl,
+                        other => {
+                            return Err(format!(
+                                "Invalid link_type: {}. Use 'block', 'page', or 'url'.",
+                                other
+                            ))
+                        }
+                    };
+                    self.deep_link_repo
+                        .get_by_source_and_type(source_id, source_type, link_type)
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
+                (Some(st), None) => {
+                    let source_type = match st {
+                        "block" => LinkSourceType::Block,
+                        "page" => LinkSourceType::Page,
+                        other => {
+                            return Err(format!(
+                                "Invalid source_type: {}. Use 'block' or 'page'.",
+                                other
+                            ))
+                        }
+                    };
+                    self.deep_link_repo
+                        .get_by_source(source_id, source_type)
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
+                (None, Some(_)) => {
+                    return Err("source_type is required when link_type is specified".to_string());
+                }
+                (None, None) => {
+                    self.deep_link_repo
+                        .get_by_source(source_id, LinkSourceType::Block)
+                        .await
+                        .map_err(|e| e.to_string())?
+                }
+            }
+        } else if let Some(target_id_str) = args.get("target_id").and_then(|v| v.as_str()) {
+            let target_id = Uuid::parse_str(target_id_str)
+                .ok_or_else(|| format!("Invalid target_id: {}", target_id_str))?;
+            self.deep_link_repo
+                .get_by_target(target_id)
+                .await
+                .map_err(|e| e.to_string())?
+        } else if let Some(link_type_str) = args.get("link_type").and_then(|v| v.as_str()) {
+            let link_type = match link_type_str {
+                "block" => LinkType::InternalBlock,
+                "page" => LinkType::InternalPage,
+                "url" => LinkType::ExternalUrl,
+                other => {
+                    return Err(format!(
+                        "Invalid link_type: {}. Use 'block', 'page', or 'url'.",
+                        other
+                    ))
+                }
+            };
+            self.deep_link_repo
+                .get_by_type(link_type)
+                .await
+                .map_err(|e| e.to_string())?
+        } else {
+            // No filters - return all (paginated)
+            // Since there's no "get all" method, we need a different approach
+            // For now, return an error asking for filters
+            return Err(
+                "At least one filter is required: source_id, target_id, or link_type"
+                    .to_string(),
+            );
+        };
+
+        Ok(serde_json::json!({
+            "deep_links": links.iter().map(deep_link_to_json).collect::<Vec<_>>(),
+            "count": links.len(),
+        })
+        .to_string())
+    }
+
+    async fn tool_delete_deep_link(&self, args: &serde_json::Value) -> Result<String, String> {
+        let id = parse_uuid(args, "id")?;
+
+        self.deep_link_repo
+            .get_by_id(id)
+            .await
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| format!("Deep link not found: {}", id))?;
+
+        self.deep_link_repo
+            .delete(id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(serde_json::json!({
+            "status": "deleted",
+            "id": id.to_string(),
         })
         .to_string())
     }
@@ -1724,6 +2297,274 @@ impl McpServer {
         Ok(serde_json::to_string_pretty(&timeline).unwrap_or_else(|e| e.to_string()))
     }
 
+    async fn tool_morning_briefing(&self, _args: &serde_json::Value) -> Result<String, String> {
+        let briefing = self
+            .morning_briefing
+            .as_ref()
+            .ok_or_else(|| "MorningBriefing not configured".to_string())?;
+
+        let dto = briefing.generate().await;
+        serde_json::to_string_pretty(&dto).map_err(|e| e.to_string())
+    }
+
+    async fn tool_explore_topic(&self, args: &serde_json::Value) -> Result<String, String> {
+        let topic = args.get("topic").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'topic' parameter".to_string())?;
+        let scope_str = args.get("scope").and_then(|v| v.as_str()).unwrap_or("auto");
+
+        let engine = self.tree_rag.as_ref()
+            .ok_or_else(|| "TreeRAG not configured".to_string())?;
+
+        let scope = Self::parse_scope(scope_str)?;
+        let clusters = engine.explore_topic(topic, &scope).await.map_err(|e| e.to_string())?;
+
+        let json_clusters: Vec<serde_json::Value> = clusters.iter().map(|c| {
+            serde_json::json!({
+                "label": c.label,
+                "summary": c.summary,
+                "block_ids": c.block_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
+                "relevance": c.relevance,
+            })
+        }).collect();
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "topic": topic,
+            "cluster_count": clusters.len(),
+            "total_blocks": clusters.iter().map(|c| c.block_ids.len()).sum::<usize>(),
+            "clusters": json_clusters,
+        })).unwrap_or_else(|e| e.to_string()))
+    }
+
+    async fn tool_build_tree(&self, args: &serde_json::Value) -> Result<String, String> {
+        let page_id_str = args.get("page_id").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'page_id' parameter".to_string())?;
+        let page_id = Uuid::parse_str(page_id_str)
+            .ok_or_else(|| format!("Invalid UUID: {}", page_id_str))?;
+
+        let engine = self.tree_rag.as_ref()
+            .ok_or_else(|| "TreeRAG not configured".to_string())?;
+
+        let tree = engine.build_tree(page_id).await.map_err(|e| e.to_string())?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "page_id": tree.page_id.to_string(),
+            "page_name": tree.page_name,
+            "total_blocks": tree.total_blocks,
+            "root": tree.root,
+        })).unwrap_or_else(|e| e.to_string()))
+    }
+
+    async fn tool_query_tree(&self, args: &serde_json::Value) -> Result<String, String> {
+        let page_id_str = args.get("page_id").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'page_id' parameter".to_string())?;
+        let page_id = Uuid::parse_str(page_id_str)
+            .ok_or_else(|| format!("Invalid UUID: {}", page_id_str))?;
+        let query = args.get("query").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'query' parameter".to_string())?;
+
+        let engine = self.tree_rag.as_ref()
+            .ok_or_else(|| "TreeRAG not configured".to_string())?;
+
+        let tree = engine.query_tree(page_id, query).await.map_err(|e| e.to_string())?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "page_id": tree.page_id.to_string(),
+            "page_name": tree.page_name,
+            "total_blocks": tree.total_blocks,
+            "root": tree.root,
+        })).unwrap_or_else(|e| e.to_string()))
+    }
+
+    async fn tool_assemble_report(&self, args: &serde_json::Value) -> Result<String, String> {
+        let title = args.get("title").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'title' parameter".to_string())?;
+        let description = args.get("description").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'description' parameter".to_string())?;
+        let sections = args.get("sections").and_then(|v| v.as_array())
+            .ok_or_else(|| "Missing 'sections' parameter".to_string())?;
+        let render_pdf = args.get("render_pdf").and_then(|v| v.as_bool()).unwrap_or(false);
+
+        let engine = self.tree_rag.as_ref()
+            .ok_or_else(|| "TreeRAG not configured".to_string())?;
+
+        // Parse sections into AssembledSection structs
+        let assembled_sections: Vec<quilt_cognitive::tree_rag::AssembledSection> = sections
+            .iter()
+            .filter_map(|s| {
+                let heading = s.get("heading")?.as_str()?.to_string();
+                let level = s.get("level")?.as_u64()? as u8;
+                let content = s.get("content")?.as_str()?.to_string();
+                let source_block_ids: Vec<Uuid> = s.get("source_block_ids")
+                    .and_then(|arr| arr.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str())
+                            .filter_map(|s| Uuid::parse_str(s))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let subsections: Vec<quilt_cognitive::tree_rag::AssembledSection> = s
+                    .get("subsections")
+                    .and_then(|arr| arr.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|sub| {
+                                let heading = sub.get("heading")?.as_str()?.to_string();
+                                let level = sub.get("level")?.as_u64()? as u8;
+                                let content = sub.get("content")?.as_str()?.to_string();
+                                let source_block_ids: Vec<Uuid> = sub.get("source_block_ids")
+                                    .and_then(|arr| arr.as_array())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|v| v.as_str())
+                                            .filter_map(|s| Uuid::parse_str(s))
+                                            .collect()
+                                    })
+                                    .unwrap_or_default();
+                                Some(quilt_cognitive::tree_rag::AssembledSection {
+                                    heading,
+                                    level,
+                                    content,
+                                    source_block_ids,
+                                    subsections: vec![],
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                Some(quilt_cognitive::tree_rag::AssembledSection {
+                    heading,
+                    level,
+                    content,
+                    source_block_ids,
+                    subsections,
+                })
+            })
+            .collect();
+
+        let markdown = engine.assemble_document(title, description, &assembled_sections);
+
+        let pdf_bytes = if render_pdf {
+            Some(engine.render_pdf(&markdown).map_err(|e| e.to_string())?)
+        } else {
+            None
+        };
+
+        let citations = assembled_sections.iter().flat_map(|s| s.source_block_ids.iter()).collect::<Vec<_>>();
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "title": title,
+            "description": description,
+            "markdown": markdown,
+            "pdf_size_bytes": pdf_bytes.as_ref().map(|b| b.len()),
+            "citations_count": citations.len(),
+        })).unwrap_or_else(|e| e.to_string()))
+    }
+
+    async fn tool_tree_status(&self, _args: &serde_json::Value) -> Result<String, String> {
+        let engine = self.tree_rag.as_ref()
+            .ok_or_else(|| "TreeRAG not configured".to_string())?;
+
+        let status = engine.status().await.map_err(|e| e.to_string())?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "total_blocks": status.total_blocks,
+            "indexed_blocks": status.indexed_blocks,
+            "pending_blocks": status.pending_blocks,
+            "coverage_percent": if status.total_blocks > 0 {
+                (status.indexed_blocks as f64 / status.total_blocks as f64 * 100.0) as u32
+            } else { 0 },
+        })).unwrap_or_else(|e| e.to_string()))
+    }
+
+    async fn tool_save_block_summary(&self, args: &serde_json::Value) -> Result<String, String> {
+        let block_id_str = args.get("block_id").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'block_id' parameter".to_string())?;
+        let block_id = Uuid::parse_str(block_id_str)
+            .ok_or_else(|| format!("Invalid UUID: {}", block_id_str))?;
+        let summary = args.get("summary").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'summary' parameter".to_string())?;
+
+        let engine = self.tree_rag.as_ref()
+            .ok_or_else(|| "TreeRAG not configured".to_string())?;
+
+        engine.save_block_summary(block_id, summary.to_string()).await.map_err(|e| e.to_string())?;
+
+        Ok(serde_json::json!({
+            "status": "saved",
+            "block_id": block_id_str,
+        }).to_string())
+    }
+
+    async fn tool_schedule_task(&self, args: &serde_json::Value) -> Result<String, String> {
+        let name = args.get("name").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'name' parameter".to_string())?;
+        let cron_expr = args.get("cron_expr").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'cron_expr' parameter".to_string())?;
+        let task_type_str = args.get("task_type").and_then(|v| v.as_str())
+            .ok_or_else(|| "Missing 'task_type' parameter".to_string())?;
+
+        let scheduler = self.task_scheduler.as_ref()
+            .ok_or_else(|| "TaskScheduler not configured".to_string())?;
+
+        let task_type = match task_type_str {
+            "RebuildIndex" => quilt_domain::TaskType::RebuildIndex,
+            "CleanStaleSummaries" => quilt_domain::TaskType::CleanStaleSummaries,
+            "HealthCheck" => quilt_domain::TaskType::HealthCheck,
+            other => return Err(format!("Unknown task_type: {}", other)),
+        };
+
+        scheduler.schedule_task(name, cron_expr, task_type).await?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "scheduled": name,
+            "cron": cron_expr,
+        })).unwrap_or_else(|e| e.to_string()))
+    }
+
+    async fn tool_list_tasks(&self, _args: &serde_json::Value) -> Result<String, String> {
+        let scheduler = self.task_scheduler.as_ref()
+            .ok_or_else(|| "TaskScheduler not configured".to_string())?;
+
+        let tasks = scheduler.list_tasks().await?;
+
+        let json_tasks: Vec<serde_json::Value> = tasks.iter().map(|t| {
+            serde_json::json!({
+                "name": t.name,
+                "cron_expr": t.cron_expr,
+                "enabled": t.enabled,
+                "last_run": t.last_run.map(|d| d.to_rfc3339()),
+                "next_run": t.next_run.to_rfc3339(),
+            })
+        }).collect();
+
+        Ok(serde_json::to_string_pretty(&json_tasks).unwrap_or_else(|e| e.to_string()))
+    }
+
+    // Helper to parse scope string
+    fn parse_scope(s: &str) -> Result<ReportScope, String> {
+        Ok(match s {
+            "auto" => ReportScope::Auto,
+            "all" => ReportScope::AllPages,
+            s if s.starts_with("pages:") => {
+                let names: Vec<String> = s.strip_prefix("pages:").unwrap()
+                    .split(',').map(|n| n.trim().to_string()).collect();
+                ReportScope::Pages(names)
+            }
+            s if s.starts_with("journal:") => {
+                let days: u32 = s.strip_prefix("journal:").unwrap()
+                    .parse().map_err(|_| "Invalid journal days")?;
+                ReportScope::JournalLast(days)
+            }
+            s if s.starts_with("tagged:") => {
+                let tag = s.strip_prefix("tagged:").unwrap().to_string();
+                ReportScope::Tagged(tag)
+            }
+            other => return Err(format!("Unknown scope: {}. Use auto, all, pages:name1,name2, journal:N, or tagged:tag", other)),
+        })
+    }
+
     // ── Cognitive resource handlers ─────────────────────────────────
 
     async fn resource_cognitive_map(&self) -> Result<String, String> {
@@ -1856,7 +2697,7 @@ fn parse_optional_marker(
         Some("todo") => Ok(Some(TaskMarker::Todo)),
         Some("done") => Ok(Some(TaskMarker::Done)),
         Some("cancelled") => Ok(Some(TaskMarker::Cancelled)),
-        Some(s) if s.is_empty() => Ok(None),
+        Some("") => Ok(None),
         None => Ok(None),
         Some(other) => Err(format!("Invalid marker: {}", other)),
     }
@@ -1878,6 +2719,21 @@ fn block_to_json(block: &Block) -> serde_json::Value {
     })
 }
 
+fn deep_link_to_json(link: &DeepLink) -> serde_json::Value {
+    serde_json::json!({
+        "id": link.id.to_string(),
+        "source_id": link.source_id.to_string(),
+        "source_type": link.source_type.as_str(),
+        "target_id": link.target_id.map(|id| id.to_string()),
+        "target_page_name": link.target_page_name,
+        "link_type": link.link_type.as_str(),
+        "external_url": link.external_url,
+        "link_text": link.link_text,
+        "context": link.context,
+        "created_at": link.created_at.to_rfc3339(),
+    })
+}
+
 // ── Integration Tests ────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1885,7 +2741,8 @@ mod tests {
     use super::*;
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
-        SqliteBlockRepository, SqlitePageRepository, SqliteTagRepository,
+        SqliteBlockRepository, SqliteDeepLinkRepository, SqlitePageRepository,
+        SqliteTagRepository,
     };
     use sqlx::SqlitePool;
 
@@ -1901,6 +2758,7 @@ mod tests {
             Arc::new(SqliteBlockRepository::new(pool.clone())),
             Arc::new(SqlitePageRepository::new(pool.clone())),
             Arc::new(SqliteTagRepository::new(pool.clone())),
+            Arc::new(SqliteDeepLinkRepository::new(pool.clone())),
             Arc::new(SearchService::new(pool.clone())),
         )
         .with_pool(pool.clone());
@@ -2256,7 +3114,7 @@ mod tests {
 
         match response {
             McpResponse::ToolsList(result) => {
-                assert_eq!(result.tools.len(), 13);
+                assert_eq!(result.tools.len(), 19);
                 assert!(result.tools.iter().any(|t| t.name == "logseq_search"));
                 assert!(result.tools.iter().any(|t| t.name == "logseq_create_block"));
             }

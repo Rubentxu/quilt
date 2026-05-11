@@ -27,10 +27,27 @@ pub struct FileChanged {
 }
 
 /// Application-level events broadcast via the event system.
+///
+/// This enum contains all domain events that can be published to the event bus.
+/// Each variant carries the specific event data needed by subscribers.
 #[derive(Debug, Clone)]
 pub enum AppEvent {
     /// A watched file was changed
     FileChanged(FileChanged),
+    /// A new block was created
+    BlockCreated(BlockCreated),
+    /// A block was updated
+    BlockUpdated(BlockUpdated),
+    /// A block was deleted
+    BlockDeleted(BlockDeleted),
+    /// A block was moved to a new parent or position
+    BlockMoved(BlockMoved),
+    /// A new page was created
+    PageCreated(PageCreated),
+    /// A page was renamed
+    PageRenamed(PageRenamed),
+    /// A page was deleted
+    PageDeleted(PageDeleted),
 }
 
 /// DomainEvent is the base trait for all domain events.

@@ -4,6 +4,38 @@ use chrono::{DateTime, Utc};
 use sqlx::SqlitePool;
 use tracing::instrument;
 
+/// Retry a database operation with exponential backoff for indexing operations.
+/// Wraps operations that return String errors (converted from sqlx errors).
+async fn retry_db_op_indexing<F, Fut, T>(mut op: F) -> Result<T, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    // Spec: 5s base delay, 60s max per retry, 300s max total elapsed
+    // Delays: [5s, 10s, 20s, 40s, 60s] (5 retries, doubling each time)
+    let delays = [5_000u64, 10_000, 20_000, 40_000, 60_000]; // ms
+    let max_elapsed = 300_000; // 300s in ms
+    let start = std::time::Instant::now();
+
+    for (i, delay) in delays.iter().enumerate() {
+        // Check if we've exceeded max elapsed time
+        if start.elapsed().as_millis() as u64 > max_elapsed {
+            return Err("Retry operation exceeded max elapsed time of 300s".to_string());
+        }
+
+        match op().await {
+            Ok(result) => return Ok(result),
+            Err(e) if i == delays.len() - 1 => {
+                return Err(e);
+            }
+            Err(_e) => {
+                tokio::time::sleep(tokio::time::Duration::from_millis(*delay)).await;
+            }
+        }
+    }
+    unreachable!("retry_db_op_indexing should always return in the loop")
+}
+
 /// Health status of the search index.
 #[derive(Debug, Clone)]
 pub struct IndexHealth {
@@ -103,6 +135,11 @@ impl SearchIndexManager {
     /// Returns the count of indexed blocks.
     #[instrument(skip(self))]
     pub async fn rebuild_full(&self) -> Result<usize, String> {
+        retry_db_op_indexing(|| self.rebuild_full_inner()).await
+    }
+
+    /// Inner implementation of rebuild_full (exposed for retry wrapper).
+    async fn rebuild_full_inner(&self) -> Result<usize, String> {
         sqlx::query("DROP TABLE IF EXISTS blocks_fts")
             .execute(&self.pool)
             .await
@@ -138,6 +175,11 @@ impl SearchIndexManager {
     /// Returns the count of re-indexed blocks.
     #[instrument(skip(self))]
     pub async fn rebuild_incremental(&self, since: DateTime<Utc>) -> Result<usize, String> {
+        retry_db_op_indexing(|| self.rebuild_incremental_inner(since)).await
+    }
+
+    /// Inner implementation of rebuild_incremental (exposed for retry wrapper).
+    async fn rebuild_incremental_inner(&self, since: DateTime<Utc>) -> Result<usize, String> {
         let since_ts = since.timestamp();
 
         struct BlockRow {
