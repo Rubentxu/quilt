@@ -585,7 +585,6 @@ fn add_to_history(query: &str, history: StoredValue<Vec<QueryHistoryItem>>) {
 fn load_history_from_storage(history: StoredValue<Vec<QueryHistoryItem>>) {
     #[cfg(target_arch = "wasm32")]
     {
-        use wasm_bindgen::JsCast;
         let window = web_sys::window().expect("no global window");
         if let Ok(Some(storage)) = window.local_storage() {
             if let Ok(Some(value)) = storage.get_item("quilt_query_history") {

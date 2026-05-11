@@ -2,7 +2,6 @@
 
 use crate::entities::ScheduledTask;
 use crate::errors::DomainError;
-use crate::value_objects::Uuid;
 use async_trait::async_trait;
 
 /// Repository for ScheduledTask persistence.

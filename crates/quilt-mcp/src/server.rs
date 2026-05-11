@@ -15,7 +15,7 @@ use quilt_application::query_service::QueryService;
 use quilt_domain::entities::{Block, BlockCreate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate};
 use quilt_domain::repositories::{BlockRepository, DeepLinkRepository, PageRepository, TagRepository};
 use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker, Uuid};
-use quilt_cognitive::tree_rag::{ReportRequest, ReportScope};
+use quilt_cognitive::tree_rag::ReportScope;
 use quilt_search::{SearchIndexManager, SearchService};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -1833,7 +1833,7 @@ impl McpServer {
         let target_id = args
             .get("target_id")
             .and_then(|v| v.as_str())
-            .and_then(|s| Uuid::parse_str(s));
+            .and_then(Uuid::parse_str);
 
         let target_page_name = args
             .get("target_page_name")
@@ -1880,7 +1880,7 @@ impl McpServer {
     }
 
     async fn tool_get_deep_links(&self, args: &serde_json::Value) -> Result<String, String> {
-        let limit = args
+        let _limit = args
             .get("limit")
             .and_then(|v| v.as_u64())
             .unwrap_or(50) as usize;
@@ -2399,7 +2399,7 @@ impl McpServer {
                     .map(|arr| {
                         arr.iter()
                             .filter_map(|v| v.as_str())
-                            .filter_map(|s| Uuid::parse_str(s))
+                            .filter_map(Uuid::parse_str)
                             .collect()
                     })
                     .unwrap_or_default();
@@ -2417,7 +2417,7 @@ impl McpServer {
                                     .map(|arr| {
                                         arr.iter()
                                             .filter_map(|v| v.as_str())
-                                            .filter_map(|s| Uuid::parse_str(s))
+                                            .filter_map(Uuid::parse_str)
                                             .collect()
                                     })
                                     .unwrap_or_default();

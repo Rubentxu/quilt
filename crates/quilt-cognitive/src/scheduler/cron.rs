@@ -27,7 +27,7 @@ impl CronField {
         match self {
             CronField::Any => true,
             CronField::Exact(vals) => vals.contains(&value),
-            CronField::Step(step) => value % step == 0,
+            CronField::Step(step) => value.is_multiple_of(*step),
             CronField::Range(start, end) => value >= *start && value <= *end,
         }
     }
@@ -103,7 +103,7 @@ pub fn next_run(schedule: &CronSchedule, from: chrono::DateTime<chrono::Utc>) ->
         {
             return Some(candidate);
         }
-        candidate = candidate + chrono::Duration::minutes(1);
+        candidate += chrono::Duration::minutes(1);
     }
     None
 }

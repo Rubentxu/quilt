@@ -1,7 +1,7 @@
 //! PDF renderer — converts Markdown to PDF using genpdf + pulldown-cmark
 
 use crate::tree_rag::types::TreeRagConfig;
-use genpdf::{elements, style, Alignment, Document};
+use genpdf::{elements, Alignment, Document};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 /// Attempt to load the default font family from disk or system fonts.

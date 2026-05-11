@@ -1,21 +1,48 @@
 //! Bridge to Tauri backend commands
 //!
 //! These are typed wrappers around Tauri's `invoke` IPC.
-//! In development (non-Tauri), they return mock data.
+//! In development (non-Tauri browser via Trunk), they return mock data.
 
 use serde::{Deserialize, Serialize};
 
-/// Invoke a Tauri command (with mock fallback for dev)
+/// Invoke a Tauri command with mock fallback for dev mode (Trunk without Tauri).
+///
+/// When running in browser via Trunk dev server (no Tauri available),
+/// this returns `BridgeError::Unavailable` which triggers mock data fallbacks
+/// in the calling functions.
 #[cfg(target_arch = "wasm32")]
 pub async fn invoke<T: for<'de> Deserialize<'de>>(
-    _cmd: &str,
-    _args: &serde_json::Value,
+    cmd: &str,
+    args: &serde_json::Value,
 ) -> Result<T, BridgeError> {
-    // Real Tauri invoke when running in WASM/Tauri
-    // For now, return unavailable until Tauri is wired up
-    Err(BridgeError::Unavailable(
-        "Tauri IPC not configured (dev mode)".into(),
-    ))
+    use wasm_bindgen::JsValue;
+    use js_sys::Error;
+
+    match tauri_invoke::invoke!(cmd, args).await {
+        Ok(v) => Ok(v),
+        Err(e) => {
+            // Check if Tauri is unavailable (running in browser without Tauri)
+            let error_msg = if let Some(error) = e.as_js_error() {
+                format!("{:?}", error)
+            } else {
+                format!("{:?}", e)
+            };
+
+            // Check for common "not in Tauri" error patterns
+            if error_msg.contains("not defined")
+                || error_msg.contains("is not")
+                || error_msg.contains("undefined")
+                || error_msg.contains("Tauri")
+                || error_msg.contains("invoke")
+            {
+                tracing::debug!("Tauri not available (dev mode): {}", error_msg);
+                Err(BridgeError::Unavailable("Tauri IPC not available (dev mode)".into()))
+            } else {
+                tracing::warn!("Tauri invoke error: {}", error_msg);
+                Err(BridgeError::TauriError(error_msg))
+            }
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -28,6 +55,7 @@ pub async fn invoke<T: for<'de> Deserialize<'de>>(
 
 /// A block from the backend
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BlockDto {
     pub id: String,
     pub page_id: String,
@@ -68,6 +96,7 @@ impl Default for BlockDto {
 
 /// A page from the backend
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PageDto {
     pub id: String,
     pub name: String,
@@ -79,6 +108,7 @@ pub struct PageDto {
 
 /// A search result
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchResultDto {
     pub block_id: String,
     pub page_id: String,
@@ -106,6 +136,7 @@ pub struct QueryError {
 
 /// Cognitive map response
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CognitiveMapDto {
     pub total_clusters: usize,
     pub total_frontiers: usize,
@@ -132,10 +163,17 @@ impl std::fmt::Display for BridgeError {
     }
 }
 
-/// Get today's blocks (mock implementation for dev)
-pub async fn get_todays_blocks() -> Result<Vec<BlockDto>, BridgeError> {
-    // TODO: Wire to real Tauri backend
-    Ok(vec![
+impl From<serde_json::Error> for BridgeError {
+    fn from(e: serde_json::Error) -> Self {
+        BridgeError::JsonError(e.to_string())
+    }
+}
+
+// ── Mock data helpers ──────────────────────────────────────────────────────────
+
+/// Mock blocks for dev mode
+fn mock_todays_blocks() -> Vec<BlockDto> {
+    vec![
         BlockDto {
             id: "mock-1".into(),
             page_id: "mock-page".into(),
@@ -192,22 +230,73 @@ pub async fn get_todays_blocks() -> Result<Vec<BlockDto>, BridgeError> {
             created_at: "2024-01-01T00:00:00Z".into(),
             updated_at: "2024-01-01T00:00:00Z".into(),
         },
-    ])
+    ]
 }
 
-/// Get all pages (mock)
-pub async fn get_pages() -> Result<Vec<PageDto>, BridgeError> {
-    Ok(vec![PageDto {
-        id: "mock-1".into(),
-        name: "welcome".into(),
-        title: Some("Welcome to Quilt".into()),
-        journal: false,
-        journal_day: None,
+/// Mock pages for dev mode
+fn mock_pages() -> Vec<PageDto> {
+    vec![
+        PageDto {
+            id: "mock-1".into(),
+            name: "welcome".into(),
+            title: Some("Welcome to Quilt".into()),
+            journal: false,
+            journal_day: None,
+            created_at: "2024-01-01T00:00:00Z".into(),
+        },
+        PageDto {
+            id: "mock-2".into(),
+            name: "journal-2024-01-15".into(),
+            title: Some("January 15, 2024".into()),
+            journal: true,
+            journal_day: Some(20240115),
+            created_at: "2024-01-15T00:00:00Z".into(),
+        },
+    ]
+}
+
+/// Mock query block result
+fn mock_query_result(dsl: &str, limit: usize) -> Vec<BlockDto> {
+    vec![BlockDto {
+        id: "mock-block-1".into(),
+        page_id: "mock-page".into(),
+        page_name: Some("Mock Page".into()),
+        content: format!("Query result for: {} (limit: {})", dsl, limit),
+        marker: None,
+        priority: None,
+        parent_id: None,
+        order: 100.0,
+        level: 1,
+        collapsed: false,
         created_at: "2024-01-01T00:00:00Z".into(),
-    }])
+        updated_at: "2024-01-01T00:00:00Z".into(),
+    }]
 }
 
-// ── Morning Briefing DTOs ─────────────────────────────────────────────────────
+/// Mock search result
+fn mock_search_result(query: &str, _limit: usize) -> Vec<SearchResultDto> {
+    vec![SearchResultDto {
+        block_id: "mock-search-1".into(),
+        page_id: "mock-page".into(),
+        page_name: "Mock Page".into(),
+        content: format!("Search result for: {}", query),
+        snippet: Some(format!("...{}...", query)),
+        score: 0.95,
+    }]
+}
+
+/// Mock cognitive map for dev mode
+fn mock_cognitive_map() -> CognitiveMapDto {
+    CognitiveMapDto {
+        total_clusters: 12,
+        total_frontiers: 5,
+        total_gaps: 3,
+        pages_analyzed: 8,
+        available: false,
+    }
+}
+
+// ── Morning Briefing DTOs ───────────────────────────────────────────────────────
 
 /// Aggregated cognitive pulse metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,6 +344,52 @@ pub struct MorningBriefingDto {
     pub degraded: bool,
 }
 
+/// Mock morning briefing for dev mode
+fn mock_morning_briefing() -> MorningBriefingDto {
+    MorningBriefingDto {
+        cognitive_pulse: CognitivePulseDto {
+            total_pages: 42,
+            total_blocks: 187,
+            clusters: 12,
+            frontiers: 5,
+            gaps: 3,
+        },
+        serendipity_highlights: vec![
+            SerendipityHighlightDto {
+                from_page: "Rust Async Patterns".to_string(),
+                to_page: "Tokio Internals".to_string(),
+                connection_type: "temporal".to_string(),
+                confidence: 0.87,
+            },
+            SerendipityHighlightDto {
+                from_page: "Memory Models".to_string(),
+                to_page: "Concurrent Algorithms".to_string(),
+                connection_type: "semantic".to_string(),
+                confidence: 0.76,
+            },
+        ],
+        decay_alerts: vec![
+            DecayAlertDto {
+                page_name: "Old Project Notes".to_string(),
+                last_modified: "2024-01-15T10:30:00Z".to_string(),
+                days_stale: 30,
+            },
+            DecayAlertDto {
+                page_name: "Deprecated API Guide".to_string(),
+                last_modified: "2024-02-01T14:00:00Z".to_string(),
+                days_stale: 14,
+            },
+        ],
+        stats: BriefingStatsDto {
+            pages_created_today: 3,
+            blocks_created_today: 15,
+            queries_run_today: 8,
+        },
+        generated_at: "2024-03-20T08:00:00Z".to_string(),
+        degraded: false,
+    }
+}
+
 // ── Cognitive IPC commands ────────────────────────────────────────────────────
 
 /// Response for cognitive commands indicating availability
@@ -264,57 +399,72 @@ pub struct AvailabilityDto {
     pub message: Option<String>,
 }
 
-/// Get cognitive map (mock in dev mode)
-pub async fn get_cognitive_map(_page_name: &str) -> Result<CognitiveMapDto, BridgeError> {
+/// Get cognitive map - wired to `cognitive_mirror` Tauri command
+pub async fn get_cognitive_map(page_name: &str) -> Result<CognitiveMapDto, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
-        let args = serde_json::json!({ "page_name": _page_name });
-        invoke::<CognitiveMapDto>("cognitive_mirror", &args)
-            .await
-            .map_err(|e| BridgeError::TauriError(e.to_string()))
+        let args = serde_json::json!({ "page_name": page_name });
+        match invoke::<CognitiveMapDto>("cognitive_mirror", &args).await {
+            Ok(dto) => Ok(dto),
+            Err(BridgeError::Unavailable(_)) => Ok(mock_cognitive_map()),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
-        // Mock data for dev
-        Ok(CognitiveMapDto {
-            total_clusters: 12,
-            total_frontiers: 5,
-            total_gaps: 3,
-            pages_analyzed: 8,
-            available: false,
-        })
+        let _ = page_name;
+        Ok(mock_cognitive_map())
     }
 }
 
 /// Check if cognitive engine is available
 pub async fn cognitive_available() -> Result<AvailabilityDto, BridgeError> {
-    Ok(AvailabilityDto {
-        available: false,
-        message: Some("Cognitive engine not configured (dev mode)".to_string()),
-    })
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({});
+        match invoke::<AvailabilityDto>("cognitive_available", &args).await {
+            Ok(dto) => Ok(dto),
+            Err(BridgeError::Unavailable(_)) => Ok(AvailabilityDto {
+                available: false,
+                message: Some("Cognitive engine not configured (dev mode)".to_string()),
+            }),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(AvailabilityDto {
+            available: false,
+            message: Some("Cognitive engine not configured (dev mode)".to_string()),
+        })
+    }
 }
 
-/// Get serendipity connections (mock in dev mode)
+/// Get serendipity connections - wired to `serendipity` Tauri command
 pub async fn get_serendipity(
-    _since: Option<&str>,
-    _limit: Option<usize>,
-    _min_confidence: Option<f32>,
+    since: Option<&str>,
+    limit: Option<usize>,
+    min_confidence: Option<f32>,
 ) -> Result<serde_json::Value, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({
-            "since": _since,
-            "limit": _limit.unwrap_or(20),
-            "min_confidence": _min_confidence.unwrap_or(0.3)
+            "since": since,
+            "limit": limit.unwrap_or(20),
+            "min_confidence": min_confidence.unwrap_or(0.3)
         });
-        invoke("serendipity", &args)
-            .await
-            .map_err(|e| BridgeError::TauriError(e.to_string()))
+        match invoke::<serde_json::Value>("serendipity", &args).await {
+            Ok(dto) => Ok(dto),
+            Err(BridgeError::Unavailable(_)) => Ok(serde_json::json!({
+                "available": false,
+                "message": "Serendipity engine not configured (dev mode)"
+            })),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let _ = (since, limit, min_confidence);
         Ok(serde_json::json!({
             "available": false,
             "message": "Serendipity engine not configured (dev mode)"
@@ -322,18 +472,23 @@ pub async fn get_serendipity(
     }
 }
 
-/// Get argument map for a page (mock in dev mode)
-pub async fn get_argument_map(_page_name: &str) -> Result<serde_json::Value, BridgeError> {
+/// Get argument map for a page - wired to `argument_map` Tauri command
+pub async fn get_argument_map(page_name: &str) -> Result<serde_json::Value, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
-        let args = serde_json::json!({ "page_name": _page_name });
-        invoke("argument_map", &args)
-            .await
-            .map_err(|e| BridgeError::TauriError(e.to_string()))
+        let args = serde_json::json!({ "page_name": page_name });
+        match invoke::<serde_json::Value>("argument_map", &args).await {
+            Ok(dto) => Ok(dto),
+            Err(BridgeError::Unavailable(_)) => Ok(serde_json::json!({
+                "available": false,
+                "message": "Argument cartographer not configured (dev mode)"
+            })),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let _ = page_name;
         Ok(serde_json::json!({
             "available": false,
             "message": "Argument cartographer not configured (dev mode)"
@@ -341,18 +496,23 @@ pub async fn get_argument_map(_page_name: &str) -> Result<serde_json::Value, Bri
     }
 }
 
-/// Get mental model for an agent (mock in dev mode)
-pub async fn get_mental_model(_agent_id: &str) -> Result<serde_json::Value, BridgeError> {
+/// Get mental model for an agent - wired to `mental_model` Tauri command
+pub async fn get_mental_model(agent_id: &str) -> Result<serde_json::Value, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
-        let args = serde_json::json!({ "agent_id": _agent_id });
-        invoke("mental_model", &args)
-            .await
-            .map_err(|e| BridgeError::TauriError(e.to_string()))
+        let args = serde_json::json!({ "agent_id": agent_id });
+        match invoke::<serde_json::Value>("mental_model", &args).await {
+            Ok(dto) => Ok(dto),
+            Err(BridgeError::Unavailable(_)) => Ok(serde_json::json!({
+                "available": false,
+                "message": "Mental model gardener not configured (dev mode)"
+            })),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
+        let _ = agent_id;
         Ok(serde_json::json!({
             "available": false,
             "message": "Mental model gardener not configured (dev mode)"
@@ -360,105 +520,75 @@ pub async fn get_mental_model(_agent_id: &str) -> Result<serde_json::Value, Brid
     }
 }
 
-/// Get morning briefing (real data from Tauri backend)
+/// Get morning briefing - wired to `morning_briefing` Tauri command
 pub async fn get_morning_briefing() -> Result<MorningBriefingDto, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({});
-        invoke::<MorningBriefingDto>("morning_briefing", &args).await
+        match invoke::<MorningBriefingDto>("morning_briefing", &args).await {
+            Ok(dto) => Ok(dto),
+            Err(BridgeError::Unavailable(_)) => Ok(mock_morning_briefing()),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
-        // Mock data for dev
-        Ok(MorningBriefingDto {
-            cognitive_pulse: CognitivePulseDto {
-                total_pages: 42,
-                total_blocks: 187,
-                clusters: 12,
-                frontiers: 5,
-                gaps: 3,
-            },
-            serendipity_highlights: vec![
-                SerendipityHighlightDto {
-                    from_page: "Rust Async Patterns".to_string(),
-                    to_page: "Tokio Internals".to_string(),
-                    connection_type: "temporal".to_string(),
-                    confidence: 0.87,
-                },
-                SerendipityHighlightDto {
-                    from_page: "Memory Models".to_string(),
-                    to_page: "Concurrent Algorithms".to_string(),
-                    connection_type: "semantic".to_string(),
-                    confidence: 0.76,
-                },
-            ],
-            decay_alerts: vec![
-                DecayAlertDto {
-                    page_name: "Old Project Notes".to_string(),
-                    last_modified: "2024-01-15T10:30:00Z".to_string(),
-                    days_stale: 30,
-                },
-                DecayAlertDto {
-                    page_name: "Deprecated API Guide".to_string(),
-                    last_modified: "2024-02-01T14:00:00Z".to_string(),
-                    days_stale: 14,
-                },
-            ],
-            stats: BriefingStatsDto {
-                pages_created_today: 3,
-                blocks_created_today: 15,
-                queries_run_today: 8,
-            },
-            generated_at: "2024-03-20T08:00:00Z".to_string(),
-            degraded: false,
-        })
+        Ok(mock_morning_briefing())
     }
 }
 
 // ── Typed wrapper functions ────────────────────────────────────────────────────
 
-/// Query blocks with DSL string
+/// Query blocks with DSL string - wired to `query_blocks` Tauri command
 pub async fn query_blocks(dsl: &str, limit: usize) -> Result<Vec<BlockDto>, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({ "dsl": dsl, "limit": limit });
-        invoke("query_blocks", &args).await
+        match invoke::<Vec<BlockDto>>("query_blocks", &args).await {
+            Ok(blocks) => Ok(blocks),
+            Err(BridgeError::Unavailable(_)) => Ok(mock_query_result(dsl, limit)),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let _ = (dsl, limit);
-        // Mock data for dev
-        Ok(vec![BlockDto {
-            id: "mock-block-1".into(),
-            page_id: "mock-page".into(),
-            page_name: Some("Mock Page".into()),
-            content: format!("Query result for: {} (limit: {})", dsl, limit),
-            marker: None,
-            priority: None,
-            parent_id: None,
-            order: 100.0,
-            level: 1,
-            collapsed: false,
-            created_at: "2024-01-01T00:00:00Z".into(),
-            updated_at: "2024-01-01T00:00:00Z".into(),
-        }])
+        Ok(mock_query_result(dsl, limit))
     }
 }
 
-/// Create a new block
-pub async fn create_block(page_name: &str, content: &str) -> Result<BlockDto, BridgeError> {
+/// Create a new block - wired to `create_block` Tauri command
+pub async fn create_block(
+    page_name: &str,
+    content: &str,
+) -> Result<BlockDto, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({ "page_name": page_name, "content": content });
-        invoke("create_block", &args).await
+        match invoke::<BlockDto>("create_block", &args).await {
+            Ok(block) => Ok(block),
+            Err(BridgeError::Unavailable(_)) => {
+                // Mock response for dev mode
+                Ok(BlockDto {
+                    id: format!("mock-{}-{}", page_name, content.len()),
+                    page_id: page_name.into(),
+                    page_name: Some(page_name.into()),
+                    content: content.into(),
+                    marker: None,
+                    priority: None,
+                    parent_id: None,
+                    order: 100.0,
+                    level: 1,
+                    collapsed: false,
+                    created_at: "2024-01-01T00:00:00Z".into(),
+                    updated_at: "2024-01-01T00:00:00Z".into(),
+                })
+            }
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = (page_name, content);
-        // Mock data for dev
         Ok(BlockDto {
             id: format!("mock-{}-{}", page_name, content.len()),
             page_id: page_name.into(),
@@ -476,73 +606,66 @@ pub async fn create_block(page_name: &str, content: &str) -> Result<BlockDto, Br
     }
 }
 
-/// Search blocks in the knowledge graph
-pub async fn search_blocks(query: &str, limit: usize) -> Result<Vec<SearchResultDto>, BridgeError> {
+/// Search blocks in the knowledge graph - wired to `search_blocks` Tauri command
+pub async fn search_blocks(
+    query: &str,
+    limit: usize,
+) -> Result<Vec<SearchResultDto>, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({ "query": query, "limit": limit });
-        invoke("search_blocks", &args).await
+        match invoke::<Vec<SearchResultDto>>("search_blocks", &args).await {
+            Ok(results) => Ok(results),
+            Err(BridgeError::Unavailable(_)) => Ok(mock_search_result(query, limit)),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let _ = (query, limit);
-        // Mock data for dev
-        Ok(vec![SearchResultDto {
-            block_id: "mock-search-1".into(),
-            page_id: "mock-page".into(),
-            page_name: "Mock Page".into(),
-            content: format!("Search result for: {}", query),
-            snippet: Some(format!("...{}...", query)),
-            score: 0.95,
-        }])
+        Ok(mock_search_result(query, limit))
     }
 }
 
-/// List all pages
+/// List all pages - wired to `list_pages` Tauri command
 pub async fn list_pages() -> Result<Vec<PageDto>, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({});
-        invoke("list_pages", &args).await
+        match invoke::<Vec<PageDto>>("list_pages", &args).await {
+            Ok(pages) => Ok(pages),
+            Err(BridgeError::Unavailable(_)) => Ok(mock_pages()),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
-        // Mock data for dev
-        Ok(vec![
-            PageDto {
-                id: "mock-1".into(),
-                name: "welcome".into(),
-                title: Some("Welcome to Quilt".into()),
-                journal: false,
-                journal_day: None,
-                created_at: "2024-01-01T00:00:00Z".into(),
-            },
-            PageDto {
-                id: "mock-2".into(),
-                name: "journal-2024-01-15".into(),
-                title: Some("January 15, 2024".into()),
-                journal: true,
-                journal_day: Some(20240115),
-                created_at: "2024-01-15T00:00:00Z".into(),
-            },
-        ])
+        Ok(mock_pages())
     }
 }
 
-/// Get journal page for a specific date
+/// Get journal page for a specific date - wired to `get_journal` Tauri command
 pub async fn get_journal(date: &str) -> Result<PageDto, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({ "date": date });
-        invoke("get_journal", &args).await
+        match invoke::<PageDto>("get_journal", &args).await {
+            Ok(page) => Ok(page),
+            Err(BridgeError::Unavailable(_)) => {
+                // Mock response for dev mode
+                Ok(PageDto {
+                    id: format!("mock-journal-{}", date),
+                    name: format!("journal-{}", date),
+                    title: Some(date.to_string()),
+                    journal: true,
+                    journal_day: Some(date.replace("-", "").parse().unwrap_or(0)),
+                    created_at: "2024-01-01T00:00:00Z".into(),
+                })
+            }
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let _ = date;
-        // Mock data for dev
         Ok(PageDto {
             id: format!("mock-journal-{}", date),
             name: format!("journal-{}", date),
@@ -554,18 +677,41 @@ pub async fn get_journal(date: &str) -> Result<PageDto, BridgeError> {
     }
 }
 
-/// Query the agent for a specific page
+/// Get today's blocks - TODO: no corresponding Tauri command yet
+///
+/// This function queries for blocks created or modified today.
+/// Currently returns mock data - needs a Tauri command implementation.
+pub async fn get_todays_blocks() -> Result<Vec<BlockDto>, BridgeError> {
+    // TODO: Wire to real Tauri backend (no command exists yet for "today's blocks")
+    Ok(mock_todays_blocks())
+}
+
+/// Get all pages (alias for list_pages for backwards compatibility)
+///
+/// DEPRECATED: Use `list_pages()` instead. This function exists for
+/// backwards compatibility with existing UI code.
+pub async fn get_pages() -> Result<Vec<PageDto>, BridgeError> {
+    list_pages().await
+}
+
+/// Query the agent for a specific page - wired to `query_agent` Tauri command
 pub async fn query_agent(page_name: &str) -> Result<serde_json::Value, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({ "page_name": page_name });
-        invoke("query_agent", &args).await
+        match invoke::<serde_json::Value>("query_agent", &args).await {
+            Ok(result) => Ok(result),
+            Err(BridgeError::Unavailable(_)) => Ok(serde_json::json!({
+                "available": false,
+                "message": "Agent not configured (dev mode)",
+                "page_name": page_name
+            })),
+            Err(e) => Err(e),
+        }
     }
-
     #[cfg(not(target_arch = "wasm32"))]
     {
         let _ = page_name;
-        // Mock data for dev
         Ok(serde_json::json!({
             "available": false,
             "message": "Agent not configured (dev mode)",

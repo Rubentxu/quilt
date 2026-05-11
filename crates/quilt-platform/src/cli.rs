@@ -564,7 +564,7 @@ impl QuiltCLI {
                 }
             }
             TreeRagCommand::BuildTree { page_id } => {
-                let pid = Uuid::parse_str(&page_id)
+                let pid = Uuid::parse_str(page_id)
                     .ok_or_else(|| anyhow::anyhow!("Invalid UUID: {}", page_id))?;
                 let tree = engine.build_tree(pid).await?;
                 println!("Tree for page '{}':", tree.page_name);
@@ -598,7 +598,7 @@ impl QuiltCLI {
                     let pdf = engine.render_pdf(&markdown)?;
                     match output {
                         Some(path) => {
-                            std::fs::write(&path, &pdf)?;
+                            std::fs::write(path, &pdf)?;
                             println!("PDF written to: {}", path);
                         }
                         None => {
@@ -608,7 +608,7 @@ impl QuiltCLI {
                 } else {
                     match output {
                         Some(path) => {
-                            std::fs::write(&path, &markdown)?;
+                            std::fs::write(path, &markdown)?;
                             println!("Markdown written to: {}", path);
                         }
                         None => {
@@ -733,17 +733,17 @@ impl QuiltCLI {
                         task_type
                     ),
                 };
-                scheduler.schedule_task(&name, &cron, tt).await
+                scheduler.schedule_task(name, cron, tt).await
                     .map_err(|e| anyhow::anyhow!(e))?;
                 println!("Scheduled task '{}': {} ({})", name, cron, task_type);
             }
             SchedulerCommand::RunNow { name } => {
-                scheduler.run_now(&name).await
+                scheduler.run_now(name).await
                     .map_err(|e| anyhow::anyhow!(e))?;
                 println!("Task '{}' executed.", name);
             }
             SchedulerCommand::Delete { name } => {
-                scheduler.delete_task(&name).await
+                scheduler.delete_task(name).await
                     .map_err(|e| anyhow::anyhow!(e))?;
                 println!("Task '{}' deleted.", name);
             }

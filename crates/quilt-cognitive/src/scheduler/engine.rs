@@ -3,7 +3,7 @@
 //! Runs TreeRAG index rebuilds, health checks, and cleanup tasks.
 
 use crate::scheduler::cron::{next_run, parse_cron};
-use crate::tree_rag::{TreeRagEngine, TreeRagStatus};
+use crate::tree_rag::TreeRagEngine;
 use quilt_domain::entities::{ScheduledTask, TaskType};
 use quilt_domain::repositories::ScheduledTaskRepository;
 use std::sync::Arc;

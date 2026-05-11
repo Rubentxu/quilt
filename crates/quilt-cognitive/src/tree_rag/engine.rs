@@ -233,7 +233,7 @@ impl TreeRagEngine {
         }
 
         // Deduplicate and cap
-        all_block_ids.sort_by(|a: &Uuid, b: &Uuid| a.to_string().cmp(&b.to_string()));
+        all_block_ids.sort_by_key(|a: &Uuid| a.to_string());
         all_block_ids.dedup();
         if all_block_ids.len() > max_blocks {
             all_block_ids.truncate(max_blocks);
@@ -248,7 +248,7 @@ impl TreeRagEngine {
 
         // Build tree for first page (representative)
         let first_page_id = *source_pages_set.iter().next().unwrap_or(&Uuid::nil());
-        let tree = if first_page_id != Uuid::nil() {
+        let _tree = if first_page_id != Uuid::nil() {
             self.build_tree(first_page_id).await.ok()
         } else {
             None

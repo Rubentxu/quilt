@@ -2772,7 +2772,7 @@ impl BlockSummaryRepository for SqliteBlockSummaryRepository {
         if block_ids.is_empty() {
             return Ok(vec![]);
         }
-        let blobs: Vec<Vec<u8>> = block_ids.iter().map(|id| uuid_to_blob(id)).collect();
+        let blobs: Vec<Vec<u8>> = block_ids.iter().map(uuid_to_blob).collect();
         let placeholders: Vec<String> = blobs.iter().map(|_| "?".to_string()).collect();
         let sql = format!(
             "SELECT * FROM block_summaries WHERE block_id IN ({})",
@@ -2790,7 +2790,7 @@ impl BlockSummaryRepository for SqliteBlockSummaryRepository {
             .map_err(|e| DomainError::Database(format!("get_batch summaries: {}", e)))?;
 
         rows.iter()
-            .map(|r| Self::row_to_summary(r))
+            .map(Self::row_to_summary)
             .collect()
     }
 
@@ -2931,7 +2931,7 @@ impl ScheduledTaskRepository for SqliteScheduledTaskRepository {
         .await
         .map_err(|e| DomainError::Database(format!("list_due: {}", e)))?;
 
-        rows.iter().map(|r| Self::row_to_task(r)).collect()
+        rows.iter().map(Self::row_to_task).collect()
     }
 
     async fn list_all(&self) -> Result<Vec<ScheduledTask>, DomainError> {
@@ -2940,7 +2940,7 @@ impl ScheduledTaskRepository for SqliteScheduledTaskRepository {
             .await
             .map_err(|e| DomainError::Database(format!("list_all tasks: {}", e)))?;
 
-        rows.iter().map(|r| Self::row_to_task(r)).collect()
+        rows.iter().map(Self::row_to_task).collect()
     }
 
     async fn upsert(&self, task: &ScheduledTask) -> Result<(), DomainError> {
@@ -3239,9 +3239,9 @@ impl SqliteDeepLinkRepository {
         let source_type_str: String = row.get("source_type");
         let link_type_str: String = row.get("link_type");
 
-        let source_type = LinkSourceType::from_str(&source_type_str)
+        let source_type = LinkSourceType::try_from_str(&source_type_str)
             .ok_or_else(|| DomainError::InvalidData(format!("Invalid source type: {}", source_type_str)))?;
-        let link_type = LinkType::from_str(&link_type_str)
+        let link_type = LinkType::try_from_str(&link_type_str)
             .ok_or_else(|| DomainError::InvalidData(format!("Invalid link type: {}", link_type_str)))?;
 
         Ok(DeepLink {

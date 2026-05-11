@@ -28,7 +28,7 @@ impl LinkType {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn try_from_str(s: &str) -> Option<Self> {
         match s {
             "block" => Some(LinkType::InternalBlock),
             "page" => Some(LinkType::InternalPage),
@@ -93,7 +93,7 @@ impl LinkSourceType {
     }
 
     /// Parse from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn try_from_str(s: &str) -> Option<Self> {
         match s {
             "block" => Some(LinkSourceType::Block),
             "page" => Some(LinkSourceType::Page),
@@ -320,16 +320,16 @@ mod tests {
 
     #[test]
     fn test_link_type_from_str() {
-        assert_eq!(LinkType::from_str("block"), Some(LinkType::InternalBlock));
-        assert_eq!(LinkType::from_str("page"), Some(LinkType::InternalPage));
-        assert_eq!(LinkType::from_str("url"), Some(LinkType::ExternalUrl));
-        assert_eq!(LinkType::from_str("unknown"), None);
+        assert_eq!(LinkType::try_from_str("block"), Some(LinkType::InternalBlock));
+        assert_eq!(LinkType::try_from_str("page"), Some(LinkType::InternalPage));
+        assert_eq!(LinkType::try_from_str("url"), Some(LinkType::ExternalUrl));
+        assert_eq!(LinkType::try_from_str("unknown"), None);
     }
 
     #[test]
     fn test_link_source_type_from_str() {
-        assert_eq!(LinkSourceType::from_str("block"), Some(LinkSourceType::Block));
-        assert_eq!(LinkSourceType::from_str("page"), Some(LinkSourceType::Page));
-        assert_eq!(LinkSourceType::from_str("unknown"), None);
+        assert_eq!(LinkSourceType::try_from_str("block"), Some(LinkSourceType::Block));
+        assert_eq!(LinkSourceType::try_from_str("page"), Some(LinkSourceType::Page));
+        assert_eq!(LinkSourceType::try_from_str("unknown"), None);
     }
 }
