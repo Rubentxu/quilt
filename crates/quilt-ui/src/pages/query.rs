@@ -55,7 +55,7 @@ pub fn QueryView() -> impl IntoView {
     };
 
     // Execute query action
-    let execute_query = Action::new(move |input: &String| {
+    let execute_query = Action::new_local(move |input: &String| {
         let query = input.clone();
         async move {
             is_executing.set_value(true);
@@ -80,7 +80,7 @@ pub fn QueryView() -> impl IntoView {
     });
 
     // Execute search action
-    let execute_search = Action::new(move |input: &String| {
+    let execute_search = Action::new_local(move |input: &String| {
         let query = input.clone();
         async move {
             is_executing.set_value(true);

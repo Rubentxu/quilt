@@ -7,7 +7,7 @@ use leptos::prelude::*;
 #[component]
 pub fn PagesView() -> impl IntoView {
     // Action to fetch all pages
-    let fetch_pages = Action::new(|_: &()| async move {
+    let fetch_pages = Action::new_local(|_: &()| async move {
         match list_pages().await {
             Ok(pages) => Some(pages),
             Err(e) => {
@@ -20,16 +20,6 @@ pub fn PagesView() -> impl IntoView {
     // Trigger initial fetch
     fetch_pages.dispatch(());
 
-    // Derived state
-    let has_pages = move || {
-        fetch_pages
-            .value()
-            .get()
-            .flatten()
-            .is_some_and(|p| !p.is_empty())
-    };
-    let is_loading = move || fetch_pages.pending().get();
-
     view! {
         <div class="pages-view">
             <div class="page-header">
@@ -37,9 +27,15 @@ pub fn PagesView() -> impl IntoView {
                 <p class="page-subtitle">"All your pages"</p>
             </div>
 
-            <Show when={is_loading} fallback={move || {
+            <Show when={move || fetch_pages.pending().get()} fallback={move || {
                 view! {
-                    <Show when={has_pages} fallback={move || view! {
+                    <Show when={move || {
+                        fetch_pages
+                            .value()
+                            .get()
+                            .flatten()
+                            .is_some_and(|p| !p.is_empty())
+                    }} fallback={move || view! {
                         <div class="card">
                             <p class="empty-state">"No pages yet. Create your first page!"</p>
                         </div>

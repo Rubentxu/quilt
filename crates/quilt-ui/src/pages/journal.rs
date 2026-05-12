@@ -12,7 +12,7 @@ pub fn JournalView() -> impl IntoView {
     let today_for_fetch = today_str.clone();
 
     // Action to fetch today's journal page
-    let fetch_journal = Action::new(move |_: &String| {
+    let fetch_journal = Action::new_local(move |_: &String| {
         let date = today_str.clone();
         async move {
             match get_journal(&date).await {
@@ -28,10 +28,6 @@ pub fn JournalView() -> impl IntoView {
     // Trigger initial fetch
     fetch_journal.dispatch(today_for_fetch);
 
-    // Derived state
-    let has_page = move || fetch_journal.value().get().flatten().is_some();
-    let is_loading = move || fetch_journal.pending().get();
-
     view! {
         <div class="journal-view">
             <div class="page-header">
@@ -39,9 +35,9 @@ pub fn JournalView() -> impl IntoView {
                 <p class="page-subtitle">"Your daily journal"</p>
             </div>
 
-            <Show when={is_loading} fallback={move || {
+            <Show when={move || fetch_journal.pending().get()} fallback={move || {
                 view! {
-                    <Show when={has_page} fallback={move || view! {
+                    <Show when={move || fetch_journal.value().get().flatten().is_some()} fallback={move || view! {
                         <div>
                             <section class="card" style="margin-bottom: 1.5rem">
                                 <h3>"Tasks"</h3>

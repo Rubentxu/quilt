@@ -9,7 +9,7 @@ pub fn SearchView() -> impl IntoView {
     let search_query = StoredValue::new(String::new());
 
     // Action to search blocks
-    let perform_search = Action::new(move |query: &String| {
+    let perform_search = Action::new_local(move |query: &String| {
         let q = query.clone();
         async move {
             if q.trim().is_empty() {
@@ -28,9 +28,7 @@ pub fn SearchView() -> impl IntoView {
 
     // Derived state
     let is_loading = move || perform_search.pending().get();
-    let has_query = move || !search_query.get_value().trim().is_empty();
     let get_results = move || perform_search.value().get().unwrap_or_default();
-    let has_results = move || !get_results().is_empty();
 
     view! {
         <div class="search-view">
@@ -59,12 +57,12 @@ pub fn SearchView() -> impl IntoView {
 
             <Show when={is_loading} fallback={move || {
                 view! {
-                    <Show when={has_query} fallback={move || view! {
+                    <Show when={move || !search_query.get_value().trim().is_empty()} fallback={move || view! {
                         <div class="card">
                             <p class="empty-state">"Enter a search term to find blocks"</p>
                         </div>
                     }}>
-                        <Show when={has_results} fallback={move || view! {
+                        <Show when={move || !get_results().is_empty()} fallback={move || view! {
                             <div class="card">
                                 <p class="empty-state">"No results found"</p>
                             </div>

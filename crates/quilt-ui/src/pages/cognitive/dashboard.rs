@@ -198,38 +198,15 @@ fn StatsBar(pages: usize, blocks: usize, queries: usize) -> impl IntoView {
 #[component]
 pub fn CognitiveDashboard() -> impl IntoView {
     // Async action to fetch morning briefing
-    let fetch_briefing = Action::new(|_: &()| async move { bridge::get_morning_briefing().await });
+    let fetch_briefing = Action::new_local(|_: &()| async move { bridge::get_morning_briefing().await });
 
     // Trigger initial fetch
     fetch_briefing.dispatch(());
 
-    // Helper to extract error message
-    let error_message = |e: &bridge::BridgeError| -> String {
-        match e {
-            bridge::BridgeError::TauriError(s) => s.clone(),
-            bridge::BridgeError::JsonError(s) => s.clone(),
-            bridge::BridgeError::Unavailable(s) => s.clone(),
-        }
-    };
-
-    let on_refresh = Callback::new(move |_| {
+    // Store the refresh callback in a StoredValue so it can be used in multiple closures
+    let on_refresh = StoredValue::new(Callback::new(move |_| {
         let _ = fetch_briefing.dispatch(());
-    });
-
-    // Check if we have a result
-    let _has_result = move || fetch_briefing.value().get().is_some();
-    // Check if result is an error
-    let is_error = move || matches!(fetch_briefing.value().get(), Some(Err(_)));
-    // Get the briefing data
-    let get_briefing = move || match fetch_briefing.value().get() {
-        Some(Ok(briefing)) => Some(briefing),
-        _ => None,
-    };
-    // Get error message
-    let get_error = move || match fetch_briefing.value().get() {
-        Some(Err(e)) => Some(error_message(&e)),
-        _ => None,
-    };
+    }));
 
     view! {
         <div class="cognitive-dashboard">
@@ -243,25 +220,42 @@ pub fn CognitiveDashboard() -> impl IntoView {
                 fallback={move || view! { <LoadingSkeleton /> }}
             >
                 <Show
-                    when={is_error}
+                    when={move || matches!(fetch_briefing.value().get(), Some(Err(_)))}
                     fallback={move || {
+                        let cb = on_refresh.get_value();
                         view! {
                             <Show
-                                when={move || get_briefing().is_some()}
+                                when={move || {
+                                    match fetch_briefing.value().get() {
+                                        Some(Ok(_)) => true,
+                                        _ => false,
+                                    }
+                                }}
                                 fallback={move || view! { <LoadingSkeleton /> }}
                             >
                                 {move || {
-                                    let b = get_briefing().expect("briefing should exist when condition is true");
-                                    view! { <BriefingContent briefing={b} on_refresh={on_refresh} /> }
+                                    let briefing = match fetch_briefing.value().get() {
+                                        Some(Ok(b)) => b,
+                                        _ => unreachable!("briefing should exist when condition is true"),
+                                    };
+                                    view! { <BriefingContent briefing={briefing} on_refresh={cb.clone()} /> }
                                 }}
                             </Show>
                         }
                     }}
                 >
                     {move || {
-                        let msg = get_error().unwrap_or_default();
+                        let msg = match fetch_briefing.value().get() {
+                            Some(Err(e)) => match e {
+                                bridge::BridgeError::TauriError(s) => s.clone(),
+                                bridge::BridgeError::JsonError(s) => s.clone(),
+                                bridge::BridgeError::Unavailable(s) => s.clone(),
+                            },
+                            _ => String::new(),
+                        };
+                        let cb = on_refresh.get_value();
                         view! {
-                            <ErrorState message={msg} on_retry={on_refresh} />
+                            <ErrorState message={msg} on_retry={cb} />
                         }
                     }}
                 </Show>
