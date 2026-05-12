@@ -31,7 +31,4 @@ gloo-timers = { version = "0.3", features = ["futures"] }
 futures-channel = "0.3"
 chrono = { version = "0.4", features = ["wasmbind"] }
 tracing = "0.1"
-
-# Tauri IPC for WASM frontend
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-tauri-invoke = "0.2"
+# Note: Tauri IPC uses window.__TAURI__.invoke via web_sys/js_sys (no tauri-invoke dep needed)

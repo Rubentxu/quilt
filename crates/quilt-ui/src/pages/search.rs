@@ -74,8 +74,13 @@ pub fn SearchView() -> impl IntoView {
                                 {get_results().iter().map(|r| view! {
                                     <div class="card" style="margin-bottom: 0.5rem">
                                         <div class="search-result-item">
-                                            <div class="result-page">{r.page_name.clone()}</div>
-                                            <div class="result-content">{r.content.clone()}</div>
+                                            <div class="result-meta">
+                                                <span class="result-page">{r.page_name.clone()}</span>
+                                                <span class="result-block-id">{"#".to_string() + &r.block_id}</span>
+                                            </div>
+                                            <div class="result-snippet">
+                                                {r.snippet.as_deref().unwrap_or(&r.content).to_string()}
+                                            </div>
                                         </div>
                                     </div>
                                 }).collect::<Vec<_>>()}

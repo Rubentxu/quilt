@@ -462,12 +462,39 @@ pub fn QueryView() -> impl IntoView {
                         </button>
                         <button
                             class="chip"
+                            attr:data-testid="query-chip-task-now"
+                            on:click={move |_| {
+                                query_input.set_value("(task now)".to_string());
+                            }}
+                        >
+                            "(task now)"
+                        </button>
+                        <button
+                            class="chip"
+                            attr:data-testid="query-chip-task-done"
+                            on:click={move |_| {
+                                query_input.set_value("(task done)".to_string());
+                            }}
+                        >
+                            "(task done)"
+                        </button>
+                        <button
+                            class="chip"
                             attr:data-testid="query-chip-priority-a"
                             on:click={move |_| {
                                 query_input.set_value("(priority a)".to_string());
                             }}
                         >
                             "(priority a)"
+                        </button>
+                        <button
+                            class="chip"
+                            attr:data-testid="query-chip-journal"
+                            on:click={move |_| {
+                                query_input.set_value("(page \"Journal\")".to_string());
+                            }}
+                        >
+                            "(page \"Journal\")"
                         </button>
                         <button
                             class="chip"

@@ -5,44 +5,53 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Invoke a Tauri command with mock fallback for dev mode (Trunk without Tauri).
+/// Invoke a Tauri command via window.__TAURI__.invoke (JavaScript interop).
 ///
-/// When running in browser via Trunk dev server (no Tauri available),
-/// this returns `BridgeError::Unavailable` which triggers mock data fallbacks
-/// in the calling functions.
+/// In development (non-Tauri browser via Trunk), the __TAURI__ global doesn't exist,
+/// so we return BridgeError::Unavailable which triggers mock data fallbacks.
 #[cfg(target_arch = "wasm32")]
 pub async fn invoke<T: for<'de> Deserialize<'de>>(
     cmd: &str,
     args: &serde_json::Value,
 ) -> Result<T, BridgeError> {
+    use wasm_bindgen::JsCast;
     use wasm_bindgen::JsValue;
-    use js_sys::Error;
+    use web_sys::{js_sys::Reflect, Window};
 
-    match tauri_invoke::invoke!(cmd, args).await {
-        Ok(v) => Ok(v),
-        Err(e) => {
-            // Check if Tauri is unavailable (running in browser without Tauri)
-            let error_msg = if let Some(error) = e.as_js_error() {
-                format!("{:?}", error)
-            } else {
-                format!("{:?}", e)
-            };
+    let window: Window = web_sys::window()
+        .ok_or_else(|| BridgeError::Unavailable("No window".into()))?;
 
-            // Check for common "not in Tauri" error patterns
-            if error_msg.contains("not defined")
-                || error_msg.contains("is not")
-                || error_msg.contains("undefined")
-                || error_msg.contains("Tauri")
-                || error_msg.contains("invoke")
-            {
-                tracing::debug!("Tauri not available (dev mode): {}", error_msg);
-                Err(BridgeError::Unavailable("Tauri IPC not available (dev mode)".into()))
-            } else {
-                tracing::warn!("Tauri invoke error: {}", error_msg);
-                Err(BridgeError::TauriError(error_msg))
-            }
-        }
+    // Get window.__TAURI__
+    let tauri = Reflect::get(&window, &JsValue::from_str("__TAURI__"))
+        .map_err(|_| BridgeError::Unavailable("__TAURI__ not available".into()))?;
+    if tauri.is_undefined() || tauri.is_null() {
+        return Err(BridgeError::Unavailable("Tauri not available (dev mode)".into()));
     }
+
+    // Get window.__TAURI__.invoke as a JS Function
+    let invoke_fn_val = Reflect::get(&tauri, &JsValue::from_str("invoke"))
+        .map_err(|e| BridgeError::TauriError(format!("invoke not found: {:?}", e)))?;
+    let invoke_fn: js_sys::Function = invoke_fn_val.unchecked_into();
+
+    // Build args array: [cmd, args]
+    let args_arr = js_sys::Array::new();
+    args_arr.push(&JsValue::from_str(cmd));
+    args_arr.push(&serde_wasm_bindgen::to_value(args)
+        .unwrap_or(JsValue::NULL));
+
+    // Call: window.__TAURI__.invoke(cmd, args) -> Promise
+    let promise_val = invoke_fn.apply(&JsValue::NULL, &args_arr)
+        .map_err(|e| BridgeError::TauriError(format!("invoke call failed: {:?}", e)))?;
+    let promise: js_sys::Promise = promise_val.unchecked_into();
+
+    // Await the Promise
+    let js_future = wasm_bindgen_futures::JsFuture::from(promise);
+    let result: JsValue = js_future.await
+        .map_err(|e| BridgeError::TauriError(format!("invoke await failed: {:?}", e)))?;
+
+    // Deserialize result
+    serde_wasm_bindgen::from_value(result)
+        .map_err(|e| BridgeError::TauriError(format!("deserialization failed: {}", e)))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

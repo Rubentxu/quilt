@@ -11,8 +11,8 @@ use crate::state::AppState;
 use commands::{
     argument_map, cognitive_available, cognitive_mirror, create_block, create_page, create_task,
     delete_block, get_availability, get_backlinks, get_block_tree, get_journal, get_page,
-    link_blocks, list_pages, mental_model, navigate_to_block, navigate_to_page, query_agent,
-    query_blocks, search_blocks, serendipity,
+    link_blocks, list_pages, mental_model, morning_briefing, navigate_to_block, navigate_to_page,
+    query_agent, query_blocks, search_blocks, serendipity,
 };
 use metrics::{describe_gauge, gauge};
 use metrics_exporter_prometheus::PrometheusBuilder;
@@ -221,6 +221,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             serendipity,
             argument_map,
             mental_model,
+            morning_briefing,
             get_availability,
             navigate_to_page,
             navigate_to_block,
