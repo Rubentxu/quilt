@@ -2,6 +2,7 @@
 //!
 //! Holds the database pool and MCP server reference for use by Tauri commands.
 
+use quilt_cognitive::AIClient;
 use quilt_infrastructure::database::sqlite::connection::DbPool;
 use quilt_mcp::McpServer;
 use quilt_search::SearchIndexManager;
@@ -20,6 +21,8 @@ pub struct AppState {
     pub search_index: Arc<SearchIndexManager>,
     /// Last opened graph ID (for deep link navigation)
     pub last_opened_graph: RwLock<Option<String>>,
+    /// AI client for cognitive engines — can be reconfigured at runtime
+    pub ai_client: RwLock<Arc<dyn AIClient>>,
 }
 
 impl AppState {
@@ -28,12 +31,14 @@ impl AppState {
         pool: DbPool,
         mcp_server: Arc<McpServer>,
         search_index: Arc<SearchIndexManager>,
+        ai_client: Arc<dyn AIClient>,
     ) -> Self {
         Self {
             pool,
             mcp_server,
             search_index,
             last_opened_graph: RwLock::new(None),
+            ai_client: RwLock::new(ai_client),
         }
     }
 }

@@ -16,7 +16,7 @@ quilt-infrastructure = { path = "../../../crates/quilt-infrastructure" }
 quilt-mcp = { path = "../../../crates/quilt-mcp" }
 quilt-query = { path = "../../../crates/quilt-query" }
 quilt-search = { path = "../../../crates/quilt-search" }
-quilt-cognitive = { path = "../../../crates/quilt-cognitive" }
+quilt-cognitive = { path = "../../../crates/quilt-cognitive", features = ["ollama"] }
 quilt-platform = { path = ".." }
 
 # Tauri

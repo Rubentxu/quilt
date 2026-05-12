@@ -9,16 +9,17 @@ pub mod state;
 use crate::deep_link::DeepLinkParser;
 use crate::state::AppState;
 use commands::{
-    argument_map, cognitive_available, cognitive_mirror, create_block, create_page, create_task,
-    delete_block, get_availability, get_backlinks, get_block_tree, get_journal, get_page,
-    link_blocks, list_pages, mental_model, morning_briefing, navigate_to_block, navigate_to_page,
-    query_agent, query_blocks, search_blocks, serendipity,
+    argument_map, cognitive_available, cognitive_mirror, configure_ai_provider,
+    create_block, create_page, create_task, delete_block, get_availability, get_ai_status,
+    get_backlinks, get_block_tree, get_journal, get_page, link_blocks, list_pages, mental_model,
+    morning_briefing, navigate_to_block, navigate_to_page, query_agent, query_blocks, search_blocks,
+    serendipity,
 };
 use metrics::{describe_gauge, gauge};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use quilt_cognitive::{
-    AgentMemory, ArgumentCartographer, CognitiveMirror, CounterfactualExplorer,
-    KnowledgeEvolutionTracker, MentalModelGardener, MockAIClient, SerendipityEngine,
+    create_ai_client, AgentMemory, ArgumentCartographer, CognitiveMirror,
+    CounterfactualExplorer, KnowledgeEvolutionTracker, MentalModelGardener, SerendipityEngine,
 };
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
@@ -127,8 +128,9 @@ pub async fn create_app_state(
     let deep_link_repo = Arc::new(SqliteDeepLinkRepository::new(pool.clone()));
     let search_service = Arc::new(SearchService::new(pool.clone()));
 
-    // Create AI client for cognitive engines
-    let ai_client: Arc<dyn quilt_cognitive::AIClient> = Arc::new(MockAIClient::new());
+    // Create AI client for cognitive engines using default config
+    let ai_config = quilt_cognitive::AIConfig::default();
+    let ai_client: Arc<dyn quilt_cognitive::AIClient> = Arc::from(create_ai_client(&ai_config));
 
     // Create AgentMemory first (needed by MentalModelGardener)
     let agent_memory = Arc::new(AgentMemory::new(block_repo.clone(), ai_client.clone()));
@@ -176,7 +178,7 @@ pub async fn create_app_state(
     // Create search index manager for FileWatcher/EventBridge
     let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
 
-    Ok(AppState::new(pool, mcp_server, search_index))
+    Ok(AppState::new(pool, mcp_server, search_index, ai_client))
 }
 
 /// Run the Tauri application
@@ -348,6 +350,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             get_availability,
             navigate_to_page,
             navigate_to_block,
+            configure_ai_provider,
+            get_ai_status,
         ])
         .run(tauri::generate_context!())?;
 

@@ -3,12 +3,14 @@
 //! These commands are the bridge between the frontend and backend.
 
 pub mod agent;
+pub mod ai_config;
 pub mod blocks;
 pub mod cognitive;
 pub mod navigation;
 pub mod pages;
 
 pub use agent::query_agent;
+pub use ai_config::{configure_ai_provider, get_ai_status};
 pub use blocks::{
     create_block, create_task, delete_block, get_backlinks, get_block_tree, link_blocks,
     query_blocks, search_blocks,
