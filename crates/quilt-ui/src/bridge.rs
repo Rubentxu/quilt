@@ -615,6 +615,67 @@ pub async fn create_block(
     }
 }
 
+/// Update an existing block - wired to `update_block` Tauri command
+pub async fn update_block(
+    id: &str,
+    content: &str,
+    parent_id: Option<&str>,
+    order: Option<f64>,
+    level: Option<u8>,
+    collapsed: Option<bool>,
+) -> Result<BlockDto, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({
+            "id": id,
+            "content": content,
+            "parentId": parent_id,
+            "order": order,
+            "level": level,
+            "collapsed": collapsed,
+        });
+        match invoke::<BlockDto>("update_block", &args).await {
+            Ok(block) => Ok(block),
+            Err(BridgeError::Unavailable(_)) => {
+                // Mock response for dev mode
+                Ok(BlockDto {
+                    id: id.into(),
+                    page_id: "mock-page".into(),
+                    page_name: Some("mock".into()),
+                    content: content.into(),
+                    marker: None,
+                    priority: None,
+                    parent_id: parent_id.map(String::from),
+                    order: order.unwrap_or(100.0),
+                    level: level.unwrap_or(1),
+                    collapsed: collapsed.unwrap_or(false),
+                    created_at: "2024-01-01T00:00:00Z".into(),
+                    updated_at: "2024-01-01T00:00:00Z".into(),
+                })
+            }
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (id, content, parent_id, order, level, collapsed);
+        Ok(BlockDto {
+            id: id.into(),
+            page_id: "mock-page".into(),
+            page_name: Some("mock".into()),
+            content: content.into(),
+            marker: None,
+            priority: None,
+            parent_id: parent_id.map(String::from),
+            order: order.unwrap_or(100.0),
+            level: level.unwrap_or(1),
+            collapsed: collapsed.unwrap_or(false),
+            created_at: "2024-01-01T00:00:00Z".into(),
+            updated_at: "2024-01-01T00:00:00Z".into(),
+        })
+    }
+}
+
 /// Search blocks in the knowledge graph - wired to `search_blocks` Tauri command
 pub async fn search_blocks(
     query: &str,

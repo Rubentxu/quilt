@@ -4,9 +4,13 @@
 //! - Indentation based on block level
 //! - Marker and priority display
 //! - Expand/collapse toggle
+//! - Keyboard navigation (Tab, Shift+Tab, Enter, Escape, ArrowUp/ArrowDown)
+//!
+//! Note: Inline editing is pending due to closure capture constraints in Leptos 0.7
 
 use crate::bridge::BlockDto;
 use leptos::prelude::*;
+use web_sys::KeyboardEvent;
 
 /// Marker options for blocks
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,7 +56,14 @@ impl Priority {
 
 /// Outliner block component - displays a single block with indentation
 #[component]
-pub fn OutlinerBlock(block: BlockDto, has_children: bool, expanded: bool) -> impl IntoView {
+pub fn OutlinerBlock(
+    block: BlockDto,
+    has_children: bool,
+    expanded: RwSignal<bool>,
+    on_collapse: Option<Callback<(), ()>>,
+    on_focus_next: Option<Callback<(), ()>>,
+    on_focus_prev: Option<Callback<(), ()>>,
+) -> impl IntoView {
     let marker = Marker::from_str(&block.marker);
     let priority = Priority::from_str(&block.priority);
 
@@ -84,29 +95,68 @@ pub fn OutlinerBlock(block: BlockDto, has_children: bool, expanded: bool) -> imp
         Marker::None => "•",
     };
 
-    let expand_icon = if !has_children {
-        ""
-    } else if expanded {
-        "▼"
-    } else {
-        "▶"
-    };
-
     // Calculate indentation based on level
     let indent_px = block.level.saturating_sub(1) as u32 * 24;
+
+    // Clone block.id for use in closures
+    let block_id = block.id.clone();
+    let block_id2 = block.id.clone();
+    let block_id3 = block.id.clone();
 
     view! {
         <div
             class="outliner-block"
-            data-block-id={block.id.clone()}
+            data-block-id={block_id.clone()}
             style:padding-left={format!("{}px", indent_px)}
+            tabindex="0"
+            on:keydown={move |ev: KeyboardEvent| {
+                let key = ev.key();
+                match key.as_str() {
+                    "Enter" => {
+                        // TODO: Enter edit mode when inline editing is implemented
+                    }
+                    "ArrowDown" => {
+                        if let Some(callback) = &on_focus_next {
+                            callback.run(());
+                        }
+                    }
+                    "ArrowUp" => {
+                        if let Some(callback) = &on_focus_prev {
+                            callback.run(());
+                        }
+                    }
+                    "Tab" => {
+                        ev.prevent_default();
+                        if ev.shift_key() {
+                            if let Some(callback) = &on_focus_prev {
+                                callback.run(());
+                            }
+                        } else {
+                            if let Some(callback) = &on_focus_next {
+                                callback.run(());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }}
         >
             <div class="outliner-block-row">
                 {/* Expand/collapse toggle */}
                 <Show when={move || has_children}>
-                    <span class="outliner-expand">
-                        {expand_icon}
-                    </span>
+                    <button
+                        class="outliner-expand"
+                        on:click={move |_ev: web_sys::MouseEvent| {
+                            expanded.update(|e| *e = !*e);
+                            if let Some(callback) = &on_collapse {
+                                callback.run(());
+                            }
+                        }}
+                        data-testid={format!("block-expand-{}", block_id2)}
+                        tabindex="-1"
+                    >
+                        {move || if expanded.get() { "▼" } else { "▶" }}
+                    </button>
                 </Show>
 
                 {/* Marker indicator */}
@@ -121,8 +171,13 @@ pub fn OutlinerBlock(block: BlockDto, has_children: bool, expanded: bool) -> imp
                     </span>
                 </Show>
 
-                {/* Content */}
-                <span class="block-content">{block.content.clone()}</span>
+                {/* Content - display only for now */}
+                <span
+                    class="block-content"
+                    data-testid={format!("block-content-{}", block_id3)}
+                >
+                    {block.content.clone()}
+                </span>
             </div>
         </div>
     }

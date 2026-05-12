@@ -1,7 +1,7 @@
 //! OutlinerTree component - displays hierarchical blocks
 //!
 //! This component takes a list of blocks and renders them as a tree
-//! with proper indentation and expand/collapse.
+//! with proper indentation, expand/collapse, and keyboard navigation.
 
 use crate::bridge::BlockDto;
 use crate::components::OutlinerBlock;
@@ -82,6 +82,9 @@ pub fn build_tree(blocks: &[BlockDto]) -> Vec<TreeBlock> {
 pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
     let tree = Signal::derive(move || build_tree(&blocks));
 
+    // Track expanded state for each block
+    let expanded_map = RwSignal::new(HashMap::<String, bool>::new());
+
     // Flatten tree for simpler rendering first
     let flattened_blocks = Signal::derive(move || {
         let mut result: Vec<TreeBlock> = Vec::new();
@@ -95,16 +98,87 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
         result
     });
 
+    // Get flat block IDs for keyboard navigation
+    let flat_block_ids = Signal::derive(move || {
+        flattened_blocks.get().iter().map(|t| t.block.id.clone()).collect::<Vec<_>>()
+    });
+
+    // Get expanded state for a block
+    let get_expanded = move |block_id: &str| -> bool {
+        expanded_map
+            .get()
+            .get(block_id)
+            .copied()
+            .unwrap_or(true)
+    };
+
+    // Toggle expanded state
+    let toggle_expanded = move |block_id: String| {
+        expanded_map.update(|map| {
+            let current = map.get(&block_id).copied().unwrap_or(true);
+            map.insert(block_id, !current);
+        });
+    };
+
+    // Focus next block
+    let focus_next = move |current_id: String| {
+        let ids = flat_block_ids.get();
+        if let Some(pos) = ids.iter().position(|id| id == &current_id) {
+            if pos + 1 < ids.len() {
+                let next_id = &ids[pos + 1];
+                if let Ok(Some(el)) = document().query_selector(&format!("[data-block-id=\"{}\"]", next_id)) {
+                    use wasm_bindgen::JsCast;
+                    if let Ok(html_el) = el.dyn_into::<web_sys::HtmlElement>() {
+                        let _ = html_el.focus();
+                    }
+                }
+            }
+        }
+    };
+
+    // Focus previous block
+    let focus_prev = move |current_id: String| {
+        let ids = flat_block_ids.get();
+        if let Some(pos) = ids.iter().position(|id| id == &current_id) {
+            if pos > 0 {
+                let prev_id = &ids[pos - 1];
+                if let Ok(Some(el)) = document().query_selector(&format!("[data-block-id=\"{}\"]", prev_id)) {
+                    use wasm_bindgen::JsCast;
+                    if let Ok(html_el) = el.dyn_into::<web_sys::HtmlElement>() {
+                        let _ = html_el.focus();
+                    }
+                }
+            }
+        }
+    };
+
     view! {
         <div class="outliner-tree" data-block-tree>
             <For each={move || flattened_blocks.get()} key=|t| t.block.id.clone() let:item>
-                <div class="outliner-node" data-block-id={item.block.id.clone()}>
-                    <OutlinerBlock
-                        block={item.block.clone()}
-                        has_children={!item.children.is_empty()}
-                        expanded={true}
-                    />
-                </div>
+                {let item_id = item.block.id.clone(); let item_id2 = item_id.clone(); let item_id3 = item_id.clone(); let item_id4 = item_id.clone(); let item_id5 = item_id.clone(); let item_id6 = item_id.clone(); view! {
+                    <div
+                        class="outliner-node"
+                        data-block-id={item_id}
+                    >
+                        <OutlinerBlock
+                            block={item.block.clone()}
+                            has_children={!item.children.is_empty()}
+                            expanded={RwSignal::new(get_expanded(&item_id2))}
+                            on_collapse={Some(Callback::new(move |_| {
+                                let id = item_id3.clone();
+                                toggle_expanded(id);
+                            }))}
+                            on_focus_next={Some(Callback::new(move |_| {
+                                let id = item_id5.clone();
+                                focus_next(id);
+                            }))}
+                            on_focus_prev={Some(Callback::new(move |_| {
+                                let id = item_id6.clone();
+                                focus_prev(id);
+                            }))}
+                        />
+                    </div>
+                }}
             </For>
         </div>
     }
