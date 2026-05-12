@@ -31,6 +31,69 @@ use tauri::{Emitter, Manager};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+/// Menu action identifiers for frontend event handling
+const MENU_ACTION_NEW_PAGE: &str = "menu:new-page";
+const MENU_ACTION_OPEN_GRAPH: &str = "menu:open-graph";
+const MENU_ACTION_EXIT: &str = "menu:exit";
+const MENU_ACTION_TOGGLE_SIDEBAR: &str = "menu:toggle-sidebar";
+const MENU_ACTION_ZOOM_IN: &str = "menu:zoom-in";
+const MENU_ACTION_ZOOM_OUT: &str = "menu:zoom-out";
+const MENU_ACTION_RESET_ZOOM: &str = "menu:reset-zoom";
+const MENU_ACTION_ABOUT: &str = "menu:about";
+const MENU_ACTION_DOCS: &str = "menu:docs";
+
+/// Build the application menu bar
+///
+/// Creates menus for File, Edit, View, and Help with standard actions.
+/// Menu items emit events to the frontend for handling.
+fn build_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu<tauri::Wry>, tauri::Error> {
+    use tauri::menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem};
+
+    // File menu: New Page, Open Graph, separator, Exit
+    let file_menu = SubmenuBuilder::new(app, "File")
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_NEW_PAGE, "New Page", true, None::<&str>)?)
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_OPEN_GRAPH, "Open Graph...", true, None::<&str>)?)
+        .separator()
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_EXIT, "Exit", true, Some("CmdOrCtrl+Q"))?)
+        .build()?;
+
+    // Edit menu: Undo, Redo, separator, Cut, Copy, Paste
+    let edit_menu = SubmenuBuilder::new(app, "Edit")
+        .item(&PredefinedMenuItem::undo(app, Some("Undo"))?)
+        .item(&PredefinedMenuItem::redo(app, Some("Redo"))?)
+        .separator()
+        .item(&PredefinedMenuItem::cut(app, Some("Cut"))?)
+        .item(&PredefinedMenuItem::copy(app, Some("Copy"))?)
+        .item(&PredefinedMenuItem::paste(app, Some("Paste"))?)
+        .item(&PredefinedMenuItem::select_all(app, Some("Select All"))?)
+        .build()?;
+
+    // View menu: Toggle Sidebar, separator, Zoom controls
+    let view_menu = SubmenuBuilder::new(app, "View")
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_TOGGLE_SIDEBAR, "Toggle Sidebar", true, Some("CmdOrCtrl+B"))?)
+        .separator()
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_ZOOM_IN, "Zoom In", true, Some("CmdOrCtrl+Plus"))?)
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_ZOOM_OUT, "Zoom Out", true, Some("CmdOrCtrl+Minus"))?)
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_RESET_ZOOM, "Reset Zoom", true, Some("CmdOrCtrl+0"))?)
+        .build()?;
+
+    // Help menu: About Quilt, Documentation
+    let help_menu = SubmenuBuilder::new(app, "Help")
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_ABOUT, "About Quilt", true, None::<&str>)?)
+        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_DOCS, "Documentation", true, None::<&str>)?)
+        .build()?;
+
+    // Build the full menu bar
+    let menu = MenuBuilder::new(app)
+        .item(&file_menu)
+        .item(&edit_menu)
+        .item(&view_menu)
+        .item(&help_menu)
+        .build()?;
+
+    Ok(menu)
+}
+
 /// Initialize logging for the application
 fn init_logging() {
     tracing_subscriber::registry()
@@ -158,6 +221,66 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             }
         }))
         .setup(move |app| {
+            // Build and set the menu bar
+            let menu = build_menu(app.handle())?;
+            app.set_menu(menu)?;
+
+            // Handle menu events
+            app.on_menu_event(move |app, event| {
+                let id = event.id().as_ref();
+                info!("Menu action triggered: {}", id);
+
+                match id {
+                    MENU_ACTION_NEW_PAGE => {
+                        if let Err(e) = app.emit("menu-action", "new-page") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    MENU_ACTION_OPEN_GRAPH => {
+                        if let Err(e) = app.emit("menu-action", "open-graph") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    MENU_ACTION_EXIT => {
+                        info!("Exit menu action, closing application");
+                        app.exit(0);
+                    }
+                    MENU_ACTION_TOGGLE_SIDEBAR => {
+                        if let Err(e) = app.emit("menu-action", "toggle-sidebar") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    MENU_ACTION_ZOOM_IN => {
+                        if let Err(e) = app.emit("menu-action", "zoom-in") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    MENU_ACTION_ZOOM_OUT => {
+                        if let Err(e) = app.emit("menu-action", "zoom-out") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    MENU_ACTION_RESET_ZOOM => {
+                        if let Err(e) = app.emit("menu-action", "reset-zoom") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    MENU_ACTION_ABOUT => {
+                        if let Err(e) = app.emit("menu-action", "about") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    MENU_ACTION_DOCS => {
+                        if let Err(e) = app.emit("menu-action", "docs") {
+                            tracing::warn!("Failed to emit menu action: {}", e);
+                        }
+                    }
+                    _ => {
+                        tracing::warn!("Unknown menu action: {}", id);
+                    }
+                }
+            });
+
             let app_data_dir = app
                 .path()
                 .app_data_dir()
