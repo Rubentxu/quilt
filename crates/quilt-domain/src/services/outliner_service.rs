@@ -171,6 +171,8 @@ impl Default for Block {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            journal_day: None,
+            updated_journal_day: None,
         }
     }
 }

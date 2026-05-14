@@ -6,8 +6,14 @@
 //! 3. Journal page → Today's entries
 //! 4. MCP tool execution
 
+use quilt_domain::services::TimezoneService;
 use sqlx::SqlitePool;
 use std::time::Duration;
+
+/// Returns a timezone for tests (UTC)
+fn test_timezone() -> TimezoneService {
+    TimezoneService::from_tz_string("UTC").expect("UTC is a valid timezone")
+}
 
 /// Sets up an in-memory SQLite database with the full schema.
 async fn setup_test_db() -> SqlitePool {
@@ -39,7 +45,9 @@ async fn setup_test_db() -> SqlitePool {
             updated_at INTEGER NOT NULL,
             refs TEXT NOT NULL DEFAULT '[]',
             tags TEXT NOT NULL DEFAULT '[]',
-            deleted_at INTEGER
+            deleted_at INTEGER,
+            journal_day INTEGER,
+            updated_journal_day INTEGER
         )
         "#,
     )
@@ -206,7 +214,7 @@ async fn test_e2e_block_creation_flow() {
         properties: Default::default(),
     };
 
-    let block = Block::new(create).expect("Block creation should succeed");
+    let block = Block::new(create, &test_timezone()).expect("Block creation should succeed");
     repo.insert(&block).await.expect("Insert should succeed");
 
     // Step 2: Verify block was created
@@ -256,7 +264,7 @@ async fn test_e2e_block_editing_flow() {
         properties: Default::default(),
     };
 
-    let mut block = Block::new(create).expect("Block creation should succeed");
+    let mut block = Block::new(create, &test_timezone()).expect("Block creation should succeed");
 
     // Insert the block first
     repo.insert(&block).await.expect("Insert should succeed");
@@ -266,7 +274,7 @@ async fn test_e2e_block_editing_flow() {
         .update(quilt_domain::entities::BlockUpdate {
             content: Some("Updated content".to_string()),
             ..Default::default()
-        })
+        }, &test_timezone())
         .expect("Update should succeed");
 
     repo.update(&block).await.expect("Update should succeed");
@@ -321,7 +329,7 @@ async fn test_e2e_page_to_block_to_edit_flow() {
         marker: Some(TaskMarker::Todo),
         format: BlockFormat::Markdown,
         properties: Default::default(),
-    })
+    }, &test_timezone())
     .expect("Block 1 creation should succeed");
 
     let block2 = Block::new(BlockCreate {
@@ -332,7 +340,7 @@ async fn test_e2e_page_to_block_to_edit_flow() {
         marker: Some(TaskMarker::Now),
         format: BlockFormat::Markdown,
         properties: Default::default(),
-    })
+    }, &test_timezone())
     .expect("Block 2 creation should succeed");
 
     block_repo
@@ -350,7 +358,7 @@ async fn test_e2e_page_to_block_to_edit_flow() {
         .update(quilt_domain::entities::BlockUpdate {
             marker: Some(TaskMarker::Done),
             ..Default::default()
-        })
+        }, &test_timezone())
         .expect("Update should succeed");
 
     block_repo
@@ -516,7 +524,7 @@ async fn test_e2e_journal_flow() {
         marker: None,
         format: BlockFormat::Markdown,
         properties: Default::default(),
-    })
+    }, &test_timezone())
     .expect("Entry 1 creation should succeed");
 
     let entry2 = Block::new(BlockCreate {
@@ -527,7 +535,7 @@ async fn test_e2e_journal_flow() {
         marker: None,
         format: BlockFormat::Markdown,
         properties: Default::default(),
-    })
+    }, &test_timezone())
     .expect("Entry 2 creation should succeed");
 
     block_repo
@@ -630,7 +638,7 @@ async fn test_e2e_mcp_tool_block_operations() {
         marker: Some(TaskMarker::Todo),
         format: BlockFormat::Markdown,
         properties: Default::default(),
-    })
+    }, &test_timezone())
     .expect("Block creation should succeed");
 
     repo.insert(&block).await.expect("Insert should succeed");
@@ -829,7 +837,7 @@ async fn test_stress_many_blocks_on_page() {
             marker: None,
             format: BlockFormat::Markdown,
             properties: Default::default(),
-        })
+        }, &test_timezone())
         .expect("Block creation should succeed");
 
         blocks.push(block);

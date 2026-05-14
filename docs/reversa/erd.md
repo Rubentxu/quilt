@@ -3,6 +3,16 @@
 > **Escala**: 🟢 CONFIRMADO | 🟡 INFERIDO | 🔴 LACUNA
 > **Fecha**: 2026-05-02
 > **Fuente**: `deps/db/src/logseq/db/frontend/schema.cljs`
+>
+> **⚠️ CANONICAL SCHEMA SOURCE**: Este documento describe el schema de **Logseq (ClojureScript original)**.
+> Para el schema canonical de **Quilt (Rust)**, ver `docs/roadmap.md` Sección 1.3 y `docs/architecture-ddd.md`.
+>
+> **Reconciliación**: El schema de Quilt/Rust es una reimplementación del schema de Logseq con las diferencias
+> documentadas en `docs/reversa/rust-reimplementation-proposal.md`. Las diferencias principales son:
+> - DataScript → SQLite + Rkyv
+> - DataScript transactions → SQLite transactions
+> - Keyword references → BLOB UUIDs
+> - In-memory → Persistent with WAL
 
 ---
 
@@ -131,7 +141,7 @@ Entidad principal del sistema. Representa una unidad de contenido dentro de Logs
 | `block/format` | keyword | ❌ | - | - | `:markdown` o `:org` |
 | `block/slug` | string | ❌ | - | - | Slug URL-friendly |
 | `block/priority` | string | ❌ | - | - | `A`, `B`, `C` |
-| `block/marker` | string | ❌ | - | - | `todo`, `doing`, `done`, `later`, `now` |
+| `block/marker` | string | ❌ | - | - | `NOW`, `LATER`, `TODO`, `DONE`, `CANCELLED` |
 | `block/scheduled` | timestamp | ❌ | - | ✅ | Fecha de scheduled |
 | `block/deadline` | timestamp | ❌ | - | ✅ | Fecha de deadline |
 | `block/start-time` | timestamp | ❌ | - | - | Start time para duración |
@@ -410,7 +420,7 @@ PAGE → JOURNAL:
 |---------|-----------------|
 | `block/format` | `:markdown`, `:org` |
 | `block/priority` | `"A"`, `"B"`, `"C"` |
-| `block/marker` | `"todo"`, `"doing"`, `"done"`, `"later"`, `"now"` |
+| `block/marker` | `"NOW"`, `"LATER"`, `"TODO"`, `"DONE"`, `"CANCELLED"` |
 | `logseq.property.asset/align` | `:left`, `:center`, `:right` |
 
 ---

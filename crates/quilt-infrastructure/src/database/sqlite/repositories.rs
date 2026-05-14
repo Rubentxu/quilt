@@ -31,14 +31,15 @@ use std::collections::HashMap;
 
 use crate::database::sqlite::connection::DbPool;
 use quilt_domain::classes::types::Class;
-use quilt_domain::entities::{Block, BlockSummary, DeepLink, File, Page, ScheduledTask, TaskType, LinkSourceType, LinkType};
+use quilt_domain::entities::{Block, BlockSummary, DeepLink, File, Page, ScheduledTask, TaskType, LinkSourceType, LinkType, UserSettings};
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::types::{Cardinality, ClosedValue, PropertyType, ViewContext};
 use quilt_domain::repositories::{
-    BlockRepository, BlockSummaryRepository, ClassRepository, DeepLinkRepository, FileRepository, PageRepository,
-    PropertyRepository, ScheduledTaskRepository, TagRepository,
+    BlockRepository, BlockSummaryRepository, ClassRepository, DeepLinkRepository, FileRepository, JournalRepository as JournalRepositoryTrait,
+    PageRepository, PropertyRepository, ScheduledTaskRepository, SettingsRepository, TagRepository,
 };
+use quilt_domain::types::DailySummary;
 use quilt_domain::value_objects::{
     BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
 };
@@ -207,6 +208,8 @@ struct BlockRow {
     updated_at: i64,
     refs: Vec<u8>,
     tags: Vec<u8>,
+    journal_day: Option<i32>,
+    updated_journal_day: Option<i32>,
     #[allow(dead_code)]
     deleted_at: Option<i64>,
 }
@@ -234,6 +237,8 @@ impl BlockRow {
             updated_at: row.get("updated_at"),
             refs: row.get("refs"),
             tags: row.get("tags"),
+            journal_day: row.get("journal_day"),
+            updated_journal_day: row.get("updated_journal_day"),
             deleted_at: row.get("deleted_at"),
         })
     }
@@ -260,6 +265,8 @@ impl BlockRow {
             updated_at: ts_to_datetime(self.updated_at),
             refs: parse_uuid_list(&self.refs),
             tags: parse_tag_list(&self.tags),
+            journal_day: self.journal_day,
+            updated_journal_day: self.updated_journal_day,
         })
     }
 }
@@ -666,6 +673,33 @@ impl BlockRepository for SqliteBlockRepository {
         .map_err(|e| DomainError::Database(format!("count_by_page: {}", e)))?;
 
         Ok(count as usize)
+    }
+
+    async fn get_blocks_by_journal_day(&self, day: JournalDay) -> Result<Vec<Block>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM blocks WHERE journal_day = ? AND deleted_at IS NULL ORDER BY created_at DESC",
+        )
+        .bind(day.as_i32())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_blocks_by_journal_day: {}", e)))?;
+
+        rows.iter()
+            .map(|r| BlockRow::from_row(r)?.to_block())
+            .collect()
+    }
+
+    async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM blocks WHERE journal_day IS NULL AND deleted_at IS NULL ORDER BY updated_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_orphan_blocks: {}", e)))?;
+
+        rows.iter()
+            .map(|r| BlockRow::from_row(r)?.to_block())
+            .collect()
     }
 }
 
@@ -1754,6 +1788,7 @@ mod tests {
 
     fn make_block(page_id: Uuid, content: &str) -> Block {
         use quilt_domain::entities::BlockCreate;
+        use quilt_domain::services::TimezoneService;
         let create = BlockCreate {
             page_id,
             content: content.to_string(),
@@ -1763,7 +1798,8 @@ mod tests {
             format: BlockFormat::Markdown,
             properties: HashMap::new(),
         };
-        Block::new(create).expect("Failed to create block")
+        let tz = TimezoneService::from_tz_string("UTC").expect("Failed to create timezone");
+        Block::new(create, &tz).expect("Failed to create block")
     }
 
     fn make_page(name: &str) -> Page {
@@ -3256,5 +3292,257 @@ impl SqliteDeepLinkRepository {
             context: row.get("context"),
             created_at: ts_to_datetime(row.get("created_at")),
         })
+    }
+}
+
+// ── SqliteSettingsRepository ──────────────────────────────────────────
+
+/// SQLite implementation of the [`SettingsRepository`] trait.
+///
+/// This repository provides persistent storage for user settings
+/// using a singleton row in the user_settings table.
+#[derive(Clone)]
+pub struct SqliteSettingsRepository {
+    pool: DbPool,
+}
+
+impl SqliteSettingsRepository {
+    /// Creates a new `SqliteSettingsRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    fn row_to_settings(&self, row: &sqlx::sqlite::SqliteRow) -> Result<UserSettings, DomainError> {
+        let timezone: String = row.get("timezone");
+        let journal_format: String = row.get("journal_format");
+        let start_of_week: i64 = row.get("start_of_week");
+        let preferred_format_str: String = row.get("preferred_format");
+
+        let preferred_format = match preferred_format_str.as_str() {
+            "org" => BlockFormat::Org,
+            _ => BlockFormat::Markdown,
+        };
+
+        Ok(UserSettings {
+            timezone,
+            journal_format,
+            start_of_week: start_of_week as u8,
+            preferred_format,
+        })
+    }
+}
+
+#[async_trait]
+impl SettingsRepository for SqliteSettingsRepository {
+    async fn get_user_settings(&self) -> Result<UserSettings, DomainError> {
+        let row = sqlx::query("SELECT * FROM user_settings WHERE id = 1")
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("get_user_settings: {}", e)))?;
+
+        match row {
+            Some(r) => self.row_to_settings(&r),
+            None => {
+                // Return defaults if no row exists (should not happen after migration)
+                Ok(UserSettings::default())
+            }
+        }
+    }
+
+    async fn update_user_settings(&self, settings: &UserSettings) -> Result<(), DomainError> {
+        let now = Utc::now().timestamp();
+        sqlx::query(
+            r#"UPDATE user_settings SET
+            timezone = ?,
+            journal_format = ?,
+            start_of_week = ?,
+            preferred_format = ?,
+            updated_at = ?
+            WHERE id = 1"#,
+        )
+        .bind(&settings.timezone)
+        .bind(&settings.journal_format)
+        .bind(settings.start_of_week as i64)
+        .bind(format_to_str(&settings.preferred_format))
+        .bind(now)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("update_user_settings: {}", e)))?;
+
+        Ok(())
+    }
+}
+
+// ── SqliteJournalRepository ───────────────────────────────────────────
+
+/// SQLite implementation of the [`JournalRepository`] trait.
+///
+/// This repository provides efficient journal-day-based queries
+/// using the denormalized journal_day field on blocks.
+#[derive(Clone)]
+pub struct SqliteJournalRepository {
+    pool: DbPool,
+}
+
+impl SqliteJournalRepository {
+    /// Creates a new `SqliteJournalRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl JournalRepositoryTrait for SqliteJournalRepository {
+    async fn get_or_create(&self, day: JournalDay) -> Result<Page, DomainError> {
+        // First try to get existing journal page
+        let existing = sqlx::query(
+            "SELECT * FROM pages WHERE journal_day = ? AND journal = 1 AND deleted_at IS NULL",
+        )
+        .bind(day.as_i32())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_or_create get: {}", e)))?;
+
+        if let Some(row) = existing {
+            return PageRow::from_row(&row)?.to_page();
+        }
+
+        // Create new journal page
+        let now = Utc::now();
+        let page_id = Uuid::new_v4();
+        let name = day.to_string(); // Format: "2026-05-14"
+
+        let page = Page {
+            id: page_id,
+            name: name.clone(),
+            title: Some(name),
+            namespace_id: None,
+            journal_day: Some(day),
+            format: BlockFormat::Markdown,
+            file_id: None,
+            original_name: None,
+            journal: true,
+            created_at: now,
+            updated_at: now,
+        };
+
+        // Insert the new page
+        sqlx::query(
+            r#"INSERT INTO pages
+            (id, name, title, namespace_id, journal_day, format, file_id,
+             original_name, journal, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(uuid_to_blob(&page.id))
+        .bind(&page.name)
+        .bind(&page.title)
+        .bind(page.namespace_id.as_ref().map(uuid_to_blob))
+        .bind(page.journal_day.map(|d| d.as_i32()))
+        .bind(format_to_str(&page.format))
+        .bind(page.file_id.as_ref().map(uuid_to_blob))
+        .bind(&page.original_name)
+        .bind(page.journal as i64)
+        .bind(datetime_to_ts(&page.created_at))
+        .bind(datetime_to_ts(&page.updated_at))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_or_create insert: {}", e)))?;
+
+        Ok(page)
+    }
+
+    async fn get_blocks_created(&self, day: JournalDay) -> Result<Vec<Block>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM blocks WHERE journal_day = ? AND deleted_at IS NULL ORDER BY created_at DESC",
+        )
+        .bind(day.as_i32())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_blocks_created: {}", e)))?;
+
+        rows.iter()
+            .map(|r| BlockRow::from_row(r)?.to_block())
+            .collect()
+    }
+
+    async fn get_blocks_updated(&self, day: JournalDay) -> Result<Vec<Block>, DomainError> {
+        // Get blocks where updated_journal_day matches but journal_day may differ
+        // This catches blocks that were modified today but not created today
+        let rows = sqlx::query(
+            "SELECT * FROM blocks WHERE updated_journal_day = ? AND journal_day != ? AND deleted_at IS NULL ORDER BY updated_at DESC",
+        )
+        .bind(day.as_i32())
+        .bind(day.as_i32())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_blocks_updated: {}", e)))?;
+
+        rows.iter()
+            .map(|r| BlockRow::from_row(r)?.to_block())
+            .collect()
+    }
+
+    async fn get_daily_summary(&self, day: JournalDay) -> Result<DailySummary, DomainError> {
+        let mut summary = DailySummary::new(day);
+
+        // Get blocks created today
+        summary.blocks_created = self.get_blocks_created(day).await?;
+
+        // Get blocks updated today (not created)
+        summary.blocks_updated = self.get_blocks_updated(day).await?;
+
+        // Get pages created today (journals created today)
+        let page_rows = sqlx::query(
+            "SELECT * FROM pages WHERE journal_day = ? AND journal = 1 AND deleted_at IS NULL",
+        )
+        .bind(day.as_i32())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_daily_summary pages: {}", e)))?;
+
+        summary.pages_created = page_rows
+            .iter()
+            .map(|r| PageRow::from_row(r)?.to_page())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        summary.compute_totals();
+        Ok(summary)
+    }
+
+    async fn get_active_days(
+        &self,
+        start: JournalDay,
+        end: JournalDay,
+    ) -> Result<Vec<JournalDay>, DomainError> {
+        // Get distinct journal days from pages in the range
+        let rows = sqlx::query(
+            "SELECT DISTINCT journal_day FROM pages WHERE journal_day >= ? AND journal_day <= ? AND journal = 1 AND deleted_at IS NULL ORDER BY journal_day",
+        )
+        .bind(start.as_i32())
+        .bind(end.as_i32())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_active_days: {}", e)))?;
+
+        rows.iter()
+            .map(|r| {
+                let day_int: i32 = r.get("journal_day");
+                Ok(JournalDay::from_i32(day_int).unwrap_or_else(|| JournalDay::from_i32_unchecked(day_int)))
+            })
+            .collect()
+    }
+
+    async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+        // Get blocks where journal_day is NULL (pre-migration or non-journal pages)
+        let rows = sqlx::query(
+            "SELECT * FROM blocks WHERE journal_day IS NULL AND deleted_at IS NULL ORDER BY updated_at DESC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Database(format!("get_orphan_blocks: {}", e)))?;
+
+        rows.iter()
+            .map(|r| BlockRow::from_row(r)?.to_block())
+            .collect()
     }
 }

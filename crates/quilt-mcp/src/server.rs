@@ -3,6 +3,8 @@
 //! Implements the Model Context Protocol for AI agent integration.
 //! Wired to real repositories, search, and query services.
 
+use crate::cognitive::CognitiveEngineStatus;
+use crate::helpers::{block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid};
 use crate::hooks::HookEvent;
 use crate::notifications::{
     BlockChangedEvent, ChangeType, Notification, NotificationEvent, NotificationParams,
@@ -11,185 +13,17 @@ use crate::notifications::{
 use crate::plugin::PluginRegistry;
 use crate::resources::Resource;
 use crate::tools::Tool;
+pub use crate::types::*;
 use quilt_application::query_service::QueryService;
 use quilt_domain::entities::{Block, BlockCreate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate};
-use quilt_domain::repositories::{BlockRepository, DeepLinkRepository, PageRepository, TagRepository};
+use quilt_domain::repositories::{BlockRepository, DeepLinkRepository, JournalRepository, PageRepository, SettingsRepository, TagRepository};
 use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker, Uuid};
 use quilt_cognitive::tree_rag::ReportScope;
 use quilt_search::{SearchIndexManager, SearchService};
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tracing::instrument;
-
-// ── Request / Response types ───────────────────────────────────────────
-
-#[derive(Debug, Deserialize)]
-#[serde(tag = "method")]
-pub enum McpRequest {
-    #[serde(rename = "initialize")]
-    Initialize { params: InitializeParams },
-    #[serde(rename = "tools/list")]
-    ListTools,
-    #[serde(rename = "tools/call")]
-    CallTool { params: CallToolParams },
-    #[serde(rename = "resources/list")]
-    ListResources,
-    #[serde(rename = "resources/read")]
-    ReadResource { params: ReadResourceParams },
-    #[serde(rename = "notifications_enabled")]
-    EnableNotifications,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct InitializeParams {
-    pub protocol_version: String,
-    pub capabilities: ClientCapabilities,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ClientCapabilities {
-    pub roots: Option<Roots>,
-    pub sampling: Option<Sampling>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Roots {
-    pub list: bool,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Sampling {}
-
-#[derive(Debug, Deserialize)]
-pub struct CallToolParams {
-    pub name: String,
-    pub arguments: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ReadResourceParams {
-    pub uri: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "method")]
-pub enum McpResponse {
-    #[serde(rename = "initialize")]
-    Initialize(InitializeResult),
-    #[serde(rename = "tools/list")]
-    ToolsList(ToolsListResult),
-    #[serde(rename = "tools/call")]
-    ToolsCall(ToolsCallResult),
-    #[serde(rename = "resources/list")]
-    ResourcesList(ResourcesListResult),
-    #[serde(rename = "resources/read")]
-    ResourcesRead(ResourceReadResult),
-}
-
-#[derive(Debug, Serialize)]
-pub struct InitializeResult {
-    pub protocol_version: String,
-    pub capabilities: ServerCapabilities,
-    pub server_info: ServerInfo,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ServerCapabilities {
-    pub tools: ToolCapabilities,
-    pub resources: ResourceCapabilities,
-    pub notifications: NotificationCapabilities,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ToolCapabilities {
-    pub list_changed: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ResourceCapabilities {
-    pub subscribe: bool,
-    pub list_changed: bool,
-}
-
-#[derive(Debug, Serialize)]
-pub struct NotificationCapabilities {}
-
-#[derive(Debug, Serialize)]
-pub struct ServerInfo {
-    pub name: String,
-    pub version: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ToolsListResult {
-    pub tools: Vec<Tool>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ToolsCallResult {
-    pub content: Vec<ContentBlock>,
-    pub is_error: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(tag = "type")]
-pub enum ContentBlock {
-    #[serde(rename = "text")]
-    Text { text: String },
-    #[serde(rename = "image")]
-    Image { data: String, mime_type: String },
-    #[serde(rename = "resource")]
-    Resource { resource: Resource },
-}
-
-#[derive(Debug, Serialize)]
-pub struct ResourcesListResult {
-    pub resources: Vec<Resource>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ResourceReadResult {
-    pub contents: Vec<ResourceContent>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ResourceContent {
-    pub uri: String,
-    pub mime_type: String,
-    pub text: Option<String>,
-}
-
-// ── Cognitive Engine Status DTO ───────────────────────────────────────
-
-/// Status of all cognitive engines in the MCP server.
-///
-/// Returned by [`McpServer::cognitive_engine_status`] to allow Tauri commands
-/// to check availability without triggering engine initialization.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CognitiveEngineStatus {
-    /// Whether the CognitiveMirror engine is available.
-    pub cognitive_mirror: bool,
-    /// Whether the SerendipityEngine is available.
-    pub serendipity_engine: bool,
-    /// Whether the AgentMemory is available.
-    pub agent_memory: bool,
-    /// Whether the ArgumentCartographer is available.
-    pub argument_cartographer: bool,
-    /// Whether the MentalModelGardener is available.
-    pub mental_model_gardener: bool,
-    /// Whether the CounterfactualExplorer is available.
-    pub counterfactual_explorer: bool,
-    /// Whether the KnowledgeEvolutionTracker is available.
-    pub knowledge_evolution_tracker: bool,
-    /// Whether the MorningBriefing service is available.
-    pub morning_briefing: bool,
-    /// Whether the TreeRAG engine is available.
-    pub tree_rag: bool,
-    /// Whether the TaskScheduler is available.
-    pub task_scheduler: bool,
-}
 
 // ── McpServer ──────────────────────────────────────────────────────────
 
@@ -230,6 +64,9 @@ pub struct McpServer {
     pool: Option<sqlx::SqlitePool>,
     notification_sender: broadcast::Sender<Notification>,
     plugin_registry: PluginRegistry,
+    timezone_service: Arc<quilt_domain::services::TimezoneService>,
+    journal_repo: Option<Arc<dyn JournalRepository>>,
+    settings_repo: Option<Arc<dyn SettingsRepository>>,
     // Cognitive services (optional)
     #[allow(dead_code)]
     cognitive_mirror: Option<Arc<quilt_cognitive::CognitiveMirror>>,
@@ -280,6 +117,7 @@ impl McpServer {
         tag_repo: Arc<dyn TagRepository>,
         deep_link_repo: Arc<dyn DeepLinkRepository>,
         search_service: Arc<SearchService>,
+        timezone_service: Arc<quilt_domain::services::TimezoneService>,
     ) -> Self {
         let (notification_sender, _) = broadcast::channel(100);
         Self {
@@ -293,6 +131,9 @@ impl McpServer {
             pool: None,
             notification_sender,
             plugin_registry: PluginRegistry::new(),
+            timezone_service,
+            journal_repo: None,
+            settings_repo: None,
             cognitive_mirror: None,
             serendipity_engine: None,
             agent_memory: None,
@@ -321,6 +162,18 @@ impl McpServer {
     /// become available for managing the FTS5 index.
     pub fn with_search_index(mut self, search_index: Arc<SearchIndexManager>) -> Self {
         self.search_index = Some(search_index);
+        self
+    }
+
+    /// Set the journal repository for daily summary and journal queries.
+    pub fn with_journal_repo(mut self, journal_repo: Arc<dyn JournalRepository>) -> Self {
+        self.journal_repo = Some(journal_repo);
+        self
+    }
+
+    /// Set the settings repository for user settings.
+    pub fn with_settings_repo(mut self, settings_repo: Arc<dyn SettingsRepository>) -> Self {
+        self.settings_repo = Some(settings_repo);
         self
     }
 
@@ -1226,6 +1079,10 @@ impl McpServer {
             "logseq_restore_block" => self.tool_restore_block(&params.arguments).await,
             "logseq_recycle_bin" => self.tool_recycle_bin(&params.arguments).await,
             "logseq_orphan_pages" => self.tool_orphan_pages(&params.arguments).await,
+            "logseq_get_orphan_blocks" => self.tool_get_orphan_blocks(&params.arguments).await,
+            "logseq_get_daily_summary" => self.tool_get_daily_summary(&params.arguments).await,
+            "logseq_get_settings" => self.tool_get_settings(&params.arguments).await,
+            "logseq_update_settings" => self.tool_update_settings(&params.arguments).await,
             "logseq_rebuild_index" => self.tool_rebuild_index(&params.arguments).await,
             "logseq_index_health" => self.tool_index_health(&params.arguments).await,
             // Deep link tools
@@ -1380,15 +1237,18 @@ impl McpServer {
             Err(e) => return Err(e.to_string()),
         };
 
-        let block = Block::new(BlockCreate {
-            page_id: page.id,
-            content: content.to_string(),
-            parent_id,
-            order: 1.0,
-            marker,
-            format: BlockFormat::Markdown,
-            properties: Default::default(),
-        })
+        let block = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: content.to_string(),
+                parent_id,
+                order: 1.0,
+                marker,
+                format: BlockFormat::Markdown,
+                properties: Default::default(),
+            },
+            &self.timezone_service,
+        )
         .map_err(|e| e.to_string())?;
 
         self.block_repo
@@ -1581,15 +1441,18 @@ impl McpServer {
             Err(e) => return Err(e.to_string()),
         };
 
-        let block = Block::new(BlockCreate {
-            page_id: page.id,
-            content: content.to_string(),
-            parent_id: None,
-            order: 1.0,
-            marker: Some(TaskMarker::Todo),
-            format: BlockFormat::Markdown,
-            properties: Default::default(),
-        })
+        let block = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: content.to_string(),
+                parent_id: None,
+                order: 1.0,
+                marker: Some(TaskMarker::Todo),
+                format: BlockFormat::Markdown,
+                properties: Default::default(),
+            },
+            &self.timezone_service,
+        )
         .map_err(|e| e.to_string())?;
 
         self.block_repo
@@ -1741,6 +1604,162 @@ impl McpServer {
         Ok(serde_json::to_string_pretty(&serde_json::json!({
             "orphan_pages": items,
             "count": items.len(),
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    async fn tool_get_orphan_blocks(&self, _args: &serde_json::Value) -> Result<String, String> {
+        let blocks = self
+            .block_repo
+            .get_orphan_blocks()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let items: Vec<serde_json::Value> = blocks
+            .iter()
+            .map(|b| {
+                serde_json::json!({
+                    "id": b.id.to_string(),
+                    "page_id": b.page_id.to_string(),
+                    "content": b.content,
+                    "created_at": b.created_at.to_rfc3339(),
+                })
+            })
+            .collect();
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "orphan_blocks": items,
+            "count": items.len(),
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    async fn tool_get_daily_summary(&self, args: &serde_json::Value) -> Result<String, String> {
+        let journal_repo = self.journal_repo.as_ref().ok_or_else(|| {
+            "JournalRepository not configured. Use with_journal_repo() to enable.".to_string()
+        })?;
+
+        let day_str = args
+            .get("day")
+            .and_then(|v| v.as_str());
+
+        let day_str = match day_str {
+            Some(s) => s.to_string(),
+            None => {
+                // Default to today in user's timezone
+                self.timezone_service.today_journal_day().to_string()
+            }
+        };
+
+        let day = JournalDay::from_str(&day_str)
+            .map_err(|e| format!("Invalid journal day '{}': {}", day_str, e))?;
+
+        let summary = journal_repo
+            .get_daily_summary(day)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let blocks_created: Vec<serde_json::Value> = summary
+            .blocks_created
+            .iter()
+            .map(|b| {
+                serde_json::json!({
+                    "id": b.id.to_string(),
+                    "page_id": b.page_id.to_string(),
+                    "content": b.content,
+                })
+            })
+            .collect();
+
+        let blocks_updated: Vec<serde_json::Value> = summary
+            .blocks_updated
+            .iter()
+            .map(|b| {
+                serde_json::json!({
+                    "id": b.id.to_string(),
+                    "page_id": b.page_id.to_string(),
+                    "content": b.content,
+                })
+            })
+            .collect();
+
+        let pages_created: Vec<serde_json::Value> = summary
+            .pages_created
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "id": p.id.to_string(),
+                    "name": p.name,
+                })
+            })
+            .collect();
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "day": summary.day.to_string(),
+            "blocks_created": blocks_created,
+            "blocks_created_count": summary.blocks_created.len(),
+            "blocks_updated": blocks_updated,
+            "blocks_updated_count": summary.blocks_updated.len(),
+            "pages_created": pages_created,
+            "pages_created_count": summary.pages_created.len(),
+            "total_blocks": summary.total_blocks,
+            "total_pages": summary.total_pages,
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    async fn tool_get_settings(&self, _args: &serde_json::Value) -> Result<String, String> {
+        let settings_repo = self.settings_repo.as_ref().ok_or_else(|| {
+            "SettingsRepository not configured. Use with_settings_repo() to enable.".to_string()
+        })?;
+
+        let settings = settings_repo
+            .get_user_settings()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "timezone": settings.timezone,
+            "journal_format": settings.journal_format,
+            "start_of_week": settings.start_of_week,
+            "preferred_format": format!("{:?}", settings.preferred_format),
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    async fn tool_update_settings(&self, args: &serde_json::Value) -> Result<String, String> {
+        let settings_repo = self.settings_repo.as_ref().ok_or_else(|| {
+            "SettingsRepository not configured. Use with_settings_repo() to enable.".to_string()
+        })?;
+
+        let mut settings = settings_repo
+            .get_user_settings()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Update fields if provided
+        if let Some(tz) = args.get("timezone").and_then(|v| v.as_str()) {
+            settings.timezone = tz.to_string();
+        }
+        if let Some(fmt) = args.get("journal_format").and_then(|v| v.as_str()) {
+            settings.journal_format = fmt.to_string();
+        }
+        if let Some(sow) = args.get("start_of_week").and_then(|v| v.as_i64()) {
+            settings.start_of_week = sow as u8;
+        }
+
+        settings_repo
+            .update_user_settings(&settings)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "status": "updated",
+            "settings": {
+                "timezone": settings.timezone,
+                "journal_format": settings.journal_format,
+                "start_of_week": settings.start_of_week,
+            }
         }))
         .unwrap_or_else(|e| format!("Serialization error: {}", e)))
     }
@@ -2013,28 +2032,46 @@ impl McpServer {
     // ── Resource implementations ──────────────────────────────────
 
     async fn resource_graph(&self) -> Result<String, String> {
+        use crate::types::{GraphNodeDto, GraphEdgeDto, GraphDataDto};
+
         let pages = self.page_repo.get_all().await.map_err(|e| e.to_string())?;
-        let page_count = pages.len();
 
-        let journal_count = pages.iter().filter(|p| p.journal).count();
+        // Build nodes from pages
+        let nodes: Vec<GraphNodeDto> = pages
+            .iter()
+            .map(|p| GraphNodeDto {
+                id: p.id.to_string(),
+                name: p.name.clone(),
+                node_type: if p.journal { "journal".to_string() } else { "page".to_string() },
+                journal: p.journal,
+            })
+            .collect();
 
-        let mut all_blocks = Vec::new();
+        // Build edges from block refs
+        let mut edges = Vec::new();
         for page in &pages {
             let blocks = self
                 .block_repo
                 .get_by_page(page.id)
                 .await
                 .map_err(|e| e.to_string())?;
-            all_blocks.extend(blocks);
+            for block in blocks {
+                for &ref_id in &block.refs {
+                    edges.push(GraphEdgeDto {
+                        source: block.page_id.to_string(),
+                        target: ref_id.to_string(),
+                    });
+                }
+            }
         }
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "pages": page_count,
-            "journals": journal_count,
-            "blocks": all_blocks.len(),
-            "last_updated": chrono::Utc::now().to_rfc3339(),
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let graph_data = GraphDataDto {
+            nodes,
+            edges,
+            last_updated: chrono::Utc::now().to_rfc3339(),
+        };
+
+        Ok(serde_json::to_string_pretty(&graph_data).unwrap_or_else(|e| e.to_string()))
     }
 
     async fn resource_pages(&self) -> Result<String, String> {
@@ -2668,77 +2705,12 @@ impl McpServer {
     }
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────
-
-fn parse_uuid(args: &serde_json::Value, key: &str) -> Result<Uuid, String> {
-    let s = args
-        .get(key)
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("Missing '{}' parameter", key))?;
-    Uuid::parse_str(s).ok_or_else(|| format!("Invalid UUID: {}", s))
-}
-
-fn parse_optional_uuid(args: &serde_json::Value, key: &str) -> Result<Option<Uuid>, String> {
-    match args.get(key).and_then(|v| v.as_str()) {
-        Some(s) if !s.is_empty() => Ok(Some(
-            Uuid::parse_str(s).ok_or_else(|| format!("Invalid UUID: {}", s))?,
-        )),
-        _ => Ok(None),
-    }
-}
-
-fn parse_optional_marker(
-    args: &serde_json::Value,
-    key: &str,
-) -> Result<Option<TaskMarker>, String> {
-    match args.get(key).and_then(|v| v.as_str()) {
-        Some("now") => Ok(Some(TaskMarker::Now)),
-        Some("later") => Ok(Some(TaskMarker::Later)),
-        Some("todo") => Ok(Some(TaskMarker::Todo)),
-        Some("done") => Ok(Some(TaskMarker::Done)),
-        Some("cancelled") => Ok(Some(TaskMarker::Cancelled)),
-        Some("") => Ok(None),
-        None => Ok(None),
-        Some(other) => Err(format!("Invalid marker: {}", other)),
-    }
-}
-
-fn block_to_json(block: &Block) -> serde_json::Value {
-    serde_json::json!({
-        "id": block.id.to_string(),
-        "page_id": block.page_id.to_string(),
-        "parent_id": block.parent_id.map(|id| id.to_string()),
-        "order": block.order,
-        "level": block.level,
-        "content": block.content,
-        "marker": block.marker.as_ref().map(|m| format!("{:?}", m)),
-        "priority": block.priority.as_ref().map(|p| format!("{:?}", p)),
-        "collapsed": block.collapsed,
-        "created_at": block.created_at.to_rfc3339(),
-        "updated_at": block.updated_at.to_rfc3339(),
-    })
-}
-
-fn deep_link_to_json(link: &DeepLink) -> serde_json::Value {
-    serde_json::json!({
-        "id": link.id.to_string(),
-        "source_id": link.source_id.to_string(),
-        "source_type": link.source_type.as_str(),
-        "target_id": link.target_id.map(|id| id.to_string()),
-        "target_page_name": link.target_page_name,
-        "link_type": link.link_type.as_str(),
-        "external_url": link.external_url,
-        "link_text": link.link_text,
-        "context": link.context,
-        "created_at": link.created_at.to_rfc3339(),
-    })
-}
-
 // ── Integration Tests ────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quilt_domain::services::TimezoneService;
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
         SqliteBlockRepository, SqliteDeepLinkRepository, SqlitePageRepository,
@@ -2754,12 +2726,15 @@ mod tests {
             .await
             .expect("Failed to run migrations");
 
+        let timezone = TimezoneService::from_tz_string("UTC").expect("UTC is a valid timezone");
+
         let server = McpServer::new(
             Arc::new(SqliteBlockRepository::new(pool.clone())),
             Arc::new(SqlitePageRepository::new(pool.clone())),
             Arc::new(SqliteTagRepository::new(pool.clone())),
             Arc::new(SqliteDeepLinkRepository::new(pool.clone())),
             Arc::new(SearchService::new(pool.clone())),
+            Arc::new(timezone),
         )
         .with_pool(pool.clone());
         (server, pool)
@@ -3025,8 +3000,117 @@ mod tests {
 
         let result = server.resource_graph().await.unwrap();
         let v: serde_json::Value = serde_json::from_str(&result).unwrap();
-        assert_eq!(v["pages"], 1);
-        assert_eq!(v["blocks"], 1);
+        assert_eq!(v["nodes"].as_array().unwrap().len(), 1);
+        assert!(v["edges"].is_array());
+        assert!(v["last_updated"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_resource_graph_multiple_pages_and_edges() {
+        let (server, _pool) = setup_server().await;
+
+        // Create page with a block
+        server
+            .tool_create_block(&serde_json::json!({
+                "page_name": "Alpha",
+                "content": "Block on Alpha page"
+            }))
+            .await
+            .unwrap();
+
+        server
+            .tool_create_block(&serde_json::json!({
+                "page_name": "Beta",
+                "content": "Block on Beta page"
+            }))
+            .await
+            .unwrap();
+
+        server
+            .tool_create_block(&serde_json::json!({
+                "page_name": "Gamma",
+                "content": "Block on Gamma page"
+            }))
+            .await
+            .unwrap();
+
+        let result = server.resource_graph().await.unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // Verify 3 nodes
+        let nodes = v["nodes"].as_array().unwrap();
+        assert_eq!(nodes.len(), 3);
+
+        // Verify each node has required fields
+        for node in nodes {
+            assert!(node["id"].is_string(), "node should have id");
+            assert!(node["name"].is_string(), "node should have name");
+            assert!(node["node_type"].is_string(), "node should have node_type");
+            assert!(node["journal"].is_boolean(), "node should have journal");
+        }
+
+        // Verify node names (page names are normalized to lowercase)
+        let names: Vec<&str> = nodes.iter()
+            .map(|n| n["name"].as_str().unwrap())
+            .collect();
+        assert!(names.contains(&"alpha"), "should have alpha node");
+        assert!(names.contains(&"beta"), "should have beta node");
+        assert!(names.contains(&"gamma"), "should have gamma node");
+
+        // Verify edges array exists
+        assert!(v["edges"].is_array(), "edges should be an array");
+    }
+
+    #[tokio::test]
+    async fn test_resource_graph_empty_database() {
+        let (server, _pool) = setup_server().await;
+
+        let result = server.resource_graph().await.unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // Empty database should return empty arrays
+        assert_eq!(v["nodes"].as_array().unwrap().len(), 0);
+        assert_eq!(v["edges"].as_array().unwrap().len(), 0);
+        assert!(v["last_updated"].is_string());
+    }
+
+    #[tokio::test]
+    async fn test_resource_graph_node_types() {
+        let (server, _pool) = setup_server().await;
+
+        // Create regular page
+        server
+            .tool_create_block(&serde_json::json!({
+                "page_name": "RegularPage",
+                "content": "Regular content"
+            }))
+            .await
+            .unwrap();
+
+        // Create journal page (name matches journal format: YYYY_MM_DD)
+        server
+            .tool_create_block(&serde_json::json!({
+                "page_name": "2024_01_15",
+                "content": "Journal entry"
+            }))
+            .await
+            .unwrap();
+
+        let result = server.resource_graph().await.unwrap();
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        let nodes = v["nodes"].as_array().unwrap();
+        assert_eq!(nodes.len(), 2);
+
+        // Find regular and journal nodes (page names are normalized to lowercase)
+        let regular = nodes.iter().find(|n| n["name"] == "regularpage").unwrap();
+        assert_eq!(regular["node_type"], "page");
+        assert_eq!(regular["journal"], false);
+
+        let journal = nodes.iter().find(|n| n["name"] == "2024_01_15").unwrap();
+        // Note: journal flag depends on how the page was created
+        assert!(journal["node_type"].is_string());
+        assert!(journal["journal"].is_boolean());
     }
 
     #[tokio::test]

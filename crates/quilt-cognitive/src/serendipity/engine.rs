@@ -7,7 +7,7 @@ use crate::serendipity::types::{
 use lru::LruCache;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::Uuid;
+use quilt_domain::value_objects::{JournalDay, Uuid};
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -328,6 +328,8 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            journal_day: None,
+            updated_journal_day: None,
         }
     }
 
@@ -406,6 +408,15 @@ mod tests {
         }
         async fn count_by_page(&self, _page_id: Uuid) -> Result<usize, DomainError> {
             Ok(0)
+        }
+        async fn get_blocks_by_journal_day(
+            &self,
+            _day: JournalDay,
+        ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+        async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
         }
     }
 
@@ -488,6 +499,8 @@ mod tests {
             collapsed: false,
             created_at: base_time,
             updated_at: base_time,
+            journal_day: None,
+            updated_journal_day: None,
         };
         // Reuse base_time to avoid epsilon drift between two now() calls
         let seven_days_later = base_time + chrono::Duration::days(7);
@@ -512,6 +525,8 @@ mod tests {
             collapsed: false,
             created_at: seven_days_later,
             updated_at: seven_days_later,
+            journal_day: None,
+            updated_journal_day: None,
         };
         let prox = temporal_proximity(&a, &b, 7.0);
         assert!((prox - 0.5).abs() < 0.05);

@@ -2,7 +2,7 @@
 
 use crate::entities::Block;
 use crate::errors::DomainError;
-use crate::value_objects::Uuid;
+use crate::value_objects::{JournalDay, Uuid};
 use async_trait::async_trait;
 
 /// BlockRepository is the abstraction for block data access.
@@ -71,6 +71,14 @@ pub trait BlockRepository: Send + Sync {
 
     /// Get the count of blocks on a page
     async fn count_by_page(&self, page_id: Uuid) -> Result<usize, DomainError>;
+
+    /// Get all blocks created on a specific journal day.
+    async fn get_blocks_by_journal_day(&self, day: JournalDay) -> Result<Vec<Block>, DomainError>;
+
+    /// Get orphan blocks (blocks with no journal_day).
+    ///
+    /// These are blocks created before the migration or on non-journal pages.
+    async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods

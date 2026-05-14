@@ -7,6 +7,7 @@ use crate::ai_client::{AIClient, AIClientError};
 use crate::knowledge_evolution::types::{BeliefChange, KnowledgeTimeline};
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
+use quilt_domain::value_objects::JournalDay;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
@@ -270,6 +271,8 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now() - chrono::Duration::days(days_ago),
             updated_at: chrono::Utc::now() - chrono::Duration::days(days_ago),
+            journal_day: None,
+            updated_journal_day: None,
         }
     }
 
@@ -363,6 +366,17 @@ mod tests {
             _page_id: Uuid,
         ) -> Result<usize, quilt_domain::errors::DomainError> {
             Ok(0)
+        }
+        async fn get_blocks_by_journal_day(
+            &self,
+            _day: JournalDay,
+        ) -> Result<Vec<Block>, quilt_domain::errors::DomainError> {
+            Ok(vec![])
+        }
+        async fn get_orphan_blocks(
+            &self,
+        ) -> Result<Vec<Block>, quilt_domain::errors::DomainError> {
+            Ok(vec![])
         }
     }
 

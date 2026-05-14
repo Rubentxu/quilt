@@ -514,6 +514,17 @@ mod tests {
         async fn count_by_page(&self, _page_id: Uuid) -> Result<usize, DomainError> {
             Ok(self.blocks.iter().filter(|b| b.page_id == _page_id).count())
         }
+
+        async fn get_blocks_by_journal_day(
+            &self,
+            _day: JournalDay,
+        ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+
+        async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
     }
 
     // Note: BlockRepositoryExt is auto-implemented for MockBlockRepository
@@ -643,6 +654,8 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            journal_day: None,
+            updated_journal_day: None,
         }
     }
 

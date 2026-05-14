@@ -342,6 +342,15 @@ pub struct BriefingStatsDto {
     pub queries_run_today: usize,
 }
 
+/// Knowledge evolution insight from tracked topics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeEvolutionDto {
+    pub topic: String,
+    pub belief_changes: usize,
+    pub reinforced_count: usize,
+    pub abandoned_count: usize,
+}
+
 /// The complete morning briefing DTO
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MorningBriefingDto {
@@ -349,6 +358,7 @@ pub struct MorningBriefingDto {
     pub serendipity_highlights: Vec<SerendipityHighlightDto>,
     pub decay_alerts: Vec<DecayAlertDto>,
     pub stats: BriefingStatsDto,
+    pub knowledge_evolution: Vec<KnowledgeEvolutionDto>,
     pub generated_at: String,
     pub degraded: bool,
 }
@@ -394,6 +404,20 @@ fn mock_morning_briefing() -> MorningBriefingDto {
             blocks_created_today: 15,
             queries_run_today: 8,
         },
+        knowledge_evolution: vec![
+            KnowledgeEvolutionDto {
+                topic: "Rust async programming".to_string(),
+                belief_changes: 3,
+                reinforced_count: 2,
+                abandoned_count: 1,
+            },
+            KnowledgeEvolutionDto {
+                topic: "Distributed systems".to_string(),
+                belief_changes: 1,
+                reinforced_count: 1,
+                abandoned_count: 0,
+            },
+        ],
         generated_at: "2024-03-20T08:00:00Z".to_string(),
         degraded: false,
     }
@@ -787,5 +811,55 @@ pub async fn query_agent(page_name: &str) -> Result<serde_json::Value, BridgeErr
             "message": "Agent not configured (dev mode)",
             "page_name": page_name
         }))
+    }
+}
+
+/// Graph View DTOs (mirrors backend types)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphNodeDto {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "nodeType")]
+    pub node_type: String,
+    pub journal: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphEdgeDto {
+    pub source: String,
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphDataDto {
+    pub nodes: Vec<GraphNodeDto>,
+    pub edges: Vec<GraphEdgeDto>,
+    #[serde(rename = "lastUpdated")]
+    pub last_updated: String,
+}
+
+/// Get graph data - wired to `resource_graph` MCP via Tauri command
+pub async fn get_graph_data() -> Result<GraphDataDto, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({});
+        invoke::<serde_json::Value>("resource_graph", &args).await
+            .map(|v| {
+                // The MCP returns a JSON string, parse it
+                serde_json::from_str(&v.as_string().unwrap_or_default())
+                    .unwrap_or(GraphDataDto {
+                        nodes: vec![],
+                        edges: vec![],
+                        last_updated: String::new(),
+                    })
+            })
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(GraphDataDto {
+            nodes: vec![],
+            edges: vec![],
+            last_updated: String::new(),
+        })
     }
 }

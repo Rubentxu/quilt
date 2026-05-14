@@ -1,6 +1,7 @@
 //! Application pages
 
 pub mod cognitive;
+pub mod graph;
 pub mod journal;
 pub mod page_list;
 pub mod query;

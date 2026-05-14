@@ -8,7 +8,8 @@
 //! The MCP server bridges AI agents with the Quilt domain layer:
 //!
 //! - [`McpServer`]: Main server handling MCP requests
-//! - [`server::McpRequest`] / [`server::McpResponse`]: Request/response types
+//! - [`types`]: MCP protocol request/response types
+//! - [`cognitive`]: Cognitive engine status DTOs
 //! - [`tools`]: Tool definitions for AI agent actions
 //! - [`resources`]: Resource definitions for graph data access
 //! - [`notifications`]: Event notification support
@@ -28,18 +29,29 @@
 //! - `get_backlinks`: Get blocks that reference a block
 //! - `delete_block`: Delete a block
 
+pub mod cognitive;
 pub mod errors;
+pub mod helpers;
 pub mod hooks;
 pub mod notifications;
 pub mod plugin;
 pub mod resources;
 pub mod server;
 pub mod tools;
+pub mod types;
 
+pub use cognitive::CognitiveEngineStatus;
 pub use errors::{McpError, McpErrorCode};
+pub use helpers::{block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid};
 pub use hooks::{
     HookDispatcher, HookError, HookEvent, HookEventKind, HookFilter, HookResult, HookSubscription,
     Priority,
 };
 pub use plugin::{Plugin, PluginContext, PluginError, PluginManifest, PluginRegistry};
 pub use server::McpServer;
+pub use types::{
+    CallToolParams, ClientCapabilities, ContentBlock, InitializeParams, InitializeResult,
+    McpRequest, McpResponse, ReadResourceParams, ResourceCapabilities, ResourceContent,
+    ResourceReadResult, ResourcesListResult, Roots, Sampling, ServerCapabilities, ServerInfo,
+    ToolCapabilities, ToolsCallResult, ToolsListResult,
+};

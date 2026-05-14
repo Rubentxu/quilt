@@ -5,7 +5,7 @@ use crate::agent_memory::types::{InteractionProfile, MemoryEntry, MemoryQuery, T
 use crate::ai_client::AIClient;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid as DomainUuid};
+use quilt_domain::value_objects::{BlockFormat, JournalDay, PropertyValue, Uuid as DomainUuid};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -219,6 +219,8 @@ impl AgentMemory {
             collapsed: false,
             created_at: now,
             updated_at: now,
+            journal_day: None,
+            updated_journal_day: None,
         };
 
         self.block_repo.insert(&block).await?;
@@ -364,6 +366,15 @@ mod tests {
         }
         async fn count_by_page(&self, _page_id: DomainUuid) -> Result<usize, DomainError> {
             Ok(0)
+        }
+        async fn get_blocks_by_journal_day(
+            &self,
+            _day: JournalDay,
+        ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+        async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
         }
     }
 

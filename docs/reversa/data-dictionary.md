@@ -4,6 +4,12 @@
 > Generado por: reversa-archaeologist
 > Fecha: 2026-05-02
 > Nivel de documentación: completo
+>
+> **⚠️ CANONICAL SCHEMA SOURCE**: Este documento describe el schema de **Logseq (ClojureScript original)**.
+> Para el schema canonical de **Quilt (Rust)**, ver `docs/roadmap.md` Sección 1.3 y `docs/architecture-ddd.md`.
+>
+> **Reconciliación**: El schema de Quilt/Rust es una reimplementación del schema de Logseq. Las diferencias
+> principales están documentadas en `docs/reversa/rust-reimplementation-proposal.md`.
 
 ---
 

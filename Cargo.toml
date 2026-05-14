@@ -38,6 +38,7 @@ serde_json = "1"
 
 # Date/Time
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
 
 # Error handling
 thiserror = "1"

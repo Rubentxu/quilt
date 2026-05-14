@@ -1034,9 +1034,19 @@ impl AILinkDiscovery {
 
 ---
 
-## 6. Sync — CRDT con Loro
+## 6. Sync — Current Implementation vs Planned
 
-### 6.1 Loro CRDT Integration
+> **⚠️ IMPLEMENTATION STATUS**: This section describes the **PLANNED** sync architecture using Loro CRDT.
+>
+> **CURRENT IMPLEMENTATION**: The actual sync implementation in `quilt-sync` uses **custom LWW (Last-Write-Wins)** strategy,
+> not true CRDT. This is documented as an architectural decision to be revisited.
+>
+> **Key mismatch**: The spec/design documents reference Loro CRDT integration, but the actual `quilt-sync` crate
+> implements a simpler LWW approach. For details, see `docs/reversa/_reversa_sdd/LLM_FIRST_ROADMAP.md`.
+>
+> **Planned resolution**: Either adopt true Loro CRDT per the design, or formalize LWW as the intentional strategy.
+
+### 6.1 Loro CRDT Integration (Planned)
 
 ```rust
 // src/sync/crdt.rs

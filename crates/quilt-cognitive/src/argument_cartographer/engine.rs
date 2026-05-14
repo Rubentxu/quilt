@@ -7,7 +7,7 @@ use crate::argument_cartographer::types::*;
 use quilt_domain::entities::Block;
 use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::Uuid;
+use quilt_domain::value_objects::{JournalDay, Uuid};
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::instrument;
@@ -653,6 +653,8 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            journal_day: None,
+            updated_journal_day: None,
         }
     }
 
@@ -744,6 +746,15 @@ mod tests {
         }
         async fn count_by_page(&self, _page_id: Uuid) -> Result<usize, DomainError> {
             Ok(0)
+        }
+        async fn get_blocks_by_journal_day(
+            &self,
+            _day: JournalDay,
+        ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+        async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
         }
     }
 

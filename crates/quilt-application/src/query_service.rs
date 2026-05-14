@@ -6,6 +6,7 @@
 //! using a DSL (Domain Specific Language) that gets translated to SQL.
 
 use quilt_domain::entities::Block;
+use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
 use quilt_query::executor::SqlParam;
 use quilt_query::{QueryExecutor, QueryParser};
@@ -275,6 +276,8 @@ fn row_to_block(row: &sqlx::sqlite::SqliteRow) -> Result<Block, String> {
         collapsed: collapsed != 0,
         created_at: ts_to_dt(created_at_ts),
         updated_at: ts_to_dt(updated_at_ts),
+        journal_day: None,
+        updated_journal_day: None,
     })
 }
 
@@ -355,6 +358,7 @@ mod tests {
     async fn test_execute_task_query() {
         let pool = setup_test_db().await;
         let service = QueryService::new();
+        let tz = TimezoneService::from_tz_string("UTC").unwrap();
 
         // Create a page and blocks with markers
         let page = make_page("test-tasks");
@@ -368,21 +372,21 @@ mod tests {
             content: "Task one".to_string(),
             marker: Some(TaskMarker::Todo),
             ..Default::default()
-        })
+        }, &tz)
         .unwrap();
         let b2 = Block::new(BlockCreate {
             page_id: page.id,
             content: "Task two".to_string(),
             marker: Some(TaskMarker::Done),
             ..Default::default()
-        })
+        }, &tz)
         .unwrap();
         let b3 = Block::new(BlockCreate {
             page_id: page.id,
             content: "Not a task".to_string(),
             marker: None,
             ..Default::default()
-        })
+        }, &tz)
         .unwrap();
 
         let block_repo = SqliteBlockRepository::new(pool.clone());
@@ -400,6 +404,7 @@ mod tests {
     async fn test_execute_page_query() {
         let pool = setup_test_db().await;
         let service = QueryService::new();
+        let tz = TimezoneService::from_tz_string("UTC").unwrap();
 
         let page = make_page("target-page");
         SqlitePageRepository::new(pool.clone())
@@ -411,7 +416,7 @@ mod tests {
             page_id: page.id,
             content: "Block on target page".to_string(),
             ..Default::default()
-        })
+        }, &tz)
         .unwrap();
         SqliteBlockRepository::new(pool.clone())
             .insert(&block)
@@ -440,6 +445,7 @@ mod tests {
     async fn test_execute_and_query() {
         let pool = setup_test_db().await;
         let service = QueryService::new();
+        let tz = TimezoneService::from_tz_string("UTC").unwrap();
 
         let page = make_page("and-test");
         SqlitePageRepository::new(pool.clone())
@@ -453,7 +459,7 @@ mod tests {
             content: "Priority A task".to_string(),
             marker: Some(TaskMarker::Todo),
             ..Default::default()
-        })
+        }, &tz)
         .unwrap();
         b1.priority = Some(Priority::A);
 
@@ -462,7 +468,7 @@ mod tests {
             content: "Priority B task".to_string(),
             marker: Some(TaskMarker::Todo),
             ..Default::default()
-        })
+        }, &tz)
         .unwrap();
         b2.priority = Some(Priority::B);
 

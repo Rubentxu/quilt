@@ -4,6 +4,7 @@ use crate::entities::Block;
 use crate::errors::DomainError;
 use crate::repositories::ClassRepository;
 use crate::repositories::PropertyRepository;
+use crate::services::TimezoneService;
 use crate::value_objects::Uuid;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -331,6 +332,7 @@ mod tests {
         let prop_repo = Arc::new(MockPropertyRepository);
         let validator = ClassValidator::new(class_repo, prop_repo);
 
+        let tz = TimezoneService::from_tz_string("UTC").unwrap();
         let block = Block::new(crate::entities::BlockCreate {
             page_id: Uuid::new_v4(),
             content: "Test".to_string(),
@@ -339,7 +341,7 @@ mod tests {
             marker: None,
             format: crate::value_objects::BlockFormat::Markdown,
             properties: HashMap::new(),
-        })
+        }, &tz)
         .unwrap();
 
         // No classes - should pass

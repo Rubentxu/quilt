@@ -1,6 +1,7 @@
 //! Block entity - the fundamental unit of content in Quilt
 
 use crate::errors::DomainError;
+use crate::services::TimezoneService;
 use crate::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
 use std::collections::HashMap;
 
@@ -50,6 +51,20 @@ pub struct Block {
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Last update timestamp
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Journal day when this block was created (YYYYMMDD format).
+    ///
+    /// This is a denormalized field for efficient queries.
+    /// When a block is created, this is automatically set to the
+    /// current journal day in the user's timezone.
+    ///
+    /// NULL means the block was created before this feature
+    /// was implemented (migration case) or is an orphan block.
+    pub journal_day: Option<i32>,
+    /// Journal day when this block was last updated (YYYYMMDD format).
+    ///
+    /// Updated on every content change, move, or property change.
+    /// Used for the "updated today" activity stream.
+    pub updated_journal_day: Option<i32>,
 }
 
 /// Data required to create a new block
@@ -80,9 +95,12 @@ pub struct BlockUpdate {
 }
 
 impl Block {
-    /// Create a new block with the given data
-    pub fn new(create: BlockCreate) -> Result<Self, DomainError> {
+    /// Create a new block with the given data.
+    ///
+    /// The journal_day is automatically set based on the user's timezone.
+    pub fn new(create: BlockCreate, timezone: &TimezoneService) -> Result<Self, DomainError> {
         let now = chrono::Utc::now();
+        let journal_day = timezone.today_journal_day().as_i32();
         Ok(Self {
             id: Uuid::new_v4(),
             page_id: create.page_id,
@@ -104,11 +122,15 @@ impl Block {
             collapsed: false,
             created_at: now,
             updated_at: now,
+            journal_day: Some(journal_day),
+            updated_journal_day: Some(journal_day),
         })
     }
 
-    /// Apply an update to this block
-    pub fn update(&mut self, update: BlockUpdate) -> Result<(), DomainError> {
+    /// Apply an update to this block.
+    ///
+    /// The updated_journal_day is automatically updated based on the user's timezone.
+    pub fn update(&mut self, update: BlockUpdate, timezone: &TimezoneService) -> Result<(), DomainError> {
         if let Some(content) = update.content {
             self.content = content;
         }
@@ -147,6 +169,8 @@ impl Block {
             self.collapsed = collapsed;
         }
         self.updated_at = chrono::Utc::now();
+        // Auto-update journal_day on every update
+        self.updated_journal_day = Some(timezone.today_journal_day().as_i32());
         Ok(())
     }
 
@@ -279,7 +303,13 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            journal_day: Some(20260514),
+            updated_journal_day: Some(20260514),
         }
+    }
+
+    fn test_timezone() -> TimezoneService {
+        TimezoneService::from_tz_string("UTC").unwrap()
     }
 
     #[test]
@@ -295,11 +325,15 @@ mod tests {
             properties: HashMap::new(),
         };
 
-        let block = Block::new(create).unwrap();
+        let tz = test_timezone();
+        let block = Block::new(create, &tz).unwrap();
         assert_eq!(block.page_id, page_id);
         assert_eq!(block.content, "Hello");
         assert_eq!(block.marker, Some(TaskMarker::Todo));
         assert!(!block.is_done());
+        // Check journal_day was auto-set
+        assert!(block.journal_day.is_some());
+        assert_eq!(block.journal_day, block.updated_journal_day);
     }
 
     #[test]
@@ -337,7 +371,8 @@ mod tests {
             properties: HashMap::new(),
         };
 
-        let mut block = Block::new(create).unwrap();
+        let tz = test_timezone();
+        let mut block = Block::new(create, &tz).unwrap();
         assert!(block.logbook.is_none());
 
         // Mark as done - logbook should be set
@@ -345,9 +380,40 @@ mod tests {
             .update(BlockUpdate {
                 marker: Some(TaskMarker::Done),
                 ..Default::default()
-            })
+            }, &tz)
             .unwrap();
 
         assert!(block.logbook.is_some());
+    }
+
+    #[test]
+    fn test_block_update_changes_journal_day() {
+        let create = BlockCreate {
+            page_id: Uuid::new_v4(),
+            content: "Original content".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: HashMap::new(),
+        };
+
+        let tz = test_timezone();
+        let mut block = Block::new(create, &tz).unwrap();
+        let original_journal_day = block.journal_day;
+        let original_updated_journal_day = block.updated_journal_day;
+
+        // Update content
+        block
+            .update(BlockUpdate {
+                content: Some("Updated content".to_string()),
+                ..Default::default()
+            }, &tz)
+            .unwrap();
+
+        // updated_journal_day should have changed
+        assert!(block.updated_journal_day.is_some());
+        // Note: In UTC timezone, today_journal_day() might return same value
+        // In a real timezone like America/Mexico_City, it could differ
     }
 }

@@ -133,9 +133,45 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
             updated_at INTEGER NOT NULL,
             refs BLOB NOT NULL DEFAULT '[]',
             tags BLOB NOT NULL DEFAULT '[]',
+            journal_day INTEGER,
+            updated_journal_day INTEGER,
             deleted_at INTEGER
         )
         "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Add journal_day columns if they don't exist (for existing databases)
+    sqlx::query("ALTER TABLE blocks ADD COLUMN IF NOT EXISTS journal_day INTEGER")
+        .execute(pool)
+        .await
+        .ok(); // Ignore error if column exists
+    sqlx::query("ALTER TABLE blocks ADD COLUMN IF NOT EXISTS updated_journal_day INTEGER")
+        .execute(pool)
+        .await
+        .ok(); // Ignore error if column exists
+
+    // Create user_settings table (singleton)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS user_settings (
+            id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+            timezone TEXT NOT NULL DEFAULT 'UTC',
+            journal_format TEXT NOT NULL DEFAULT '%Y-%m-%d',
+            start_of_week INTEGER NOT NULL DEFAULT 1 CHECK (start_of_week BETWEEN 0 AND 6),
+            preferred_format TEXT NOT NULL DEFAULT 'markdown' CHECK (preferred_format IN ('markdown', 'org')),
+            updated_at INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Initialize default settings if not exists
+    sqlx::query(
+        r#"INSERT OR IGNORE INTO user_settings (id, timezone, journal_format, start_of_week, preferred_format, updated_at)
+           VALUES (1, 'UTC', '%Y-%m-%d', 1, 'markdown', unixepoch('now'))"#,
     )
     .execute(pool)
     .await?;

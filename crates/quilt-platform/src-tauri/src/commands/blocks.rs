@@ -4,9 +4,12 @@ use crate::commands::pages::create_page_repo;
 use crate::state::AppState;
 use quilt_application::query_service::QueryService;
 use quilt_domain::entities::{Block, BlockCreate};
-use quilt_domain::repositories::{BlockRepository, PageRepository};
+use quilt_domain::repositories::{BlockRepository, PageRepository, SettingsRepository};
+use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, TaskMarker, Uuid};
-use quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository;
+use quilt_infrastructure::database::sqlite::repositories::{
+    SqliteBlockRepository, SqliteSettingsRepository,
+};
 use quilt_search::SearchService;
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -99,6 +102,12 @@ pub async fn create_block(
     let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let page_repo = create_page_repo(&state.pool);
 
+    // Create timezone service from user settings (fallback to UTC)
+    let settings_repo = SqliteSettingsRepository::new(state.pool.clone());
+    let user_settings = settings_repo.get_user_settings().await.unwrap_or_default();
+    let timezone = TimezoneService::from_tz_string(&user_settings.timezone)
+        .unwrap_or_else(|_| TimezoneService::from_tz_string("UTC").unwrap());
+
     // Find or create the page
     let page = match page_repo.get_by_name(&page_name).await {
         Ok(Some(p)) => p,
@@ -130,7 +139,7 @@ pub async fn create_block(
         marker: None,
         format: BlockFormat::Markdown,
         properties: Default::default(),
-    })
+    }, &timezone)
     .map_err(|e| e.to_string())?;
 
     block_repo.insert(&block).await.map_err(|e| e.to_string())?;
@@ -286,6 +295,12 @@ pub async fn create_task(
     let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let page_repo = create_page_repo(&state.pool);
 
+    // Create timezone service from user settings (fallback to UTC)
+    let settings_repo = SqliteSettingsRepository::new(state.pool.clone());
+    let user_settings = settings_repo.get_user_settings().await.unwrap_or_default();
+    let timezone = TimezoneService::from_tz_string(&user_settings.timezone)
+        .unwrap_or_else(|_| TimezoneService::from_tz_string("UTC").unwrap());
+
     // Find or create the page
     let page = match page_repo.get_by_name(&page_name).await {
         Ok(Some(p)) => p,
@@ -316,7 +331,7 @@ pub async fn create_task(
         marker: Some(TaskMarker::Todo),
         format: BlockFormat::Markdown,
         properties: Default::default(),
-    })
+    }, &timezone)
     .map_err(|e| e.to_string())?;
 
     block_repo.insert(&block).await.map_err(|e| e.to_string())?;

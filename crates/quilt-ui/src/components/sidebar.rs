@@ -25,6 +25,9 @@ pub fn Sidebar() -> impl IntoView {
                 <A href="/query" attr:data-testid="nav-query">
                     <span class="nav-item">"💬 Query"</span>
                 </A>
+                <A href="/graph" attr:data-testid="nav-graph">
+                    <span class="nav-item">"🌐 Graph"</span>
+                </A>
                 <A href="/cognitive" attr:data-testid="nav-cognitive">
                     <span class="nav-item">"🧠 Cognitive"</span>
                 </A>

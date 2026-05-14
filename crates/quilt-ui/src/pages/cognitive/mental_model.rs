@@ -3,8 +3,11 @@
 //! Visualizes belief evolution over time from journal entries,
 //! shows contradictions and deepening suggestions.
 
+use leptos::callback::Callable;
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::bridge::{self, BridgeError};
 
 /// State of a belief
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -53,64 +56,208 @@ pub struct MentalModelDto {
     pub suggestions: Vec<DeepeningSuggestionDto>,
 }
 
+/// Response from mental_model Tauri command
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MentalModelResponse {
+    #[serde(rename = "available")]
+    available: bool,
+    #[serde(rename = "message")]
+    message: Option<String>,
+    #[serde(rename = "model")]
+    model: Option<MentalModelDto>,
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+
+fn state_color(state: &BeliefState) -> &'static str {
+    match state {
+        BeliefState::New => "#3b82f6",
+        BeliefState::Strengthened => "#22c55e",
+        BeliefState::Weakened => "#f59e0b",
+        BeliefState::Abandoned => "#9ca3af",
+        BeliefState::Unchanged => "#6366f1",
+    }
+}
+
+// ── Loading Skeleton ──────────────────────────────────────────────────────────
+
+#[component]
+fn LoadingSkeleton() -> impl IntoView {
+    view! {
+        <div class="mental-model-loading">
+            <div class="skeleton-header"></div>
+            <div class="skeleton-sections">
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+                <div class="skeleton-card"></div>
+            </div>
+        </div>
+    }
+}
+
+// ── Error State ───────────────────────────────────────────────────────────────
+
+#[component]
+fn ModelErrorState(message: String, on_retry: Callback<()>) -> impl IntoView {
+    view! {
+        <div class="mental-model-error">
+            <p class="error-message">"Failed to load mental model: " {message}</p>
+            <button class="btn-retry" on:click={move |_| on_retry.run(())}>
+                "🔄 Retry"
+            </button>
+        </div>
+    }
+}
+
+// ── Belief Card ───────────────────────────────────────────────────────────────
+
+#[component]
+fn BeliefCard(belief: BeliefDto) -> impl IntoView {
+    let color = state_color(&belief.state);
+    view! {
+        <div class="belief-card" style:border-left-color={color}>
+            <div class="belief-header">
+                <span class="belief-statement">{belief.statement}</span>
+                <span class="belief-state">{format!("{:?}", belief.state)}</span>
+            </div>
+            <div class="belief-meta">
+                <span>"Confidence: {(belief.confidence * 100.0).round()}%"</span>
+                <span>"Evidence: {} blocks", belief.supporting_blocks</span>
+                <span>"Updated: {}", belief.last_updated</span>
+            </div>
+        </div>
+    }
+}
+
+// ── Contradiction Cards ───────────────────────────────────────────────────────
+
+#[component]
+fn ContradictionCards(contradictions: Vec<ContradictionDto>) -> impl IntoView {
+    let c_for_empty = contradictions.clone();
+    view! {
+        <Show
+            when={move || !c_for_empty.is_empty()}
+            fallback={move || view! { <div></div> }}
+        >
+            <div class="contradictions-container">
+                {contradictions.iter().map(|c| {
+                    view! {
+                        <div class="contradiction-card">
+                            <div class="contradiction-explanation">{c.explanation.clone()}</div>
+                            <div class="contradiction-severity">"Severity: {(c.severity * 100.0).round()}%"</div>
+                        </div>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+        </Show>
+    }
+}
+
+// ── Beliefs List ─────────────────────────────────────────────────────────────
+
+#[component]
+fn BeliefsList(beliefs: Vec<BeliefDto>) -> impl IntoView {
+    let beliefs_for_empty = beliefs.clone();
+    view! {
+        <Show
+            when={move || !beliefs_for_empty.is_empty()}
+            fallback={move || view! { <div class="empty-state"><p>"No beliefs tracked yet."</p></div> }}
+        >
+            <div class="beliefs-container">
+                {beliefs.iter().map(|b| {
+                    view! { <BeliefCard belief={b.clone()} /> }
+                }).collect::<Vec<_>>()}
+            </div>
+        </Show>
+    }
+}
+
+// ── Suggestions List ───────────────────────────────────────────────────────────
+
+#[component]
+fn SuggestionsList(suggestions: Vec<DeepeningSuggestionDto>) -> impl IntoView {
+    let suggestions_for_empty = suggestions.clone();
+    view! {
+        <Show
+            when={move || !suggestions_for_empty.is_empty()}
+            fallback={move || view! { <div class="empty-state"><p>"No suggestions yet."</p></div> }}
+        >
+            <div class="suggestions-container">
+                {suggestions.iter().map(|s| {
+                    view! {
+                        <div class="suggestion-card">
+                            <div class="suggestion-concept">{s.concept.clone()}</div>
+                            <div class="suggestion-depth">"Current depth: {} observations", s.current_depth</div>
+                            <div class="suggestion-questions">
+                                {s.suggested_questions.iter().map(|q| {
+                                    view! { <li>{q.clone()}</li> }
+                                }).collect::<Vec<_>>()}
+                            </div>
+                        </div>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+        </Show>
+    }
+}
+
+// ── Mental Model Garden Page ──────────────────────────────────────────────────
+
 /// Mental model garden page component
 #[component]
 pub fn MentalModelGarden() -> impl IntoView {
-    // Mock data for development
-    let mock_beliefs = [
-        BeliefDto {
-            id: "belief-1".to_string(),
-            statement: "Rust async is the future of concurrency".to_string(),
-            confidence: 0.85,
-            state: BeliefState::Strengthened,
-            supporting_blocks: 5,
-            last_updated: "2026-05-01".to_string(),
-        },
-        BeliefDto {
-            id: "belief-2".to_string(),
-            statement: "Memory safety is critical for systems".to_string(),
-            confidence: 0.9,
-            state: BeliefState::New,
-            supporting_blocks: 3,
-            last_updated: "2026-04-28".to_string(),
-        },
-        BeliefDto {
-            id: "belief-3".to_string(),
-            statement: "Async Rust is too complex for simple tasks".to_string(),
-            confidence: 0.6,
-            state: BeliefState::Weakened,
-            supporting_blocks: 1,
-            last_updated: "2026-03-15".to_string(),
-        },
-    ];
+    // Default agent ID — in future this could come from route or user context
+    let agent_id = "default-agent".to_string();
+    let agent_id_for_fetch = agent_id.clone();
 
-    let mock_contradictions = [ContradictionDto {
-        belief_a_id: "belief-1".to_string(),
-        belief_b_id: "belief-3".to_string(),
-        explanation:
-            "These beliefs express tension between Rust async being 'the future' vs 'too complex'"
-                .to_string(),
-        severity: 0.7,
-    }];
-
-    let mock_suggestions = [DeepeningSuggestionDto {
-        concept: "Rust async runtime internals".to_string(),
-        current_depth: 1,
-        suggested_questions: vec![
-            "How does Tokio schedule tasks?".to_string(),
-            "What are the tradeoffs of different async runtimes?".to_string(),
-        ],
-    }];
-
-    let state_color = |state: &BeliefState| -> &'static str {
-        match state {
-            BeliefState::New => "#3b82f6",
-            BeliefState::Strengthened => "#22c55e",
-            BeliefState::Weakened => "#f59e0b",
-            BeliefState::Abandoned => "#9ca3af",
-            BeliefState::Unchanged => "#6366f1",
+    // Async action to fetch mental model
+    let fetch_model = Action::new_local(move |_: &()| {
+        let name = agent_id_for_fetch.clone();
+        async move {
+            match bridge::get_mental_model(&name).await {
+                Ok(json) => {
+                    match serde_json::from_value::<MentalModelResponse>(json.clone()) {
+                        Ok(resp) if !resp.available => {
+                            Err(BridgeError::Unavailable(
+                                resp.message.unwrap_or_else(|| "Mental model gardener unavailable".into()),
+                            ))
+                        }
+                        Ok(resp) => Ok(resp.model.unwrap_or(MentalModelDto {
+                            agent_id: name,
+                            beliefs: vec![],
+                            contradictions: vec![],
+                            suggestions: vec![],
+                        })),
+                        Err(_) => {
+                            match serde_json::from_value::<MentalModelDto>(json) {
+                                Ok(m) => Ok(m),
+                                Err(_) => Ok(MentalModelDto {
+                                    agent_id: name,
+                                    beliefs: vec![],
+                                    contradictions: vec![],
+                                    suggestions: vec![],
+                                }),
+                            }
+                        }
+                    }
+                }
+                Err(e) => Err(e),
+            }
         }
-    };
+    });
+
+    // Store refresh callback
+    let on_refresh = StoredValue::new(Callback::new(move |_| {
+        let _ = fetch_model.dispatch(());
+    }));
+
+    // Trigger initial fetch
+    fetch_model.dispatch(());
+
+    // Extract reactive values BEFORE the view! macro — dashboard pattern
+    let pending = fetch_model.pending();
+    let value = fetch_model.value();
+    let cb = on_refresh.get_value();
 
     view! {
         <div class="mental-model-garden">
@@ -119,57 +266,53 @@ pub fn MentalModelGarden() -> impl IntoView {
                 <p class="page-subtitle">"Belief evolution from your journal"</p>
             </div>
 
-            <div class="model-sections">
-                <div class="contradiction-alerts">
-                    <h3>"⚠️ Contradiction Alerts"</h3>
-                    <div class="alert-count">{mock_contradictions.len()} contradictions</div>
-                    {mock_contradictions.iter().map(|c| {
-                        view! {
-                            <div class="contradiction-card">
-                                <div class="contradiction-explanation">{c.explanation.clone()}</div>
-                                <div class="contradiction-severity">"Severity: {(c.severity * 100.0).round()}%"</div>
-                            </div>
-                        }
-                    }).collect::<Vec<_>>()}
-                </div>
+            <Show
+                when={move || !pending.get()}
+                fallback={move || view! { <LoadingSkeleton /> }}
+            >
+                <Show
+                    when={move || !matches!(value.get(), Some(Err(_)))}
+                    fallback={move || {
+                        let msg = match value.get() {
+                            Some(Err(BridgeError::TauriError(s))) => s.clone(),
+                            Some(Err(BridgeError::JsonError(s))) => s.clone(),
+                            Some(Err(BridgeError::Unavailable(s))) => s.clone(),
+                            _ => String::new(),
+                        };
+                        view! { <ModelErrorState message={msg} on_retry={cb.clone()} /> }
+                    }}
+                >
+                    <div class="model-sections">
+                        <div class="contradiction-alerts">
+                            <h3>"⚠️ Contradiction Alerts"</h3>
+                            <div class="alert-count">{match value.get() {
+                                Some(Ok(m)) => m.contradictions.len(),
+                                _ => 0,
+                            }} contradictions</div>
+                            <ContradictionCards contradictions={match value.get() {
+                                Some(Ok(m)) => m.contradictions,
+                                _ => vec![],
+                            }} />
+                        </div>
 
-                <div class="belief-timeline">
-                    <h3>"📈 Belief Timeline"</h3>
-                    {mock_beliefs.iter().map(|belief| {
-                        let color = state_color(&belief.state);
-                        view! {
-                            <div class="belief-card" style:border-left-color={color}>
-                                <div class="belief-header">
-                                    <span class="belief-statement">{belief.statement.clone()}</span>
-                                    <span class="belief-state">{format!("{:?}", belief.state)}</span>
-                                </div>
-                                <div class="belief-meta">
-                                    <span>"Confidence: {(belief.confidence * 100.0).round()}%"</span>
-                                    <span>"Evidence: {belief.supporting_blocks} blocks"</span>
-                                    <span>"Updated: {belief.last_updated.clone()}"</span>
-                                </div>
-                            </div>
-                        }
-                    }).collect::<Vec<_>>()}
-                </div>
+                        <div class="belief-timeline">
+                            <h3>"📈 Belief Timeline"</h3>
+                            <BeliefsList beliefs={match value.get() {
+                                Some(Ok(m)) => m.beliefs,
+                                _ => vec![],
+                            }} />
+                        </div>
 
-                <div class="deepening-section">
-                    <h3>"💡 Deepening Suggestions"</h3>
-                    {mock_suggestions.iter().map(|s| {
-                        view! {
-                            <div class="suggestion-card">
-                                <div class="suggestion-concept">{s.concept.clone()}</div>
-                                <div class="suggestion-depth">"Current depth: {s.current_depth} observations"</div>
-                                <div class="suggestion-questions">
-                                    {s.suggested_questions.iter().map(|q| {
-                                        view! { <li>{q.clone()}</li> }
-                                    }).collect::<Vec<_>>()}
-                                </div>
-                            </div>
-                        }
-                    }).collect::<Vec<_>>()}
-                </div>
-            </div>
+                        <div class="deepening-section">
+                            <h3>"💡 Deepening Suggestions"</h3>
+                            <SuggestionsList suggestions={match value.get() {
+                                Some(Ok(m)) => m.suggestions,
+                                _ => vec![],
+                            }} />
+                        </div>
+                    </div>
+                </Show>
+            </Show>
         </div>
     }
 }

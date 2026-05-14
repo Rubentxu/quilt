@@ -5,11 +5,12 @@ use crate::pages::cognitive::{
     ArgumentMapView, CognitiveDashboard, MentalModelGarden, SerendipityFeed,
 };
 use crate::pages::{
-    journal::JournalView, page_list::PagesView, query::QueryView, search::SearchView,
+    graph::GraphView, journal::JournalView, page_list::PagesView, query::QueryView,
+    search::SearchView,
 };
 use leptos::prelude::*;
 use leptos_meta::*;
-use leptos_router::{components::*, path};
+use leptos_router::{components::*, hooks::use_params, params::Params, path};
 
 /// Main application component
 #[component]
@@ -33,15 +34,33 @@ pub fn App() -> impl IntoView {
                         <Route path=path!("/query") view=QueryView />
                         <Route path=path!("/cognitive") view=CognitiveDashboard />
                         <Route path=path!("/cognitive/serendipity") view=SerendipityFeed />
-                        <Route path=path!("/cognitive/arguments/:page") view=move || {
-                            view! { <ArgumentMapView _page_name="demo-page".to_string() /> }
-                        } />
+                        <Route path=path!("/cognitive/arguments/:page") view=ArgumentMapRoute />
                         <Route path=path!("/cognitive/models") view=MentalModelGarden />
+                        <Route path=path!("/graph") view=GraphView />
                     </Routes>
                 </main>
             </div>
         </Router>
     }
+}
+
+/// Route wrapper for ArgumentMapView — extracts :page param and passes to component
+#[component]
+fn ArgumentMapRoute() -> impl IntoView {
+    let params = use_params::<ArgumentMapParams>();
+    let page_name = params.with(|result| {
+        result
+            .as_ref()
+            .ok()
+            .and_then(|p| p.page.clone())
+            .unwrap_or_else(|| "unknown".to_string())
+    });
+    view! { <ArgumentMapView page_name={page_name} /> }
+}
+
+#[derive(Params, Debug, PartialEq, Eq)]
+struct ArgumentMapParams {
+    page: Option<String>,
 }
 
 /// 404 Not Found page

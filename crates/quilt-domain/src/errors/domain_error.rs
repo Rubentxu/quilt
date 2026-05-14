@@ -54,6 +54,12 @@ pub enum DomainError {
         error: String,
     },
 
+    // Timezone and settings errors
+    /// Invalid timezone identifier (e.g., "Moon/Mars")
+    InvalidTimezone(String),
+    /// Invalid user settings configuration
+    InvalidConfiguration(String),
+
     // Class validation errors
     /// Class validation failed
     ClassValidationError {
@@ -137,6 +143,12 @@ impl fmt::Display for DomainError {
                     "Circular inheritance detected for class {}: {}",
                     class_id, message
                 )
+            }
+            DomainError::InvalidTimezone(tz) => {
+                write!(f, "Invalid timezone: {}", tz)
+            }
+            DomainError::InvalidConfiguration(msg) => {
+                write!(f, "Invalid configuration: {}", msg)
             }
         }
     }

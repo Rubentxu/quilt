@@ -99,6 +99,8 @@ fn entry_to_block(entry: &MemoryEntry) -> Result<Block, StoreError> {
         collapsed: false,
         created_at: entry.created_at,
         updated_at: now,
+        journal_day: None,
+        updated_journal_day: None,
     })
 }
 

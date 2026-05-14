@@ -2,8 +2,14 @@
 //!
 //! These tests verify the full stack from MCP tools to database operations.
 
+use quilt_domain::services::TimezoneService;
 use sqlx::SqlitePool;
 use uuid::Uuid;
+
+/// Returns a timezone for tests (UTC)
+fn test_timezone() -> TimezoneService {
+    TimezoneService::from_tz_string("UTC").expect("UTC is a valid timezone")
+}
 
 /// Sets up an in-memory SQLite database with the full schema.
 async fn setup_test_db() -> SqlitePool {
@@ -35,7 +41,9 @@ async fn setup_test_db() -> SqlitePool {
             updated_at INTEGER NOT NULL,
             refs TEXT NOT NULL DEFAULT '[]',
             tags TEXT NOT NULL DEFAULT '[]',
-            deleted_at INTEGER
+            deleted_at INTEGER,
+            journal_day INTEGER,
+            updated_journal_day INTEGER
         )
         "#,
     )
@@ -202,7 +210,7 @@ async fn test_block_entity_creation() {
         properties: Default::default(),
     };
 
-    let block = Block::new(create).expect("Block creation should succeed");
+    let block = Block::new(create, &test_timezone()).expect("Block creation should succeed");
 
     assert_eq!(block.content, "Test block content");
     assert_eq!(block.page_id, page_id);
@@ -227,7 +235,7 @@ async fn test_block_circular_reference_detection() {
         format: BlockFormat::Markdown,
         properties: Default::default(),
     };
-    let mut block_a = Block::new(create_a).unwrap();
+    let mut block_a = Block::new(create_a, &test_timezone()).unwrap();
 
     let create_b = BlockCreate {
         page_id,
@@ -238,7 +246,7 @@ async fn test_block_circular_reference_detection() {
         format: BlockFormat::Markdown,
         properties: Default::default(),
     };
-    let mut block_b = Block::new(create_b).unwrap();
+    let mut block_b = Block::new(create_b, &test_timezone()).unwrap();
 
     let create_c = BlockCreate {
         page_id,
@@ -249,7 +257,7 @@ async fn test_block_circular_reference_detection() {
         format: BlockFormat::Markdown,
         properties: Default::default(),
     };
-    let block_c = Block::new(create_c).unwrap();
+    let block_c = Block::new(create_c, &test_timezone()).unwrap();
 
     let all_blocks = vec![block_a.clone(), block_b.clone(), block_c.clone()];
 
@@ -282,7 +290,7 @@ async fn test_block_update_logbook_on_done() {
         properties: Default::default(),
     };
 
-    let mut block = Block::new(create).unwrap();
+    let mut block = Block::new(create, &test_timezone()).unwrap();
     assert!(block.logbook.is_none(), "Logbook should be None initially");
 
     // Mark as done - logbook should be set
@@ -290,7 +298,7 @@ async fn test_block_update_logbook_on_done() {
         .update(quilt_domain::entities::BlockUpdate {
             marker: Some(TaskMarker::Done),
             ..Default::default()
-        })
+        }, &test_timezone())
         .unwrap();
 
     assert!(
@@ -373,7 +381,7 @@ async fn test_block_insert_and_retrieve() {
         format: BlockFormat::Markdown,
         properties: Default::default(),
     };
-    let block = Block::new(create).expect("Block creation should succeed");
+    let block = Block::new(create, &test_timezone()).expect("Block creation should succeed");
 
     repo.insert(&block).await.expect("Insert should succeed");
 

@@ -4,11 +4,11 @@
 //! Commands follow the CQRS pattern by encapsulating all write operations.
 
 use crate::errors::ApplicationError;
-use quilt_domain::entities::{Block, BlockCreate, BlockUpdate, Page, PageCreate};
+use quilt_domain::entities::{Block, BlockCreate, BlockUpdate, Page, PageCreate, UserSettings};
 use quilt_domain::repositories::{
-    BlockRepository, BlockRepositoryExt, PageRepository, PageRepositoryExt,
+    BlockRepository, BlockRepositoryExt, PageRepository, PageRepositoryExt, SettingsRepository,
 };
-use quilt_domain::services::OutlinerService;
+use quilt_domain::services::{OutlinerService, TimezoneService};
 use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker, Uuid};
 use std::sync::Arc;
 use tracing::instrument;
@@ -26,22 +26,25 @@ use tracing::instrument;
 /// - `R`: The block repository implementation
 pub struct BlockCommand<R: BlockRepository> {
     repository: Arc<R>,
+    timezone: Arc<TimezoneService>,
 }
 
 impl<R: BlockRepository> BlockCommand<R> {
-    /// Creates a new `BlockCommand` handler with the given repository.
+    /// Creates a new `BlockCommand` handler with the given repository and timezone.
     ///
     /// # Arguments
     ///
     /// * `repository` - An `Arc`-wrapped repository for block persistence
-    pub fn new(repository: Arc<R>) -> Self {
-        Self { repository }
+    /// * `timezone` - An `Arc`-wrapped timezone service for journal day calculation
+    pub fn new(repository: Arc<R>, timezone: Arc<TimezoneService>) -> Self {
+        Self { repository, timezone }
     }
 
     /// Creates a new block within a page.
     ///
     /// The block is created with Markdown format and default empty properties.
     /// The block is assigned `order: 1.0` (future versions should calculate proper ordering).
+    /// The journal_day is automatically set based on the user's timezone.
     ///
     /// # Arguments
     ///
@@ -75,7 +78,7 @@ impl<R: BlockRepository> BlockCommand<R> {
             properties: Default::default(),
         };
 
-        let block = Block::new(create).map_err(ApplicationError::Domain)?;
+        let block = Block::new(create, &self.timezone).map_err(ApplicationError::Domain)?;
 
         self.repository
             .insert(&block)
@@ -86,6 +89,8 @@ impl<R: BlockRepository> BlockCommand<R> {
     }
 
     /// Updates an existing block with new data.
+    ///
+    /// The updated_journal_day is automatically updated based on the user's timezone.
     ///
     /// # Arguments
     ///
@@ -114,7 +119,7 @@ impl<R: BlockRepository> BlockCommand<R> {
             .await
             .map_err(ApplicationError::Domain)?;
 
-        block.update(update).map_err(ApplicationError::Domain)?;
+        block.update(update, &self.timezone).map_err(ApplicationError::Domain)?;
 
         self.repository
             .update(&block)
@@ -221,10 +226,13 @@ impl<R: BlockRepository> BlockCommand<R> {
             .map_err(ApplicationError::Domain)?;
 
         block
-            .update(BlockUpdate {
-                marker: Some(marker),
-                ..Default::default()
-            })
+            .update(
+                BlockUpdate {
+                    marker: Some(marker),
+                    ..Default::default()
+                },
+                &self.timezone,
+            )
             .map_err(ApplicationError::Domain)?;
 
         self.repository
@@ -292,6 +300,59 @@ impl<R: BlockRepository> BlockCommand<R> {
             .map_err(ApplicationError::Domain)?;
 
         Ok(())
+    }
+}
+
+/// Command handler for user settings operations.
+pub struct SettingsCommand<R: SettingsRepository> {
+    repository: Arc<R>,
+}
+
+impl<R: SettingsRepository> SettingsCommand<R> {
+    /// Creates a new `SettingsCommand` handler with the given repository.
+    pub fn new(repository: Arc<R>) -> Self {
+        Self { repository }
+    }
+
+    /// Update user settings.
+    ///
+    /// # Arguments
+    ///
+    /// * `settings` - The new user settings to persist
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated [`UserSettings`] on success.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ApplicationError`] if:
+    /// - Validation fails
+    /// - Repository operation fails
+    #[instrument(skip(self))]
+    pub async fn update(&self, settings: UserSettings) -> Result<UserSettings, ApplicationError> {
+        // Validate settings first
+        settings.validate().map_err(ApplicationError::Domain)?;
+
+        self.repository
+            .update_user_settings(&settings)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(settings)
+    }
+
+    /// Reset settings to defaults.
+    #[instrument(skip(self))]
+    pub async fn reset_to_defaults(&self) -> Result<UserSettings, ApplicationError> {
+        let defaults = UserSettings::default();
+
+        self.repository
+            .update_user_settings(&defaults)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(defaults)
     }
 }
 
@@ -633,6 +694,18 @@ mod tests {
         async fn count_by_page(&self, _page_id: Uuid) -> Result<usize, DomainError> {
             Ok(0)
         }
+
+        async fn get_blocks_by_journal_day(&self, _day: JournalDay) -> Result<Vec<Block>, DomainError> {
+            Ok(Vec::new())
+        }
+
+        async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn test_timezone() -> Arc<TimezoneService> {
+        Arc::new(TimezoneService::from_tz_string("UTC").expect("Failed to create test timezone"))
     }
 
     fn create_test_block(
@@ -663,6 +736,8 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            journal_day: None,
+            updated_journal_day: None,
         }
     }
 
@@ -679,7 +754,7 @@ mod tests {
             sibling1.clone(),
             sibling2.clone(),
         ]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         // Move block_to_move to position 1 among siblings (after first sibling)
         let result = command
@@ -696,7 +771,7 @@ mod tests {
             create_test_block(Uuid::new_v4(), page_id, Some(Uuid::new_v4()), 100.0, 2);
 
         let repo = MockBlockRepository::new(vec![block_to_move.clone()]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         // Move block_to_move to top-level (new_parent = None)
         let result = command.handle_move(block_to_move.id, None, 0).await;
@@ -707,7 +782,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_move_block_not_found() {
         let repo = MockBlockRepository::new(vec![]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command.handle_move(Uuid::new_v4(), None, 0).await;
 
@@ -727,7 +802,7 @@ mod tests {
 
         let repo = MockBlockRepository::new(vec![block_to_move.clone(), sibling.clone()]);
         let repo_clone = repo.clone();
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         // Move to a parent - level should become parent's level + 1
         let result = command
@@ -750,7 +825,7 @@ mod tests {
 
         let repo = MockBlockRepository::new(vec![block_to_move.clone()]);
         let repo_clone = repo.clone();
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         // Move to top-level (None parent) - level should become 1
         let result = command.handle_move(block_to_move.id, None, 0).await;
@@ -769,7 +844,7 @@ mod tests {
         let page_id = Uuid::new_v4();
         let repo = MockBlockRepository::new(vec![]);
         let repo_clone = repo.clone();
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command
             .create(page_id, "Test content".to_string(), None)
@@ -791,7 +866,7 @@ mod tests {
         let page_id = Uuid::new_v4();
         let parent_id = Uuid::new_v4();
         let repo = MockBlockRepository::new(vec![]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command
             .create(page_id, "Child block".to_string(), Some(parent_id))
@@ -811,7 +886,7 @@ mod tests {
         let existing_block = create_test_block(Uuid::new_v4(), page_id, None, 1.0, 1);
         let repo = MockBlockRepository::new(vec![existing_block.clone()]);
         let repo_clone = repo.clone();
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let update = BlockUpdate {
             content: Some("Updated content".to_string()),
@@ -834,7 +909,7 @@ mod tests {
     #[tokio::test]
     async fn test_block_update_not_found() {
         let repo = MockBlockRepository::new(vec![]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let update = BlockUpdate {
             content: Some("New content".to_string()),
@@ -858,7 +933,7 @@ mod tests {
         let existing_block = create_test_block(block_id, page_id, None, 1.0, 1);
         let repo = MockBlockRepository::new(vec![existing_block]);
         let repo_clone = repo.clone();
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command.delete(block_id).await;
 
@@ -873,7 +948,7 @@ mod tests {
     async fn test_block_delete_idempotent() {
         // Deleting a non-existent block should succeed (idempotent)
         let repo = MockBlockRepository::new(vec![]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command.delete(Uuid::new_v4()).await;
 
@@ -888,7 +963,7 @@ mod tests {
         let page_id = Uuid::new_v4();
         let existing_block = create_test_block(Uuid::new_v4(), page_id, None, 1.0, 1);
         let repo = MockBlockRepository::new(vec![existing_block.clone()]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command
             .set_marker(existing_block.id, TaskMarker::Todo)
@@ -903,7 +978,7 @@ mod tests {
         let page_id = Uuid::new_v4();
         let existing_block = create_test_block(Uuid::new_v4(), page_id, None, 1.0, 1);
         let repo = MockBlockRepository::new(vec![existing_block.clone()]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command
             .set_marker(existing_block.id, TaskMarker::Done)
@@ -916,7 +991,7 @@ mod tests {
     #[tokio::test]
     async fn test_block_set_marker_not_found() {
         let repo = MockBlockRepository::new(vec![]);
-        let command = BlockCommand::new(Arc::new(repo));
+        let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let result = command.set_marker(Uuid::new_v4(), TaskMarker::Todo).await;
 

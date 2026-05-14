@@ -9,6 +9,7 @@ mod journal;
 mod page;
 mod scheduled_task;
 mod tag;
+mod user_settings;
 
 pub use asset::Asset;
 pub use block::{Block, BlockCreate, BlockUpdate};
@@ -19,3 +20,4 @@ pub use journal::Journal;
 pub use page::{Page, PageCreate};
 pub use scheduled_task::{ScheduledTask, TaskType};
 pub use tag::Tag;
+pub use user_settings::UserSettings;

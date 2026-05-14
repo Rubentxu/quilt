@@ -9,13 +9,15 @@ use quilt_cognitive::{
     KnowledgeEvolutionTracker, MentalModelGardener, MockAIClient, SerendipityEngine,
     TaskScheduler, TreeRagEngine,
 };
-use quilt_domain::entities::{BlockCreate, PageCreate};
-use quilt_domain::repositories::{BlockRepository, PageRepository};
+use quilt_domain::entities::{BlockCreate, PageCreate, UserSettings};
+use quilt_domain::repositories::{BlockRepository, PageRepository, SettingsRepository};
+use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqliteBlockSummaryRepository, SqliteDeepLinkRepository,
-    SqlitePageRepository, SqliteScheduledTaskRepository, SqliteTagRepository,
+    SqliteJournalRepository, SqlitePageRepository, SqliteScheduledTaskRepository,
+    SqliteSettingsRepository, SqliteTagRepository,
 };
 use quilt_mcp::McpServer;
 use quilt_search::SearchService;
@@ -266,6 +268,15 @@ impl QuiltCLI {
             Command::Serve { port: _ } => {
                 let tag_repo = SqliteTagRepository::new(pool.clone());
                 let search_svc = SearchService::new(pool.clone());
+                let settings_repo = Arc::new(SqliteSettingsRepository::new(pool.clone()));
+                let journal_repo = Arc::new(SqliteJournalRepository::new(pool.clone()));
+
+                // Create timezone service from user settings (fallback to UTC)
+                let user_settings = settings_repo.get_user_settings().await.unwrap_or_default();
+                let timezone_service = Arc::new(
+                    TimezoneService::from_tz_string(&user_settings.timezone)
+                        .unwrap_or_else(|_| TimezoneService::from_tz_string("UTC").unwrap()),
+                );
 
                 // Create AI client for cognitive engines
                 let ai_client: Arc<dyn quilt_cognitive::AIClient> = Arc::new(MockAIClient::new());
@@ -312,6 +323,7 @@ impl QuiltCLI {
                         Arc::new(tag_repo),
                         Arc::new(deep_link_repo),
                         Arc::new(search_svc),
+                        timezone_service,
                     )
                     .with_cognitive(
                         Some(cognitive_mirror),
@@ -321,7 +333,9 @@ impl QuiltCLI {
                         Some(mental_model_gardener),
                         Some(counterfactual_explorer),
                         Some(knowledge_evolution_tracker),
-                    ),
+                    )
+                    .with_journal_repo(journal_repo)
+                    .with_settings_repo(settings_repo),
                 );
                 StdioTransport::serve(mcp_server).await?;
                 unreachable!("StdioTransport::serve only returns on error/EOF");
@@ -373,6 +387,10 @@ impl QuiltCLI {
         content: &str,
         parent_id: Option<&str>,
     ) -> Result<()> {
+        // Create a default timezone service (UTC) for CLI block creation
+        let timezone = TimezoneService::from_tz_string("UTC")
+            .expect("UTC is a valid timezone");
+
         let page = match page_repo.get_by_name(page_name).await? {
             Some(p) => p,
             None => {
@@ -401,7 +419,7 @@ impl QuiltCLI {
             marker: None,
             format: BlockFormat::Markdown,
             properties: Default::default(),
-        })?;
+        }, &timezone)?;
 
         block_repo.insert(&block).await?;
         println!("✓ Block created on page '{}': {}", page_name, content);

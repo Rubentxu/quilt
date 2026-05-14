@@ -7,7 +7,7 @@ use crate::cognitive_mirror::graph::build_cognitive_map;
 use crate::cognitive_mirror::types::{CognitiveMap, KnowledgeCluster};
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::Uuid;
+use quilt_domain::value_objects::{JournalDay, Uuid};
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::instrument;
@@ -144,6 +144,8 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            journal_day: None,
+            updated_journal_day: None,
         }
     }
 
@@ -223,6 +225,15 @@ mod tests {
         }
         async fn count_by_page(&self, _page_id: Uuid) -> Result<usize, DomainError> {
             Ok(0)
+        }
+        async fn get_blocks_by_journal_day(
+            &self,
+            _day: JournalDay,
+        ) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
+        }
+        async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError> {
+            Ok(vec![])
         }
     }
 
