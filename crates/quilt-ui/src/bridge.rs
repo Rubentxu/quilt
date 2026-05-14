@@ -846,7 +846,7 @@ pub async fn get_graph_data() -> Result<GraphDataDto, BridgeError> {
         invoke::<serde_json::Value>("resource_graph", &args).await
             .map(|v| {
                 // The MCP returns a JSON string, parse it
-                serde_json::from_str(&v.as_string().unwrap_or_default())
+                serde_json::from_str(v.as_str().unwrap_or("{}"))
                     .unwrap_or(GraphDataDto {
                         nodes: vec![],
                         edges: vec![],

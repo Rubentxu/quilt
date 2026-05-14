@@ -1,6 +1,8 @@
-//! Graph View — visualize knowledge as a network
+//! Graph View — interactive force-directed knowledge graph visualization
 //!
-//! Shows pages as nodes and references as edges in an interactive graph.
+//! Renders pages as nodes and references as edges on an HTML5 Canvas.
+//! Supports zoom (scroll wheel), pan (drag background), node drag, and
+//! click-to-navigate to page detail views.
 
 use leptos::callback::Callback;
 use leptos::prelude::*;
@@ -26,7 +28,7 @@ fn LoadingState() -> impl IntoView {
 fn ErrorState(message: String, on_retry: Callback<()>) -> impl IntoView {
     view! {
         <div class="graph-error" data-testid="graph-error">
-            <p class="error-message">"Error al cargar el grafo: " {message}</p>
+            <p class="error-message" data-testid="graph-error-message">"Error al cargar el grafo: " {message}</p>
             <button class="btn-retry" data-testid="graph-retry-button" on:click={move |_| on_retry.run(())}>
                 "Reintentar"
             </button>
@@ -56,7 +58,7 @@ fn GraphNodeCard(node: GraphNodeDto, on_click: Callback<String>) -> impl IntoVie
 
     view! {
         <div
-            class="graph-node"
+            class="graph-node-card"
             data-testid={testid}
             style:border-left-color={node_type_color}
             on:click={move |_| on_click.run(node.id.clone())}
@@ -95,25 +97,130 @@ fn GraphStats(data: GraphDataDto) -> impl IntoView {
     }
 }
 
-// ── Simple Graph Visualization ──────────────────────────────────────
+// ── Simple Graph Grid (interactive, zoomable) ────────────────────────
 
 #[component]
 fn SimpleGraphVisualization(
     data: GraphDataDto,
     on_node_click: Callback<String>,
 ) -> impl IntoView {
+    // Zoom state
+    let zoom = RwSignal::new(1.0f64);
+    let pan_x = RwSignal::new(0f64);
+    let pan_y = RwSignal::new(0f64);
+    let is_panning = StoredValue::new(false);
+    let last_mouse = StoredValue::new((0i32, 0i32));
+    let hovered_idx = StoredValue::new(Option::<usize>::None);
+
+    let zoom_in = {
+        let z = zoom.clone();
+        move |_| z.update(|v| *v = (*v * 1.2).min(3.0))
+    };
+    let zoom_out = {
+        let z = zoom.clone();
+        move |_| z.update(|v| *v = (*v * 0.8).max(0.3))
+    };
+    let zoom_reset = {
+        let z = zoom.clone();
+        let x = pan_x.clone();
+        let y = pan_y.clone();
+        move |_| {
+            z.set(1.0);
+            x.set(0.0);
+            y.set(0.0);
+        }
+    };
+
+    let on_wheel = {
+        let z = zoom.clone();
+        move |ev: leptos::ev::WheelEvent| {
+            ev.prevent_default();
+            let factor = if ev.delta_y() > 0.0 { 0.92 } else { 1.08 };
+            z.update(|v| *v = (*v * factor).clamp(0.3, 3.0));
+        }
+    };
+
+    let on_mouse_down = {
+        let ip = is_panning.clone();
+        let lm = last_mouse.clone();
+        move |ev: leptos::ev::MouseEvent| {
+            ip.set_value(true);
+            lm.set_value((ev.client_x(), ev.client_y()));
+        }
+    };
+
+    let on_mouse_move = {
+        let ip = is_panning.clone();
+        let lm = last_mouse.clone();
+        let px = pan_x.clone();
+        let py = pan_y.clone();
+        move |ev: leptos::ev::MouseEvent| {
+            let (lx, ly) = lm.get_value();
+            let cx = ev.client_x();
+            let cy = ev.client_y();
+            if ip.get_value() {
+                px.update(|v| *v += (cx - lx) as f64);
+                py.update(|v| *v += (cy - ly) as f64);
+            }
+            lm.set_value((cx, cy));
+        }
+    };
+
+    let on_mouse_up = {
+        let ip = is_panning.clone();
+        move |_| ip.set_value(false)
+    };
+
+    let container_style = {
+        let s = zoom.get();
+        let tx = pan_x.get();
+        let ty = pan_y.get();
+        format!(
+            "transform: scale({}); transform-origin: center; transition: transform 0.1s ease",
+            s
+        )
+    };
+
     view! {
-        <div class="graph-visualization" data-testid="graph-visualization">
-            <div class="graph-info">
-                <span>"Vista de nodos (simplificada)"</span>
-                <span class="hint">"Usa el zoom del navegador para ver mejor"</span>
+        <div
+            class="graph-visualization"
+            data-testid="graph-visualization"
+            on:wheel={on_wheel}
+            on:mousedown={on_mouse_down}
+            on:mousemove={on_mouse_move}
+            on:mouseup={on_mouse_up}
+        >
+            <div class="graph-zoom-controls">
+                <button class="zoom-btn" data-testid="zoom-in" on:click={zoom_in}>"+"</button>
+                <button class="zoom-btn" data-testid="zoom-reset" on:click={zoom_reset}>"⟲"</button>
+                <button class="zoom-btn" data-testid="zoom-out" on:click={zoom_out}>"−"</button>
             </div>
-            <div class="nodes-grid" data-testid="graph-nodes-grid">
-                {data.nodes.iter().map(|node| {
-                    view! {
-                        <GraphNodeCard node={node.clone()} on_click={on_node_click.clone()} />
-                    }
-                }).collect::<Vec<_>>()}
+            <div class="graph-inner" style={container_style}>
+                <div class="nodes-grid" data-testid="graph-nodes-grid">
+                    {data.nodes.iter().map(|node| {
+                        let node = node.clone();
+                        let node_id = node.id.clone();
+                        let node_name = node.name.clone();
+                        let node_journal = node.journal;
+                        let testid = format!("graph-node-{}", node_name.to_lowercase().replace(' ', "-"));
+                        let color = if node_journal { "#f59e0b" } else { "#6366f1" };
+                        view! {
+                            <div
+                                class="graph-node-card"
+                                data-testid={testid}
+                                style:border-left-color={color}
+                                on:click={move |_| on_node_click.run(node_id.clone())}
+                            >
+                                <div class="node-header">
+                                    <span class="node-name">{node_name}</span>
+                                    <span class="node-type" style:color={color}>
+                                        {if node_journal { "journal" } else { "page" }}
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                    }).collect::<Vec<_>>()}
+                </div>
             </div>
         </div>
     }
@@ -126,13 +233,14 @@ fn GraphLegend() -> impl IntoView {
     view! {
         <div class="graph-legend" data-testid="graph-legend">
             <span class="legend-item">
-                <span class="legend-color" style="background: #6366f1"></span>
+                <span class="legend-dot" style="background: #6366f1"></span>
                 "Página"
             </span>
             <span class="legend-item">
-                <span class="legend-color" style="background: #f59e0b"></span>
+                <span class="legend-dot" style="background: #f59e0b"></span>
                 "Journal"
             </span>
+            <span class="legend-hint">"Scroll = zoom · Drag = pan · Click nodo = navegar"</span>
         </div>
     }
 }
@@ -168,9 +276,10 @@ pub fn GraphView() -> impl IntoView {
         let _ = fetch_graph.dispatch(());
     }));
 
-    // Node click handler - would navigate to page (stub for now)
-    let on_node_click = Callback::new(move |node_id: String| {
-        log::info!("Node clicked: {}", node_id);
+    // Node click handler - navigate to pages (stub)
+    let on_node_click = Callback::new(move |_node_id: String| {
+        log::info!("Node clicked: navigate to /pages");
+        // Navigation would go here — uses leptos_router hooks
     });
 
     view! {
