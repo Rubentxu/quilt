@@ -276,10 +276,15 @@ pub fn GraphView() -> impl IntoView {
         let _ = fetch_graph.dispatch(());
     }));
 
-    // Node click handler - navigate to pages (stub)
-    let on_node_click = Callback::new(move |_node_id: String| {
-        log::info!("Node clicked: navigate to /pages");
-        // Navigation would go here — uses leptos_router hooks
+    // Node click handler - navigate to page view
+    let on_node_click = Callback::new(move |node_id: String| {
+        let url = format!("/pages?name={}", node_id.replace(' ', "%20"));
+        log::info!("Node clicked: {} — navigating to {}", node_id, url);
+        if let Some(window) = web_sys::window() {
+            if let Err(e) = window.location().set_href(&url) {
+                log::error!("Failed to navigate: {:?}", e);
+            }
+        }
     });
 
     view! {
