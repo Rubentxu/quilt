@@ -333,15 +333,18 @@ mod tests {
         let validator = ClassValidator::new(class_repo, prop_repo);
 
         let tz = TimezoneService::from_tz_string("UTC").unwrap();
-        let block = Block::new(crate::entities::BlockCreate {
-            page_id: Uuid::new_v4(),
-            content: "Test".to_string(),
-            parent_id: None,
-            order: 1.0,
-            marker: None,
-            format: crate::value_objects::BlockFormat::Markdown,
-            properties: HashMap::new(),
-        }, &tz)
+        let block = Block::new(
+            crate::entities::BlockCreate {
+                page_id: Uuid::new_v4(),
+                content: "Test".to_string(),
+                parent_id: None,
+                order: 1.0,
+                marker: None,
+                format: crate::value_objects::BlockFormat::Markdown,
+                properties: HashMap::new(),
+            },
+            &tz,
+        )
         .unwrap();
 
         // No classes - should pass

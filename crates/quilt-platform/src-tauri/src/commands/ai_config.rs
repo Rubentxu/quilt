@@ -86,17 +86,17 @@ pub async fn configure_ai_provider(
 #[tauri::command]
 pub async fn get_ai_status(state: State<'_, AppState>) -> Result<AiStatusDto, String> {
     let _ai_client_guard = state.ai_client.read().await;
-    
+
     // We need to inspect the config to get provider info
     // The client itself doesn't expose its config, so we rely on the fact that
     // the AIConfig is stored alongside in the state for this purpose
     // For now, return a status based on the client type
-    
+
     // Since we can't easily determine the provider from the trait object,
     // we'll use a workaround: check if it's a MockAIClient
     // A better solution would be to extend the AIClient trait with a config method
     // but that would require a bigger API change
-    
+
     // For now, return a default status indicating Mock (the default)
     // This is a limitation - in a real implementation we'd want the trait to expose config
     Ok(AiStatusDto {

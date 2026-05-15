@@ -42,15 +42,21 @@ pub trait DeepLinkRepository: Send + Sync {
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
 
     /// Delete all deep links from a source
-    async fn delete_by_source(&self, source_id: Uuid, source_type: LinkSourceType)
-        -> Result<(), DomainError>;
+    async fn delete_by_source(
+        &self,
+        source_id: Uuid,
+        source_type: LinkSourceType,
+    ) -> Result<(), DomainError>;
 
     /// Delete all deep links to a target
     async fn delete_by_target(&self, target_id: Uuid) -> Result<(), DomainError>;
 
     /// Get the count of deep links from a source
-    async fn count_by_source(&self, source_id: Uuid, source_type: LinkSourceType)
-        -> Result<usize, DomainError>;
+    async fn count_by_source(
+        &self,
+        source_id: Uuid,
+        source_type: LinkSourceType,
+    ) -> Result<usize, DomainError>;
 
     /// Get the count of deep links to a target
     async fn count_by_target(&self, target_id: Uuid) -> Result<usize, DomainError>;
@@ -65,7 +71,8 @@ pub trait DeepLinkRepository: Send + Sync {
     ) -> Result<Vec<DeepLink>, DomainError>;
 
     /// Search deep links by link text
-    async fn search_by_text(&self, query: &str, limit: usize) -> Result<Vec<DeepLink>, DomainError>;
+    async fn search_by_text(&self, query: &str, limit: usize)
+        -> Result<Vec<DeepLink>, DomainError>;
 }
 
 /// DeepLinkRepositoryExt provides additional convenience methods

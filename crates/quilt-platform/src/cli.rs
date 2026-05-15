@@ -6,8 +6,8 @@ use metrics::{describe_gauge, gauge};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use quilt_cognitive::{
     AgentMemory, ArgumentCartographer, CognitiveMirror, CounterfactualExplorer,
-    KnowledgeEvolutionTracker, MentalModelGardener, MockAIClient, SerendipityEngine,
-    TaskScheduler, TreeRagEngine,
+    KnowledgeEvolutionTracker, MentalModelGardener, MockAIClient, SerendipityEngine, TaskScheduler,
+    TreeRagEngine,
 };
 use quilt_domain::entities::{BlockCreate, PageCreate, UserSettings};
 use quilt_domain::repositories::{BlockRepository, PageRepository, SettingsRepository};
@@ -342,12 +342,8 @@ impl QuiltCLI {
             }
             Command::ListPages => self.run_list_pages(&page_repo).await?,
             Command::PageInfo { name } => self.run_page_info(&page_repo, &block_repo, name).await?,
-            Command::TreeRag { command } => {
-                self.run_tree_rag(&pool, command).await?
-            }
-            Command::Scheduler { command } => {
-                self.run_scheduler(&pool, command).await?
-            }
+            Command::TreeRag { command } => self.run_tree_rag(&pool, command).await?,
+            Command::Scheduler { command } => self.run_scheduler(&pool, command).await?,
         }
         Ok(())
     }
@@ -388,8 +384,7 @@ impl QuiltCLI {
         parent_id: Option<&str>,
     ) -> Result<()> {
         // Create a default timezone service (UTC) for CLI block creation
-        let timezone = TimezoneService::from_tz_string("UTC")
-            .expect("UTC is a valid timezone");
+        let timezone = TimezoneService::from_tz_string("UTC").expect("UTC is a valid timezone");
 
         let page = match page_repo.get_by_name(page_name).await? {
             Some(p) => p,
@@ -411,15 +406,18 @@ impl QuiltCLI {
             .map(|s| Uuid::parse_str(s).ok_or_else(|| anyhow::anyhow!("Invalid UUID: {}", s)))
             .transpose()?;
 
-        let block = quilt_domain::entities::Block::new(BlockCreate {
-            page_id: page.id,
-            content: content.to_string(),
-            parent_id: parent_uuid,
-            order: 1.0,
-            marker: None,
-            format: BlockFormat::Markdown,
-            properties: Default::default(),
-        }, &timezone)?;
+        let block = quilt_domain::entities::Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: content.to_string(),
+                parent_id: parent_uuid,
+                order: 1.0,
+                marker: None,
+                format: BlockFormat::Markdown,
+                properties: Default::default(),
+            },
+            &timezone,
+        )?;
 
         block_repo.insert(&block).await?;
         println!("✓ Block created on page '{}': {}", page_name, content);
@@ -576,7 +574,9 @@ impl QuiltCLI {
                 for c in &clusters {
                     println!(
                         "  - {} (relevance: {:.2}, {} blocks)",
-                        c.label, c.relevance, c.block_ids.len()
+                        c.label,
+                        c.relevance,
+                        c.block_ids.len()
                     );
                     println!("    Summary: {}", c.summary);
                 }
@@ -664,7 +664,11 @@ impl QuiltCLI {
         Ok(())
     }
 
-    fn print_tree_node(&self, node: &quilt_cognitive::tree_rag::TreeNode, indent: usize) -> Result<()> {
+    fn print_tree_node(
+        &self,
+        node: &quilt_cognitive::tree_rag::TreeNode,
+        indent: usize,
+    ) -> Result<()> {
         let prefix = "  ".repeat(indent);
         let summary = if node.summary.is_empty() {
             String::new()
@@ -709,16 +713,14 @@ impl QuiltCLI {
         let summary_repo = Arc::new(SqliteBlockSummaryRepository::new(pool.clone()));
         let task_repo = Arc::new(SqliteScheduledTaskRepository::new(pool.clone()));
 
-        let tree_rag = Arc::new(TreeRagEngine::new(
-            block_repo,
-            page_repo,
-            summary_repo,
-        ));
+        let tree_rag = Arc::new(TreeRagEngine::new(block_repo, page_repo, summary_repo));
         let scheduler = Arc::new(TaskScheduler::new(task_repo.clone(), tree_rag));
 
         match command {
             SchedulerCommand::List => {
-                let tasks = scheduler.list_tasks().await
+                let tasks = scheduler
+                    .list_tasks()
+                    .await
                     .map_err(|e| anyhow::anyhow!(e))?;
                 if tasks.is_empty() {
                     println!("No scheduled tasks.");
@@ -751,17 +753,23 @@ impl QuiltCLI {
                         task_type
                     ),
                 };
-                scheduler.schedule_task(name, cron, tt).await
+                scheduler
+                    .schedule_task(name, cron, tt)
+                    .await
                     .map_err(|e| anyhow::anyhow!(e))?;
                 println!("Scheduled task '{}': {} ({})", name, cron, task_type);
             }
             SchedulerCommand::RunNow { name } => {
-                scheduler.run_now(name).await
+                scheduler
+                    .run_now(name)
+                    .await
                     .map_err(|e| anyhow::anyhow!(e))?;
                 println!("Task '{}' executed.", name);
             }
             SchedulerCommand::Delete { name } => {
-                scheduler.delete_task(name).await
+                scheduler
+                    .delete_task(name)
+                    .await
                     .map_err(|e| anyhow::anyhow!(e))?;
                 println!("Task '{}' deleted.", name);
             }

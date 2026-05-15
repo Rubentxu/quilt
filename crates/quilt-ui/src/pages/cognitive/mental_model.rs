@@ -215,32 +215,27 @@ pub fn MentalModelGarden() -> impl IntoView {
         let name = agent_id_for_fetch.clone();
         async move {
             match bridge::get_mental_model(&name).await {
-                Ok(json) => {
-                    match serde_json::from_value::<MentalModelResponse>(json.clone()) {
-                        Ok(resp) if !resp.available => {
-                            Err(BridgeError::Unavailable(
-                                resp.message.unwrap_or_else(|| "Mental model gardener unavailable".into()),
-                            ))
-                        }
-                        Ok(resp) => Ok(resp.model.unwrap_or(MentalModelDto {
+                Ok(json) => match serde_json::from_value::<MentalModelResponse>(json.clone()) {
+                    Ok(resp) if !resp.available => Err(BridgeError::Unavailable(
+                        resp.message
+                            .unwrap_or_else(|| "Mental model gardener unavailable".into()),
+                    )),
+                    Ok(resp) => Ok(resp.model.unwrap_or(MentalModelDto {
+                        agent_id: name,
+                        beliefs: vec![],
+                        contradictions: vec![],
+                        suggestions: vec![],
+                    })),
+                    Err(_) => match serde_json::from_value::<MentalModelDto>(json) {
+                        Ok(m) => Ok(m),
+                        Err(_) => Ok(MentalModelDto {
                             agent_id: name,
                             beliefs: vec![],
                             contradictions: vec![],
                             suggestions: vec![],
-                        })),
-                        Err(_) => {
-                            match serde_json::from_value::<MentalModelDto>(json) {
-                                Ok(m) => Ok(m),
-                                Err(_) => Ok(MentalModelDto {
-                                    agent_id: name,
-                                    beliefs: vec![],
-                                    contradictions: vec![],
-                                    suggestions: vec![],
-                                }),
-                            }
-                        }
-                    }
-                }
+                        }),
+                    },
+                },
                 Err(e) => Err(e),
             }
         }

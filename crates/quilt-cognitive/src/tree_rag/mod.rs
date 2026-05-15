@@ -11,6 +11,6 @@ pub mod types;
 pub use engine::TreeRagEngine;
 pub use format_cache::{FormatCache, MldocAst, MldocAstNode, MldocContent};
 pub use types::{
-    AssembledSection, Citation, GeneratedReport, ReportRequest,
-    ReportScope, TopicCluster, TreeIndex, TreeNode, TreeRagConfig, TreeRagStatus,
+    AssembledSection, Citation, GeneratedReport, ReportRequest, ReportScope, TopicCluster,
+    TreeIndex, TreeNode, TreeRagConfig, TreeRagStatus,
 };

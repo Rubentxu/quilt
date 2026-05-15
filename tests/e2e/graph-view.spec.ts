@@ -1,7 +1,7 @@
 /**
  * Quilt Graph View E2E Tests
  *
- * Tests graph visualization page using stable data-testid selectors.
+ * Tests canvas-based force-directed graph visualization.
  * Run with: npx playwright test graph-view
  *
  * Prerequisites:
@@ -42,7 +42,7 @@ test.describe('Graph View States', () => {
 
     // Wait for loading to complete (either content, empty, or error state)
     const contentOrEmpty = page.locator(
-      '[data-testid="graph-content"], [data-testid="graph-empty"], [data-testid="graph-error"]'
+      '[data-testid="force-graph"], [data-testid="graph-empty"], [data-testid="graph-error"]'
     );
     await expect(contentOrEmpty.first()).toBeVisible({ timeout: 20000 });
   });
@@ -55,63 +55,59 @@ test.describe('Graph View States', () => {
   });
 });
 
-// ─── Test 3: Graph Content (when data exists) ─────────────────────────────
+// ─── Test 3: Graph Canvas and Controls ────────────────────────────────────
 
-test.describe('Graph View Content', () => {
-  test('should display stats when graph has data', async ({ page }) => {
+test.describe('Graph View Canvas', () => {
+  test('should display canvas when graph has data', async ({ page }) => {
     await page.goto('/graph');
 
-    // Wait for loading to complete
+    // Wait for canvas to appear (or empty/error state)
     await page.waitForSelector(
-      '[data-testid="graph-content"], [data-testid="graph-empty"], [data-testid="graph-error"]',
+      '[data-testid="force-graph"], [data-testid="graph-empty"], [data-testid="graph-error"]',
       { timeout: 20000 }
     );
 
-    // If content loaded (not empty/error), verify stats
-    const content = page.locator('[data-testid="graph-content"]');
-    if (await content.isVisible()) {
-      // Stats should be visible
-      await expect(page.locator('[data-testid="graph-stats"]')).toBeVisible();
-      await expect(page.locator('[data-testid="graph-stat-nodes"]')).toBeVisible();
-      await expect(page.locator('[data-testid="graph-stat-edges"]')).toBeVisible();
-      await expect(page.locator('[data-testid="graph-stat-journals"]')).toBeVisible();
+    // If force-graph loaded (not empty/error), verify canvas and controls
+    const forceGraph = page.locator('[data-testid="force-graph"]');
+    if (await forceGraph.isVisible()) {
+      // Canvas should be visible
+      await expect(page.locator('[data-testid="graph-canvas"]')).toBeVisible();
 
       // Legend should be visible
       await expect(page.locator('[data-testid="graph-legend"]')).toBeVisible();
 
-      // Visualization area should be visible
-      await expect(page.locator('[data-testid="graph-visualization"]')).toBeVisible();
-      await expect(page.locator('[data-testid="graph-nodes-grid"]')).toBeVisible();
+      // Controls should be visible
+      await expect(page.locator('[data-testid="graph-controls"]')).toBeVisible();
+
+      // Filter buttons should exist
+      await expect(page.locator('[data-testid="graph-filter-pages"]')).toBeVisible();
+      await expect(page.locator('[data-testid="graph-filter-journals"]')).toBeVisible();
+
+      // Zoom controls should exist
+      await expect(page.locator('[data-testid="zoom-in"]')).toBeVisible();
+      await expect(page.locator('[data-testid="zoom-reset"]')).toBeVisible();
+      await expect(page.locator('[data-testid="zoom-out"]')).toBeVisible();
     }
   });
 
-  test('should display node cards when graph has data', async ({ page }) => {
+  test('should display graph controls for filtering', async ({ page }) => {
     await page.goto('/graph');
 
-    // Wait for any final state (content, empty, or error)
-    await page.waitForSelector(
-      '[data-testid="graph-content"], [data-testid="graph-empty"], [data-testid="graph-error"]',
-      { timeout: 20000 }
-    );
+    // Wait for force-graph
+    await page.waitForSelector('[data-testid="force-graph"]', { timeout: 20000 }).catch(() => {});
 
-    // If error state shows, skip this test (no backend data)
-    const errorState = page.locator('[data-testid="graph-error"]');
-    const emptyState = page.locator('[data-testid="graph-empty"]');
-    if (await errorState.isVisible() || await emptyState.isVisible()) {
-      test.skip('No graph data available (backend not connected or empty database)');
-    }
+    const forceGraph = page.locator('[data-testid="force-graph"]');
+    if (await forceGraph.isVisible()) {
+      // Filter pages button
+      const pagesBtn = page.locator('[data-testid="graph-filter-pages"]');
+      await expect(pagesBtn).toBeVisible();
+      // Should be active by default
+      await expect(pagesBtn).toHaveClass(/active/);
 
-    const content = page.locator('[data-testid="graph-content"]');
-    if (await content.isVisible()) {
-      // Should have at least one node card
-      const nodes = page.locator('[data-testid^="graph-node-"]');
-      const nodeCount = await nodes.count();
-      expect(nodeCount).toBeGreaterThan(0);
-
-      // Each node should have a name and type label
-      const firstNode = nodes.first();
-      await expect(firstNode.locator('.node-name')).toBeVisible();
-      await expect(firstNode.locator('.node-type')).toBeVisible();
+      // Filter journals button
+      const journalsBtn = page.locator('[data-testid="graph-filter-journals"]');
+      await expect(journalsBtn).toBeVisible();
+      await expect(journalsBtn).toHaveClass(/active/);
     }
   });
 });
@@ -120,13 +116,11 @@ test.describe('Graph View Content', () => {
 
 test.describe('Graph View Error Handling', () => {
   test('should handle errors gracefully with retry button', async ({ page }) => {
-    // This test verifies the error state UI exists in the DOM structure
-    // Actual error triggering requires backend manipulation
     await page.goto('/graph');
 
     // Wait for any state to settle
     await page.waitForSelector(
-      '[data-testid="graph-content"], [data-testid="graph-empty"], [data-testid="graph-error"]',
+      '[data-testid="force-graph"], [data-testid="graph-empty"], [data-testid="graph-error"]',
       { timeout: 20000 }
     );
 

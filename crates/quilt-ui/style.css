@@ -1059,3 +1059,141 @@ body {
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
 }
+
+/* ─── Force-Directed Graph (Canvas) ──────────────────────────────────────── */
+
+.force-graph {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    position: relative;
+    min-height: 500px;
+}
+
+.graph-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    border-radius: 10px 10px 0 0;
+    flex-wrap: wrap;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.graph-search {
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    min-width: 160px;
+}
+
+.graph-search:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.btn-filter {
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-filter:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.btn-filter.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.btn-secondary {
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
+.graph-canvas {
+    flex: 1;
+    width: 100%;
+    min-height: 400px;
+    cursor: grab;
+    border-radius: 0 0 10px 10px;
+    border: 1px solid var(--border);
+    border-top: none;
+}
+
+.graph-canvas:active {
+    cursor: grabbing;
+}
+
+.graph-tooltip {
+    position: absolute;
+    padding: 0.4rem 0.75rem;
+    background: rgba(15, 23, 42, 0.95);
+    color: #e2e8f0;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    pointer-events: none;
+    z-index: 100;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.graph-legend {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-secondary);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border);
+    border-radius: 0 0 10px 10px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.legend-hint {
+    margin-left: auto;
+    font-size: 0.7rem;
+    opacity: 0.7;
+}

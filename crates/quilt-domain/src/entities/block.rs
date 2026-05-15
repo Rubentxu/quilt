@@ -130,7 +130,11 @@ impl Block {
     /// Apply an update to this block.
     ///
     /// The updated_journal_day is automatically updated based on the user's timezone.
-    pub fn update(&mut self, update: BlockUpdate, timezone: &TimezoneService) -> Result<(), DomainError> {
+    pub fn update(
+        &mut self,
+        update: BlockUpdate,
+        timezone: &TimezoneService,
+    ) -> Result<(), DomainError> {
         if let Some(content) = update.content {
             self.content = content;
         }
@@ -377,10 +381,13 @@ mod tests {
 
         // Mark as done - logbook should be set
         block
-            .update(BlockUpdate {
-                marker: Some(TaskMarker::Done),
-                ..Default::default()
-            }, &tz)
+            .update(
+                BlockUpdate {
+                    marker: Some(TaskMarker::Done),
+                    ..Default::default()
+                },
+                &tz,
+            )
             .unwrap();
 
         assert!(block.logbook.is_some());
@@ -405,10 +412,13 @@ mod tests {
 
         // Update content
         block
-            .update(BlockUpdate {
-                content: Some("Updated content".to_string()),
-                ..Default::default()
-            }, &tz)
+            .update(
+                BlockUpdate {
+                    content: Some("Updated content".to_string()),
+                    ..Default::default()
+                },
+                &tz,
+            )
             .unwrap();
 
         // updated_journal_day should have changed

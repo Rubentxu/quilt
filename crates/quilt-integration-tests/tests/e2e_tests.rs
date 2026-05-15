@@ -271,10 +271,13 @@ async fn test_e2e_block_editing_flow() {
 
     // Step 2: Edit the block content
     block
-        .update(quilt_domain::entities::BlockUpdate {
-            content: Some("Updated content".to_string()),
-            ..Default::default()
-        }, &test_timezone())
+        .update(
+            quilt_domain::entities::BlockUpdate {
+                content: Some("Updated content".to_string()),
+                ..Default::default()
+            },
+            &test_timezone(),
+        )
         .expect("Update should succeed");
 
     repo.update(&block).await.expect("Update should succeed");
@@ -321,26 +324,32 @@ async fn test_e2e_page_to_block_to_edit_flow() {
         .expect("Insert page should succeed");
 
     // Step 2: Create blocks on the page
-    let block1 = Block::new(BlockCreate {
-        page_id: page.id,
-        content: "First task".to_string(),
-        parent_id: None,
-        order: 1.0,
-        marker: Some(TaskMarker::Todo),
-        format: BlockFormat::Markdown,
-        properties: Default::default(),
-    }, &test_timezone())
+    let block1 = Block::new(
+        BlockCreate {
+            page_id: page.id,
+            content: "First task".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: Some(TaskMarker::Todo),
+            format: BlockFormat::Markdown,
+            properties: Default::default(),
+        },
+        &test_timezone(),
+    )
     .expect("Block 1 creation should succeed");
 
-    let block2 = Block::new(BlockCreate {
-        page_id: page.id,
-        content: "Second task".to_string(),
-        parent_id: Some(block1.id),
-        order: 1.0,
-        marker: Some(TaskMarker::Now),
-        format: BlockFormat::Markdown,
-        properties: Default::default(),
-    }, &test_timezone())
+    let block2 = Block::new(
+        BlockCreate {
+            page_id: page.id,
+            content: "Second task".to_string(),
+            parent_id: Some(block1.id),
+            order: 1.0,
+            marker: Some(TaskMarker::Now),
+            format: BlockFormat::Markdown,
+            properties: Default::default(),
+        },
+        &test_timezone(),
+    )
     .expect("Block 2 creation should succeed");
 
     block_repo
@@ -355,10 +364,13 @@ async fn test_e2e_page_to_block_to_edit_flow() {
     // Step 3: Edit block2 to mark it done
     let mut block2_updated = block2.clone();
     block2_updated
-        .update(quilt_domain::entities::BlockUpdate {
-            marker: Some(TaskMarker::Done),
-            ..Default::default()
-        }, &test_timezone())
+        .update(
+            quilt_domain::entities::BlockUpdate {
+                marker: Some(TaskMarker::Done),
+                ..Default::default()
+            },
+            &test_timezone(),
+        )
         .expect("Update should succeed");
 
     block_repo
@@ -516,26 +528,32 @@ async fn test_e2e_journal_flow() {
         .expect("Insert journal page should succeed");
 
     // Step 2: Add journal entries (blocks)
-    let entry1 = Block::new(BlockCreate {
-        page_id: page.id,
-        content: "Morning planning".to_string(),
-        parent_id: None,
-        order: 1.0,
-        marker: None,
-        format: BlockFormat::Markdown,
-        properties: Default::default(),
-    }, &test_timezone())
+    let entry1 = Block::new(
+        BlockCreate {
+            page_id: page.id,
+            content: "Morning planning".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: Default::default(),
+        },
+        &test_timezone(),
+    )
     .expect("Entry 1 creation should succeed");
 
-    let entry2 = Block::new(BlockCreate {
-        page_id: page.id,
-        content: "Afternoon review".to_string(),
-        parent_id: None,
-        order: 2.0,
-        marker: None,
-        format: BlockFormat::Markdown,
-        properties: Default::default(),
-    }, &test_timezone())
+    let entry2 = Block::new(
+        BlockCreate {
+            page_id: page.id,
+            content: "Afternoon review".to_string(),
+            parent_id: None,
+            order: 2.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: Default::default(),
+        },
+        &test_timezone(),
+    )
     .expect("Entry 2 creation should succeed");
 
     block_repo
@@ -630,15 +648,18 @@ async fn test_e2e_mcp_tool_block_operations() {
     .expect("failed to insert page");
 
     // Simulate MCP tool call: create_block
-    let block = Block::new(BlockCreate {
-        page_id,
-        content: "MCP created block".to_string(),
-        parent_id: None,
-        order: 1.0,
-        marker: Some(TaskMarker::Todo),
-        format: BlockFormat::Markdown,
-        properties: Default::default(),
-    }, &test_timezone())
+    let block = Block::new(
+        BlockCreate {
+            page_id,
+            content: "MCP created block".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: Some(TaskMarker::Todo),
+            format: BlockFormat::Markdown,
+            properties: Default::default(),
+        },
+        &test_timezone(),
+    )
     .expect("Block creation should succeed");
 
     repo.insert(&block).await.expect("Insert should succeed");
@@ -829,15 +850,18 @@ async fn test_stress_many_blocks_on_page() {
     // Create 100 blocks
     let mut blocks = Vec::new();
     for i in 0..100 {
-        let block = Block::new(BlockCreate {
-            page_id,
-            content: format!("Stress test block {}", i),
-            parent_id: None,
-            order: i as f64,
-            marker: None,
-            format: BlockFormat::Markdown,
-            properties: Default::default(),
-        }, &test_timezone())
+        let block = Block::new(
+            BlockCreate {
+                page_id,
+                content: format!("Stress test block {}", i),
+                parent_id: None,
+                order: i as f64,
+                marker: None,
+                format: BlockFormat::Markdown,
+                properties: Default::default(),
+            },
+            &test_timezone(),
+        )
         .expect("Block creation should succeed");
 
         blocks.push(block);

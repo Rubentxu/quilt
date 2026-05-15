@@ -1,10 +1,10 @@
 //! JournalRepository trait - abstraction for journal-specific queries
 
-use async_trait::async_trait;
 use crate::entities::{Block, Page};
 use crate::errors::DomainError;
-use crate::value_objects::JournalDay;
 use crate::types::DailySummary;
+use crate::value_objects::JournalDay;
+use async_trait::async_trait;
 
 /// Repository for journal-specific queries.
 ///

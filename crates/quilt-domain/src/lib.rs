@@ -35,13 +35,19 @@ pub mod value_objects;
 
 // Re-exports for convenience
 pub use classes::{builtin_classes, Class, ClassValidator};
-pub use entities::{Asset, Block, BlockSummary, DeepLink, File, Journal, Page, ScheduledTask, Tag, TaskType, UserSettings};
+pub use entities::{
+    Asset, Block, BlockSummary, DeepLink, File, Journal, Page, ScheduledTask, Tag, TaskType,
+    UserSettings,
+};
 pub use errors::DomainError;
 pub use events::{AppEvent, FileChanged, FileEventType};
 pub use properties::{
     Cardinality, ClosedValue, PropertyDefinition, PropertyType, PropertyValidator, ViewContext,
 };
-pub use repositories::{BlockSummaryRepository, ClassRepository, DeepLinkRepository, JournalRepository, PropertyRepository, ScheduledTaskRepository, SettingsRepository};
+pub use repositories::{
+    BlockSummaryRepository, ClassRepository, DeepLinkRepository, JournalRepository,
+    PropertyRepository, ScheduledTaskRepository, SettingsRepository,
+};
 pub use services::TimezoneService;
 pub use types::DailySummary;
 pub use value_objects::{

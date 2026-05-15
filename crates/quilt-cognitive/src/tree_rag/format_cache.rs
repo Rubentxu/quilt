@@ -77,10 +77,7 @@ impl MldocAst {
             })
         }
 
-        fn finish_node(
-            tag: Tag<'_>,
-            children: Vec<MldocAstNode>,
-        ) -> Option<MldocAstNode> {
+        fn finish_node(tag: Tag<'_>, children: Vec<MldocAstNode>) -> Option<MldocAstNode> {
             let node_type = match tag {
                 Tag::Heading { .. } => "Heading",
                 Tag::Paragraph => "Paragraph",
@@ -101,10 +98,7 @@ impl MldocAst {
             Some(MldocAstNode {
                 node_type: node_type.to_string(),
                 metadata: None,
-                content: children
-                    .into_iter()
-                    .map(MldocContent::Node)
-                    .collect(),
+                content: children.into_iter().map(MldocContent::Node).collect(),
             })
         }
 
@@ -184,9 +178,7 @@ impl FormatCache {
     #[tracing::instrument]
     pub fn new() -> Self {
         Self {
-            cache: Mutex::new(LruCache::new(
-                NonZeroUsize::new(FORMAT_CACHE_SIZE).unwrap(),
-            )),
+            cache: Mutex::new(LruCache::new(NonZeroUsize::new(FORMAT_CACHE_SIZE).unwrap())),
         }
     }
 
@@ -236,19 +228,13 @@ impl FormatCache {
     /// Get the current number of entries in the cache.
     #[allow(dead_code)]
     pub fn len(&self) -> usize {
-        self.cache
-            .lock()
-            .map(|c| c.len())
-            .unwrap_or(0)
+        self.cache.lock().map(|c| c.len()).unwrap_or(0)
     }
 
     /// Check if the cache is empty.
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
-        self.cache
-            .lock()
-            .map(|c| c.is_empty())
-            .unwrap_or(true)
+        self.cache.lock().map(|c| c.is_empty()).unwrap_or(true)
     }
 }
 
@@ -273,7 +259,7 @@ mod tests {
     fn test_parse_and_cache() {
         let cache = FormatCache::new();
         let markdown = "# Hello\n\nThis is a test.";
-        
+
         let ast1 = cache.parse_and_cache("key1", markdown);
         assert!(ast1.is_some());
         assert!(!cache.is_empty());
@@ -289,12 +275,12 @@ mod tests {
     fn test_get() {
         let cache = FormatCache::new();
         let markdown = "# Test\n\nContent";
-        
+
         cache.parse_and_cache("key1", markdown);
-        
+
         let result = cache.get("key1");
         assert!(result.is_some());
-        
+
         let missing = cache.get("nonexistent");
         assert!(missing.is_none());
     }
@@ -303,9 +289,9 @@ mod tests {
     fn test_put() {
         let cache = FormatCache::new();
         let ast = MldocAst::parse_markdown("# Direct put");
-        
+
         cache.put("direct_key".to_string(), ast.clone());
-        
+
         let result = cache.get("direct_key");
         assert!(result.is_some());
     }
@@ -314,28 +300,28 @@ mod tests {
     fn test_mldoc_ast_parse_markdown() {
         let markdown = "# Heading 1\n\nThis is a paragraph.\n\n## Heading 2";
         let ast = MldocAst::parse_markdown(markdown);
-        
+
         assert!(!ast.nodes.is_empty());
     }
 
     #[test]
     fn test_format_cache_lru_eviction() {
         let cache = FormatCache::new();
-        
+
         // Fill cache beyond 5000 entries to test LRU eviction
         for i in 0..6000 {
             let markdown = format!("# Title {}\n\nContent {}", i, i);
             cache.parse_and_cache(&format!("key{}", i), &markdown);
         }
-        
+
         // Cache should have evicted old entries
         // After 6000 inserts into 5000 capacity, we should have ~5000 entries
         let len = cache.len();
         assert!(len <= 5000);
-        
+
         // Recent entries should still be there
         assert!(cache.get("key5000").is_some());
-        
+
         // Very old entries should have been evicted
         // key0 would have been evicted when we inserted key5000
         let key0_exists = cache.get("key0").is_some();

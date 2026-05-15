@@ -367,26 +367,35 @@ mod tests {
             .await
             .unwrap();
 
-        let mut b1 = Block::new(BlockCreate {
-            page_id: page.id,
-            content: "Task one".to_string(),
-            marker: Some(TaskMarker::Todo),
-            ..Default::default()
-        }, &tz)
+        let mut b1 = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: "Task one".to_string(),
+                marker: Some(TaskMarker::Todo),
+                ..Default::default()
+            },
+            &tz,
+        )
         .unwrap();
-        let b2 = Block::new(BlockCreate {
-            page_id: page.id,
-            content: "Task two".to_string(),
-            marker: Some(TaskMarker::Done),
-            ..Default::default()
-        }, &tz)
+        let b2 = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: "Task two".to_string(),
+                marker: Some(TaskMarker::Done),
+                ..Default::default()
+            },
+            &tz,
+        )
         .unwrap();
-        let b3 = Block::new(BlockCreate {
-            page_id: page.id,
-            content: "Not a task".to_string(),
-            marker: None,
-            ..Default::default()
-        }, &tz)
+        let b3 = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: "Not a task".to_string(),
+                marker: None,
+                ..Default::default()
+            },
+            &tz,
+        )
         .unwrap();
 
         let block_repo = SqliteBlockRepository::new(pool.clone());
@@ -412,11 +421,14 @@ mod tests {
             .await
             .unwrap();
 
-        let block = Block::new(BlockCreate {
-            page_id: page.id,
-            content: "Block on target page".to_string(),
-            ..Default::default()
-        }, &tz)
+        let block = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: "Block on target page".to_string(),
+                ..Default::default()
+            },
+            &tz,
+        )
         .unwrap();
         SqliteBlockRepository::new(pool.clone())
             .insert(&block)
@@ -454,21 +466,27 @@ mod tests {
             .unwrap();
 
         // Create block with both marker and priority
-        let mut b1 = Block::new(BlockCreate {
-            page_id: page.id,
-            content: "Priority A task".to_string(),
-            marker: Some(TaskMarker::Todo),
-            ..Default::default()
-        }, &tz)
+        let mut b1 = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: "Priority A task".to_string(),
+                marker: Some(TaskMarker::Todo),
+                ..Default::default()
+            },
+            &tz,
+        )
         .unwrap();
         b1.priority = Some(Priority::A);
 
-        let mut b2 = Block::new(BlockCreate {
-            page_id: page.id,
-            content: "Priority B task".to_string(),
-            marker: Some(TaskMarker::Todo),
-            ..Default::default()
-        }, &tz)
+        let mut b2 = Block::new(
+            BlockCreate {
+                page_id: page.id,
+                content: "Priority B task".to_string(),
+                marker: Some(TaskMarker::Todo),
+                ..Default::default()
+            },
+            &tz,
+        )
         .unwrap();
         b2.priority = Some(Priority::B);
 

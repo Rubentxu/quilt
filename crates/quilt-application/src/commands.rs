@@ -37,7 +37,10 @@ impl<R: BlockRepository> BlockCommand<R> {
     /// * `repository` - An `Arc`-wrapped repository for block persistence
     /// * `timezone` - An `Arc`-wrapped timezone service for journal day calculation
     pub fn new(repository: Arc<R>, timezone: Arc<TimezoneService>) -> Self {
-        Self { repository, timezone }
+        Self {
+            repository,
+            timezone,
+        }
     }
 
     /// Creates a new block within a page.
@@ -119,7 +122,9 @@ impl<R: BlockRepository> BlockCommand<R> {
             .await
             .map_err(ApplicationError::Domain)?;
 
-        block.update(update, &self.timezone).map_err(ApplicationError::Domain)?;
+        block
+            .update(update, &self.timezone)
+            .map_err(ApplicationError::Domain)?;
 
         self.repository
             .update(&block)
@@ -695,7 +700,10 @@ mod tests {
             Ok(0)
         }
 
-        async fn get_blocks_by_journal_day(&self, _day: JournalDay) -> Result<Vec<Block>, DomainError> {
+        async fn get_blocks_by_journal_day(
+            &self,
+            _day: JournalDay,
+        ) -> Result<Vec<Block>, DomainError> {
             Ok(Vec::new())
         }
 

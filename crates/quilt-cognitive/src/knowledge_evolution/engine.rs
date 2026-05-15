@@ -373,9 +373,7 @@ mod tests {
         ) -> Result<Vec<Block>, quilt_domain::errors::DomainError> {
             Ok(vec![])
         }
-        async fn get_orphan_blocks(
-            &self,
-        ) -> Result<Vec<Block>, quilt_domain::errors::DomainError> {
+        async fn get_orphan_blocks(&self) -> Result<Vec<Block>, quilt_domain::errors::DomainError> {
             Ok(vec![])
         }
     }

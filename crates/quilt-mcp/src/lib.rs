@@ -42,7 +42,9 @@ pub mod types;
 
 pub use cognitive::CognitiveEngineStatus;
 pub use errors::{McpError, McpErrorCode};
-pub use helpers::{block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid};
+pub use helpers::{
+    block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid,
+};
 pub use hooks::{
     HookDispatcher, HookError, HookEvent, HookEventKind, HookFilter, HookResult, HookSubscription,
     Priority,

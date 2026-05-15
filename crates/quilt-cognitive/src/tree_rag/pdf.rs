@@ -39,12 +39,8 @@ fn load_default_font() -> Option<genpdf::fonts::FontFamily<genpdf::fonts::FontDa
 }
 
 /// Renders a Markdown string to a PDF byte vector.
-pub fn render_markdown_to_pdf(
-    markdown: &str,
-    _config: &TreeRagConfig,
-) -> Result<Vec<u8>, String> {
-    let font_family = load_default_font()
-        .ok_or_else(|| "PDF fonts not found.".to_string())?;
+pub fn render_markdown_to_pdf(markdown: &str, _config: &TreeRagConfig) -> Result<Vec<u8>, String> {
+    let font_family = load_default_font().ok_or_else(|| "PDF fonts not found.".to_string())?;
 
     let mut doc = Document::new(font_family);
     doc.set_title("Quilt Report");

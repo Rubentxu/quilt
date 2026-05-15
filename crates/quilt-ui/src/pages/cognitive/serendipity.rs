@@ -96,22 +96,17 @@ pub fn SerendipityFeed() -> impl IntoView {
     // Action captures mc (f32, Copy) directly
     let fetch_serendipity = Action::new_local(move |_: &()| async move {
         match bridge::get_serendipity(None, Some(20), Some(mc)).await {
-            Ok(json) => {
-                match serde_json::from_value::<SerendipityResponse>(json.clone()) {
-                    Ok(resp) if !resp.available => {
-                        Err(BridgeError::Unavailable(
-                            resp.message.unwrap_or_else(|| "Serendipity engine unavailable".into()),
-                        ))
-                    }
-                    Ok(resp) => Ok(resp.connections.unwrap_or_default()),
-                    Err(_) => {
-                        match serde_json::from_value::<Vec<ConnectionDto>>(json) {
-                            Ok(conns) => Ok(conns),
-                            Err(_) => Ok(vec![]),
-                        }
-                    }
-                }
-            }
+            Ok(json) => match serde_json::from_value::<SerendipityResponse>(json.clone()) {
+                Ok(resp) if !resp.available => Err(BridgeError::Unavailable(
+                    resp.message
+                        .unwrap_or_else(|| "Serendipity engine unavailable".into()),
+                )),
+                Ok(resp) => Ok(resp.connections.unwrap_or_default()),
+                Err(_) => match serde_json::from_value::<Vec<ConnectionDto>>(json) {
+                    Ok(conns) => Ok(conns),
+                    Err(_) => Ok(vec![]),
+                },
+            },
             Err(e) => Err(e),
         }
     });

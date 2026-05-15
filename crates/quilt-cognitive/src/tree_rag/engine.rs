@@ -142,11 +142,7 @@ impl TreeRagEngine {
     }
 
     /// Query/filter a tree by text match on title or summary.
-    pub async fn query_tree(
-        &self,
-        page_id: Uuid,
-        query: &str,
-    ) -> Result<TreeIndex, TreeRagError> {
+    pub async fn query_tree(&self, page_id: Uuid, query: &str) -> Result<TreeIndex, TreeRagError> {
         let tree = self.build_tree(page_id).await?;
         let query_lower = query.to_lowercase();
 
@@ -351,10 +347,7 @@ impl TreeRagEngine {
 
     /// Rebuild index: count stale blocks (content hash changed).
     /// Does NOT generate summaries — the agent generates summaries via save_block_summary.
-    pub async fn rebuild_index(
-        &self,
-        scope: Option<&ReportScope>,
-    ) -> Result<usize, TreeRagError> {
+    pub async fn rebuild_index(&self, scope: Option<&ReportScope>) -> Result<usize, TreeRagError> {
         let page_ids = if let Some(s) = scope {
             self.resolve_scope(s).await?
         } else {
@@ -570,7 +563,11 @@ impl TreeRagEngine {
     }
 
     fn count_nodes(&self, node: &TreeNode) -> usize {
-        1 + node.children.iter().map(|c| self.count_nodes(c)).sum::<usize>()
+        1 + node
+            .children
+            .iter()
+            .map(|c| self.count_nodes(c))
+            .sum::<usize>()
     }
 
     fn hash_content(content: &str) -> Vec<u8> {
@@ -617,8 +614,7 @@ fn build_subtree<'a>(
                 .await?
                 .map(|s| s.summary)
                 .unwrap_or_default();
-            let grand_children =
-                build_subtree(summary_repo, Some(child.id), all_blocks).await;
+            let grand_children = build_subtree(summary_repo, Some(child.id), all_blocks).await;
             let sub_nodes = match grand_children {
                 Ok(n) if n.children_count > 0 || !n.summary.is_empty() => vec![n],
                 _ => vec![],

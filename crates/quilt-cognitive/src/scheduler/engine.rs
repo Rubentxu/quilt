@@ -16,10 +16,7 @@ pub struct TaskScheduler {
 }
 
 impl TaskScheduler {
-    pub fn new(
-        task_repo: Arc<dyn ScheduledTaskRepository>,
-        tree_rag: Arc<TreeRagEngine>,
-    ) -> Self {
+    pub fn new(task_repo: Arc<dyn ScheduledTaskRepository>, tree_rag: Arc<TreeRagEngine>) -> Self {
         Self {
             task_repo,
             tree_rag,
@@ -77,7 +74,11 @@ impl TaskScheduler {
         match &task.task_type {
             TaskType::RebuildIndex => {
                 info!("Rebuilding TreeRAG index...");
-                let count = self.tree_rag.rebuild_index(None).await.map_err(|e| e.to_string())?;
+                let count = self
+                    .tree_rag
+                    .rebuild_index(None)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 info!("TreeRAG index: {} stale blocks need summarization", count);
             }
             TaskType::CleanStaleSummaries => {
@@ -116,10 +117,10 @@ impl TaskScheduler {
         cron_expr: &str,
         task_type: TaskType,
     ) -> Result<(), String> {
-        let schedule = parse_cron(cron_expr).ok_or_else(|| "Invalid cron expression".to_string())?;
-        let next = next_run(&schedule, chrono::Utc::now()).unwrap_or_else(|| {
-            chrono::Utc::now() + chrono::Duration::hours(24)
-        });
+        let schedule =
+            parse_cron(cron_expr).ok_or_else(|| "Invalid cron expression".to_string())?;
+        let next = next_run(&schedule, chrono::Utc::now())
+            .unwrap_or_else(|| chrono::Utc::now() + chrono::Duration::hours(24));
 
         let task = ScheduledTask::new(name, cron_expr, task_type, next);
         self.task_repo
@@ -131,18 +132,12 @@ impl TaskScheduler {
 
     /// List all scheduled tasks.
     pub async fn list_tasks(&self) -> Result<Vec<ScheduledTask>, String> {
-        self.task_repo
-            .list_all()
-            .await
-            .map_err(|e| e.to_string())
+        self.task_repo.list_all().await.map_err(|e| e.to_string())
     }
 
     /// Delete a scheduled task by name.
     pub async fn delete_task(&self, name: &str) -> Result<(), String> {
-        self.task_repo
-            .delete(name)
-            .await
-            .map_err(|e| e.to_string())
+        self.task_repo.delete(name).await.map_err(|e| e.to_string())
     }
 
     /// Run a specific task immediately.

@@ -44,20 +44,22 @@ impl UserSettings {
     /// Returns error if timezone is invalid or start_of_week is out of range.
     pub fn validate(&self) -> Result<(), DomainError> {
         // Validate timezone
-        self.timezone.parse::<chrono_tz::Tz>()
+        self.timezone
+            .parse::<chrono_tz::Tz>()
             .map_err(|_| DomainError::InvalidTimezone(self.timezone.clone()))?;
 
         // Validate start_of_week
         if self.start_of_week > 6 {
-            return Err(DomainError::InvalidConfiguration(
-                format!("start_of_week must be 0-6, got {}", self.start_of_week)
-            ));
+            return Err(DomainError::InvalidConfiguration(format!(
+                "start_of_week must be 0-6, got {}",
+                self.start_of_week
+            )));
         }
 
         // Validate journal_format (basic check - should be parseable)
         if self.journal_format.is_empty() {
             return Err(DomainError::InvalidConfiguration(
-                "journal_format cannot be empty".to_string()
+                "journal_format cannot be empty".to_string(),
             ));
         }
 

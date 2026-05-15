@@ -84,7 +84,10 @@ fn parse_field(s: &str, min: u32, max: u32) -> Option<CronField> {
 }
 
 /// Compute the next execution time from a cron schedule and a reference time.
-pub fn next_run(schedule: &CronSchedule, from: chrono::DateTime<chrono::Utc>) -> Option<chrono::DateTime<chrono::Utc>> {
+pub fn next_run(
+    schedule: &CronSchedule,
+    from: chrono::DateTime<chrono::Utc>,
+) -> Option<chrono::DateTime<chrono::Utc>> {
     let mut candidate = from + chrono::Duration::minutes(1);
     // Try up to 2 years ahead
     let limit = from + chrono::Duration::days(730);

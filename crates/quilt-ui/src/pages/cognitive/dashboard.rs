@@ -198,7 +198,8 @@ fn StatsBar(pages: usize, blocks: usize, queries: usize) -> impl IntoView {
 #[component]
 pub fn CognitiveDashboard() -> impl IntoView {
     // Async action to fetch morning briefing
-    let fetch_briefing = Action::new_local(|_: &()| async move { bridge::get_morning_briefing().await });
+    let fetch_briefing =
+        Action::new_local(|_: &()| async move { bridge::get_morning_briefing().await });
 
     // Trigger initial fetch
     fetch_briefing.dispatch(());

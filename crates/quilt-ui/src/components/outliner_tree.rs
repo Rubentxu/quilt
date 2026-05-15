@@ -100,17 +100,16 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
 
     // Get flat block IDs for keyboard navigation
     let flat_block_ids = Signal::derive(move || {
-        flattened_blocks.get().iter().map(|t| t.block.id.clone()).collect::<Vec<_>>()
+        flattened_blocks
+            .get()
+            .iter()
+            .map(|t| t.block.id.clone())
+            .collect::<Vec<_>>()
     });
 
     // Get expanded state for a block
-    let get_expanded = move |block_id: &str| -> bool {
-        expanded_map
-            .get()
-            .get(block_id)
-            .copied()
-            .unwrap_or(true)
-    };
+    let get_expanded =
+        move |block_id: &str| -> bool { expanded_map.get().get(block_id).copied().unwrap_or(true) };
 
     // Toggle expanded state
     let toggle_expanded = move |block_id: String| {
@@ -126,7 +125,9 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
         if let Some(pos) = ids.iter().position(|id| id == &current_id) {
             if pos + 1 < ids.len() {
                 let next_id = &ids[pos + 1];
-                if let Ok(Some(el)) = document().query_selector(&format!("[data-block-id=\"{}\"]", next_id)) {
+                if let Ok(Some(el)) =
+                    document().query_selector(&format!("[data-block-id=\"{}\"]", next_id))
+                {
                     use wasm_bindgen::JsCast;
                     if let Ok(html_el) = el.dyn_into::<web_sys::HtmlElement>() {
                         let _ = html_el.focus();
@@ -142,7 +143,9 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
         if let Some(pos) = ids.iter().position(|id| id == &current_id) {
             if pos > 0 {
                 let prev_id = &ids[pos - 1];
-                if let Ok(Some(el)) = document().query_selector(&format!("[data-block-id=\"{}\"]", prev_id)) {
+                if let Ok(Some(el)) =
+                    document().query_selector(&format!("[data-block-id=\"{}\"]", prev_id))
+                {
                     use wasm_bindgen::JsCast;
                     if let Ok(html_el) = el.dyn_into::<web_sys::HtmlElement>() {
                         let _ = html_el.focus();

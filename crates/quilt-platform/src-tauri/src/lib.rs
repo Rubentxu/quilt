@@ -9,18 +9,16 @@ pub mod state;
 use crate::deep_link::DeepLinkParser;
 use crate::state::AppState;
 use commands::{
-    argument_map, cognitive_available, cognitive_mirror, configure_ai_provider,
-    create_block, create_page, create_task, delete_block, get_availability, get_ai_status,
-    get_backlinks, get_block_tree, get_journal, get_page, link_blocks, list_pages, mental_model,
-    morning_briefing, navigate_to_block, navigate_to_page, query_agent, query_blocks, search_blocks,
-    serendipity,
+    argument_map, cognitive_available, cognitive_mirror, configure_ai_provider, create_block,
+    create_page, create_task, delete_block, get_ai_status, get_availability, get_backlinks,
+    get_block_tree, get_journal, get_page, link_blocks, list_pages, mental_model, morning_briefing,
+    navigate_to_block, navigate_to_page, query_agent, query_blocks, search_blocks, serendipity,
 };
 use metrics::{describe_gauge, gauge};
 use metrics_exporter_prometheus::PrometheusBuilder;
 use quilt_cognitive::{
-    create_ai_client, AgentMemory, ArgumentCartographer, CognitiveMirror,
-    CounterfactualExplorer, KnowledgeEvolutionTracker, MentalModelGardener, MorningBriefing,
-    SerendipityEngine,
+    create_ai_client, AgentMemory, ArgumentCartographer, CognitiveMirror, CounterfactualExplorer,
+    KnowledgeEvolutionTracker, MentalModelGardener, MorningBriefing, SerendipityEngine,
 };
 use quilt_domain::repositories::SettingsRepository;
 use quilt_domain::services::TimezoneService;
@@ -52,14 +50,32 @@ const MENU_ACTION_DOCS: &str = "menu:docs";
 /// Creates menus for File, Edit, View, and Help with standard actions.
 /// Menu items emit events to the frontend for handling.
 fn build_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu<tauri::Wry>, tauri::Error> {
-    use tauri::menu::{MenuBuilder, SubmenuBuilder, PredefinedMenuItem};
+    use tauri::menu::{MenuBuilder, PredefinedMenuItem, SubmenuBuilder};
 
     // File menu: New Page, Open Graph, separator, Exit
     let file_menu = SubmenuBuilder::new(app, "File")
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_NEW_PAGE, "New Page", true, None::<&str>)?)
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_OPEN_GRAPH, "Open Graph...", true, None::<&str>)?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_NEW_PAGE,
+            "New Page",
+            true,
+            None::<&str>,
+        )?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_OPEN_GRAPH,
+            "Open Graph...",
+            true,
+            None::<&str>,
+        )?)
         .separator()
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_EXIT, "Exit", true, Some("CmdOrCtrl+Q"))?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_EXIT,
+            "Exit",
+            true,
+            Some("CmdOrCtrl+Q"),
+        )?)
         .build()?;
 
     // Edit menu: Undo, Redo, separator, Cut, Copy, Paste
@@ -75,17 +91,53 @@ fn build_menu(app: &tauri::AppHandle) -> Result<tauri::menu::Menu<tauri::Wry>, t
 
     // View menu: Toggle Sidebar, separator, Zoom controls
     let view_menu = SubmenuBuilder::new(app, "View")
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_TOGGLE_SIDEBAR, "Toggle Sidebar", true, Some("CmdOrCtrl+B"))?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_TOGGLE_SIDEBAR,
+            "Toggle Sidebar",
+            true,
+            Some("CmdOrCtrl+B"),
+        )?)
         .separator()
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_ZOOM_IN, "Zoom In", true, Some("CmdOrCtrl+Plus"))?)
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_ZOOM_OUT, "Zoom Out", true, Some("CmdOrCtrl+Minus"))?)
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_RESET_ZOOM, "Reset Zoom", true, Some("CmdOrCtrl+0"))?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_ZOOM_IN,
+            "Zoom In",
+            true,
+            Some("CmdOrCtrl+Plus"),
+        )?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_ZOOM_OUT,
+            "Zoom Out",
+            true,
+            Some("CmdOrCtrl+Minus"),
+        )?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_RESET_ZOOM,
+            "Reset Zoom",
+            true,
+            Some("CmdOrCtrl+0"),
+        )?)
         .build()?;
 
     // Help menu: About Quilt, Documentation
     let help_menu = SubmenuBuilder::new(app, "Help")
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_ABOUT, "About Quilt", true, None::<&str>)?)
-        .item(&tauri::menu::MenuItem::with_id(app, MENU_ACTION_DOCS, "Documentation", true, None::<&str>)?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_ABOUT,
+            "About Quilt",
+            true,
+            None::<&str>,
+        )?)
+        .item(&tauri::menu::MenuItem::with_id(
+            app,
+            MENU_ACTION_DOCS,
+            "Documentation",
+            true,
+            None::<&str>,
+        )?)
         .build()?;
 
     // Build the full menu bar
@@ -183,8 +235,15 @@ pub async fn create_app_state(
 
     // Create MCP server with cognitive engines
     let mcp_server = Arc::new(
-        McpServer::new(block_repo, page_repo.clone(), tag_repo, deep_link_repo, search_service, timezone_service)
-            .with_cognitive(
+        McpServer::new(
+            block_repo,
+            page_repo.clone(),
+            tag_repo,
+            deep_link_repo,
+            search_service,
+            timezone_service,
+        )
+        .with_cognitive(
             Some(cognitive_mirror),
             Some(serendipity_engine),
             Some(agent_memory),
@@ -193,9 +252,9 @@ pub async fn create_app_state(
             Some(counterfactual_explorer),
             Some(knowledge_evolution_tracker),
         )
-            .with_morning_briefing(morning_briefing)
-            .with_journal_repo(journal_repo)
-            .with_settings_repo(settings_repo),
+        .with_morning_briefing(morning_briefing)
+        .with_journal_repo(journal_repo)
+        .with_settings_repo(settings_repo),
     );
 
     info!("MCP server initialized");

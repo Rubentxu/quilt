@@ -33,8 +33,6 @@ pub trait BlockSummaryRepository: Send + Sync {
     async fn count(&self) -> Result<usize, DomainError>;
 
     /// Count summaries generated since a timestamp
-    async fn count_since(
-        &self,
-        since: chrono::DateTime<chrono::Utc>,
-    ) -> Result<usize, DomainError>;
+    async fn count_since(&self, since: chrono::DateTime<chrono::Utc>)
+        -> Result<usize, DomainError>;
 }

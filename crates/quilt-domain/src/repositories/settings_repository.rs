@@ -1,8 +1,8 @@
 //! SettingsRepository trait - abstraction for user settings persistence
 
-use async_trait::async_trait;
 use crate::entities::UserSettings;
 use crate::errors::DomainError;
+use async_trait::async_trait;
 
 /// Repository for user settings persistence.
 ///

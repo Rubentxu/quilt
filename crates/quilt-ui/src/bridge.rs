@@ -18,14 +18,16 @@ pub async fn invoke<T: for<'de> Deserialize<'de>>(
     use wasm_bindgen::JsValue;
     use web_sys::{js_sys::Reflect, Window};
 
-    let window: Window = web_sys::window()
-        .ok_or_else(|| BridgeError::Unavailable("No window".into()))?;
+    let window: Window =
+        web_sys::window().ok_or_else(|| BridgeError::Unavailable("No window".into()))?;
 
     // Get window.__TAURI__
     let tauri = Reflect::get(&window, &JsValue::from_str("__TAURI__"))
         .map_err(|_| BridgeError::Unavailable("__TAURI__ not available".into()))?;
     if tauri.is_undefined() || tauri.is_null() {
-        return Err(BridgeError::Unavailable("Tauri not available (dev mode)".into()));
+        return Err(BridgeError::Unavailable(
+            "Tauri not available (dev mode)".into(),
+        ));
     }
 
     // Get window.__TAURI__.invoke as a JS Function
@@ -36,17 +38,18 @@ pub async fn invoke<T: for<'de> Deserialize<'de>>(
     // Build args array: [cmd, args]
     let args_arr = js_sys::Array::new();
     args_arr.push(&JsValue::from_str(cmd));
-    args_arr.push(&serde_wasm_bindgen::to_value(args)
-        .unwrap_or(JsValue::NULL));
+    args_arr.push(&serde_wasm_bindgen::to_value(args).unwrap_or(JsValue::NULL));
 
     // Call: window.__TAURI__.invoke(cmd, args) -> Promise
-    let promise_val = invoke_fn.apply(&JsValue::NULL, &args_arr)
+    let promise_val = invoke_fn
+        .apply(&JsValue::NULL, &args_arr)
         .map_err(|e| BridgeError::TauriError(format!("invoke call failed: {:?}", e)))?;
     let promise: js_sys::Promise = promise_val.unchecked_into();
 
     // Await the Promise
     let js_future = wasm_bindgen_futures::JsFuture::from(promise);
-    let result: JsValue = js_future.await
+    let result: JsValue = js_future
+        .await
         .map_err(|e| BridgeError::TauriError(format!("invoke await failed: {:?}", e)))?;
 
     // Deserialize result
@@ -590,10 +593,7 @@ pub async fn query_blocks(dsl: &str, limit: usize) -> Result<Vec<BlockDto>, Brid
 }
 
 /// Create a new block - wired to `create_block` Tauri command
-pub async fn create_block(
-    page_name: &str,
-    content: &str,
-) -> Result<BlockDto, BridgeError> {
+pub async fn create_block(page_name: &str, content: &str) -> Result<BlockDto, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({ "page_name": page_name, "content": content });
@@ -701,10 +701,7 @@ pub async fn update_block(
 }
 
 /// Search blocks in the knowledge graph - wired to `search_blocks` Tauri command
-pub async fn search_blocks(
-    query: &str,
-    limit: usize,
-) -> Result<Vec<SearchResultDto>, BridgeError> {
+pub async fn search_blocks(query: &str, limit: usize) -> Result<Vec<SearchResultDto>, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({ "query": query, "limit": limit });
@@ -843,15 +840,15 @@ pub async fn get_graph_data() -> Result<GraphDataDto, BridgeError> {
     #[cfg(target_arch = "wasm32")]
     {
         let args = serde_json::json!({});
-        invoke::<serde_json::Value>("resource_graph", &args).await
+        invoke::<serde_json::Value>("resource_graph", &args)
+            .await
             .map(|v| {
                 // The MCP returns a JSON string, parse it
-                serde_json::from_str(v.as_str().unwrap_or("{}"))
-                    .unwrap_or(GraphDataDto {
-                        nodes: vec![],
-                        edges: vec![],
-                        last_updated: String::new(),
-                    })
+                serde_json::from_str(v.as_str().unwrap_or("{}")).unwrap_or(GraphDataDto {
+                    nodes: vec![],
+                    edges: vec![],
+                    last_updated: String::new(),
+                })
             })
     }
     #[cfg(not(target_arch = "wasm32"))]

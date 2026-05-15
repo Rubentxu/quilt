@@ -46,9 +46,9 @@ pub use morning_briefing::{
 };
 pub use serendipity::SerendipityEngine;
 pub use tree_rag::{
-    AssembledSection, Citation, FormatCache, GeneratedReport, MldocAst, MldocAstNode,
-    MldocContent, ReportRequest, ReportScope, TopicCluster, TreeIndex, TreeNode,
-    TreeRagConfig, TreeRagEngine, TreeRagStatus,
+    AssembledSection, Citation, FormatCache, GeneratedReport, MldocAst, MldocAstNode, MldocContent,
+    ReportRequest, ReportScope, TopicCluster, TreeIndex, TreeNode, TreeRagConfig, TreeRagEngine,
+    TreeRagStatus,
 };
 
 // Re-export scheduler types when scheduler module is added

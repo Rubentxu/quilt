@@ -62,16 +62,10 @@ async fn main() -> Result<()> {
     let ai_client: Arc<dyn quilt_cognitive::AIClient> = Arc::new(MockAIClient::new());
 
     // Create AgentMemory first (needed by MentalModelGardener)
-    let agent_memory = Arc::new(AgentMemory::new(
-        block_repo.clone(),
-        ai_client.clone(),
-    ));
+    let agent_memory = Arc::new(AgentMemory::new(block_repo.clone(), ai_client.clone()));
 
     // Create all cognitive engines
-    let cognitive_mirror = Arc::new(CognitiveMirror::new(
-        block_repo.clone(),
-        ai_client.clone(),
-    ));
+    let cognitive_mirror = Arc::new(CognitiveMirror::new(block_repo.clone(), ai_client.clone()));
     let serendipity_engine = Arc::new(SerendipityEngine::new(
         block_repo.clone(),
         ai_client.clone(),

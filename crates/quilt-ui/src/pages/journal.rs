@@ -1,6 +1,6 @@
 //! Journal view — today's daily notes
 
-use crate::bridge::{self, get_journal, MorningBriefingDto, CognitivePulseDto, BriefingStatsDto};
+use crate::bridge::{self, get_journal, BriefingStatsDto, CognitivePulseDto, MorningBriefingDto};
 use chrono::Local;
 use leptos::prelude::*;
 
@@ -26,9 +26,8 @@ pub fn JournalView() -> impl IntoView {
     });
 
     // Action to fetch morning briefing
-    let fetch_briefing = Action::new_local(|_: &()| async move {
-        bridge::get_morning_briefing().await.ok()
-    });
+    let fetch_briefing =
+        Action::new_local(|_: &()| async move { bridge::get_morning_briefing().await.ok() });
 
     // Trigger initial fetches
     fetch_journal.dispatch(today_for_fetch);

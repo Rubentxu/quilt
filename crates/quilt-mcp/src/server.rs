@@ -4,7 +4,9 @@
 //! Wired to real repositories, search, and query services.
 
 use crate::cognitive::CognitiveEngineStatus;
-use crate::helpers::{block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid};
+use crate::helpers::{
+    block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid,
+};
 use crate::hooks::HookEvent;
 use crate::notifications::{
     BlockChangedEvent, ChangeType, Notification, NotificationEvent, NotificationParams,
@@ -15,10 +17,15 @@ use crate::resources::Resource;
 use crate::tools::Tool;
 pub use crate::types::*;
 use quilt_application::query_service::QueryService;
-use quilt_domain::entities::{Block, BlockCreate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate};
-use quilt_domain::repositories::{BlockRepository, DeepLinkRepository, JournalRepository, PageRepository, SettingsRepository, TagRepository};
-use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker, Uuid};
 use quilt_cognitive::tree_rag::ReportScope;
+use quilt_domain::entities::{
+    Block, BlockCreate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate,
+};
+use quilt_domain::repositories::{
+    BlockRepository, DeepLinkRepository, JournalRepository, PageRepository, SettingsRepository,
+    TagRepository,
+};
+use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker, Uuid};
 use quilt_search::{SearchIndexManager, SearchService};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -888,7 +895,9 @@ impl McpServer {
             });
             tools.push(Tool {
                 name: "logseq_tree_status".to_string(),
-                description: "Get the current status of the TreeRAG index (blocks indexed, pending, etc.)".to_string(),
+                description:
+                    "Get the current status of the TreeRAG index (blocks indexed, pending, etc.)"
+                        .to_string(),
                 input_schema: serde_json::json!({ "type": "object", "properties": {} }),
             });
             tools.push(Tool {
@@ -1639,9 +1648,7 @@ impl McpServer {
             "JournalRepository not configured. Use with_journal_repo() to enable.".to_string()
         })?;
 
-        let day_str = args
-            .get("day")
-            .and_then(|v| v.as_str());
+        let day_str = args.get("day").and_then(|v| v.as_str());
 
         let day_str = match day_str {
             Some(s) => s.to_string(),
@@ -1899,18 +1906,13 @@ impl McpServer {
     }
 
     async fn tool_get_deep_links(&self, args: &serde_json::Value) -> Result<String, String> {
-        let _limit = args
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(50) as usize;
+        let _limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
 
         let links = if let Some(source_id_str) = args.get("source_id").and_then(|v| v.as_str()) {
             let source_id = Uuid::parse_str(source_id_str)
                 .ok_or_else(|| format!("Invalid source_id: {}", source_id_str))?;
 
-            let source_type_str = args
-                .get("source_type")
-                .and_then(|v| v.as_str());
+            let source_type_str = args.get("source_type").and_then(|v| v.as_str());
 
             let link_type_str = args.get("link_type").and_then(|v| v.as_str());
 
@@ -1961,12 +1963,11 @@ impl McpServer {
                 (None, Some(_)) => {
                     return Err("source_type is required when link_type is specified".to_string());
                 }
-                (None, None) => {
-                    self.deep_link_repo
-                        .get_by_source(source_id, LinkSourceType::Block)
-                        .await
-                        .map_err(|e| e.to_string())?
-                }
+                (None, None) => self
+                    .deep_link_repo
+                    .get_by_source(source_id, LinkSourceType::Block)
+                    .await
+                    .map_err(|e| e.to_string())?,
             }
         } else if let Some(target_id_str) = args.get("target_id").and_then(|v| v.as_str()) {
             let target_id = Uuid::parse_str(target_id_str)
@@ -1996,8 +1997,7 @@ impl McpServer {
             // Since there's no "get all" method, we need a different approach
             // For now, return an error asking for filters
             return Err(
-                "At least one filter is required: source_id, target_id, or link_type"
-                    .to_string(),
+                "At least one filter is required: source_id, target_id, or link_type".to_string(),
             );
         };
 
@@ -2032,7 +2032,7 @@ impl McpServer {
     // ── Resource implementations ──────────────────────────────────
 
     async fn resource_graph(&self) -> Result<String, String> {
-        use crate::types::{GraphNodeDto, GraphEdgeDto, GraphDataDto};
+        use crate::types::{GraphDataDto, GraphEdgeDto, GraphNodeDto};
 
         let pages = self.page_repo.get_all().await.map_err(|e| e.to_string())?;
 
@@ -2042,7 +2042,11 @@ impl McpServer {
             .map(|p| GraphNodeDto {
                 id: p.id.to_string(),
                 name: p.name.clone(),
-                node_type: if p.journal { "journal".to_string() } else { "page".to_string() },
+                node_type: if p.journal {
+                    "journal".to_string()
+                } else {
+                    "page".to_string()
+                },
                 journal: p.journal,
             })
             .collect();
@@ -2345,83 +2349,123 @@ impl McpServer {
     }
 
     async fn tool_explore_topic(&self, args: &serde_json::Value) -> Result<String, String> {
-        let topic = args.get("topic").and_then(|v| v.as_str())
+        let topic = args
+            .get("topic")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'topic' parameter".to_string())?;
         let scope_str = args.get("scope").and_then(|v| v.as_str()).unwrap_or("auto");
 
-        let engine = self.tree_rag.as_ref()
+        let engine = self
+            .tree_rag
+            .as_ref()
             .ok_or_else(|| "TreeRAG not configured".to_string())?;
 
         let scope = Self::parse_scope(scope_str)?;
-        let clusters = engine.explore_topic(topic, &scope).await.map_err(|e| e.to_string())?;
+        let clusters = engine
+            .explore_topic(topic, &scope)
+            .await
+            .map_err(|e| e.to_string())?;
 
-        let json_clusters: Vec<serde_json::Value> = clusters.iter().map(|c| {
-            serde_json::json!({
-                "label": c.label,
-                "summary": c.summary,
-                "block_ids": c.block_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
-                "relevance": c.relevance,
+        let json_clusters: Vec<serde_json::Value> = clusters
+            .iter()
+            .map(|c| {
+                serde_json::json!({
+                    "label": c.label,
+                    "summary": c.summary,
+                    "block_ids": c.block_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
+                    "relevance": c.relevance,
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(serde_json::to_string_pretty(&serde_json::json!({
             "topic": topic,
             "cluster_count": clusters.len(),
             "total_blocks": clusters.iter().map(|c| c.block_ids.len()).sum::<usize>(),
             "clusters": json_clusters,
-        })).unwrap_or_else(|e| e.to_string()))
+        }))
+        .unwrap_or_else(|e| e.to_string()))
     }
 
     async fn tool_build_tree(&self, args: &serde_json::Value) -> Result<String, String> {
-        let page_id_str = args.get("page_id").and_then(|v| v.as_str())
+        let page_id_str = args
+            .get("page_id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'page_id' parameter".to_string())?;
-        let page_id = Uuid::parse_str(page_id_str)
-            .ok_or_else(|| format!("Invalid UUID: {}", page_id_str))?;
+        let page_id =
+            Uuid::parse_str(page_id_str).ok_or_else(|| format!("Invalid UUID: {}", page_id_str))?;
 
-        let engine = self.tree_rag.as_ref()
+        let engine = self
+            .tree_rag
+            .as_ref()
             .ok_or_else(|| "TreeRAG not configured".to_string())?;
 
-        let tree = engine.build_tree(page_id).await.map_err(|e| e.to_string())?;
+        let tree = engine
+            .build_tree(page_id)
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok(serde_json::to_string_pretty(&serde_json::json!({
             "page_id": tree.page_id.to_string(),
             "page_name": tree.page_name,
             "total_blocks": tree.total_blocks,
             "root": tree.root,
-        })).unwrap_or_else(|e| e.to_string()))
+        }))
+        .unwrap_or_else(|e| e.to_string()))
     }
 
     async fn tool_query_tree(&self, args: &serde_json::Value) -> Result<String, String> {
-        let page_id_str = args.get("page_id").and_then(|v| v.as_str())
+        let page_id_str = args
+            .get("page_id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'page_id' parameter".to_string())?;
-        let page_id = Uuid::parse_str(page_id_str)
-            .ok_or_else(|| format!("Invalid UUID: {}", page_id_str))?;
-        let query = args.get("query").and_then(|v| v.as_str())
+        let page_id =
+            Uuid::parse_str(page_id_str).ok_or_else(|| format!("Invalid UUID: {}", page_id_str))?;
+        let query = args
+            .get("query")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'query' parameter".to_string())?;
 
-        let engine = self.tree_rag.as_ref()
+        let engine = self
+            .tree_rag
+            .as_ref()
             .ok_or_else(|| "TreeRAG not configured".to_string())?;
 
-        let tree = engine.query_tree(page_id, query).await.map_err(|e| e.to_string())?;
+        let tree = engine
+            .query_tree(page_id, query)
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok(serde_json::to_string_pretty(&serde_json::json!({
             "page_id": tree.page_id.to_string(),
             "page_name": tree.page_name,
             "total_blocks": tree.total_blocks,
             "root": tree.root,
-        })).unwrap_or_else(|e| e.to_string()))
+        }))
+        .unwrap_or_else(|e| e.to_string()))
     }
 
     async fn tool_assemble_report(&self, args: &serde_json::Value) -> Result<String, String> {
-        let title = args.get("title").and_then(|v| v.as_str())
+        let title = args
+            .get("title")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'title' parameter".to_string())?;
-        let description = args.get("description").and_then(|v| v.as_str())
+        let description = args
+            .get("description")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'description' parameter".to_string())?;
-        let sections = args.get("sections").and_then(|v| v.as_array())
+        let sections = args
+            .get("sections")
+            .and_then(|v| v.as_array())
             .ok_or_else(|| "Missing 'sections' parameter".to_string())?;
-        let render_pdf = args.get("render_pdf").and_then(|v| v.as_bool()).unwrap_or(false);
+        let render_pdf = args
+            .get("render_pdf")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
-        let engine = self.tree_rag.as_ref()
+        let engine = self
+            .tree_rag
+            .as_ref()
             .ok_or_else(|| "TreeRAG not configured".to_string())?;
 
         // Parse sections into AssembledSection structs
@@ -2431,7 +2475,8 @@ impl McpServer {
                 let heading = s.get("heading")?.as_str()?.to_string();
                 let level = s.get("level")?.as_u64()? as u8;
                 let content = s.get("content")?.as_str()?.to_string();
-                let source_block_ids: Vec<Uuid> = s.get("source_block_ids")
+                let source_block_ids: Vec<Uuid> = s
+                    .get("source_block_ids")
                     .and_then(|arr| arr.as_array())
                     .map(|arr| {
                         arr.iter()
@@ -2449,7 +2494,8 @@ impl McpServer {
                                 let heading = sub.get("heading")?.as_str()?.to_string();
                                 let level = sub.get("level")?.as_u64()? as u8;
                                 let content = sub.get("content")?.as_str()?.to_string();
-                                let source_block_ids: Vec<Uuid> = sub.get("source_block_ids")
+                                let source_block_ids: Vec<Uuid> = sub
+                                    .get("source_block_ids")
                                     .and_then(|arr| arr.as_array())
                                     .map(|arr| {
                                         arr.iter()
@@ -2488,7 +2534,10 @@ impl McpServer {
             None
         };
 
-        let citations = assembled_sections.iter().flat_map(|s| s.source_block_ids.iter()).collect::<Vec<_>>();
+        let citations = assembled_sections
+            .iter()
+            .flat_map(|s| s.source_block_ids.iter())
+            .collect::<Vec<_>>();
 
         Ok(serde_json::to_string_pretty(&serde_json::json!({
             "title": title,
@@ -2496,11 +2545,14 @@ impl McpServer {
             "markdown": markdown,
             "pdf_size_bytes": pdf_bytes.as_ref().map(|b| b.len()),
             "citations_count": citations.len(),
-        })).unwrap_or_else(|e| e.to_string()))
+        }))
+        .unwrap_or_else(|e| e.to_string()))
     }
 
     async fn tool_tree_status(&self, _args: &serde_json::Value) -> Result<String, String> {
-        let engine = self.tree_rag.as_ref()
+        let engine = self
+            .tree_rag
+            .as_ref()
             .ok_or_else(|| "TreeRAG not configured".to_string())?;
 
         let status = engine.status().await.map_err(|e| e.to_string())?;
@@ -2512,37 +2564,56 @@ impl McpServer {
             "coverage_percent": if status.total_blocks > 0 {
                 (status.indexed_blocks as f64 / status.total_blocks as f64 * 100.0) as u32
             } else { 0 },
-        })).unwrap_or_else(|e| e.to_string()))
+        }))
+        .unwrap_or_else(|e| e.to_string()))
     }
 
     async fn tool_save_block_summary(&self, args: &serde_json::Value) -> Result<String, String> {
-        let block_id_str = args.get("block_id").and_then(|v| v.as_str())
+        let block_id_str = args
+            .get("block_id")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'block_id' parameter".to_string())?;
         let block_id = Uuid::parse_str(block_id_str)
             .ok_or_else(|| format!("Invalid UUID: {}", block_id_str))?;
-        let summary = args.get("summary").and_then(|v| v.as_str())
+        let summary = args
+            .get("summary")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'summary' parameter".to_string())?;
 
-        let engine = self.tree_rag.as_ref()
+        let engine = self
+            .tree_rag
+            .as_ref()
             .ok_or_else(|| "TreeRAG not configured".to_string())?;
 
-        engine.save_block_summary(block_id, summary.to_string()).await.map_err(|e| e.to_string())?;
+        engine
+            .save_block_summary(block_id, summary.to_string())
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok(serde_json::json!({
             "status": "saved",
             "block_id": block_id_str,
-        }).to_string())
+        })
+        .to_string())
     }
 
     async fn tool_schedule_task(&self, args: &serde_json::Value) -> Result<String, String> {
-        let name = args.get("name").and_then(|v| v.as_str())
+        let name = args
+            .get("name")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'name' parameter".to_string())?;
-        let cron_expr = args.get("cron_expr").and_then(|v| v.as_str())
+        let cron_expr = args
+            .get("cron_expr")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'cron_expr' parameter".to_string())?;
-        let task_type_str = args.get("task_type").and_then(|v| v.as_str())
+        let task_type_str = args
+            .get("task_type")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing 'task_type' parameter".to_string())?;
 
-        let scheduler = self.task_scheduler.as_ref()
+        let scheduler = self
+            .task_scheduler
+            .as_ref()
             .ok_or_else(|| "TaskScheduler not configured".to_string())?;
 
         let task_type = match task_type_str {
@@ -2557,24 +2628,30 @@ impl McpServer {
         Ok(serde_json::to_string_pretty(&serde_json::json!({
             "scheduled": name,
             "cron": cron_expr,
-        })).unwrap_or_else(|e| e.to_string()))
+        }))
+        .unwrap_or_else(|e| e.to_string()))
     }
 
     async fn tool_list_tasks(&self, _args: &serde_json::Value) -> Result<String, String> {
-        let scheduler = self.task_scheduler.as_ref()
+        let scheduler = self
+            .task_scheduler
+            .as_ref()
             .ok_or_else(|| "TaskScheduler not configured".to_string())?;
 
         let tasks = scheduler.list_tasks().await?;
 
-        let json_tasks: Vec<serde_json::Value> = tasks.iter().map(|t| {
-            serde_json::json!({
-                "name": t.name,
-                "cron_expr": t.cron_expr,
-                "enabled": t.enabled,
-                "last_run": t.last_run.map(|d| d.to_rfc3339()),
-                "next_run": t.next_run.to_rfc3339(),
+        let json_tasks: Vec<serde_json::Value> = tasks
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "name": t.name,
+                    "cron_expr": t.cron_expr,
+                    "enabled": t.enabled,
+                    "last_run": t.last_run.map(|d| d.to_rfc3339()),
+                    "next_run": t.next_run.to_rfc3339(),
+                })
             })
-        }).collect();
+            .collect();
 
         Ok(serde_json::to_string_pretty(&json_tasks).unwrap_or_else(|e| e.to_string()))
     }
@@ -2585,20 +2662,32 @@ impl McpServer {
             "auto" => ReportScope::Auto,
             "all" => ReportScope::AllPages,
             s if s.starts_with("pages:") => {
-                let names: Vec<String> = s.strip_prefix("pages:").unwrap()
-                    .split(',').map(|n| n.trim().to_string()).collect();
+                let names: Vec<String> = s
+                    .strip_prefix("pages:")
+                    .unwrap()
+                    .split(',')
+                    .map(|n| n.trim().to_string())
+                    .collect();
                 ReportScope::Pages(names)
             }
             s if s.starts_with("journal:") => {
-                let days: u32 = s.strip_prefix("journal:").unwrap()
-                    .parse().map_err(|_| "Invalid journal days")?;
+                let days: u32 = s
+                    .strip_prefix("journal:")
+                    .unwrap()
+                    .parse()
+                    .map_err(|_| "Invalid journal days")?;
                 ReportScope::JournalLast(days)
             }
             s if s.starts_with("tagged:") => {
                 let tag = s.strip_prefix("tagged:").unwrap().to_string();
                 ReportScope::Tagged(tag)
             }
-            other => return Err(format!("Unknown scope: {}. Use auto, all, pages:name1,name2, journal:N, or tagged:tag", other)),
+            other => {
+                return Err(format!(
+                    "Unknown scope: {}. Use auto, all, pages:name1,name2, journal:N, or tagged:tag",
+                    other
+                ))
+            }
         })
     }
 
@@ -2713,8 +2802,7 @@ mod tests {
     use quilt_domain::services::TimezoneService;
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
-        SqliteBlockRepository, SqliteDeepLinkRepository, SqlitePageRepository,
-        SqliteTagRepository,
+        SqliteBlockRepository, SqliteDeepLinkRepository, SqlitePageRepository, SqliteTagRepository,
     };
     use sqlx::SqlitePool;
 
@@ -3050,9 +3138,7 @@ mod tests {
         }
 
         // Verify node names (page names are normalized to lowercase)
-        let names: Vec<&str> = nodes.iter()
-            .map(|n| n["name"].as_str().unwrap())
-            .collect();
+        let names: Vec<&str> = nodes.iter().map(|n| n["name"].as_str().unwrap()).collect();
         assert!(names.contains(&"alpha"), "should have alpha node");
         assert!(names.contains(&"beta"), "should have beta node");
         assert!(names.contains(&"gamma"), "should have gamma node");

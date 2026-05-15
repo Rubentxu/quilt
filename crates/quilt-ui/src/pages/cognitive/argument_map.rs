@@ -195,30 +195,25 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
         let name = page_name_for_fetch.clone();
         async move {
             match bridge::get_argument_map(&name).await {
-                Ok(json) => {
-                    match serde_json::from_value::<ArgumentMapResponse>(json.clone()) {
-                        Ok(resp) if !resp.available => {
-                            Err(BridgeError::Unavailable(
-                                resp.message.unwrap_or_else(|| "Argument cartographer unavailable".into()),
-                            ))
-                        }
-                        Ok(resp) => Ok(resp.graph.unwrap_or(ArgumentGraphDto {
+                Ok(json) => match serde_json::from_value::<ArgumentMapResponse>(json.clone()) {
+                    Ok(resp) if !resp.available => Err(BridgeError::Unavailable(
+                        resp.message
+                            .unwrap_or_else(|| "Argument cartographer unavailable".into()),
+                    )),
+                    Ok(resp) => Ok(resp.graph.unwrap_or(ArgumentGraphDto {
+                        page_id: name,
+                        nodes: vec![],
+                        edges: vec![],
+                    })),
+                    Err(_) => match serde_json::from_value::<ArgumentGraphDto>(json) {
+                        Ok(g) => Ok(g),
+                        Err(_) => Ok(ArgumentGraphDto {
                             page_id: name,
                             nodes: vec![],
                             edges: vec![],
-                        })),
-                        Err(_) => {
-                            match serde_json::from_value::<ArgumentGraphDto>(json) {
-                                Ok(g) => Ok(g),
-                                Err(_) => Ok(ArgumentGraphDto {
-                                    page_id: name,
-                                    nodes: vec![],
-                                    edges: vec![],
-                                }),
-                            }
-                        }
-                    }
-                }
+                        }),
+                    },
+                },
                 Err(e) => Err(e),
             }
         }

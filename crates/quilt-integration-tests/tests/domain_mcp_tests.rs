@@ -295,10 +295,13 @@ async fn test_block_update_logbook_on_done() {
 
     // Mark as done - logbook should be set
     block
-        .update(quilt_domain::entities::BlockUpdate {
-            marker: Some(TaskMarker::Done),
-            ..Default::default()
-        }, &test_timezone())
+        .update(
+            quilt_domain::entities::BlockUpdate {
+                marker: Some(TaskMarker::Done),
+                ..Default::default()
+            },
+            &test_timezone(),
+        )
         .unwrap();
 
     assert!(

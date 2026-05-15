@@ -31,13 +31,17 @@ use std::collections::HashMap;
 
 use crate::database::sqlite::connection::DbPool;
 use quilt_domain::classes::types::Class;
-use quilt_domain::entities::{Block, BlockSummary, DeepLink, File, Page, ScheduledTask, TaskType, LinkSourceType, LinkType, UserSettings};
+use quilt_domain::entities::{
+    Block, BlockSummary, DeepLink, File, LinkSourceType, LinkType, Page, ScheduledTask, TaskType,
+    UserSettings,
+};
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::types::{Cardinality, ClosedValue, PropertyType, ViewContext};
 use quilt_domain::repositories::{
-    BlockRepository, BlockSummaryRepository, ClassRepository, DeepLinkRepository, FileRepository, JournalRepository as JournalRepositoryTrait,
-    PageRepository, PropertyRepository, ScheduledTaskRepository, SettingsRepository, TagRepository,
+    BlockRepository, BlockSummaryRepository, ClassRepository, DeepLinkRepository, FileRepository,
+    JournalRepository as JournalRepositoryTrait, PageRepository, PropertyRepository,
+    ScheduledTaskRepository, SettingsRepository, TagRepository,
 };
 use quilt_domain::types::DailySummary;
 use quilt_domain::value_objects::{
@@ -2759,7 +2763,6 @@ mod tests {
         let results = tag_repo.search_tags("tag", 2).await.unwrap();
         assert_eq!(results.len(), 2);
     }
-
 } // end of mod tests
 
 // ── SqliteBlockSummaryRepository ───────────────────────────────────────────
@@ -2825,9 +2828,7 @@ impl BlockSummaryRepository for SqliteBlockSummaryRepository {
             .await
             .map_err(|e| DomainError::Database(format!("get_batch summaries: {}", e)))?;
 
-        rows.iter()
-            .map(Self::row_to_summary)
-            .collect()
+        rows.iter().map(Self::row_to_summary).collect()
     }
 
     async fn upsert(&self, summary: &BlockSummary) -> Result<(), DomainError> {
@@ -2863,12 +2864,11 @@ impl BlockSummaryRepository for SqliteBlockSummaryRepository {
         &self,
         before: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<Uuid>, DomainError> {
-        let rows =
-            sqlx::query("SELECT block_id FROM block_summaries WHERE generated_at < ?")
-                .bind(datetime_to_ts(&before))
-                .fetch_all(&self.pool)
-                .await
-                .map_err(|e| DomainError::Database(format!("list_stale: {}", e)))?;
+        let rows = sqlx::query("SELECT block_id FROM block_summaries WHERE generated_at < ?")
+            .bind(datetime_to_ts(&before))
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("list_stale: {}", e)))?;
 
         rows.iter()
             .map(|r| {
@@ -2879,11 +2879,10 @@ impl BlockSummaryRepository for SqliteBlockSummaryRepository {
     }
 
     async fn count(&self) -> Result<usize, DomainError> {
-        let count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM block_summaries")
-                .fetch_one(&self.pool)
-                .await
-                .map_err(|e| DomainError::Database(format!("count summaries: {}", e)))?;
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM block_summaries")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("count summaries: {}", e)))?;
         Ok(count as usize)
     }
 
@@ -2891,13 +2890,12 @@ impl BlockSummaryRepository for SqliteBlockSummaryRepository {
         &self,
         since: chrono::DateTime<chrono::Utc>,
     ) -> Result<usize, DomainError> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM block_summaries WHERE generated_at >= ?",
-        )
-        .bind(datetime_to_ts(&since))
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| DomainError::Database(format!("count_since: {}", e)))?;
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM block_summaries WHERE generated_at >= ?")
+                .bind(datetime_to_ts(&since))
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| DomainError::Database(format!("count_since: {}", e)))?;
         Ok(count as usize)
     }
 }
@@ -3107,25 +3105,23 @@ impl DeepLinkRepository for SqliteDeepLinkRepository {
     }
 
     async fn get_by_target(&self, target_id: Uuid) -> Result<Vec<DeepLink>, DomainError> {
-        let rows = sqlx::query(
-            "SELECT * FROM deep_links WHERE target_id = ? ORDER BY created_at DESC",
-        )
-        .bind(uuid_to_blob(&target_id))
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::Database(format!("get_by_target: {}", e)))?;
+        let rows =
+            sqlx::query("SELECT * FROM deep_links WHERE target_id = ? ORDER BY created_at DESC")
+                .bind(uuid_to_blob(&target_id))
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| DomainError::Database(format!("get_by_target: {}", e)))?;
 
         rows.iter().map(|r| self.row_to_deep_link(r)).collect()
     }
 
     async fn get_by_type(&self, link_type: LinkType) -> Result<Vec<DeepLink>, DomainError> {
-        let rows = sqlx::query(
-            "SELECT * FROM deep_links WHERE link_type = ? ORDER BY created_at DESC",
-        )
-        .bind(link_type.as_str())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::Database(format!("get_by_type: {}", e)))?;
+        let rows =
+            sqlx::query("SELECT * FROM deep_links WHERE link_type = ? ORDER BY created_at DESC")
+                .bind(link_type.as_str())
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| DomainError::Database(format!("get_by_type: {}", e)))?;
 
         rows.iter().map(|r| self.row_to_deep_link(r)).collect()
     }
@@ -3222,13 +3218,11 @@ impl DeepLinkRepository for SqliteDeepLinkRepository {
     }
 
     async fn count_by_target(&self, target_id: Uuid) -> Result<usize, DomainError> {
-        let count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM deep_links WHERE target_id = ?",
-        )
-        .bind(uuid_to_blob(&target_id))
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| DomainError::Database(format!("count_by_target: {}", e)))?;
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM deep_links WHERE target_id = ?")
+            .bind(uuid_to_blob(&target_id))
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| DomainError::Database(format!("count_by_target: {}", e)))?;
 
         Ok(count as usize)
     }
@@ -3254,7 +3248,11 @@ impl DeepLinkRepository for SqliteDeepLinkRepository {
         rows.iter().map(|r| self.row_to_deep_link(r)).collect()
     }
 
-    async fn search_by_text(&self, query: &str, limit: usize) -> Result<Vec<DeepLink>, DomainError> {
+    async fn search_by_text(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<DeepLink>, DomainError> {
         let pattern = format!("%{}%", query);
         let rows = sqlx::query(
             "SELECT * FROM deep_links WHERE link_text LIKE ? OR context LIKE ? ORDER BY created_at DESC LIMIT ?",
@@ -3275,16 +3273,20 @@ impl SqliteDeepLinkRepository {
         let source_type_str: String = row.get("source_type");
         let link_type_str: String = row.get("link_type");
 
-        let source_type = LinkSourceType::try_from_str(&source_type_str)
-            .ok_or_else(|| DomainError::InvalidData(format!("Invalid source type: {}", source_type_str)))?;
-        let link_type = LinkType::try_from_str(&link_type_str)
-            .ok_or_else(|| DomainError::InvalidData(format!("Invalid link type: {}", link_type_str)))?;
+        let source_type = LinkSourceType::try_from_str(&source_type_str).ok_or_else(|| {
+            DomainError::InvalidData(format!("Invalid source type: {}", source_type_str))
+        })?;
+        let link_type = LinkType::try_from_str(&link_type_str).ok_or_else(|| {
+            DomainError::InvalidData(format!("Invalid link type: {}", link_type_str))
+        })?;
 
         Ok(DeepLink {
             id: blob_to_uuid(row.get::<Vec<u8>, _>("id").as_ref())?,
             source_id: blob_to_uuid(row.get::<Vec<u8>, _>("source_id").as_ref())?,
             source_type,
-            target_id: optional_blob_to_uuid(row.get::<Option<Vec<u8>>, _>("target_id").as_deref())?,
+            target_id: optional_blob_to_uuid(
+                row.get::<Option<Vec<u8>>, _>("target_id").as_deref(),
+            )?,
             target_page_name: row.get("target_page_name"),
             link_type,
             external_url: row.get("external_url"),
@@ -3527,7 +3529,8 @@ impl JournalRepositoryTrait for SqliteJournalRepository {
         rows.iter()
             .map(|r| {
                 let day_int: i32 = r.get("journal_day");
-                Ok(JournalDay::from_i32(day_int).unwrap_or_else(|| JournalDay::from_i32_unchecked(day_int)))
+                Ok(JournalDay::from_i32(day_int)
+                    .unwrap_or_else(|| JournalDay::from_i32_unchecked(day_int)))
             })
             .collect()
     }

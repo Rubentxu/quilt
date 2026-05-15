@@ -131,15 +131,18 @@ pub async fn create_block(
         .map(|s| Uuid::parse_str(&s).ok_or_else(|| format!("Invalid UUID: {}", s)))
         .transpose()?;
 
-    let block = Block::new(BlockCreate {
-        page_id: page.id,
-        content,
-        parent_id: parent_uuid,
-        order: 1.0,
-        marker: None,
-        format: BlockFormat::Markdown,
-        properties: Default::default(),
-    }, &timezone)
+    let block = Block::new(
+        BlockCreate {
+            page_id: page.id,
+            content,
+            parent_id: parent_uuid,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: Default::default(),
+        },
+        &timezone,
+    )
     .map_err(|e| e.to_string())?;
 
     block_repo.insert(&block).await.map_err(|e| e.to_string())?;
@@ -323,15 +326,18 @@ pub async fn create_task(
     // TODO: Parse deadline and priority when Block entity supports properties for these
     let _ = (deadline, priority);
 
-    let block = Block::new(BlockCreate {
-        page_id: page.id,
-        content,
-        parent_id: None,
-        order: 1.0,
-        marker: Some(TaskMarker::Todo),
-        format: BlockFormat::Markdown,
-        properties: Default::default(),
-    }, &timezone)
+    let block = Block::new(
+        BlockCreate {
+            page_id: page.id,
+            content,
+            parent_id: None,
+            order: 1.0,
+            marker: Some(TaskMarker::Todo),
+            format: BlockFormat::Markdown,
+            properties: Default::default(),
+        },
+        &timezone,
+    )
     .map_err(|e| e.to_string())?;
 
     block_repo.insert(&block).await.map_err(|e| e.to_string())?;

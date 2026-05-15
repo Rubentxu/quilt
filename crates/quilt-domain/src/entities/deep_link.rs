@@ -320,7 +320,10 @@ mod tests {
 
     #[test]
     fn test_link_type_from_str() {
-        assert_eq!(LinkType::try_from_str("block"), Some(LinkType::InternalBlock));
+        assert_eq!(
+            LinkType::try_from_str("block"),
+            Some(LinkType::InternalBlock)
+        );
         assert_eq!(LinkType::try_from_str("page"), Some(LinkType::InternalPage));
         assert_eq!(LinkType::try_from_str("url"), Some(LinkType::ExternalUrl));
         assert_eq!(LinkType::try_from_str("unknown"), None);
@@ -328,8 +331,14 @@ mod tests {
 
     #[test]
     fn test_link_source_type_from_str() {
-        assert_eq!(LinkSourceType::try_from_str("block"), Some(LinkSourceType::Block));
-        assert_eq!(LinkSourceType::try_from_str("page"), Some(LinkSourceType::Page));
+        assert_eq!(
+            LinkSourceType::try_from_str("block"),
+            Some(LinkSourceType::Block)
+        );
+        assert_eq!(
+            LinkSourceType::try_from_str("page"),
+            Some(LinkSourceType::Page)
+        );
         assert_eq!(LinkSourceType::try_from_str("unknown"), None);
     }
 }
