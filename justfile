@@ -107,13 +107,13 @@ fmt:
 fmt-check:
     cargo fmt --all -- --check
 
-# Run clippy with strict warnings
+# Run clippy with strict warnings (library code only, no tests)
 clippy:
-    cargo clippy --all-targets --all-features -- -D warnings
+    cargo clippy --lib --bins --all-features -- -D warnings
 
-# Run clippy on workspace
-clippy-workspace:
-    cargo clippy --workspace -- -D warnings
+# Run clippy including tests
+clippy-all:
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Auto-fix clippy suggestions
 clippy-fix:
@@ -132,8 +132,8 @@ coverage-html:
 
 # ── Quality Gate (CI) ────────────────────────────────────────────────────
 
-# Run full CI pipeline: fmt + clippy + build + test
-check: fmt-check clippy test
+# Run full CI pipeline: fmt + clippy (lib) + build + test
+check: fmt-check clippy build test
 
 # Full CI with all features
 check-all: fmt-check

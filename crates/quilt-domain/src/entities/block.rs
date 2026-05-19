@@ -407,8 +407,8 @@ mod tests {
 
         let tz = test_timezone();
         let mut block = Block::new(create, &tz).unwrap();
-        let original_journal_day = block.journal_day;
-        let original_updated_journal_day = block.updated_journal_day;
+        let _original_journal_day = block.journal_day;
+        let _original_updated_journal_day = block.updated_journal_day;
 
         // Update content
         block

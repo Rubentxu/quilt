@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn test_net_new_blocks() {
         let day = JournalDay::from_ymd(2026, 5, 14).unwrap();
-        let mut summary = DailySummary::new(day);
+        let summary = DailySummary::new(day);
         // With no blocks, net is 0
         assert_eq!(summary.net_new_blocks(), 0);
     }

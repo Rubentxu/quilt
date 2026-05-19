@@ -324,7 +324,7 @@ mod tests {
 
         // Very old entries should have been evicted
         // key0 would have been evicted when we inserted key5000
-        let key0_exists = cache.get("key0").is_some();
+        let _key0_exists = cache.get("key0").is_some();
         // This might pass or fail depending on exact LRU behavior
         // but the cache size should be bounded
         assert!(len <= 5000);
