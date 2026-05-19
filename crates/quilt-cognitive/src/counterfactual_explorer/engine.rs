@@ -6,7 +6,6 @@
 use crate::ai_client::{AIClient, AIClientError};
 use crate::counterfactual_explorer::types::{CounterfactualBranch, CounterfactualTree};
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::JournalDay;
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -190,7 +189,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
-    use quilt_domain::value_objects::{BlockFormat, Uuid};
+    use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
     use quilt_domain::Block;
     use std::collections::HashMap;
 

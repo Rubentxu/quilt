@@ -9,7 +9,7 @@ use quilt_cognitive::{
     KnowledgeEvolutionTracker, MentalModelGardener, MockAIClient, SerendipityEngine, TaskScheduler,
     TreeRagEngine,
 };
-use quilt_domain::entities::{BlockCreate, PageCreate, UserSettings};
+use quilt_domain::entities::{BlockCreate, PageCreate};
 use quilt_domain::repositories::{BlockRepository, PageRepository, SettingsRepository};
 use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};

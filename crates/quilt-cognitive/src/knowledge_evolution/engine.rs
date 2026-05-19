@@ -7,7 +7,6 @@ use crate::ai_client::{AIClient, AIClientError};
 use crate::knowledge_evolution::types::{BeliefChange, KnowledgeTimeline};
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::JournalDay;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
@@ -246,7 +245,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
-    use quilt_domain::value_objects::{BlockFormat, Uuid};
+    use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
     use std::collections::HashMap;
 
     fn make_block(id: Uuid, content: &str, days_ago: i64) -> Block {

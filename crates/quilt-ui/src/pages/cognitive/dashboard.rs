@@ -227,10 +227,7 @@ pub fn CognitiveDashboard() -> impl IntoView {
                         view! {
                             <Show
                                 when={move || {
-                                    match fetch_briefing.value().get() {
-                                        Some(Ok(_)) => true,
-                                        _ => false,
-                                    }
+                                    matches!(fetch_briefing.value().get(), Some(Ok(_)))
                                 }}
                                 fallback={move || view! { <LoadingSkeleton /> }}
                             >
@@ -239,7 +236,7 @@ pub fn CognitiveDashboard() -> impl IntoView {
                                         Some(Ok(b)) => b,
                                         _ => unreachable!("briefing should exist when condition is true"),
                                     };
-                                    view! { <BriefingContent briefing={briefing} on_refresh={cb.clone()} /> }
+                                    view! { <BriefingContent briefing={briefing} on_refresh={cb} /> }
                                 }}
                             </Show>
                         }

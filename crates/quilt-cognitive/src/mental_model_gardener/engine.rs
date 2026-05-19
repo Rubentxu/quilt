@@ -9,7 +9,7 @@ use crate::mental_model_gardener::types::*;
 use quilt_domain::entities::Block;
 use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{JournalDay, Uuid};
+use quilt_domain::value_objects::Uuid;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
@@ -447,7 +447,7 @@ pub enum MentalModelError {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, JournalDay};
 
     fn make_block(
         id: Uuid,

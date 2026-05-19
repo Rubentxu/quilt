@@ -225,10 +225,14 @@ pub async fn create_app_state(
     ));
 
     // Create MorningBriefing service (aggregates all cognitive engines)
+    let cognitive_services: Arc<dyn quilt_cognitive::MorningBriefingServices> =
+        Arc::new(quilt_cognitive::DefaultMorningBriefingServices::new(
+            cognitive_mirror.clone(),
+            serendipity_engine.clone(),
+            knowledge_evolution_tracker.clone(),
+        ));
     let morning_briefing = Arc::new(MorningBriefing::new(
-        Some(cognitive_mirror.clone()),
-        Some(serendipity_engine.clone()),
-        Some(knowledge_evolution_tracker.clone()),
+        cognitive_services,
         Some(page_repo.clone()),
         Some(block_repo.clone()),
     ));
@@ -372,7 +376,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .app_data_dir()
                 .expect("Failed to get app data dir");
 
-            let state = rt.block_on(async { create_app_state(app_data_dir.clone()).await })?;
+            let state = rt.block_on(async { create_app_state(app_data_dir.join("quilt.db")).await })?;
             info!("App state created, managing in Tauri");
             app.manage(state);
 

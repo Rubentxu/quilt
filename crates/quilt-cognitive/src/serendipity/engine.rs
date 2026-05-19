@@ -7,7 +7,7 @@ use crate::serendipity::types::{
 use lru::LruCache;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{JournalDay, Uuid};
+use quilt_domain::value_objects::Uuid;
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -297,7 +297,7 @@ mod tests {
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
     use quilt_domain::repositories::BlockRepository;
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, JournalDay};
     use std::collections::HashMap;
 
     fn uuid_from_u8(i: u8) -> Uuid {

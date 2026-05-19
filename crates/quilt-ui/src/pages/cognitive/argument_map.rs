@@ -253,7 +253,7 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
                             Some(Err(BridgeError::Unavailable(s))) => s.clone(),
                             _ => String::new(),
                         };
-                        view! { <MapErrorState message={msg} on_retry={cb.clone()} /> }
+                        view! { <MapErrorState message={msg} on_retry={cb} /> }
                     }}
                 >
                     <div class="argument-tree">

@@ -155,15 +155,15 @@ impl ForceSimulation {
 
         let nodes: Vec<SimNode> = ids
             .into_iter()
-            .zip(names.into_iter())
-            .zip(journals.into_iter())
-            .zip(connection_counts.into_iter())
+            .zip(names)
+            .zip(journals)
+            .zip(connection_counts)
             .map(|(((id, name), journal), count)| SimNode::new(id, name, journal, count))
             .collect();
 
         let edges: Vec<SimEdge> = sources
             .into_iter()
-            .zip(targets.into_iter())
+            .zip(targets)
             .map(|(s, t)| SimEdge {
                 source_idx: s,
                 target_idx: t,

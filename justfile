@@ -48,9 +48,24 @@ run +args="":
 run-server db_path="quilt.db":
     cargo run -p quilt-bin -- --db-path {{db_path}} serve
 
-# Run the Tauri desktop app in dev mode
+# Run the Tauri desktop app in dev mode (UI via trunk + Rust backend)
 run-desktop:
+    cd crates/quilt-ui && trunk serve --port 1420 &
+    sleep 3
     cd crates/quilt-platform/src-tauri && cargo tauri dev
+
+# Build complete desktop app: WASM UI + Tauri binary
+build-desktop: build-wasm
+    ln -sf ../quilt-ui/dist crates/quilt-platform/src-tauri/dist
+    cd crates/quilt-platform/src-tauri && cargo tauri build -r
+
+# Build Tauri release only (assumes UI already built)
+build-desktop-standalone:
+    cd crates/quilt-platform/src-tauri && cargo tauri build -r
+
+# Link UI dist to Tauri expected location
+link-ui-dist:
+    ln -sf ../quilt-ui/dist crates/quilt-platform/src-tauri/dist
 
 # ── Test ─────────────────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ use crate::agent_memory::types::{InteractionProfile, MemoryEntry, MemoryQuery, T
 use crate::ai_client::AIClient;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{BlockFormat, JournalDay, PropertyValue, Uuid as DomainUuid};
+use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid as DomainUuid};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -260,6 +260,7 @@ mod tests {
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
     use quilt_domain::repositories::BlockRepository;
+    use quilt_domain::value_objects::JournalDay;
     use quilt_domain::Uuid;
     use std::collections::HashMap;
 

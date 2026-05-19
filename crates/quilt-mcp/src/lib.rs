@@ -31,6 +31,7 @@
 
 pub mod cognitive;
 pub mod errors;
+pub mod handlers;
 pub mod helpers;
 pub mod hooks;
 pub mod notifications;

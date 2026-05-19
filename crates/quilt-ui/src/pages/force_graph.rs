@@ -91,70 +91,54 @@ pub fn ForceGraph(data: GraphDataDto, on_node_click: Callback<String>) -> impl I
     build_sim();
 
     // Redraw function
-    let redraw = {
-        let canvas_ref = canvas_ref.clone();
-        let zoom = zoom.clone();
-        let pan_x = pan_x.clone();
-        let pan_y = pan_y.clone();
-        let hovered_idx = hovered_idx.clone();
-        let highlight_idx = highlight_idx.clone();
-        let filter_pages = filter_pages.clone();
-        let filter_journals = filter_journals.clone();
-        let search_query = search_query.clone();
-        let simulation = simulation.clone();
+    #[allow(clippy::clone_on_copy)]
+    let redraw = move || {
+        let canvas: HtmlCanvasElement = match canvas_ref.get() {
+            Some(c) => c,
+            None => return,
+        };
 
-        move || {
-            let canvas: HtmlCanvasElement = match canvas_ref.get() {
-                Some(c) => c,
-                None => return,
-            };
+        let renderer = match CanvasRenderer::new(canvas) {
+            Ok(r) => r,
+            Err(_) => return,
+        };
 
-            let renderer = match CanvasRenderer::new(canvas) {
-                Ok(r) => r,
-                Err(_) => return,
-            };
+        let sim = simulation.get();
+        let sim = match sim.as_ref() {
+            Some(s) => s,
+            None => return,
+        };
 
-            let sim = simulation.get();
-            let sim = match sim.as_ref() {
-                Some(s) => s,
-                None => return,
-            };
+        let nodes = sim.nodes();
+        let edges = sim.edges();
+        let hi = highlight_idx.get_value();
+        let ho = hovered_idx.get_value();
+        let fp = filter_pages.get();
+        let fj = filter_journals.get();
+        let sq = search_query.get();
 
-            let nodes = sim.nodes();
-            let edges = sim.edges();
-            let hi = highlight_idx.get_value();
-            let ho = hovered_idx.get_value();
-            let fp = filter_pages.get();
-            let fj = filter_journals.get();
-            let sq = search_query.get();
-
-            renderer.draw_with_search(
-                nodes,
-                edges,
-                zoom.get(),
-                pan_x.get(),
-                pan_y.get(),
-                hi,
-                hi.is_some(),
-                ho,
-                fj,
-                fp,
-                &sq,
-            );
-        }
+        renderer.draw_with_search(
+            nodes,
+            edges,
+            zoom.get(),
+            pan_x.get(),
+            pan_y.get(),
+            hi,
+            hi.is_some(),
+            ho,
+            fj,
+            fp,
+            &sq,
+        );
     };
 
     // Animation loop — runs continuously for smooth interaction
     let _start_animation = {
-        let simulation = simulation.clone();
-        let redraw = redraw.clone();
-
         move || {
-            let sim_clone = simulation.clone();
-            let redraw_clone = redraw.clone();
+            let sim_clone = simulation;
 
             fn anim_loop(sim: RwSignal<Option<ForceSimulation>>, rd: impl Fn() + Clone + 'static) {
-                let sim2 = sim.clone();
+                let sim2 = sim;
                 let rd2 = rd.clone();
                 // Always step simulation for smooth animation
                 sim.update(|s| {
@@ -172,305 +156,220 @@ pub fn ForceGraph(data: GraphDataDto, on_node_click: Callback<String>) -> impl I
                 });
             }
 
+            #[allow(clippy::clone_on_copy)]
             request_animation_frame(move || {
-                anim_loop(sim_clone, redraw_clone);
+                anim_loop(sim_clone, redraw.clone());
             });
         }
     };
 
     // Zoom via wheel
-    let on_wheel = {
-        let zoom = zoom.clone();
-        let redraw = redraw.clone();
-
-        move |ev: WheelEvent| {
-            ev.prevent_default();
-            let factor = if ev.delta_y() > 0.0 { 0.92 } else { 1.08 };
-            zoom.update(|v| *v = (*v * factor).clamp(0.3, 3.0));
-            redraw();
-        }
+    let on_wheel = move |ev: WheelEvent| {
+        ev.prevent_default();
+        let factor = if ev.delta_y() > 0.0 { 0.92 } else { 1.08 };
+        zoom.update(|v| *v = (*v * factor).clamp(0.3, 3.0));
+        redraw();
     };
 
     // Mouse down
-    let on_mouse_down = {
-        let is_panning = is_panning.clone();
-        let last_mouse = last_mouse.clone();
-        let dragged_idx = dragged_idx.clone();
-        let highlight_idx = highlight_idx.clone();
-        let simulation = simulation.clone();
-        let zoom = zoom.clone();
-        let pan_x = pan_x.clone();
-        let pan_y = pan_y.clone();
-        let filter_pages = filter_pages.clone();
-        let filter_journals = filter_journals.clone();
-        let canvas_ref = canvas_ref.clone();
-        let redraw = redraw.clone();
+    let on_mouse_down = move |ev: MouseEvent| {
+        let (x, y) = match get_mouse_pos_in_canvas(&ev) {
+            Some(pos) => pos,
+            None => return,
+        };
 
-        move |ev: MouseEvent| {
-            let (x, y) = match get_mouse_pos_in_canvas(&ev) {
-                Some(pos) => pos,
-                None => return,
-            };
+        let canvas: HtmlCanvasElement = match canvas_ref.get() {
+            Some(c) => c,
+            None => return,
+        };
 
-            let canvas: HtmlCanvasElement = match canvas_ref.get() {
-                Some(c) => c,
-                None => return,
-            };
+        let renderer = match CanvasRenderer::new(canvas) {
+            Ok(r) => r,
+            Err(_) => return,
+        };
 
-            let renderer = match CanvasRenderer::new(canvas) {
-                Ok(r) => r,
-                Err(_) => return,
-            };
+        let sim = simulation.get();
+        let sim = match sim.as_ref() {
+            Some(s) => s,
+            None => return,
+        };
 
-            let sim = simulation.get();
-            let sim = match sim.as_ref() {
-                Some(s) => s,
-                None => return,
-            };
+        let hit = renderer.hit_test(
+            x,
+            y,
+            sim.nodes(),
+            zoom.get(),
+            pan_x.get(),
+            pan_y.get(),
+            filter_pages.get(),
+            filter_journals.get(),
+        );
 
-            let hit = renderer.hit_test(
-                x,
-                y,
-                sim.nodes(),
-                zoom.get(),
-                pan_x.get(),
-                pan_y.get(),
-                filter_pages.get(),
-                filter_journals.get(),
-            );
-
-            if let Some(idx) = hit {
-                dragged_idx.set_value(Some(idx));
-                highlight_idx.set_value(Some(idx));
-            } else {
-                is_panning.set_value(true);
-            }
-
-            last_mouse.set_value((x, y));
-            redraw();
+        if let Some(idx) = hit {
+            dragged_idx.set_value(Some(idx));
+            highlight_idx.set_value(Some(idx));
+        } else {
+            is_panning.set_value(true);
         }
+
+        last_mouse.set_value((x, y));
+        redraw();
     };
 
     // Mouse move
-    let on_mouse_move = {
-        let is_panning = is_panning.clone();
-        let dragged_idx = dragged_idx.clone();
-        let last_mouse = last_mouse.clone();
-        let hovered_idx = hovered_idx.clone();
-        let pan_x = pan_x.clone();
-        let pan_y = pan_y.clone();
-        let zoom = zoom.clone();
-        let simulation = simulation.clone();
-        let filter_pages = filter_pages.clone();
-        let filter_journals = filter_journals.clone();
-        let tooltip = tooltip.clone();
-        let canvas_ref = canvas_ref.clone();
-        let redraw = redraw.clone();
+    let on_mouse_move = move |ev: MouseEvent| {
+        let (x, y) = match get_mouse_pos_in_canvas(&ev) {
+            Some(pos) => pos,
+            None => return,
+        };
+        let (lx, ly) = last_mouse.get_value();
 
-        move |ev: MouseEvent| {
-            let (x, y) = match get_mouse_pos_in_canvas(&ev) {
-                Some(pos) => pos,
-                None => return,
-            };
-            let (lx, ly) = last_mouse.get_value();
-
-            if is_panning.get_value() {
-                pan_x.update(|v| *v += x - lx);
-                pan_y.update(|v| *v += y - ly);
-            } else if let Some(idx) = dragged_idx.get_value() {
-                let canvas: HtmlCanvasElement = match canvas_ref.get() {
-                    Some(c) => c,
-                    None => return,
-                };
-                let renderer = match CanvasRenderer::new(canvas) {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
-                let (gx, gy) = renderer.screen_to_graph(x, y, zoom.get(), pan_x.get(), pan_y.get());
-                simulation.update(|s| {
-                    if let Some(ref mut inner) = *s {
-                        inner.move_node(idx, gx, gy);
-                    }
-                });
-            } else {
-                let canvas: HtmlCanvasElement = match canvas_ref.get() {
-                    Some(c) => c,
-                    None => return,
-                };
-                let renderer = match CanvasRenderer::new(canvas) {
-                    Ok(r) => r,
-                    Err(_) => return,
-                };
-
-                let sim = simulation.get();
-                if let Some(ref sim) = sim.as_ref() {
-                    let hit = renderer.hit_test(
-                        x,
-                        y,
-                        sim.nodes(),
-                        zoom.get(),
-                        pan_x.get(),
-                        pan_y.get(),
-                        filter_pages.get(),
-                        filter_journals.get(),
-                    );
-                    hovered_idx.set_value(hit);
-                    if let Some(idx) = hit {
-                        let node = &sim.nodes()[idx];
-                        tooltip.set_value(Some((x, y, node.name.clone())));
-                    } else {
-                        tooltip.set_value(None);
-                    }
-                }
-            }
-
-            last_mouse.set_value((x, y));
-            redraw();
-        }
-    };
-
-    // Mouse up
-    let on_mouse_up = {
-        let is_panning = is_panning.clone();
-        let dragged_idx = dragged_idx.clone();
-
-        move |_ev: MouseEvent| {
-            is_panning.set_value(false);
-            dragged_idx.set_value(None);
-        }
-    };
-
-    // Click
-    let on_click = {
-        let highlight_idx = highlight_idx.clone();
-        let simulation = simulation.clone();
-        let zoom = zoom.clone();
-        let pan_x = pan_x.clone();
-        let pan_y = pan_y.clone();
-        let filter_pages = filter_pages.clone();
-        let filter_journals = filter_journals.clone();
-        let on_node_click = on_node_click.clone();
-        let canvas_ref = canvas_ref.clone();
-        let redraw = redraw.clone();
-
-        move |ev: MouseEvent| {
-            let (x, y) = match get_mouse_pos_in_canvas(&ev) {
-                Some(pos) => pos,
-                None => return,
-            };
-
+        if is_panning.get_value() {
+            pan_x.update(|v| *v += x - lx);
+            pan_y.update(|v| *v += y - ly);
+        } else if let Some(idx) = dragged_idx.get_value() {
             let canvas: HtmlCanvasElement = match canvas_ref.get() {
                 Some(c) => c,
                 None => return,
             };
-
+            let renderer = match CanvasRenderer::new(canvas) {
+                Ok(r) => r,
+                Err(_) => return,
+            };
+            let (gx, gy) = renderer.screen_to_graph(x, y, zoom.get(), pan_x.get(), pan_y.get());
+            simulation.update(|s| {
+                if let Some(ref mut inner) = *s {
+                    inner.move_node(idx, gx, gy);
+                }
+            });
+        } else {
+            let canvas: HtmlCanvasElement = match canvas_ref.get() {
+                Some(c) => c,
+                None => return,
+            };
             let renderer = match CanvasRenderer::new(canvas) {
                 Ok(r) => r,
                 Err(_) => return,
             };
 
             let sim = simulation.get();
-            let sim = match sim.as_ref() {
-                Some(s) => s,
-                None => return,
-            };
-
-            if let Some(idx) = renderer.hit_test(
-                x,
-                y,
-                sim.nodes(),
-                zoom.get(),
-                pan_x.get(),
-                pan_y.get(),
-                filter_pages.get(),
-                filter_journals.get(),
-            ) {
-                let node = &sim.nodes()[idx];
-                on_node_click.run(node.id.clone());
+            if let Some(sim) = sim.as_ref() {
+                let hit = renderer.hit_test(
+                    x,
+                    y,
+                    sim.nodes(),
+                    zoom.get(),
+                    pan_x.get(),
+                    pan_y.get(),
+                    filter_pages.get(),
+                    filter_journals.get(),
+                );
+                hovered_idx.set_value(hit);
+                if let Some(idx) = hit {
+                    let node = &sim.nodes()[idx];
+                    tooltip.set_value(Some((x, y, node.name.clone())));
+                } else {
+                    tooltip.set_value(None);
+                }
             }
-
-            highlight_idx.set_value(None);
-            redraw();
         }
+
+        last_mouse.set_value((x, y));
+        redraw();
+    };
+
+    // Mouse up
+    let on_mouse_up = move |_ev: MouseEvent| {
+        is_panning.set_value(false);
+        dragged_idx.set_value(None);
+    };
+
+    // Click
+    let on_click = move |ev: MouseEvent| {
+        let (x, y) = match get_mouse_pos_in_canvas(&ev) {
+            Some(pos) => pos,
+            None => return,
+        };
+
+        let canvas: HtmlCanvasElement = match canvas_ref.get() {
+            Some(c) => c,
+            None => return,
+        };
+
+        let renderer = match CanvasRenderer::new(canvas) {
+            Ok(r) => r,
+            Err(_) => return,
+        };
+
+        let sim = simulation.get();
+        let sim = match sim.as_ref() {
+            Some(s) => s,
+            None => return,
+        };
+
+        if let Some(idx) = renderer.hit_test(
+            x,
+            y,
+            sim.nodes(),
+            zoom.get(),
+            pan_x.get(),
+            pan_y.get(),
+            filter_pages.get(),
+            filter_journals.get(),
+        ) {
+            let node = &sim.nodes()[idx];
+            on_node_click.run(node.id.clone());
+        }
+
+        highlight_idx.set_value(None);
+        redraw();
     };
 
     // Mouse leave
-    let on_mouse_leave = {
-        let hovered_idx = hovered_idx.clone();
-        let tooltip = tooltip.clone();
-        let redraw = redraw.clone();
-
-        move |_ev: MouseEvent| {
-            hovered_idx.set_value(None);
-            tooltip.set_value(None);
-            redraw();
-        }
+    let on_mouse_leave = move |_ev: MouseEvent| {
+        hovered_idx.set_value(None);
+        tooltip.set_value(None);
+        redraw();
     };
 
     // Zoom controls
-    let zoom_in = {
-        let zoom = zoom.clone();
-        let redraw = redraw.clone();
-        move |_| {
-            zoom.update(|v| *v = (*v * 1.2).min(3.0));
-            redraw();
-        }
+    let zoom_in = move |_| {
+        zoom.update(|v| *v = (*v * 1.2).min(3.0));
+        redraw();
     };
 
-    let zoom_out = {
-        let zoom = zoom.clone();
-        let redraw = redraw.clone();
-        move |_| {
-            zoom.update(|v| *v = (*v * 0.8).max(0.3));
-            redraw();
-        }
+    let zoom_out = move |_| {
+        zoom.update(|v| *v = (*v * 0.8).max(0.3));
+        redraw();
     };
 
-    let zoom_reset = {
-        let zoom = zoom.clone();
-        let pan_x = pan_x.clone();
-        let pan_y = pan_y.clone();
-        let redraw = redraw.clone();
-        move |_| {
-            zoom.set(1.0);
-            pan_x.set(0.0);
-            pan_y.set(0.0);
-            redraw();
-        }
+    let zoom_reset = move |_| {
+        zoom.set(1.0);
+        pan_x.set(0.0);
+        pan_y.set(0.0);
+        redraw();
     };
 
     // Filter toggles
-    let toggle_pages = {
-        let filter_pages = filter_pages.clone();
-        let redraw = redraw.clone();
-        move |_| {
-            filter_pages.update(|v| *v = !*v);
-            redraw();
-        }
+    let toggle_pages = move |_| {
+        filter_pages.update(|v| *v = !*v);
+        redraw();
     };
 
-    let toggle_journals = {
-        let filter_journals = filter_journals.clone();
-        let redraw = redraw.clone();
-        move |_| {
-            filter_journals.update(|v| *v = !*v);
-            redraw();
-        }
+    let toggle_journals = move |_| {
+        filter_journals.update(|v| *v = !*v);
+        redraw();
     };
 
     // Re-layout
-    let re_layout = {
-        let simulation = simulation.clone();
-        let redraw = redraw.clone();
-        move |_| {
-            simulation.update(|s| {
-                if let Some(ref mut inner) = *s {
-                    inner.randomize_positions();
-                    inner.run();
-                }
-            });
-            redraw();
-        }
+    let re_layout = move |_| {
+        simulation.update(|s| {
+            if let Some(ref mut inner) = *s {
+                inner.randomize_positions();
+                inner.run();
+            }
+        });
+        redraw();
     };
 
     // Start animation immediately (canvas ref will be available when events fire)

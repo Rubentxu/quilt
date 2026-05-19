@@ -3,11 +3,14 @@
 //! Renders a ForceSimulation to an HTML5 Canvas using web-sys.
 //! Handles zoom/pan transforms, hit testing, and drawing nodes/edges.
 
+#![allow(unused_must_use)]
+
 use crate::pages::force_simulation::{SimEdge, SimNode};
 use wasm_bindgen::JsCast;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement};
 
 /// Renderer for the force-directed graph
+#[allow(dead_code)]
 pub struct CanvasRenderer {
     canvas: HtmlCanvasElement,
     ctx: CanvasRenderingContext2d,
@@ -44,10 +47,11 @@ impl CanvasRenderer {
 
     /// Clear the canvas
     pub fn clear(&self) {
-        let _ = self.ctx.clear_rect(0.0, 0.0, self.width, self.height);
+        self.ctx.clear_rect(0.0, 0.0, self.width, self.height);
     }
 
     /// Draw with search filtering - filters nodes by name
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_with_search(
         &self,
         nodes: &[SimNode],
@@ -105,6 +109,7 @@ impl CanvasRenderer {
     }
 
     /// Internal draw with search filtering
+    #[allow(clippy::too_many_arguments)]
     fn draw_search(
         &self,
         nodes: &[SimNode],
@@ -123,16 +128,16 @@ impl CanvasRenderer {
 
         // Background
         self.ctx.set_fill_style_str("#0f172a");
-        let _ = self.ctx.fill_rect(0.0, 0.0, self.width, self.height);
+        self.ctx.fill_rect(0.0, 0.0, self.width, self.height);
 
         // Save context and apply transform
-        let _ = self.ctx.save();
-        let _ = self.ctx.translate(pan_x, pan_y);
-        let _ = self.ctx.scale(zoom, zoom);
+        self.ctx.save();
+        self.ctx.translate(pan_x, pan_y);
+        self.ctx.scale(zoom, zoom);
 
         // Build node lookup
         let node_map: std::collections::HashMap<usize, &SimNode> =
-            nodes.iter().enumerate().map(|(i, n)| (i, n)).collect();
+            nodes.iter().enumerate().collect();
 
         // Draw edges (only those connecting visible nodes)
         self.draw_edges_search(
@@ -173,7 +178,7 @@ impl CanvasRenderer {
             );
         }
 
-        let _ = self.ctx.restore();
+        self.ctx.restore();
     }
 
     /// Draw a single node with search dimming
@@ -208,28 +213,27 @@ impl CanvasRenderer {
         };
 
         if highlighted || hovered {
-            let _ = self.ctx.set_shadow_color(base_color);
-            let _ = self.ctx.set_shadow_blur(if hovered { 20.0 } else { 15.0 });
+            self.ctx.set_shadow_color(base_color);
+            self.ctx.set_shadow_blur(if hovered { 20.0 } else { 15.0 });
         } else {
-            let _ = self.ctx.set_shadow_color("transparent");
-            let _ = self.ctx.set_shadow_blur(0.0);
+            self.ctx.set_shadow_color("transparent");
+            self.ctx.set_shadow_blur(0.0);
         }
 
         self.ctx.begin_path();
-        let _ = self
-            .ctx
+        self.ctx
             .arc(node.x, node.y, radius, 0.0, 2.0 * std::f64::consts::PI);
-        let _ = self.ctx.set_fill_style_str(&fill_color);
-        let _ = self.ctx.fill();
+        self.ctx.set_fill_style_str(&fill_color);
+        self.ctx.fill();
 
         if highlighted {
-            let _ = self.ctx.set_stroke_style_str("#e0e7ff");
-            let _ = self.ctx.set_line_width(2.0);
-            let _ = self.ctx.stroke();
+            self.ctx.set_stroke_style_str("#e0e7ff");
+            self.ctx.set_line_width(2.0);
+            self.ctx.stroke();
         }
 
-        let _ = self.ctx.set_shadow_color("transparent");
-        let _ = self.ctx.set_shadow_blur(0.0);
+        self.ctx.set_shadow_color("transparent");
+        self.ctx.set_shadow_blur(0.0);
 
         if !search_dimmed {
             self.draw_label(node, dimmed);
@@ -237,9 +241,10 @@ impl CanvasRenderer {
     }
 
     /// Draw edges with search filtering
+    #[allow(clippy::too_many_arguments)]
     fn draw_edges_search(
         &self,
-        nodes: &[SimNode],
+        _nodes: &[SimNode],
         edges: &[SimEdge],
         node_map: &std::collections::HashMap<usize, &SimNode>,
         highlight_idx: Option<usize>,
@@ -266,7 +271,7 @@ impl CanvasRenderer {
             let tgt_match = matching_indices.contains(&edge.target_idx);
 
             let is_highlighted =
-                highlight_idx.map_or(false, |hi| hi == edge.source_idx || hi == edge.target_idx);
+                highlight_idx.is_some_and(|hi| hi == edge.source_idx || hi == edge.target_idx);
             let alpha = if dimmed && !is_highlighted {
                 0.03
             } else if is_highlighted {
@@ -282,6 +287,7 @@ impl CanvasRenderer {
     }
 
     /// Draw the entire graph visualization
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &self,
         nodes: &[SimNode],
@@ -299,16 +305,16 @@ impl CanvasRenderer {
 
         // Background
         self.ctx.set_fill_style_str("#0f172a");
-        let _ = self.ctx.fill_rect(0.0, 0.0, self.width, self.height);
+        self.ctx.fill_rect(0.0, 0.0, self.width, self.height);
 
         // Save context and apply transform
-        let _ = self.ctx.save();
-        let _ = self.ctx.translate(pan_x, pan_y);
-        let _ = self.ctx.scale(zoom, zoom);
+        self.ctx.save();
+        self.ctx.translate(pan_x, pan_y);
+        self.ctx.scale(zoom, zoom);
 
         // Build node lookup
         let node_map: std::collections::HashMap<usize, &SimNode> =
-            nodes.iter().enumerate().map(|(i, n)| (i, n)).collect();
+            nodes.iter().enumerate().collect();
 
         // Draw edges first (behind nodes)
         self.draw_edges(
@@ -338,13 +344,14 @@ impl CanvasRenderer {
             self.draw_node(node, i, is_highlighted, is_hovered, dim);
         }
 
-        let _ = self.ctx.restore();
+        self.ctx.restore();
     }
 
     /// Draw edges between nodes
+    #[allow(clippy::too_many_arguments)]
     fn draw_edges(
         &self,
-        nodes: &[SimNode],
+        _nodes: &[SimNode],
         edges: &[SimEdge],
         node_map: &std::collections::HashMap<usize, &SimNode>,
         highlight_idx: Option<usize>,
@@ -369,7 +376,7 @@ impl CanvasRenderer {
 
             // Highlight logic
             let is_highlighted =
-                highlight_idx.map_or(false, |hi| hi == edge.source_idx || hi == edge.target_idx);
+                highlight_idx.is_some_and(|hi| hi == edge.source_idx || hi == edge.target_idx);
             let alpha = if dimmed && !is_highlighted {
                 0.05
             } else if is_highlighted {
@@ -385,19 +392,19 @@ impl CanvasRenderer {
     /// Draw a single edge
     fn draw_edge(&self, src: &SimNode, tgt: &SimNode, alpha: f64, highlighted: bool) {
         self.ctx.begin_path();
-        let _ = self.ctx.move_to(src.x, src.y);
-        let _ = self.ctx.line_to(tgt.x, tgt.y);
+        self.ctx.move_to(src.x, src.y);
+        self.ctx.line_to(tgt.x, tgt.y);
 
         if highlighted {
-            let _ = self.ctx.set_stroke_style_str("#818cf8");
-            let _ = self.ctx.set_line_width(2.0);
+            self.ctx.set_stroke_style_str("#818cf8");
+            self.ctx.set_line_width(2.0);
         } else {
             let color = format!("rgba(99,102,241,{})", alpha);
-            let _ = self.ctx.set_stroke_style_str(&color);
-            let _ = self.ctx.set_line_width(1.0);
+            self.ctx.set_stroke_style_str(&color);
+            self.ctx.set_line_width(1.0);
         }
 
-        let _ = self.ctx.stroke();
+        self.ctx.stroke();
     }
 
     /// Draw a single node
@@ -429,31 +436,30 @@ impl CanvasRenderer {
 
         // Glow for highlighted/hovered
         if highlighted || hovered {
-            let _ = self.ctx.set_shadow_color(base_color);
-            let _ = self.ctx.set_shadow_blur(if hovered { 20.0 } else { 15.0 });
+            self.ctx.set_shadow_color(base_color);
+            self.ctx.set_shadow_blur(if hovered { 20.0 } else { 15.0 });
         } else {
-            let _ = self.ctx.set_shadow_color("transparent");
-            let _ = self.ctx.set_shadow_blur(0.0);
+            self.ctx.set_shadow_color("transparent");
+            self.ctx.set_shadow_blur(0.0);
         }
 
         // Draw circle
         self.ctx.begin_path();
-        let _ = self
-            .ctx
+        self.ctx
             .arc(node.x, node.y, radius, 0.0, 2.0 * std::f64::consts::PI);
-        let _ = self.ctx.set_fill_style_str(&fill_color);
-        let _ = self.ctx.fill();
+        self.ctx.set_fill_style_str(&fill_color);
+        self.ctx.fill();
 
         // Border for highlighted
         if highlighted {
-            let _ = self.ctx.set_stroke_style_str("#e0e7ff");
-            let _ = self.ctx.set_line_width(2.0);
-            let _ = self.ctx.stroke();
+            self.ctx.set_stroke_style_str("#e0e7ff");
+            self.ctx.set_line_width(2.0);
+            self.ctx.stroke();
         }
 
         // Reset shadow
-        let _ = self.ctx.set_shadow_color("transparent");
-        let _ = self.ctx.set_shadow_blur(0.0);
+        self.ctx.set_shadow_color("transparent");
+        self.ctx.set_shadow_blur(0.0);
 
         // Draw label
         self.draw_label(node, dimmed);
@@ -468,8 +474,8 @@ impl CanvasRenderer {
         // Fixed width for label (page names are typically short)
         let text_width = 80.0;
         let padding = 4.0;
-        let _ = self.ctx.set_fill_style_str("rgba(15, 23, 42, 0.8)");
-        let _ = self.ctx.fill_rect(
+        self.ctx.set_fill_style_str("rgba(15, 23, 42, 0.8)");
+        self.ctx.fill_rect(
             x - text_width / 2.0 - padding,
             y - 10.0,
             text_width + padding * 2.0,
@@ -479,14 +485,15 @@ impl CanvasRenderer {
         // Text
         let alpha = if dimmed { 0.4 } else { 1.0 };
         let color = format!("rgba(226,232,240,{})", alpha);
-        let _ = self.ctx.set_fill_style_str(&color);
-        let _ = self.ctx.set_font("12px system-ui, sans-serif");
-        let _ = self.ctx.set_text_align("center");
-        let _ = self.ctx.set_text_baseline("top");
-        let _ = self.ctx.fill_text(label, x, y);
+        self.ctx.set_fill_style_str(&color);
+        self.ctx.set_font("12px system-ui, sans-serif");
+        self.ctx.set_text_align("center");
+        self.ctx.set_text_baseline("top");
+        self.ctx.fill_text(label, x, y);
     }
 
     /// Hit test: convert screen coordinates to find node at position
+    #[allow(clippy::too_many_arguments)]
     pub fn hit_test(
         &self,
         screen_x: f64,

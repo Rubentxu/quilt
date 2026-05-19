@@ -117,7 +117,7 @@ pub fn GraphView() -> impl IntoView {
                                 last_updated: String::new(),
                             });
                         view! {
-                            <ForceGraph data={data} on_node_click={on_node_click.clone()} />
+                            <ForceGraph data={data} on_node_click={on_node_click} />
                         }
                     }}
                 </Show>

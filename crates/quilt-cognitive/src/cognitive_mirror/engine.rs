@@ -7,7 +7,7 @@ use crate::cognitive_mirror::graph::build_cognitive_map;
 use crate::cognitive_mirror::types::{CognitiveMap, KnowledgeCluster};
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{JournalDay, Uuid};
+use quilt_domain::value_objects::Uuid;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::instrument;
@@ -119,7 +119,7 @@ mod tests {
     use quilt_domain::entities::Block;
     use quilt_domain::errors::DomainError;
     use quilt_domain::repositories::BlockRepository;
-    use quilt_domain::value_objects::{BlockFormat, Uuid};
+    use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
     use std::collections::HashMap;
 
     fn make_block(id: Uuid, refs: Vec<Uuid>, page_id: Uuid) -> Block {

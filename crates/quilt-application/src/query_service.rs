@@ -6,7 +6,6 @@
 //! using a DSL (Domain Specific Language) that gets translated to SQL.
 
 use quilt_domain::entities::Block;
-use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
 use quilt_query::executor::SqlParam;
 use quilt_query::{QueryExecutor, QueryParser};
@@ -293,6 +292,7 @@ mod tests {
     use super::*;
     use quilt_domain::entities::{BlockCreate, PageCreate};
     use quilt_domain::repositories::{BlockRepository, PageRepository};
+    use quilt_domain::TimezoneService;
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
         SqliteBlockRepository, SqlitePageRepository,

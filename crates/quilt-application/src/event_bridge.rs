@@ -19,12 +19,80 @@ use tokio::sync::broadcast;
 use tracing::instrument;
 
 #[cfg(feature = "tokio-runtime")]
+/// Debouncer coalesces rapid events within a time window.
+///
+/// This struct is testable because the sleep duration is configurable
+/// and the "should process" logic can be tested in isolation.
+pub struct Debouncer {
+    /// Duration to wait before processing
+    duration: Duration,
+    /// Last event timestamp (for testing)
+    #[cfg(test)]
+    last_event_time: Option<std::time::Instant>,
+}
+
+#[cfg(feature = "tokio-runtime")]
+impl Debouncer {
+    /// Create a new Debouncer with the given duration.
+    pub fn new(duration: Duration) -> Self {
+        Self {
+            duration,
+            #[cfg(test)]
+            last_event_time: None,
+        }
+    }
+
+    /// Default debounce duration: 500ms to coalesce rapid file changes.
+    pub fn default_debouncer() -> Self {
+        Self::new(Duration::from_millis(500))
+    }
+
+    /// Wait for the debounce period and return.
+    /// Call this after receiving an event.
+    #[cfg(not(test))]
+    pub async fn wait(&mut self) {
+        tokio::time::sleep(self.duration).await;
+    }
+
+    /// Wait for the debounce period (testable version uses Instant::now for determinism).
+    #[cfg(test)]
+    pub async fn wait(&mut self) {
+        // In test mode, just record the time without actual sleeping
+        let now = std::time::Instant::now();
+        if let Some(last) = self.last_event_time {
+            let elapsed = now.duration_since(last);
+            if elapsed < self.duration {
+                // Would have slept for self.duration - elapsed
+                tracing::debug!("Debouncer: would sleep for {:?}", self.duration - elapsed);
+            }
+        }
+        self.last_event_time = Some(now);
+    }
+
+    /// Check if we should process an event that arrives after `since`.
+    /// Returns true if enough time has passed since the last event.
+    pub fn should_process(&self, since: std::time::Instant) -> bool {
+        let elapsed = since.elapsed();
+        elapsed >= self.duration
+    }
+}
+
+#[cfg(feature = "tokio-runtime")]
+impl Default for Debouncer {
+    fn default() -> Self {
+        Self::default_debouncer()
+    }
+}
+
+#[cfg(feature = "tokio-runtime")]
 /// EventBridge subscribes to file change events and triggers search index updates.
 pub struct EventBridge {
     /// Receiver for AppEvent broadcasts
     receiver: broadcast::Receiver<AppEvent>,
     /// Search index manager for FTS5 operations
     search_index: SearchIndexManager,
+    /// Debouncer for coalescing rapid events
+    debouncer: Debouncer,
 }
 
 #[cfg(feature = "tokio-runtime")]
@@ -34,6 +102,20 @@ impl EventBridge {
         Self {
             receiver,
             search_index,
+            debouncer: Debouncer::default_debouncer(),
+        }
+    }
+
+    /// Create a new EventBridge with custom debounce duration.
+    pub fn with_debouncer(
+        search_index: SearchIndexManager,
+        receiver: broadcast::Receiver<AppEvent>,
+        debounce_duration: Duration,
+    ) -> Self {
+        Self {
+            receiver,
+            search_index,
+            debouncer: Debouncer::new(debounce_duration),
         }
     }
 
@@ -43,15 +125,12 @@ impl EventBridge {
     /// incremental rebuilds on the search index.
     #[instrument(skip(self))]
     pub async fn run(mut self) -> Result<(), ApplicationError> {
-        // Debounce duration: wait for event storm to settle
-        let debounce_duration = Duration::from_millis(500);
-
         loop {
             // Wait for the next event
             match self.receiver.recv().await {
                 Ok(AppEvent::FileChanged(change)) => {
                     // Wait for debounce period to coalesce rapid file changes
-                    tokio::time::sleep(debounce_duration).await;
+                    self.debouncer.wait().await;
 
                     // Process based on event type
                     match change.event_type {
@@ -117,7 +196,7 @@ mod tests {
         drop(tx);
 
         // Verify receiver still works after sender dropped
-        let mut rx = rx;
+        let _rx = rx;
         // This will return an error since channel is closed - that's expected
     }
 

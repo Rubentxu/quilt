@@ -4,7 +4,6 @@ use crate::entities::Block;
 use crate::errors::DomainError;
 use crate::repositories::ClassRepository;
 use crate::repositories::PropertyRepository;
-use crate::services::TimezoneService;
 use crate::value_objects::Uuid;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -132,6 +131,7 @@ impl<C: ClassRepository, P: PropertyRepository> ClassValidator<C, P> {
 mod tests {
     use super::*;
     use crate::classes::types::Class;
+    use crate::services::TimezoneService;
     use crate::value_objects::Uuid;
     use std::collections::HashMap;
 

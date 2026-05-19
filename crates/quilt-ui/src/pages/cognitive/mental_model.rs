@@ -274,7 +274,7 @@ pub fn MentalModelGarden() -> impl IntoView {
                             Some(Err(BridgeError::Unavailable(s))) => s.clone(),
                             _ => String::new(),
                         };
-                        view! { <ModelErrorState message={msg} on_retry={cb.clone()} /> }
+                        view! { <ModelErrorState message={msg} on_retry={cb} /> }
                     }}
                 >
                     <div class="model-sections">

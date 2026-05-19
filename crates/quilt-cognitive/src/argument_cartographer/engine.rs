@@ -7,7 +7,7 @@ use crate::argument_cartographer::types::*;
 use quilt_domain::entities::Block;
 use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{JournalDay, Uuid};
+use quilt_domain::value_objects::Uuid;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tracing::instrument;
@@ -628,7 +628,7 @@ fn detect_cycle(node_id: Uuid, edges: &[ArgumentEdge]) -> bool {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, JournalDay};
     use std::collections::HashMap;
 
     fn make_block(id: Uuid, refs: Vec<Uuid>, page_id: Uuid, content: &str) -> Block {

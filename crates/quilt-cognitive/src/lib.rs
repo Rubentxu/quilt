@@ -41,8 +41,9 @@ pub use mental_model_gardener::{
     Belief, BeliefSnapshot, Contradiction, DeepeningSuggestion, MentalModel, MentalModelGardener,
 };
 pub use morning_briefing::{
-    BriefingStatsDto, CognitivePulseDto, DecayAlertDto, KnowledgeEvolutionDto, MorningBriefing,
-    MorningBriefingDto, SerendipityHighlightDto,
+    BriefingStatsDto, CognitivePulseDto, DecayAlertDto, DefaultMorningBriefingServices,
+    KnowledgeEvolutionDto, MorningBriefing, MorningBriefingDto, MorningBriefingServices,
+    SerendipityHighlightDto,
 };
 pub use serendipity::SerendipityEngine;
 pub use tree_rag::{

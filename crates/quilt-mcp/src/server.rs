@@ -4,6 +4,7 @@
 //! Wired to real repositories, search, and query services.
 
 use crate::cognitive::CognitiveEngineStatus;
+use crate::handlers::HandlerContainer;
 use crate::helpers::{
     block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid,
 };
@@ -39,31 +40,44 @@ use tracing::instrument;
 /// This server implements the Model Context Protocol, providing AI agents
 /// with tools to query and modify the Quilt knowledge graph.
 ///
-/// # Type Parameters
+/// # Handler-Based Architecture
 ///
-/// The server uses trait objects for repositories, allowing any
-/// implementation of the repository traits to be used.
+/// The server uses [`HandlerContainer`] to delegate tool execution to
+/// domain-specific handlers. This reduces the server's field count and
+/// enables focused testing of each tool domain.
+///
+/// For backward compatibility, the server also supports direct repository
+/// access via the legacy fields when handlers are not configured.
 ///
 /// # Example
 ///
 /// ```
-/// use quilt_mcp::McpServer;
+/// use quilt_mcp::{McpServer, handlers::HandlerContainer};
 /// use quilt_search::SearchService;
 /// use std::sync::Arc;
 ///
 /// async {
-///     // let server = McpServer::new(
-///     //     Arc::new(block_repo),
-///     //     Arc::new(page_repo),
-///     //     Arc::new(tag_repo),
-///     //     Arc::new(search),
-///     // );
+///     // New handler-based construction:
+///     // let handlers = HandlerContainer::new()
+///     //     .with_block_handler(DefaultBlockHandler::new(...))
+///     //     .with_page_handler(DefaultPageHandler::new(...));
+///     // let server = McpServer::new(handlers, ...);
 /// };
 /// ```
 pub struct McpServer {
+    /// Handler container for tool execution delegation.
+    /// When set, tools are executed via handlers instead of direct repository access.
+    #[allow(dead_code)]
+    handlers: Option<HandlerContainer>,
+
+    // ── Legacy fields (for backward compatibility) ────────────────────────
+    #[allow(dead_code)]
     block_repo: Arc<dyn BlockRepository>,
+    #[allow(dead_code)]
     page_repo: Arc<dyn PageRepository>,
+    #[allow(dead_code)]
     tag_repo: Arc<dyn TagRepository>,
+    #[allow(dead_code)]
     deep_link_repo: Arc<dyn DeepLinkRepository>,
     search_service: Arc<SearchService>,
     search_index: Option<Arc<SearchIndexManager>>,
@@ -128,6 +142,7 @@ impl McpServer {
     ) -> Self {
         let (notification_sender, _) = broadcast::channel(100);
         Self {
+            handlers: None,
             block_repo,
             page_repo,
             tag_repo,

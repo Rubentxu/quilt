@@ -158,7 +158,7 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
     view! {
         <div class="outliner-tree" data-block-tree>
             <For each={move || flattened_blocks.get()} key=|t| t.block.id.clone() let:item>
-                {let item_id = item.block.id.clone(); let item_id2 = item_id.clone(); let item_id3 = item_id.clone(); let item_id4 = item_id.clone(); let item_id5 = item_id.clone(); let item_id6 = item_id.clone(); view! {
+                {let item_id = item.block.id.clone(); let item_id2 = item_id.clone(); let item_id3 = item_id.clone(); let _item_id4 = item_id.clone(); let item_id5 = item_id.clone(); let item_id6 = item_id.clone(); view! {
                     <div
                         class="outliner-node"
                         data-block-id={item_id}

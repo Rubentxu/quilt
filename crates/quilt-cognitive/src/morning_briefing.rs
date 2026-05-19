@@ -123,27 +123,25 @@ pub struct MorningBriefingDto {
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct MorningBriefing {
-    cognitive_mirror: Option<Arc<CognitiveMirror>>,
-    serendipity_engine: Option<Arc<SerendipityEngine>>,
-    knowledge_evolution: Option<Arc<KnowledgeEvolutionTracker>>,
+    services: Arc<dyn MorningBriefingServices>,
     // Repository access for stats
     page_repo: Option<Arc<dyn PageRepository>>,
     block_repo: Option<Arc<dyn BlockRepository>>,
 }
 
 impl MorningBriefing {
-    /// Create a new MorningBriefing with the given cognitive engines
+    /// Create a new MorningBriefing with the given cognitive services and repositories.
+    ///
+    /// The services parameter provides access to the cognitive engines (CognitiveMirror,
+    /// SerendipityEngine, KnowledgeEvolutionTracker). Repositories are passed separately
+    /// for stats collection.
     pub fn new(
-        cognitive_mirror: Option<Arc<CognitiveMirror>>,
-        serendipity_engine: Option<Arc<SerendipityEngine>>,
-        knowledge_evolution: Option<Arc<KnowledgeEvolutionTracker>>,
+        services: Arc<dyn MorningBriefingServices>,
         page_repo: Option<Arc<dyn PageRepository>>,
         block_repo: Option<Arc<dyn BlockRepository>>,
     ) -> Self {
         Self {
-            cognitive_mirror,
-            serendipity_engine,
-            knowledge_evolution,
+            services,
             page_repo,
             block_repo,
         }
@@ -193,7 +191,7 @@ impl MorningBriefing {
 
     /// Collect cognitive pulse metrics from CognitiveMirror
     async fn collect_cognitive_pulse(&self) -> Result<CognitivePulseDto, String> {
-        let Some(mirror) = &self.cognitive_mirror else {
+        let Some(mirror) = self.services.cognitive_mirror() else {
             return Err("CognitiveMirror not available".to_string());
         };
 
@@ -249,7 +247,7 @@ impl MorningBriefing {
 
     /// Collect top serendipity highlights from SerendipityEngine
     async fn collect_serendipity_highlights(&self) -> Result<Vec<SerendipityHighlightDto>, String> {
-        let Some(engine) = &self.serendipity_engine else {
+        let Some(engine) = self.services.serendipity_engine() else {
             return Err("SerendipityEngine not available".to_string());
         };
 
@@ -386,7 +384,7 @@ impl MorningBriefing {
 
     /// Collect knowledge evolution insights from tracked topics
     async fn collect_knowledge_evolution(&self) -> Result<Vec<KnowledgeEvolutionDto>, String> {
-        let Some(tracker) = &self.knowledge_evolution else {
+        let Some(tracker) = self.services.knowledge_evolution_tracker() else {
             return Err("KnowledgeEvolutionTracker not available".to_string());
         };
 
@@ -434,6 +432,87 @@ impl MorningBriefing {
         insights.truncate(5); // Return top 5
 
         Ok(insights)
+    }
+}
+
+// =============================================================================
+// MorningBriefingServices - Unified trait for MorningBriefing engine access
+// =============================================================================
+
+use async_trait::async_trait;
+use std::fmt::Debug;
+
+/// Unified service trait exposing all cognitive engines needed by MorningBriefing.
+///
+/// This trait enables simplified dependency injection and mock implementations for testing.
+/// All getters return Option since individual engines may be optional.
+pub trait MorningBriefingServices: Send + Sync {
+    /// Get the CognitiveMirror engine if available.
+    fn cognitive_mirror(&self) -> Option<&CognitiveMirror>;
+
+    /// Get the SerendipityEngine if available.
+    fn serendipity_engine(&self) -> Option<&SerendipityEngine>;
+
+    /// Get the KnowledgeEvolutionTracker if available.
+    fn knowledge_evolution_tracker(&self) -> Option<&KnowledgeEvolutionTracker>;
+}
+
+/// Default implementation holding all cognitive engines as optional fields.
+#[derive(Clone)]
+pub struct DefaultMorningBriefingServices {
+    cognitive_mirror: Option<Arc<CognitiveMirror>>,
+    serendipity_engine: Option<Arc<SerendipityEngine>>,
+    knowledge_evolution_tracker: Option<Arc<KnowledgeEvolutionTracker>>,
+}
+
+impl DefaultMorningBriefingServices {
+    /// Create a new DefaultMorningBriefingServices with the given cognitive engines.
+    ///
+    /// All engines are optional - MorningBriefing works in degraded mode if some are unavailable.
+    pub fn new(
+        cognitive_mirror: Arc<CognitiveMirror>,
+        serendipity_engine: Arc<SerendipityEngine>,
+        knowledge_evolution_tracker: Arc<KnowledgeEvolutionTracker>,
+    ) -> Self {
+        Self {
+            cognitive_mirror: Some(cognitive_mirror),
+            serendipity_engine: Some(serendipity_engine),
+            knowledge_evolution_tracker: Some(knowledge_evolution_tracker),
+        }
+    }
+
+    /// Create a new DefaultMorningBriefingServices with all engines set to None.
+    pub fn new_empty() -> Self {
+        Self {
+            cognitive_mirror: None,
+            serendipity_engine: None,
+            knowledge_evolution_tracker: None,
+        }
+    }
+}
+
+impl Debug for DefaultMorningBriefingServices {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DefaultMorningBriefingServices")
+            .field("cognitive_mirror", &self.cognitive_mirror.is_some())
+            .field("serendipity_engine", &self.serendipity_engine.is_some())
+            .field("knowledge_evolution_tracker", &self.knowledge_evolution_tracker.is_some())
+            .finish()
+    }
+}
+
+#[async_trait]
+impl MorningBriefingServices for DefaultMorningBriefingServices {
+    fn cognitive_mirror(&self) -> Option<&CognitiveMirror> {
+        self.cognitive_mirror.as_deref()
+    }
+
+    fn serendipity_engine(&self) -> Option<&SerendipityEngine> {
+        self.serendipity_engine.as_deref()
+    }
+
+    fn knowledge_evolution_tracker(&self) -> Option<&KnowledgeEvolutionTracker> {
+        self.knowledge_evolution_tracker.as_deref()
     }
 }
 

@@ -131,10 +131,8 @@ pub fn OutlinerBlock(
                             if let Some(callback) = &on_focus_prev {
                                 callback.run(());
                             }
-                        } else {
-                            if let Some(callback) = &on_focus_next {
-                                callback.run(());
-                            }
+                        } else if let Some(callback) = &on_focus_next {
+                            callback.run(());
                         }
                     }
                     _ => {}
