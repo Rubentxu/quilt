@@ -496,7 +496,10 @@ impl Debug for DefaultMorningBriefingServices {
         f.debug_struct("DefaultMorningBriefingServices")
             .field("cognitive_mirror", &self.cognitive_mirror.is_some())
             .field("serendipity_engine", &self.serendipity_engine.is_some())
-            .field("knowledge_evolution_tracker", &self.knowledge_evolution_tracker.is_some())
+            .field(
+                "knowledge_evolution_tracker",
+                &self.knowledge_evolution_tracker.is_some(),
+            )
             .finish()
     }
 }

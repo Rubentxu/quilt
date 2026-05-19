@@ -303,7 +303,10 @@ impl HandlerContainer {
     }
 
     /// Set the daily summary handler.
-    pub fn with_daily_summary_handler(mut self, handler: impl DailySummaryHandler + 'static) -> Self {
+    pub fn with_daily_summary_handler(
+        mut self,
+        handler: impl DailySummaryHandler + 'static,
+    ) -> Self {
         self.daily_summary = Some(Arc::new(handler));
         self
     }
@@ -368,7 +371,12 @@ pub trait CognitiveHandler: Send + Sync {
     ) -> HandlerResult;
 
     /// Query the agent memory store.
-    async fn agent_memory(&self, domain: &str, query: Option<&str>, limit: Option<usize>) -> HandlerResult;
+    async fn agent_memory(
+        &self,
+        domain: &str,
+        query: Option<&str>,
+        limit: Option<usize>,
+    ) -> HandlerResult;
 
     /// Map argument structure in a page.
     async fn argument_map(&self, page_name: &str, max_depth: Option<usize>) -> HandlerResult;
@@ -380,7 +388,8 @@ pub trait CognitiveHandler: Send + Sync {
     async fn counterfactual_explore(&self, scenario: &str, decision_point: &str) -> HandlerResult;
 
     /// Track how knowledge evolves over time.
-    async fn knowledge_evolution(&self, topic: &str, timespan_days: Option<usize>) -> HandlerResult;
+    async fn knowledge_evolution(&self, topic: &str, timespan_days: Option<usize>)
+        -> HandlerResult;
 
     /// Get a daily cognitive briefing.
     async fn morning_briefing(&self) -> HandlerResult;

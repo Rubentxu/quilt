@@ -376,7 +376,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .app_data_dir()
                 .expect("Failed to get app data dir");
 
-            let state = rt.block_on(async { create_app_state(app_data_dir.join("quilt.db")).await })?;
+            let state =
+                rt.block_on(async { create_app_state(app_data_dir.join("quilt.db")).await })?;
             info!("App state created, managing in Tauri");
             app.manage(state);
 

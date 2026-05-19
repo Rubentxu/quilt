@@ -112,7 +112,10 @@ impl DefaultCognitiveHandler {
     }
 
     /// Find a page by name.
-    async fn find_page_by_name(&self, page_name: &str) -> Result<quilt_domain::entities::Page, String> {
+    async fn find_page_by_name(
+        &self,
+        page_name: &str,
+    ) -> Result<quilt_domain::entities::Page, String> {
         let pages = self.page_repo.get_all().await.map_err(|e| e.to_string())?;
         pages
             .iter()
@@ -330,7 +333,10 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .as_ref()
             .ok_or_else(|| "TreeRAG not configured".to_string())?;
 
-        let tree = engine.build_tree(page_id).await.map_err(|e| e.to_string())?;
+        let tree = engine
+            .build_tree(page_id)
+            .await
+            .map_err(|e| e.to_string())?;
 
         Ok(serde_json::to_string_pretty(&serde_json::json!({
             "page_id": tree.page_id.to_string(),
@@ -521,12 +527,7 @@ impl CognitiveHandler for DefaultCognitiveHandler {
     }
 
     #[instrument(skip(self))]
-    async fn schedule_task(
-        &self,
-        name: &str,
-        cron_expr: &str,
-        task_type: &str,
-    ) -> HandlerResult {
+    async fn schedule_task(&self, name: &str, cron_expr: &str, task_type: &str) -> HandlerResult {
         let scheduler = self
             .task_scheduler
             .as_ref()

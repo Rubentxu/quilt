@@ -168,14 +168,7 @@ impl CanvasRenderer {
             let dim =
                 (dimmed && highlight_idx.is_some() && !is_highlighted) || (dimmed && !search_match);
 
-            self.draw_node_search(
-                node,
-                i,
-                is_highlighted,
-                is_hovered,
-                dim,
-                !search_match,
-            );
+            self.draw_node_search(node, i, is_highlighted, is_hovered, dim, !search_match);
         }
 
         self.ctx.restore();

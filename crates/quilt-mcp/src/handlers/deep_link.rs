@@ -121,7 +121,8 @@ impl DeepLinkHandler for DefaultDeepLinkHandler {
                 "deep_links": [],
                 "count": 0,
                 "note": "Provide target_id, link_type, or source_id to filter deep links"
-            })).unwrap_or_else(|e| format!("Serialization error: {}", e)));
+            }))
+            .unwrap_or_else(|e| format!("Serialization error: {}", e)));
         };
 
         let items: Vec<serde_json::Value> = links

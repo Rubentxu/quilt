@@ -16,12 +16,12 @@ use wasm_bindgen::prelude::*;
 pub fn main() {
     // Set up panic hook FIRST to catch any panics
     console_error_panic_hook::set_once();
-    
+
     // Initialize logging
     if let Err(e) = console_log::init_with_level(log::Level::Debug) {
         web_sys::console::error_1(&format!("Failed to init logger: {}", e).into());
     }
-    
+
     web_sys::console::log_1(&"Quilt UI starting...".into());
 
     // Get the app element
@@ -31,8 +31,10 @@ pub fn main() {
 
     match app_element {
         Some(element) => {
-            web_sys::console::log_1(&format!("Found #app element: {:?}", element.tag_name()).into());
-            
+            web_sys::console::log_1(
+                &format!("Found #app element: {:?}", element.tag_name()).into(),
+            );
+
             // Convert Element to HtmlElement for mount_to
             match element.dyn_into::<web_sys::HtmlElement>() {
                 Ok(html_element) => {
@@ -40,14 +42,16 @@ pub fn main() {
                     let handle = leptos::mount::mount_to(html_element, || {
                         leptos::view! { <app::App /> }
                     });
-                    
+
                     web_sys::console::log_1(&"Quilt UI mounted successfully!".into());
-                    
+
                     // Forget the handle so the view stays mounted
                     handle.forget();
                 }
                 Err(e) => {
-                    web_sys::console::error_1(&format!("Could not convert element to HtmlElement: {:?}", e).into());
+                    web_sys::console::error_1(
+                        &format!("Could not convert element to HtmlElement: {:?}", e).into(),
+                    );
                 }
             }
         }

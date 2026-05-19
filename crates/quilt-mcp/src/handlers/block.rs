@@ -20,7 +20,10 @@ pub struct DefaultBlockHandler {
 
 impl DefaultBlockHandler {
     /// Create a new block handler.
-    pub fn new(block_repo: Arc<dyn BlockRepository>, timezone_service: Arc<TimezoneService>) -> Self {
+    pub fn new(
+        block_repo: Arc<dyn BlockRepository>,
+        timezone_service: Arc<TimezoneService>,
+    ) -> Self {
         Self {
             block_repo,
             timezone_service,
@@ -34,14 +37,14 @@ impl BlockHandler for DefaultBlockHandler {
     async fn create_block(&self, params: super::CreateBlockParams) -> HandlerResult {
         let block = Block::new(
             BlockCreate {
-                page_id: params.page_name.parse().map_err(|e: uuid::Error| e.to_string())?,
+                page_id: params
+                    .page_name
+                    .parse()
+                    .map_err(|e: uuid::Error| e.to_string())?,
                 content: params.content,
                 parent_id: params.parent_id,
                 order: 1.0,
-                marker: params
-                    .marker
-                    .as_ref()
-                    .and_then(|m| TaskMarker::from_str(m)),
+                marker: params.marker.as_ref().and_then(|m| TaskMarker::from_str(m)),
                 format: BlockFormat::Markdown,
                 properties: Default::default(),
             },

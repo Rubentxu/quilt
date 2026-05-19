@@ -43,16 +43,21 @@ impl SettingsHandlerTrait for DefaultSettingsHandler {
     #[instrument(skip(self))]
     async fn update_settings(&self, settings_json: serde_json::Value) -> HandlerResult {
         // Parse settings from JSON manually since UserSettings doesn't implement Deserialize
-        let timezone = settings_json.get("timezone")
+        let timezone = settings_json
+            .get("timezone")
             .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing or invalid timezone".to_string())?;
-        let journal_format = settings_json.get("journal_format")
+        let journal_format = settings_json
+            .get("journal_format")
             .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing or invalid journal_format".to_string())?;
-        let start_of_week = settings_json.get("start_of_week")
+        let start_of_week = settings_json
+            .get("start_of_week")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| "Missing or invalid start_of_week".to_string())? as u8;
-        let preferred_format_str = settings_json.get("preferred_format")
+            .ok_or_else(|| "Missing or invalid start_of_week".to_string())?
+            as u8;
+        let preferred_format_str = settings_json
+            .get("preferred_format")
             .and_then(|v| v.as_str())
             .ok_or_else(|| "Missing or invalid preferred_format".to_string())?;
 
@@ -60,10 +65,12 @@ impl SettingsHandlerTrait for DefaultSettingsHandler {
             timezone: timezone.to_string(),
             journal_format: journal_format.to_string(),
             start_of_week,
-            preferred_format: quilt_domain::value_objects::BlockFormat::from_str(preferred_format_str)
-                .ok_or_else(|| format!("Invalid preferred_format: {}", preferred_format_str))?,
+            preferred_format: quilt_domain::value_objects::BlockFormat::from_str(
+                preferred_format_str,
+            )
+            .ok_or_else(|| format!("Invalid preferred_format: {}", preferred_format_str))?,
         };
-        
+
         self.settings_repo
             .update_user_settings(&settings)
             .await

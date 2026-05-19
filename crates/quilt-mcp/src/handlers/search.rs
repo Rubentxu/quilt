@@ -37,7 +37,8 @@ impl SearchHandlerTrait for DefaultSearchHandler {
     async fn search(&self, params: super::SearchParams) -> HandlerResult {
         let limit = params.limit.unwrap_or(50);
 
-        let results = &*self.search_service
+        let results = &*self
+            .search_service
             .search(&params.query, limit)
             .await
             .map_err(|e| e.to_string())?;
@@ -88,7 +89,8 @@ impl SearchHandlerTrait for DefaultSearchHandler {
 
         match mode {
             "incremental" => {
-                let since_str = since.ok_or_else(|| "Since timestamp required for incremental mode".to_string())?;
+                let since_str = since
+                    .ok_or_else(|| "Since timestamp required for incremental mode".to_string())?;
                 let since_dt = chrono::DateTime::parse_from_rfc3339(&since_str)
                     .map_err(|e| format!("Invalid timestamp format (RFC3339 required): {}", e))?
                     .with_timezone(&chrono::Utc);
