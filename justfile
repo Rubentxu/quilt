@@ -55,17 +55,21 @@ run-desktop:
     cd crates/quilt-platform/src-tauri && cargo tauri dev
 
 # Build complete desktop app: WASM UI + Tauri binary
-build-desktop: build-wasm
-    ln -sf ../quilt-ui/dist crates/quilt-platform/src-tauri/dist
-    cd crates/quilt-platform/src-tauri && cargo tauri build -r
+build-desktop:
+    cd crates/quilt-ui && trunk build
+    cd crates/quilt-platform/src-tauri && cargo tauri build
 
-# Build Tauri release only (assumes UI already built)
+# Build Tauri release only (assumes UI already built via build-desktop)
 build-desktop-standalone:
-    cd crates/quilt-platform/src-tauri && cargo tauri build -r
+    cd crates/quilt-platform/src-tauri && cargo tauri build
 
-# Link UI dist to Tauri expected location
-link-ui-dist:
-    ln -sf ../quilt-ui/dist crates/quilt-platform/src-tauri/dist
+# Build just the Rust backend (no bundling)
+build-backend:
+    cargo build --manifest-path crates/quilt-platform/src-tauri/Cargo.toml
+
+# Build frontend only (WASM via trunk)
+build-frontend:
+    cd crates/quilt-ui && trunk build
 
 # ── Test ─────────────────────────────────────────────────────────────────
 
@@ -89,6 +93,10 @@ test-doc:
 test-crate crate:
     cargo test -p {{crate}}
 
+# Run all tests for workspace including doc tests
+test-all:
+    cargo test --workspace --all-features
+
 # ── Lint ─────────────────────────────────────────────────────────────────
 
 # Format code
@@ -102,6 +110,10 @@ fmt-check:
 # Run clippy with strict warnings
 clippy:
     cargo clippy --all-targets --all-features -- -D warnings
+
+# Run clippy on workspace
+clippy-workspace:
+    cargo clippy --workspace -- -D warnings
 
 # Auto-fix clippy suggestions
 clippy-fix:
@@ -138,7 +150,7 @@ db-setup:
 db-migrate:
     cargo run -p quilt-bin -- db migrate
 
-# ── Clean ────────────────────────────────────────────────────────────────
+# ── Clean ───────────────────────────────────────────────────────────────
 
 # Clean all build artifacts
 clean:
@@ -147,7 +159,11 @@ clean:
 # Clean and rebuild from scratch
 rebuild: clean build
 
-# ── Docs ──────────────────────────────────────────────────────────────────
+# Clean Tauri build artifacts
+clean-tauri:
+    cd crates/quilt-platform/src-tauri && cargo clean
+
+# ── Docs ─────────────────────────────────────────────────────────────────
 
 # Generate and open crate documentation
 docs:
@@ -160,6 +176,11 @@ setup:
     cargo install cargo-watch
     cargo install cargo-llvm-cov
     rustup component add rustfmt clippy llvm-tools
+
+# Install tauri-driver for E2E testing
+setup-e2e:
+    cargo install tauri-driver --locked
+    cd e2e && npm install
 
 # ── TreeRAG ──────────────────────────────────────────────────────────────
 
@@ -183,7 +204,7 @@ report-md topic scope="auto" output="report.md":
 tree-rag-status:
     cargo run -p quilt-bin -- tree-rag status
 
-# ── Scheduler ────────────────────────────────────────────────────────────
+# ── Scheduler ───────────────────────────────────────────────────────────
 
 # Start the task scheduler (background tasks)
 scheduler-start:
@@ -197,53 +218,57 @@ scheduler-list:
 scheduler-now name:
     cargo run -p quilt-bin -- scheduler run-now {{name}}
 
-# ── WASM ──────────────────────────────────────────────────────────────────
+# ── WASM / Frontend ──────────────────────────────────────────────────────────
 
-# Build the Yew UI for WASM target
+# Build the Leptos UI for WASM target
 build-wasm:
     cd crates/quilt-ui && trunk build
 
 # Watch and serve WASM UI in dev mode
 dev-wasm:
-    cd crates/quilt-ui && trunk serve
+    cd crates/quilt-ui && trunk serve --port 1420
 
-# ── E2E Tests (Playwright) ─────────────────────────────────────────────────
+# ── E2E Tests (Tauri WebDriver) ─────────────────────────────────────────────
 
-# Install Playwright browsers
+# Install E2E test dependencies (WebdriverIO + tauri-driver)
 e2e-install:
-    npm install && npx playwright install --with-deps
+    cargo install tauri-driver --locked
+    cd e2e && npm install
 
-# Run E2E tests (requires dev server on port 1420)
+# Run E2E tests using Tauri WebDriver (requires built app)
 e2e-test:
-    npx playwright test
+    cd e2e && npm test
 
 # Run E2E tests in headed mode (see browser)
 e2e-test-headed:
-    npx playwright test --headed
+    cd e2e && npm run test:headed || npx wdio run e2e/wdio.conf.ts --headed
 
 # List all E2E tests without running
 e2e-list:
-    npx playwright test --list
+    cd e2e && npx wdio run e2e/wdio.conf.ts --spec ./tests/**/*.ts --dry
 
-# Open Playwright UI
-e2e-ui:
-    npx playwright test --ui
-
-# Run specific E2E test file
-e2e-test-file file:
-    npx playwright test {{file}}
-
-# Run E2E tests with debug mode
+# Debug E2E tests
 e2e-debug:
-    npx playwright test --debug
+    cd e2e && npx wdio debug e2e/wdio.conf.ts
+
+# Run E2E tests with full app rebuild
+e2e-all: build-desktop
+    cd e2e && npm test
 
 # Show E2E test report
 e2e-report:
-    npx playwright show-report
+    @echo "E2E tests use WebdriverIO spec reporter - check console output"
 
-# Start dev server and run E2E tests
-e2e-all:
-    cd crates/quilt-ui && trunk serve --port 1420 &
-    sleep 5
-    npx playwright test
-    pkill -f "trunk serve" || true
+# ── Desktop App ──────────────────────────────────────────────────────────────
+
+# Run the built desktop app (from target/release)
+run-desktop-built:
+    ./target/release/quilt-desktop
+
+# Run the debug desktop app
+run-desktop-debug:
+    ./target/debug/quilt-desktop
+
+# Build and run desktop app in one command
+dev-desktop: build-desktop
+    ./target/release/quilt-desktop
