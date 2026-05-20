@@ -10,6 +10,7 @@ use quilt_cognitive::{
     TreeRagEngine,
 };
 use quilt_domain::entities::{BlockCreate, PageCreate};
+use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::{BlockRepository, PageRepository, SettingsRepository};
 use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
@@ -409,7 +410,7 @@ impl QuiltCLI {
         let block = quilt_domain::entities::Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: content.to_string(),
+                content: BlockContent::from_text(content),
                 parent_id: parent_uuid,
                 order: 1.0,
                 marker: None,
@@ -537,10 +538,11 @@ impl QuiltCLI {
             let blocks = block_repo.get_by_page(page.id).await?;
             println!("  Recent blocks:");
             for b in blocks.iter().rev().take(5) {
-                let prefix: &str = if b.content.len() > 60 {
-                    &b.content[..60]
+                let plain = b.content.as_plain_text();
+                let prefix: &str = if plain.len() > 60 {
+                    &plain[..60]
                 } else {
-                    &b.content
+                    &plain
                 };
                 println!("    - {}", prefix);
             }

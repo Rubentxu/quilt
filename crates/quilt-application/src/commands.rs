@@ -5,6 +5,7 @@
 
 use crate::errors::ApplicationError;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate, Page, PageCreate, UserSettings};
+use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::{
     BlockRepository, BlockRepositoryExt, PageRepository, PageRepositoryExt, SettingsRepository,
 };
@@ -73,7 +74,7 @@ impl<R: BlockRepository> BlockCommand<R> {
     ) -> Result<Block, ApplicationError> {
         let create = BlockCreate {
             page_id,
-            content,
+            content: BlockContent::from_text(content),
             parent_id,
             order: 1.0, // TODO: Calculate proper order
             marker: None,

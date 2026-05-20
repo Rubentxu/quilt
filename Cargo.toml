@@ -9,10 +9,10 @@ members = [
     "crates/quilt-mcp",
     "crates/quilt-git-extension",
     "crates/quilt-platform",
-    "crates/quilt-platform/src-tauri",
     "crates/quilt-bin",
     "crates/quilt-ui",
     "crates/quilt-cognitive",
+    "crates/quilt-server",
     "crates/quilt-integration-tests",
     "crates/quilt-benchmarks",
 ]
@@ -53,9 +53,6 @@ lru = "0.13"
 
 # CLI
 clap = { version = "4", features = ["derive"] }
-
-# Platform
-tauri = { version = "2", features = ["build"] }
 
 # Utils
 once_cell = "1"

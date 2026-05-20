@@ -1,5 +1,7 @@
 //! ClassValidator - validates blocks against class constraints
 
+#[cfg(test)]
+use crate::content::BlockContent;
 use crate::entities::Block;
 use crate::errors::DomainError;
 use crate::repositories::ClassRepository;
@@ -336,7 +338,7 @@ mod tests {
         let block = Block::new(
             crate::entities::BlockCreate {
                 page_id: Uuid::new_v4(),
-                content: "Test".to_string(),
+                content: BlockContent::from_text("Test"),
                 parent_id: None,
                 order: 1.0,
                 marker: None,

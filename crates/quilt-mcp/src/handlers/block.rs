@@ -6,6 +6,7 @@
 use super::{BlockHandler, HandlerResult};
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, BlockCreate};
+use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::BlockRepository;
 use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, TaskMarker, Uuid};
@@ -41,7 +42,7 @@ impl BlockHandler for DefaultBlockHandler {
                     .page_name
                     .parse()
                     .map_err(|e: uuid::Error| e.to_string())?,
-                content: params.content,
+                content: BlockContent::from_text(params.content),
                 parent_id: params.parent_id,
                 order: 1.0,
                 marker: params.marker.as_ref().and_then(|m| TaskMarker::from_str(m)),

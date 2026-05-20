@@ -22,6 +22,7 @@ use quilt_cognitive::tree_rag::ReportScope;
 use quilt_domain::entities::{
     Block, BlockCreate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate,
 };
+use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::{
     BlockRepository, DeepLinkRepository, JournalRepository, PageRepository, SettingsRepository,
     TagRepository,
@@ -1264,7 +1265,7 @@ impl McpServer {
         let block = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: content.to_string(),
+                content: BlockContent::from_text(content.to_string()),
                 parent_id,
                 order: 1.0,
                 marker,
@@ -1468,7 +1469,7 @@ impl McpServer {
         let block = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: content.to_string(),
+                content: BlockContent::from_text(content.to_string()),
                 parent_id: None,
                 order: 1.0,
                 marker: Some(TaskMarker::Todo),

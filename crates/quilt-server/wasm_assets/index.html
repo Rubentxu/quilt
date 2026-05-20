@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quilt — AI-first Knowledge Graph</title>
+    <link rel="stylesheet" href="/style-132a93965d6be96b.css" integrity="sha384-6HvDxBvU41xy9MXOP4Cqyagv2N8DZlGWQHV8pSSGzhPs5yuyJ3oQ0MqpuqNGbIdk"/>
+<link rel="modulepreload" href="/quilt-ui-6806e940f8049ff3.js" crossorigin="anonymous" integrity="sha384-5w8YhNbObyrDA73RECm9NZlQLB6bElQYG3WIrdJtqz2a4f7oQyTqEBNi49THDmEy"><link rel="preload" href="/quilt-ui-6806e940f8049ff3_bg.wasm" crossorigin="anonymous" integrity="sha384-9OTKISnL5gljYPYdvtwj+WdoUuOpVhpg7vo/avoBYtk/NSgOp2nvLJUDnFZyv7cK" as="fetch" type="application/wasm"></head>
+<body>
+    <div id="app"></div>
+
+<script type="module">
+import init, * as bindings from '/quilt-ui-6806e940f8049ff3.js';
+const wasm = await init({ module_or_path: '/quilt-ui-6806e940f8049ff3_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script></body>
+</html>

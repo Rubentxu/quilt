@@ -1,0 +1,60 @@
+# Quilt Server
+#
+# HTTP server crate providing REST API + WebSocket + embedded frontend.
+# Replaces the Tauri desktop shell with a standalone Axum server.
+
+[package]
+name = "quilt-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Quilt HTTP server with Axum — REST API, WebSocket, and embedded frontend"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["macros", "ws"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+
+# Async runtime
+tokio.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+async-trait.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging & tracing
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Domain dependencies
+quilt-domain = { path = "../quilt-domain" }
+quilt-application = { path = "../quilt-application" }
+quilt-infrastructure = { path = "../quilt-infrastructure" }
+quilt-mcp = { path = "../quilt-mcp" }
+quilt-cognitive = { path = "../quilt-cognitive" }
+quilt-search = { path = "../quilt-search" }
+quilt-platform = { path = "../quilt-platform" }
+
+# UUID
+uuid.workspace = true
+
+# Date/Time
+chrono.workspace = true
+
+# Bytes for body handling
+bytes = "1"
+
+# Metrics
+metrics = { workspace = true }
+metrics-exporter-prometheus = { workspace = true }
+
+[dev-dependencies]
+tokio-test.workspace = true

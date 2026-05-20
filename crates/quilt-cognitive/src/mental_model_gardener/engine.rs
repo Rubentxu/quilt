@@ -90,15 +90,15 @@ impl MentalModelGardener {
 
     /// Extract a single belief from a block using AI analysis.
     async fn extract_belief_from_block(&self, block: &Block) -> Option<ExtractedBelief> {
-        let content = &block.content;
+        let content = block.content.as_plain_text();
 
         // Heuristic pre-filter
-        if !looks_like_belief(content) {
+        if !looks_like_belief(&content) {
             return None;
         }
 
         // Use AI to extract the belief concept
-        let (concept, confidence) = self.ai_extract_belief(content).await;
+        let (concept, confidence) = self.ai_extract_belief(&content).await;
 
         if confidence < 0.3 {
             return None;

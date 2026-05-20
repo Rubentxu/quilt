@@ -19,6 +19,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use sqlx::Row;
 use std::collections::HashMap;
 
+use quilt_domain::content::BlockContent;
 use quilt_domain::errors::DomainError;
 use quilt_domain::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
 
@@ -126,7 +127,7 @@ impl BlockRow {
             format: parse_format(&self.format),
             marker: self.marker.as_deref().and_then(parse_marker),
             priority: self.priority.as_deref().and_then(parse_priority),
-            content: self.content.clone(),
+            content: parse_block_content(&self.content)?,
             properties: parse_properties(&self.properties),
             refs: parse_uuid_list(&self.refs),
             tags: parse_tag_list(&self.tags),
@@ -208,6 +209,30 @@ pub(crate) fn parse_tag_list(blob: &[u8]) -> Vec<String> {
         return vec![];
     }
     serde_json::from_slice::<Vec<String>>(blob).unwrap_or_default()
+}
+
+/// Parse block content from JSON string.
+///
+/// Handles both legacy plain text (for migration) and new BlockContent JSON format.
+pub fn parse_block_content(s: &str) -> Result<BlockContent, DomainError> {
+    // Empty string -> empty content
+    if s.is_empty() {
+        return Ok(BlockContent::empty());
+    }
+
+    // Try to parse as JSON first (new format)
+    if let Ok(content) = serde_json::from_str::<BlockContent>(s) {
+        return Ok(content);
+    }
+
+    // Fallback: treat as plain text (legacy migration case)
+    // This allows old data with plain text content to still work
+    Ok(BlockContent::from_text(s))
+}
+
+/// Serialize block content to JSON string for database storage.
+pub fn serialize_block_content(content: &BlockContent) -> String {
+    serde_json::to_string(content).unwrap_or_else(|_| r#"{"segments":[]}"#.to_string())
 }
 
 // Re-export Block for convenience

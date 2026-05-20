@@ -6,6 +6,7 @@
 //! using a DSL (Domain Specific Language) that gets translated to SQL.
 
 use quilt_domain::entities::Block;
+use quilt_domain::content::BlockContent;
 use quilt_domain::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
 use quilt_query::executor::SqlParam;
 use quilt_query::{QueryExecutor, QueryParser};
@@ -263,7 +264,7 @@ fn row_to_block(row: &sqlx::sqlite::SqliteRow) -> Result<Block, String> {
         format,
         marker,
         priority,
-        content,
+        content: BlockContent::from_text(content),
         properties,
         refs,
         tags,

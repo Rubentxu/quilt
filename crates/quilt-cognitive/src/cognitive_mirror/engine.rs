@@ -81,8 +81,8 @@ impl CognitiveMirror {
         blocks: &[Block],
         mut clusters: Vec<KnowledgeCluster>,
     ) -> Vec<KnowledgeCluster> {
-        let block_content: std::collections::HashMap<Uuid, &str> =
-            blocks.iter().map(|b| (b.id, b.content.as_str())).collect();
+        let block_content: std::collections::HashMap<Uuid, String> =
+            blocks.iter().map(|b| (b.id, b.content.as_plain_text())).collect();
 
         for cluster in &mut clusters {
             if cluster.block_ids.len() > 1 {

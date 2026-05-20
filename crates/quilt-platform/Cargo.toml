@@ -5,11 +5,10 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
-description = "Platform adapters - Tauri desktop shell and CLI"
+description = "Platform adapters - CLI and server utilities"
 
 [dependencies]
 quilt-domain = { path = "../quilt-domain" }
-tauri = { version = "2", features = ["devtools"] }
 quilt-application = { path = "../quilt-application" }
 quilt-infrastructure = { path = "../quilt-infrastructure" }
 quilt-mcp = { path = "../quilt-mcp" }

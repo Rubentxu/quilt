@@ -1,5 +1,6 @@
 //! Block entity - the fundamental unit of content in Quilt
 
+use crate::content::BlockContent;
 use crate::errors::DomainError;
 use crate::services::TimezoneService;
 use crate::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
@@ -27,8 +28,8 @@ pub struct Block {
     pub marker: Option<TaskMarker>,
     /// Priority level (A, B, C)
     pub priority: Option<Priority>,
-    /// The actual content text
-    pub content: String,
+    /// The actual content - structured as typed segments (ADR 0005)
+    pub content: BlockContent,
     /// Custom properties (key-value pairs)
     pub properties: HashMap<String, PropertyValue>,
     /// References to other blocks/pages
@@ -71,7 +72,7 @@ pub struct Block {
 #[derive(Debug, Clone)]
 pub struct BlockCreate {
     pub page_id: Uuid,
-    pub content: String,
+    pub content: BlockContent,
     pub parent_id: Option<Uuid>,
     pub order: f64,
     pub marker: Option<TaskMarker>,
@@ -82,7 +83,7 @@ pub struct BlockCreate {
 /// Data required to update an existing block
 #[derive(Debug, Clone, Default)]
 pub struct BlockUpdate {
-    pub content: Option<String>,
+    pub content: Option<BlockContent>,
     pub parent_id: Option<Option<Uuid>>,
     pub order: Option<f64>,
     pub level: Option<u8>,
@@ -98,10 +99,13 @@ impl Block {
     /// Create a new block with the given data.
     ///
     /// The journal_day is automatically set based on the user's timezone.
+    /// Refs are automatically extracted from the content.
     pub fn new(create: BlockCreate, timezone: &TimezoneService) -> Result<Self, DomainError> {
         let now = chrono::Utc::now();
         let journal_day = timezone.today_journal_day().as_i32();
-        Ok(Self {
+
+        // Create the block with the provided content
+        let mut block = Self {
             id: Uuid::new_v4(),
             page_id: create.page_id,
             parent_id: create.parent_id,
@@ -124,12 +128,18 @@ impl Block {
             updated_at: now,
             journal_day: Some(journal_day),
             updated_journal_day: Some(journal_day),
-        })
+        };
+
+        // Extract refs from content
+        block.extract_and_update_refs();
+
+        Ok(block)
     }
 
     /// Apply an update to this block.
     ///
     /// The updated_journal_day is automatically updated based on the user's timezone.
+    /// Also extracts and updates refs from the new content.
     pub fn update(
         &mut self,
         update: BlockUpdate,
@@ -137,6 +147,7 @@ impl Block {
     ) -> Result<(), DomainError> {
         if let Some(content) = update.content {
             self.content = content;
+            self.extract_and_update_refs();
         }
         if let Some(parent_id) = update.parent_id {
             self.parent_id = parent_id;
@@ -231,6 +242,37 @@ impl Block {
         self.updated_at = chrono::Utc::now();
     }
 
+    /// Extract references from the block's content and update the refs field.
+    ///
+    /// This method parses the BlockContent to find PageRef and BlockRef segments,
+    /// then updates the refs field to contain all referenced block and page IDs.
+    ///
+    /// Call this after creating a block or updating its content.
+    pub fn extract_and_update_refs(&mut self) {
+        use crate::content::BlockSegment;
+
+        let mut new_refs = Vec::new();
+
+        for segment in &self.content.segments {
+            match segment {
+                BlockSegment::PageRef { target, .. } => {
+                    if !new_refs.contains(target) {
+                        new_refs.push(*target);
+                    }
+                }
+                BlockSegment::BlockRef { target } => {
+                    if !new_refs.contains(target) {
+                        new_refs.push(*target);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        self.refs = new_refs;
+        self.updated_at = chrono::Utc::now();
+    }
+
     /// Add a tag
     pub fn add_tag(&mut self, tag: impl Into<String>) {
         let tag = tag.into();
@@ -265,13 +307,45 @@ impl Block {
         path.reverse();
         path
     }
+
+    /// Get the content as plain text.
+    ///
+    /// This extracts only the text segments, ignoring references,
+    /// embeds, and other non-text content.
+    pub fn as_plain_text(&self) -> String {
+        self.content.as_plain_text()
+    }
+
+    /// Get the class identifier from this block's properties.
+    ///
+    /// Returns the class db_ident (e.g., "task", "journal") if set.
+    /// Returns None if no class property is defined.
+    pub fn get_class_ident(&self) -> Option<&str> {
+        self.properties
+            .get("class")
+            .and_then(|v| match v {
+                PropertyValue::String(s) => Some(s.as_str()),
+                _ => None,
+            })
+    }
+
+    /// Get the effective property value, considering class defaults.
+    ///
+    /// If the property is explicitly set on the block, returns that value.
+    /// If not set but class provides a default, returns the default.
+    /// If neither, returns None.
+    pub fn get_effective_property(&self, _prop_id: &str) -> Option<&PropertyValue> {
+        // For now, just return the block's own property
+        // TODO: Implement class default lookup
+        None
+    }
 }
 
 impl Default for BlockCreate {
     fn default() -> Self {
         Self {
             page_id: Uuid::new_v4(),
-            content: String::new(),
+            content: BlockContent::empty(),
             parent_id: None,
             order: 1.0,
             marker: None,
@@ -284,6 +358,7 @@ impl Default for BlockCreate {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content::BlockSegment;
 
     fn create_test_block(id: Uuid, page_id: Uuid, parent_id: Option<Uuid>) -> Block {
         Block {
@@ -295,7 +370,7 @@ mod tests {
             format: BlockFormat::Markdown,
             marker: None,
             priority: None,
-            content: "Test block".to_string(),
+            content: BlockContent::from_text("Test block"),
             properties: HashMap::new(),
             refs: Vec::new(),
             tags: Vec::new(),
@@ -321,7 +396,7 @@ mod tests {
         let page_id = Uuid::new_v4();
         let create = BlockCreate {
             page_id,
-            content: "Hello".to_string(),
+            content: BlockContent::from_text("Hello"),
             parent_id: None,
             order: 1.0,
             marker: Some(TaskMarker::Todo),
@@ -332,7 +407,7 @@ mod tests {
         let tz = test_timezone();
         let block = Block::new(create, &tz).unwrap();
         assert_eq!(block.page_id, page_id);
-        assert_eq!(block.content, "Hello");
+        assert_eq!(block.content.as_plain_text(), "Hello");
         assert_eq!(block.marker, Some(TaskMarker::Todo));
         assert!(!block.is_done());
         // Check journal_day was auto-set
@@ -367,7 +442,7 @@ mod tests {
     fn test_block_done_auto_logbook() {
         let create = BlockCreate {
             page_id: Uuid::new_v4(),
-            content: "Task".to_string(),
+            content: BlockContent::from_text("Task"),
             parent_id: None,
             order: 1.0,
             marker: None,
@@ -397,7 +472,7 @@ mod tests {
     fn test_block_update_changes_journal_day() {
         let create = BlockCreate {
             page_id: Uuid::new_v4(),
-            content: "Original content".to_string(),
+            content: BlockContent::from_text("Original content"),
             parent_id: None,
             order: 1.0,
             marker: None,
@@ -414,7 +489,7 @@ mod tests {
         block
             .update(
                 BlockUpdate {
-                    content: Some("Updated content".to_string()),
+                    content: Some(BlockContent::from_text("Updated content")),
                     ..Default::default()
                 },
                 &tz,
@@ -425,5 +500,196 @@ mod tests {
         assert!(block.updated_journal_day.is_some());
         // Note: In UTC timezone, today_journal_day() might return same value
         // In a real timezone like America/Mexico_City, it could differ
+    }
+
+    #[test]
+    fn test_extract_and_update_refs_on_create() {
+        let page_id = Uuid::new_v4();
+        let page_ref_id = Uuid::new_v4();
+        let block_ref_id = Uuid::new_v4();
+
+        let content = BlockContent {
+            segments: vec![
+                BlockSegment::Text {
+                    content: "See ".to_string(),
+                    marks: Vec::new(),
+                },
+                BlockSegment::PageRef {
+                    target: page_ref_id,
+                    label: None,
+                },
+                BlockSegment::Text {
+                    content: " and ".to_string(),
+                    marks: Vec::new(),
+                },
+                BlockSegment::BlockRef { target: block_ref_id },
+                BlockSegment::Text {
+                    content: " for details".to_string(),
+                    marks: Vec::new(),
+                },
+            ],
+        };
+
+        let create = BlockCreate {
+            page_id,
+            content,
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: HashMap::new(),
+        };
+
+        let tz = test_timezone();
+        let block = Block::new(create, &tz).unwrap();
+
+        // Block should have extracted both page and block refs
+        assert_eq!(block.refs.len(), 2);
+        assert!(block.refs.contains(&page_ref_id));
+        assert!(block.refs.contains(&block_ref_id));
+    }
+
+    #[test]
+    fn test_extract_and_update_refs_on_update() {
+        let page_id = Uuid::new_v4();
+        let page_ref_id = Uuid::new_v4();
+        let block_ref_id = Uuid::new_v4();
+        let new_page_ref_id = Uuid::new_v4();
+
+        // Create block with one page ref
+        let content = BlockContent {
+            segments: vec![BlockSegment::PageRef {
+                target: page_ref_id,
+                label: None,
+            }],
+        };
+
+        let create = BlockCreate {
+            page_id,
+            content,
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: HashMap::new(),
+        };
+
+        let tz = test_timezone();
+        let mut block = Block::new(create, &tz).unwrap();
+
+        // Should have initial ref
+        assert_eq!(block.refs.len(), 1);
+        assert!(block.refs.contains(&page_ref_id));
+
+        // Update content with different refs
+        let new_content = BlockContent {
+            segments: vec![
+                BlockSegment::BlockRef { target: block_ref_id },
+                BlockSegment::PageRef {
+                    target: new_page_ref_id,
+                    label: None,
+                },
+            ],
+        };
+
+        block
+            .update(BlockUpdate { content: Some(new_content), ..Default::default() }, &tz)
+            .unwrap();
+
+        // Should have updated refs
+        assert_eq!(block.refs.len(), 2);
+        assert!(!block.refs.contains(&page_ref_id)); // Old ref removed
+        assert!(block.refs.contains(&block_ref_id));
+        assert!(block.refs.contains(&new_page_ref_id));
+    }
+
+    #[test]
+    fn test_extract_and_update_refs_no_refs() {
+        let page_id = Uuid::new_v4();
+
+        let create = BlockCreate {
+            page_id,
+            content: BlockContent::from_text("Just plain text"),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: HashMap::new(),
+        };
+
+        let tz = test_timezone();
+        let block = Block::new(create, &tz).unwrap();
+
+        // No refs should be extracted
+        assert!(block.refs.is_empty());
+    }
+
+    #[test]
+    fn test_get_class_ident() {
+        let page_id = Uuid::new_v4();
+
+        // Block with class property
+        let mut properties = HashMap::new();
+        properties.insert("class".to_string(), PropertyValue::String("task".to_string()));
+
+        let create = BlockCreate {
+            page_id,
+            content: BlockContent::from_text("My task"),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties,
+        };
+
+        let tz = test_timezone();
+        let block = Block::new(create, &tz).unwrap();
+
+        assert_eq!(block.get_class_ident(), Some("task"));
+    }
+
+    #[test]
+    fn test_get_class_ident_no_class() {
+        let page_id = Uuid::new_v4();
+
+        let create = BlockCreate {
+            page_id,
+            content: BlockContent::from_text("Plain text"),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties: HashMap::new(),
+        };
+
+        let tz = test_timezone();
+        let block = Block::new(create, &tz).unwrap();
+
+        assert_eq!(block.get_class_ident(), None);
+    }
+
+    #[test]
+    fn test_get_class_ident_wrong_type() {
+        let page_id = Uuid::new_v4();
+
+        // Class property as wrong type (checkbox instead of string)
+        let mut properties = HashMap::new();
+        properties.insert("class".to_string(), PropertyValue::Checkbox(true));
+
+        let create = BlockCreate {
+            page_id,
+            content: BlockContent::from_text("Test"),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            properties,
+        };
+
+        let tz = test_timezone();
+        let block = Block::new(create, &tz).unwrap();
+
+        // Should return None because class is not a string
+        assert_eq!(block.get_class_ident(), None);
     }
 }

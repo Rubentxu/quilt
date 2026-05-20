@@ -152,7 +152,7 @@ impl KnowledgeEvolutionTracker {
     fn summarize_content(&self, blocks: &[&Block]) -> String {
         blocks
             .iter()
-            .map(|b| b.content.chars().take(100).collect::<String>())
+            .map(|b| b.content.as_plain_text().chars().take(100).collect::<String>())
             .collect::<Vec<_>>()
             .join(" | ")
     }
@@ -202,7 +202,7 @@ impl KnowledgeEvolutionTracker {
                 || content_lower.contains("still correct")
                 || content_lower.contains("reinforced")
             {
-                reinforced.push(block.content.chars().take(50).collect());
+                reinforced.push(block.content.as_plain_text().chars().take(50).collect());
             }
             // Indicators of abandonment
             if content_lower.contains("changed")
@@ -210,7 +210,7 @@ impl KnowledgeEvolutionTracker {
                 || content_lower.contains("no longer")
                 || content_lower.contains("rejected")
             {
-                abandoned.push(block.content.chars().take(50).collect());
+                abandoned.push(block.content.as_plain_text().chars().take(50).collect());
             }
         }
 

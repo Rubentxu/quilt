@@ -337,7 +337,7 @@ impl TreeRagEngine {
             .block_repo
             .get_by_id(block_id)
             .await?
-            .map(|b| Self::hash_content(&b.content))
+            .map(|b| Self::hash_content(&b.content.as_plain_text()))
             .unwrap_or_default();
 
         let bs = BlockSummary::new(block_id, summary, content_hash);
@@ -359,7 +359,7 @@ impl TreeRagEngine {
         for page_id in &page_ids {
             let blocks = self.block_repo.get_by_page(*page_id).await?;
             for block in blocks {
-                let current_hash = Self::hash_content(&block.content);
+                let current_hash = Self::hash_content(&block.content.as_plain_text());
                 if let Some(existing) = self.summary_repo.get(block.id).await? {
                     if existing.is_stale(&current_hash) {
                         stale_count += 1;
@@ -514,7 +514,7 @@ impl TreeRagEngine {
                     .map(|p| p.name)
                     .unwrap_or_default();
 
-                let snippet = block.content.chars().take(100).collect::<String>();
+                let snippet = block.content.as_plain_text().chars().take(100).collect::<String>();
                 citations.push(Citation {
                     section: String::new(),
                     block_id,
@@ -599,7 +599,7 @@ fn build_subtree<'a>(
                 return Ok(TreeNode {
                     block_id: block.id,
                     page_name: String::new(),
-                    title: block.content.lines().next().unwrap_or("").to_string(),
+                    title: block.content.as_plain_text().lines().next().unwrap_or("").to_string(),
                     summary,
                     children_count: 0,
                     children: vec![],
@@ -623,7 +623,7 @@ fn build_subtree<'a>(
             nodes.push(TreeNode {
                 block_id: child.id,
                 page_name: String::new(),
-                title: child.content.lines().next().unwrap_or("").to_string(),
+                title: child.content.as_plain_text().lines().next().unwrap_or("").to_string(),
                 summary,
                 children_count: sub_nodes.len(),
                 children: sub_nodes,

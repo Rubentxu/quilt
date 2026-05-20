@@ -4,6 +4,7 @@ use crate::agent_memory::store::{self, find_by_key, load_all};
 use crate::agent_memory::types::{InteractionProfile, MemoryEntry, MemoryQuery, ThinkingPattern};
 use crate::ai_client::AIClient;
 use quilt_domain::entities::Block;
+use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::BlockRepository;
 use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid as DomainUuid};
 use std::collections::HashMap;
@@ -115,7 +116,9 @@ impl AgentMemory {
                 continue;
             }
 
-            if let Ok(entry) = serde_json::from_str::<MemoryEntry>(&block.content) {
+            if let Ok(entry) = serde_json::from_str::<MemoryEntry>(
+                &serde_json::to_string(&block.content).unwrap_or_default(),
+            ) {
                 if let Some(ref q) = query.query {
                     if !entry.content.to_lowercase().contains(&q.to_lowercase()) {
                         continue;
@@ -155,7 +158,9 @@ impl AgentMemory {
                 continue;
             }
 
-            if let Ok(entry) = serde_json::from_str::<MemoryEntry>(&block.content) {
+            if let Ok(entry) = serde_json::from_str::<MemoryEntry>(
+                &serde_json::to_string(&block.content).unwrap_or_default(),
+            ) {
                 let score = entry.relevance_score();
                 if score < 0.1 {
                     let mut stale_entry = entry.clone();
@@ -207,7 +212,7 @@ impl AgentMemory {
             format: BlockFormat::Markdown,
             marker: None,
             priority: None,
-            content,
+            content: BlockContent::from_text(content),
             properties,
             refs: Vec::new(),
             tags: vec!["agent-memory".to_string(), "profile".to_string()],
@@ -241,8 +246,11 @@ impl AgentMemory {
             .await?;
 
         for block in blocks {
-            if let Ok(profile) = serde_json::from_str::<InteractionProfile>(&block.content) {
-                return Ok(Some(profile));
+            let content_str = serde_json::to_string(&block.content).ok();
+            if let Some(content_str) = content_str {
+                if let Ok(profile) = serde_json::from_str::<InteractionProfile>(&content_str) {
+                    return Ok(Some(profile));
+                }
             }
         }
 

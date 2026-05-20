@@ -48,24 +48,17 @@ run +args="":
 run-server db_path="quilt.db":
     cargo run -p quilt-bin -- --db-path {{db_path}} serve
 
-# Run the Tauri desktop app in dev mode (UI via trunk + Rust backend)
-run-desktop:
-    cd crates/quilt-ui && trunk serve --port 1420 &
-    sleep 3
-    cd crates/quilt-platform/src-tauri && cargo tauri dev
+# Run the Axum server in dev mode
+run-server-dev:
+    cargo run -p quilt-server
 
-# Build complete desktop app: WASM UI + Tauri binary
-build-desktop:
-    cd crates/quilt-ui && trunk build
-    cd crates/quilt-platform/src-tauri && cargo tauri build
+# Build complete server binary with embedded frontend
+build-server:
+    cargo build -p quilt-server
 
-# Build Tauri release only (assumes UI already built via build-desktop)
-build-desktop-standalone:
-    cd crates/quilt-platform/src-tauri && cargo tauri build
-
-# Build just the Rust backend (no bundling)
+# Build just the Rust backend (no bundling) - DEPRECATED
 build-backend:
-    cargo build --manifest-path crates/quilt-platform/src-tauri/Cargo.toml
+    cargo build -p quilt-platform
 
 # Build frontend only (WASM via trunk)
 build-frontend:
@@ -159,9 +152,9 @@ clean:
 # Clean and rebuild from scratch
 rebuild: clean build
 
-# Clean Tauri build artifacts
-clean-tauri:
-    cd crates/quilt-platform/src-tauri && cargo clean
+# Clean server build artifacts
+clean-server:
+    cargo clean -p quilt-server
 
 # ── Docs ─────────────────────────────────────────────────────────────────
 
@@ -177,9 +170,8 @@ setup:
     cargo install cargo-llvm-cov
     rustup component add rustfmt clippy llvm-tools
 
-# Install tauri-driver for E2E testing
+# Install Playwright for E2E testing
 setup-e2e:
-    cargo install tauri-driver --locked
     cd e2e && npm install
 
 # ── TreeRAG ──────────────────────────────────────────────────────────────
@@ -252,7 +244,7 @@ e2e-debug:
     cd e2e && npx wdio debug e2e/wdio.conf.ts
 
 # Run E2E tests with full app rebuild
-e2e-all: build-desktop
+e2e-all: build-server
     cd e2e && npm test
 
 # Show E2E test report
@@ -261,14 +253,34 @@ e2e-report:
 
 # ── Desktop App ──────────────────────────────────────────────────────────────
 
-# Run the built desktop app (from target/release)
-run-desktop-built:
-    ./target/release/quilt-desktop
+# ── Axum Server (quilt-server) ────────────────────────────────────────────────
 
-# Run the debug desktop app
-run-desktop-debug:
-    ./target/debug/quilt-desktop
+# Build quilt-server in release mode
+build-server-release:
+    cargo build -p quilt-server --release
 
-# Build and run desktop app in one command
-dev-desktop: build-desktop
-    ./target/release/quilt-desktop
+# Run the quilt-server (Axum HTTP server)
+serve:
+    cargo run -p quilt-server
+
+# Run quilt-server with custom port
+serve-port port:
+    QUILT_PORT={{port}} cargo run -p quilt-server
+
+# Run quilt-server with CORS enabled (for development)
+serve-cors:
+    QUILT_CORS=true cargo run -p quilt-server
+
+# Run quilt-server in release mode
+run-server-release:
+    cargo run -p quilt-server --release
+
+# ── E2E Tests (Playwright) ──────────────────────────────────────────────────────
+
+# Install Playwright for E2E testing
+e2e-install-playwright:
+    cd e2e && npm install
+
+# Run E2E tests with Playwright (after quilt-server is running)
+e2e-playwright:
+    cd e2e && npx playwright test

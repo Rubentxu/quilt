@@ -77,7 +77,7 @@ impl CounterfactualExplorer {
         let context: String = context_blocks
             .iter()
             .take(10)
-            .map(|b| b.content.chars().take(200).collect::<String>())
+            .map(|b| b.content.as_plain_text().chars().take(200).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n---\n");
 

@@ -101,10 +101,10 @@ impl ArgumentCartographer {
     /// Classify a single block's argument role via AI.
     async fn classify_block(&self, block: &Block) -> ArgumentDetection {
         // Simple heuristic + AI approach for now
-        let content = &block.content;
+        let content = block.content.as_plain_text();
 
         // Quick heuristic pre-filter to avoid AI call for obvious non-arguments
-        let (classification, confidence) = self.ai_classify_block(content).await;
+        let (classification, confidence) = self.ai_classify_block(&content).await;
 
         ArgumentDetection {
             classification,

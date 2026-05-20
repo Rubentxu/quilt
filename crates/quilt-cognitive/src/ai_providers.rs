@@ -222,8 +222,8 @@ mod ollama {
                 "Given block A: '{}' and block B: '{}', describe a single conceptual bridge \
                  or connection between them in 1-2 sentences. If no meaningful connection exists, \
                  say 'none'.",
-                a.content.chars().take(200).collect::<String>(),
-                b.content.chars().take(200).collect::<String>()
+                a.content.as_plain_text().chars().take(200).collect::<String>(),
+                b.content.as_plain_text().chars().take(200).collect::<String>()
             );
             let body = serde_json::json!({
                 "model": self.model,
@@ -545,8 +545,8 @@ mod openai {
                 "Given block A: '{}' and block B: '{}', describe a single conceptual bridge \
                  or connection between them in 1-2 sentences. If no meaningful connection exists, \
                  say 'none'.",
-                a.content.chars().take(200).collect::<String>(),
-                b.content.chars().take(200).collect::<String>()
+                a.content.as_plain_text().chars().take(200).collect::<String>(),
+                b.content.as_plain_text().chars().take(200).collect::<String>()
             );
             let body = OpenAIChatRequest {
                 model: self.model.clone(),

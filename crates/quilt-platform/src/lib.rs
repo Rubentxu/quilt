@@ -3,6 +3,7 @@
 //! This crate provides platform adapters: Tauri desktop shell and CLI.
 
 pub mod cli;
+pub mod init;
 pub mod mcp_transport;
 pub mod tauri;
 pub mod watcher;

@@ -29,6 +29,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use sqlx::Row;
 use std::collections::HashMap;
 
+use crate::database::sqlite::block_row::{parse_block_content, serialize_block_content};
 use crate::database::sqlite::connection::DbPool;
 use quilt_domain::classes::types::Class;
 use quilt_domain::entities::{
@@ -257,7 +258,7 @@ impl BlockRow {
             format: parse_format(&self.format),
             marker: self.marker.as_deref().and_then(parse_marker),
             priority: self.priority.as_deref().and_then(parse_priority),
-            content: self.content.clone(),
+            content: parse_block_content(&self.content)?,
             properties: parse_properties(&self.properties),
             scheduled: optional_ts_to_datetime(self.scheduled),
             deadline: optional_ts_to_datetime(self.deadline),
@@ -483,7 +484,7 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(format_to_str(&block.format))
         .bind(block.marker.as_ref().map(|m| marker_to_str(m)))
         .bind(block.priority.as_ref().map(|p| priority_to_str(p)))
-        .bind(&block.content)
+        .bind(&serialize_block_content(&block.content))
         .bind(properties_to_blob(&block.properties))
         .bind(block.scheduled.as_ref().map(datetime_to_ts))
         .bind(block.deadline.as_ref().map(datetime_to_ts))
@@ -519,7 +520,7 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(format_to_str(&block.format))
         .bind(block.marker.as_ref().map(|m| marker_to_str(m)))
         .bind(block.priority.as_ref().map(|p| priority_to_str(p)))
-        .bind(&block.content)
+        .bind(&serialize_block_content(&block.content))
         .bind(properties_to_blob(&block.properties))
         .bind(block.scheduled.as_ref().map(datetime_to_ts))
         .bind(block.deadline.as_ref().map(datetime_to_ts))
@@ -619,13 +620,15 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn get_backlinks(&self, block_id: Uuid) -> Result<Vec<Block>, DomainError> {
+        // Query blocks where refs JSON array contains the target block_id
+        // The refs are stored as JSON: ["uuid1", "uuid2", ...]
+        let target_str = block_id.to_string();
         let rows = sqlx::query(
-            r#"SELECT b.* FROM blocks b
-            JOIN refs r ON b.id = r.source_id
-            WHERE r.target_id = ? AND b.deleted_at IS NULL
-            ORDER BY b.updated_at DESC"#,
+            r#"SELECT * FROM blocks
+            WHERE refs LIKE ? AND deleted_at IS NULL
+            ORDER BY updated_at DESC"#,
         )
-        .bind(uuid_to_blob(&block_id))
+        .bind(format!("\"{}\"", target_str))
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DomainError::Database(format!("get_backlinks: {}", e)))?;

@@ -147,8 +147,8 @@ impl AIClient for MockAIClient {
     async fn bridge_concept(&self, a: &Block, b: &Block) -> Result<Option<String>, AIClientError> {
         Ok(Some(format!(
             "synthetic bridge between '{}' and '{}'",
-            a.content.chars().take(50).collect::<String>(),
-            b.content.chars().take(50).collect::<String>()
+            a.content.as_plain_text().chars().take(50).collect::<String>(),
+            b.content.as_plain_text().chars().take(50).collect::<String>()
         )))
     }
 

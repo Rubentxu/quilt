@@ -19,11 +19,13 @@ use quilt_query::parser::{
 use quilt_query::{QueryExecutor, QueryParser as QParser};
 
 /// Helper to parse a query string
+#[allow(dead_code)]
 fn parse(input: &str) -> QueryExpr {
     QueryParser.parse(input).expect("parse failed")
 }
 
 /// Helper to parse and get a parse error
+#[allow(dead_code)]
 fn parse_err(input: &str) -> ParseError {
     QueryParser.parse(input).expect_err("expected parse error")
 }

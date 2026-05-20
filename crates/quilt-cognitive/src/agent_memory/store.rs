@@ -40,7 +40,8 @@ fn storage_key(entry: &MemoryEntry) -> String {
 }
 
 fn entry_to_block(entry: &MemoryEntry) -> Result<Block, StoreError> {
-    let content = serde_json::to_string(entry)?;
+    use quilt_domain::content::BlockContent;
+    let content = BlockContent::from_text(serde_json::to_string(entry)?);
     let _page_name = format!("{}/{}", AGENT_MEMORY_NAMESPACE, entry.context);
 
     let page_id = {
@@ -105,7 +106,8 @@ fn entry_to_block(entry: &MemoryEntry) -> Result<Block, StoreError> {
 }
 
 fn block_to_entry(block: &Block) -> Result<MemoryEntry, StoreError> {
-    let entry: MemoryEntry = serde_json::from_str(&block.content)?;
+    let content_str = serde_json::to_string(&block.content)?;
+    let entry: MemoryEntry = serde_json::from_str(&content_str)?;
     Ok(entry)
 }
 

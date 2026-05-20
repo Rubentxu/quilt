@@ -1,6 +1,7 @@
-//! Journal view — today's daily notes
+//! Journal view — today's daily notes with Logseq-style layout
 
 use crate::bridge::{self, get_journal, BriefingStatsDto, CognitivePulseDto, MorningBriefingDto};
+use crate::components::block::{Block, EmptyState};
 use chrono::Local;
 use leptos::prelude::*;
 
@@ -35,12 +36,12 @@ pub fn JournalView() -> impl IntoView {
 
     view! {
         <div class="journal-view">
-            <div class="page-header">
-                <h2 class="journal-date">{today_display}</h2>
-                <p class="page-subtitle">"Your daily journal"</p>
-            </div>
+            <header class="journal-header">
+                <h1 class="journal-date">{today_display}</h1>
+                <p class="journal-subtitle">"Your daily journal"</p>
+            </header>
 
-            // Morning Briefing Section - shown when briefing is available
+            // Morning Briefing Section
             <Show
                 when={move || !fetch_briefing.pending().get() && fetch_briefing.value().get().flatten().is_some()}
                 fallback={move || view! { <div class="briefing-loading">"Loading cognitive pulse..."</div> }}
@@ -69,40 +70,23 @@ pub fn JournalView() -> impl IntoView {
                 }}
             </Show>
 
-            <Show when={move || fetch_journal.pending().get()} fallback={move || {
-                view! {
-                    <Show when={move || fetch_journal.value().get().flatten().is_some()} fallback={move || view! {
-                        <div>
-                            <section class="card" style="margin-bottom: 1.5rem">
-                                <h3>"Tasks"</h3>
-                                <p class="empty-state">"No tasks yet"</p>
-                            </section>
-                            <section class="card">
-                                <h3>"Notes"</h3>
-                                <p class="empty-state">"Start writing to see your notes"</p>
-                            </section>
-                        </div>
-                    }}>
-                        <div>
-                            <section class="card" style="margin-bottom: 1.5rem">
-                                <h3>"Tasks"</h3>
-                                <p class="empty-state">"No tasks yet"</p>
-                            </section>
-                            <section class="card">
-                                <h3>"Notes"</h3>
-                                <p class="empty-state">"Start writing to see your notes"</p>
-                            </section>
-                        </div>
-                    </Show>
-                }
-            }}>
-                <div class="loading">"Loading journal..."</div>
+            // Journal content
+            <Show when={move || !fetch_journal.pending().get()}>
+                <div class="journal-content">
+                    <Block title="Tasks">
+                        <EmptyState message="No tasks yet" />
+                    </Block>
+
+                    <Block title="Notes">
+                        <EmptyState message="Start writing to see your notes" />
+                    </Block>
+                </div>
             </Show>
         </div>
     }
 }
 
-/// Morning Briefing Section Component
+/// Morning Briefing Section Component with Logseq styling
 #[component]
 fn MorningBriefingSection(briefing: MorningBriefingDto) -> impl IntoView {
     let pulse = briefing.cognitive_pulse.clone();
@@ -110,58 +94,46 @@ fn MorningBriefingSection(briefing: MorningBriefingDto) -> impl IntoView {
     let alerts_count = briefing.decay_alerts.len();
 
     view! {
-        <section class="card morning-briefing-section" style="margin-bottom: 1.5rem">
-            <h3>"🧠 Morning Briefing"</h3>
-            <div class="briefing-pulse">
-                <span class="pulse-metric">
-                    <span class="pulse-value">{pulse.total_pages}</span>
-                    <span class="pulse-label">"Pages"</span>
-                </span>
-                <span class="pulse-metric">
-                    <span class="pulse-value">{pulse.total_blocks}</span>
-                    <span class="pulse-label">"Blocks"</span>
-                </span>
-                <span class="pulse-metric">
-                    <span class="pulse-value">{pulse.clusters}</span>
-                    <span class="pulse-label">"Clusters"</span>
-                </span>
-                <span class="pulse-metric">
-                    <span class="pulse-value">{pulse.frontiers}</span>
-                    <span class="pulse-label">"Frontiers"</span>
-                </span>
-            </div>
+        <Block title="🧠 Morning Briefing">
+            // Compact inline metrics - Logseq style
+            <p class="briefing-metrics">
+                {pulse.total_pages} " Pages · " {pulse.total_blocks} " Blocks · " {pulse.clusters} " Clusters · " {pulse.frontiers} " Frontiers"
+            </p>
+
             <Show when={move || highlights_count > 0}>
-                <div class="briefing-highlights">
-                    <h4>"✨ Serendipity"</h4>
-                    <ul>
-                        {briefing.serendipity_highlights.iter().take(3).map(|h| {
-                            view! {
-                                <li>
-                                    {h.from_page.clone()} " → " {h.to_page.clone()}
-                                    <span class="highlight-confidence">" ({(h.confidence * 100.0).round()}%)"</span>
-                                </li>
-                            }
-                        }).collect::<Vec<_>>()}
-                    </ul>
-                </div>
+                <ul class="briefing-list">
+                    <li class="briefing-section-title">"✨ Serendipity"</li>
+                    {briefing.serendipity_highlights.iter().take(3).map(|h| {
+                        let confidence_pct = (h.confidence * 100.0).round() as i32;
+                        view! {
+                            <li class="briefing-list-item">
+                                <span class="highlight-from">{h.from_page.clone()}</span>
+                                <span class="highlight-arrow">" → "</span>
+                                <span class="highlight-to">{h.to_page.clone()}</span>
+                                <span class="highlight-confidence">" (" {confidence_pct} "%)"</span>
+                            </li>
+                        }
+                    }).collect::<Vec<_>>()}
+                </ul>
             </Show>
+
             <Show when={move || alerts_count > 0}>
-                <div class="briefing-alerts">
-                    <h4>"⚠️ Stale Pages"</h4>
-                    <ul>
-                        {briefing.decay_alerts.iter().take(3).map(|a| {
-                            view! {
-                                <li>
-                                    {a.page_name.clone()} " — " {a.days_stale} " days stale"
-                                </li>
-                            }
-                        }).collect::<Vec<_>>()}
-                    </ul>
-                </div>
+                <ul class="briefing-list briefing-list-alerts">
+                    <li class="briefing-section-title">"⚠️ Stale Pages"</li>
+                    {briefing.decay_alerts.iter().take(3).map(|a| {
+                        view! {
+                            <li class="briefing-list-item">
+                                <span class="stale-page-name">{a.page_name.clone()}</span>
+                                <span class="stale-days">" — " {a.days_stale} " days stale"</span>
+                            </li>
+                        }
+                    }).collect::<Vec<_>>()}
+                </ul>
             </Show>
+
             <Show when={move || briefing.degraded}>
                 <div class="degraded-notice">"Running in degraded mode"</div>
             </Show>
-        </section>
+        </Block>
     }
 }

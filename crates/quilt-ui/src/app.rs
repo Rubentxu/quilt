@@ -12,7 +12,7 @@ use leptos::prelude::*;
 use leptos_meta::*;
 use leptos_router::{components::*, hooks::use_params, params::Params, path};
 
-/// Main application component
+/// Main application component with Logseq-style grid layout
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
@@ -22,8 +22,17 @@ pub fn App() -> impl IntoView {
         <Title text="Quilt — AI-first Knowledge Graph" />
 
         <Router>
-            <div class="app-layout">
+            <div class="app-shell">
                 <Sidebar />
+                <header class="mobile-header">
+                    <div class="mobile-header-brand">
+                        <span class="mobile-header-icon">"🧠"</span>
+                        <span class="mobile-header-text">"Quilt"</span>
+                    </div>
+                    <button class="mobile-header-menu" type="button">
+                        "Menu"
+                    </button>
+                </header>
                 <main class="main-content">
                     <Routes fallback=|| view! { <NotFound /> }>
                         <Route path=path!("/") view=JournalView />

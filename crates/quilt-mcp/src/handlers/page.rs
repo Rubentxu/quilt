@@ -6,6 +6,7 @@
 use super::{HandlerResult, PageHandler as PageHandlerTrait};
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
+use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::services::TimezoneService;
 use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker};
@@ -167,7 +168,7 @@ impl PageHandlerTrait for DefaultPageHandler {
         let block = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: params.content.clone(),
+                content: BlockContent::from_text(params.content.clone()),
                 parent_id: None,
                 order: 1.0,
                 marker: Some(marker),

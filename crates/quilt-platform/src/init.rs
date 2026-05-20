@@ -3,7 +3,7 @@
 //! This module provides common initialization logic that can be shared between
 //! different entry points (Tauri desktop app, HTTP server, CLI).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quilt_cognitive::{
@@ -14,8 +14,8 @@ use quilt_domain::repositories::SettingsRepository;
 use quilt_domain::services::TimezoneService;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations, DbPool};
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqliteDeepLinkRepository, SqliteJournalRepository,
-    SqlitePageRepository, SqliteSettingsRepository, SqliteTagRepository,
+    SqliteBlockRepository, SqliteDeepLinkRepository, SqliteJournalRepository, SqlitePageRepository,
+    SqliteSettingsRepository, SqliteTagRepository,
 };
 use quilt_mcp::McpServer;
 use quilt_search::SearchService;
@@ -50,7 +50,7 @@ pub enum VaultError {
 }
 
 /// Ensure the vault directory structure exists (.quilt folder and quilt.db)
-pub fn ensure_vault_exists(vault_path: &PathBuf) -> Result<PathBuf, VaultError> {
+pub fn ensure_vault_exists(vault_path: &Path) -> Result<PathBuf, VaultError> {
     let quilt_dir = vault_path.join(".quilt");
     let db_path = quilt_dir.join("quilt.db");
 
@@ -95,7 +95,9 @@ pub async fn create_db_pool(db_path: &PathBuf) -> Result<DbPool, VaultError> {
 /// - Timezone service
 /// - AI client and all cognitive engines
 /// - Morning briefing aggregation
-pub async fn init_mcp_server(pool: DbPool) -> Result<Arc<McpServer>, Box<dyn std::error::Error + Send + Sync>> {
+pub async fn init_mcp_server(
+    pool: DbPool,
+) -> Result<Arc<McpServer>, Box<dyn std::error::Error + Send + Sync>> {
     // Create repositories
     let block_repo = Arc::new(SqliteBlockRepository::new(pool.clone()));
     let page_repo = Arc::new(SqlitePageRepository::new(pool.clone()));
@@ -114,7 +116,8 @@ pub async fn init_mcp_server(pool: DbPool) -> Result<Arc<McpServer>, Box<dyn std
 
     // Create AI client for cognitive engines using default config
     let ai_config = quilt_cognitive::AIConfig::default();
-    let ai_client: Arc<dyn quilt_cognitive::AIClient> = Arc::from(quilt_cognitive::create_ai_client(&ai_config));
+    let ai_client: Arc<dyn quilt_cognitive::AIClient> =
+        Arc::from(quilt_cognitive::create_ai_client(&ai_config));
 
     // Create AgentMemory first (needed by MentalModelGardener)
     let agent_memory = Arc::new(AgentMemory::new(block_repo.clone(), ai_client.clone()));
@@ -197,7 +200,9 @@ pub struct HttpServerInit {
 
 impl HttpServerInit {
     /// Initialize HTTP server state from vault path
-    pub async fn new(vault_path: PathBuf) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(
+        vault_path: PathBuf,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         // Initialize vault
         let vault_config = init_vault(vault_path)?;
 

@@ -24,6 +24,7 @@
 //! - `types/` - Aggregate and composite types (DailySummary, etc.)
 
 pub mod classes;
+pub mod content;
 pub mod entities;
 pub mod errors;
 pub mod events;
@@ -53,3 +54,4 @@ pub use types::DailySummary;
 pub use value_objects::{
     Align, AssetType, BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
 };
+pub use content::{BlockContent, BlockSegment, Mark};
