@@ -4,6 +4,69 @@
 //! In development (non-Tauri browser via Trunk), they return mock data.
 
 use serde::{Deserialize, Serialize};
+use std::future::Future as StdFuture;
+use std::pin::Pin;
+use std::time::Duration;
+
+/// Execute a future with retry logic for transient failures.
+///
+/// Returns the result if successful, or propagates the last error after max_retries.
+pub async fn with_retry<F, T, E>(mut f: F, max_retries: u32) -> Result<T, E>
+where
+    F: FnMut() -> Pin<Box<dyn StdFuture<Output = Result<T, E>>>>,
+    E: std::fmt::Debug,
+{
+    let mut last_error = None;
+    for attempt in 0..max_retries {
+        match f().await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                last_error = Some(e);
+                if attempt < max_retries - 1 {
+                    // Exponential backoff: 100ms, 200ms, 400ms, ...
+                    let backoff_ms = 100 * 2u64.pow(attempt);
+                    gloo_timers::future::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                }
+            }
+        }
+    }
+    Err(last_error.unwrap())
+}
+
+/// Execute a future with a timeout.
+///
+/// This implementation uses a simple poll-based approach where the timeout
+/// task sets a flag, and we check it after the future completes.
+/// Note: The future continues running even if timeout fires (no cancellation).
+///
+/// Returns Ok(T) if the future completes within the duration, otherwise Err(BridgeError).
+pub async fn with_timeout<F, T>(future: F, duration: Duration) -> Result<T, BridgeError>
+where
+    F: std::future::Future<Output = Result<T, BridgeError>>,
+{
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let timed_out_clone = timed_out.clone();
+
+    // Spawn timeout task using gloo_timers
+    let duration_ms = duration.as_millis() as u64;
+    wasm_bindgen_futures::spawn_local(async move {
+        gloo_timers::future::sleep(std::time::Duration::from_millis(duration_ms)).await;
+        timed_out_clone.store(true, Ordering::SeqCst);
+    });
+
+    // Await the future
+    let result = future.await;
+
+    // Check if we timed out
+    if timed_out.load(Ordering::SeqCst) {
+        Err(BridgeError::TauriError("Operation timed out".into()))
+    } else {
+        result
+    }
+}
 
 /// Invoke a Tauri command via window.__TAURI__.invoke (JavaScript interop).
 ///
@@ -858,5 +921,429 @@ pub async fn get_graph_data() -> Result<GraphDataDto, BridgeError> {
             edges: vec![],
             last_updated: String::new(),
         })
+    }
+}
+
+// ============================================================================
+// Block Properties API
+// ============================================================================
+
+/// Property DTO for block metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropertyDto {
+    pub key: String,
+    pub value: String,
+}
+
+/// Block properties DTO
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockPropertiesDto {
+    pub block_id: String,
+    pub properties: Vec<PropertyDto>,
+}
+
+/// Get properties for a block - wired to `get_block_properties` Tauri command
+pub async fn get_block_properties(block_id: &str) -> Result<BlockPropertiesDto, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let block_id = block_id.to_string();
+        with_retry(
+            || {
+                let block_id = block_id.clone();
+                Box::pin(async move {
+                    let args = serde_json::json!({ "block_id": block_id });
+                    with_timeout(
+                        invoke::<BlockPropertiesDto>("get_block_properties", &args),
+                        std::time::Duration::from_secs(5)
+                    ).await
+                })
+            },
+            3
+        ).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(BlockPropertiesDto {
+            block_id: block_id.to_string(),
+            properties: vec![],
+        })
+    }
+}
+
+/// Update properties for a block - wired to `update_block_properties` Tauri command
+pub async fn update_block_properties(
+    block_id: &str,
+    properties: Vec<PropertyDto>,
+) -> Result<BlockPropertiesDto, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({
+            "block_id": block_id,
+            "properties": properties
+        });
+        match invoke::<BlockPropertiesDto>("update_block_properties", &args).await {
+            Ok(props) => Ok(props),
+            Err(BridgeError::Unavailable(_)) => Ok(BlockPropertiesDto {
+                block_id: block_id.to_string(),
+                properties,
+            }),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(BlockPropertiesDto {
+            block_id: block_id.to_string(),
+            properties,
+        })
+    }
+}
+
+// ============================================================================
+// Annotations API
+// ============================================================================
+
+/// Annotation type enum
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum AnnotationTypeDto {
+    Highlight,
+    Comment,
+    Question,
+    Important,
+}
+
+/// Annotation DTO
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnnotationDto {
+    pub id: String,
+    pub block_id: String,
+    pub annotation_type: AnnotationTypeDto,
+    pub content: String,
+    pub resolved: bool,
+    pub created_at: String,
+}
+
+/// Create annotation request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateAnnotationRequest {
+    pub block_id: String,
+    pub annotation_type: AnnotationTypeDto,
+    pub content: String,
+}
+
+/// List annotations for a block - wired to `get_block_annotations` Tauri command
+pub async fn get_block_annotations(_block_id: &str) -> Result<Vec<AnnotationDto>, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({ "block_id": block_id });
+        match invoke::<Vec<AnnotationDto>>("get_block_annotations", &args).await {
+            Ok(annotations) => Ok(annotations),
+            Err(BridgeError::Unavailable(_)) => Ok(vec![]),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(vec![])
+    }
+}
+
+/// Create a new annotation - wired to `create_annotation` Tauri command
+pub async fn create_annotation(
+    block_id: &str,
+    annotation_type: AnnotationTypeDto,
+    content: &str,
+) -> Result<AnnotationDto, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({
+            "block_id": block_id,
+            "annotation_type": annotation_type,
+            "content": content
+        });
+        match invoke::<AnnotationDto>("create_annotation", &args).await {
+            Ok(annotation) => Ok(annotation),
+            Err(BridgeError::Unavailable(_)) => Ok(AnnotationDto {
+                id: format!(
+                    "mock-ann-{}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis()
+                ),
+                block_id: block_id.to_string(),
+                annotation_type,
+                content: content.to_string(),
+                resolved: false,
+                created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+            }),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(AnnotationDto {
+            id: format!(
+                "mock-ann-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis()
+            ),
+            block_id: block_id.to_string(),
+            annotation_type,
+            content: content.to_string(),
+            resolved: false,
+            created_at: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
+        })
+    }
+}
+
+/// Resolve/unresolve an annotation - wired to `resolve_annotation` Tauri command
+pub async fn resolve_annotation(
+    annotation_id: &str,
+    resolved: bool,
+) -> Result<AnnotationDto, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({
+            "annotation_id": annotation_id,
+            "resolved": resolved
+        });
+        match invoke::<AnnotationDto>("resolve_annotation", &args).await {
+            Ok(annotation) => Ok(annotation),
+            Err(BridgeError::Unavailable(_)) => Ok(AnnotationDto {
+                id: annotation_id.to_string(),
+                block_id: "unknown".to_string(),
+                annotation_type: AnnotationTypeDto::Comment,
+                content: String::new(),
+                resolved,
+                created_at: String::new(),
+            }),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(AnnotationDto {
+            id: annotation_id.to_string(),
+            block_id: "unknown".to_string(),
+            annotation_type: AnnotationTypeDto::Comment,
+            content: String::new(),
+            resolved,
+            created_at: String::new(),
+        })
+    }
+}
+
+/// Delete an annotation - wired to `delete_annotation` Tauri command
+pub async fn delete_annotation(_annotation_id: &str) -> Result<(), BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({ "annotation_id": annotation_id });
+        match invoke::<()>("delete_annotation", &args).await {
+            Ok(_) => Ok(()),
+            Err(BridgeError::Unavailable(_)) => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Backlinks API
+// ============================================================================
+
+/// Relationship type enum
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RelationshipTypeDto {
+    Direct,
+    Transitive,
+    Semantic,
+}
+
+/// Backlink DTO
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BacklinkDto {
+    pub id: String,
+    pub source_id: String,
+    pub source_title: String,
+    pub source_preview: String,
+    pub context: String,
+    pub relationship_type: RelationshipTypeDto,
+    pub created_at: String,
+    pub provenance_score: f64,
+}
+
+/// Get backlinks for a page - wired to `get_page_backlinks` Tauri command
+pub async fn get_page_backlinks(_page_name: &str) -> Result<Vec<BacklinkDto>, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({ "page_name": page_name });
+        match invoke::<Vec<BacklinkDto>>("get_page_backlinks", &args).await {
+            Ok(backlinks) => Ok(backlinks),
+            Err(BridgeError::Unavailable(_)) => Ok(vec![]),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(vec![])
+    }
+}
+
+// ============================================================================
+// Graph Management API (Multi-graph support)
+// ============================================================================
+
+/// Graph info DTO for multi-graph support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphInfoDto {
+    pub path: String,
+    pub name: String,
+}
+
+/// Get the currently open graph info - wired to `get_current_graph` Tauri command
+pub async fn get_current_graph() -> Result<Option<GraphInfoDto>, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({});
+        match invoke::<Option<GraphInfoDto>>("get_current_graph", &args).await {
+            Ok(graph_info) => Ok(graph_info),
+            Err(BridgeError::Unavailable(_)) => Ok(Some(GraphInfoDto {
+                path: "quilt.db".to_string(),
+                name: "Default Graph".to_string(),
+            })),
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(Some(GraphInfoDto {
+            path: "quilt.db".to_string(),
+            name: "Default Graph".to_string(),
+        }))
+    }
+}
+
+/// Open a graph at the given path - wired to `open_graph` Tauri command
+/// This switches the active graph to a different .quilt file
+pub async fn open_graph(path: &str) -> Result<(), BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({ "path": path });
+        match invoke::<()>("open_graph", &args).await {
+            Ok(_) => Ok(()),
+            Err(BridgeError::Unavailable(_)) => {
+                // TODO: Implement actual graph switching
+                // For now, just return success in dev mode
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Trash / Recycle Bin API
+// ============================================================================
+
+/// Block info DTO for trash/recycle bin listing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockInfoDto {
+    pub id: String,
+    pub content: String,
+    pub deleted_at: Option<String>,
+}
+
+/// Delete a block (soft delete / move to trash) - wired to `delete_block` Tauri command
+pub async fn delete_block(block_id: &str) -> Result<(), BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({ "block_id": block_id });
+        match invoke::<()>("delete_block", &args).await {
+            Ok(_) => Ok(()),
+            Err(BridgeError::Unavailable(_)) => {
+                // TODO: Implement mock for dev mode
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = block_id;
+        Ok(())
+    }
+}
+
+/// Restore a block from trash - wired to `restore_block` Tauri command
+pub async fn restore_block(block_id: &str) -> Result<(), BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({ "block_id": block_id });
+        match invoke::<()>("restore_block", &args).await {
+            Ok(_) => Ok(()),
+            Err(BridgeError::Unavailable(_)) => {
+                // TODO: Implement mock for dev mode
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = block_id;
+        Ok(())
+    }
+}
+
+/// Get the recycle bin / trash contents - wired to `get_recycle_bin` Tauri command
+pub async fn get_recycle_bin() -> Result<Vec<BlockInfoDto>, BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({});
+        match invoke::<Vec<BlockInfoDto>>("get_recycle_bin", &args).await {
+            Ok(items) => Ok(items),
+            Err(BridgeError::Unavailable(_)) => {
+                // TODO: Implement mock for dev mode
+                Ok(vec![])
+            }
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        Ok(vec![])
+    }
+}
+
+/// Hard delete a block permanently - wired to `hard_delete_block` Tauri command
+pub async fn hard_delete_block(block_id: &str) -> Result<(), BridgeError> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let args = serde_json::json!({ "block_id": block_id });
+        match invoke::<()>("hard_delete_block", &args).await {
+            Ok(_) => Ok(()),
+            Err(BridgeError::Unavailable(_)) => {
+                // TODO: Implement mock for dev mode
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = block_id;
+        Ok(())
     }
 }
