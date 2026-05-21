@@ -44,26 +44,38 @@ pub fn SearchModal(
 
     view! {
         <Show when={move || is_open}>
-            <div class="search-modal-overlay">
-                <div class="search-modal">
+            <div
+                class="search-modal-overlay"
+                on:click={move |_| on_close.call(())}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="search-modal-title"
+            >
+                <div class="search-modal" on:click={move |ev| ev.stop_propagation()}>
                     <div class="search-modal-header">
-                        <span class="search-icon">*</span>
+                        <span class="search-icon">"*</span>
                         <input
                             type="text"
                             class="search-input"
                             placeholder="Search pages, blocks, commands..."
                             value={query_sig.get()}
+                            aria-label="Search query"
                         />
                         <span class="search-shortcut">ESC</span>
                     </div>
+                    <h2 id="search-modal-title" class="visually-hidden">"Search"</h2>
                     <Show when={move || results_sig.get().is_empty()}>
                         <div class="search-empty">
                             <p>"No results found"</p>
                         </div>
                     </Show>
-                    <div class="search-results">
+                    <div class="search-results" role="listbox" aria-label="Search results">
                         <For each={move || results_sig.get()} key=|result| result.id.clone() let:result>
-                            <button class="search-result-item">
+                            <button
+                                class="search-result-item"
+                                role="option"
+                                aria-selected="false"
+                            >
                                 <span class="search-result-icon">{result.icon}</span>
                                 <div class="search-result-content">
                                     <span class="search-result-title">{result.title}</span>
