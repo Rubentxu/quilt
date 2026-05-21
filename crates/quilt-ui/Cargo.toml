@@ -31,4 +31,5 @@ gloo-timers = { version = "0.3", features = ["futures"] }
 futures-channel = "0.3"
 chrono = { version = "0.4", features = ["wasmbind"] }
 tracing = "0.1"
+quilt-ui-plugin = { path = "../quilt-ui-plugin" }
 # Note: Tauri IPC uses window.__TAURI__.invoke via web_sys/js_sys (no tauri-invoke dep needed)
