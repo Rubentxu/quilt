@@ -26,6 +26,7 @@
 
 pub mod error;
 pub mod handlers;
+pub mod middleware;
 pub mod mcp_ws;
 pub mod polling;
 pub mod server;

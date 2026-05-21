@@ -6,16 +6,18 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::Context;
-use axum::{routing::get, Json, Router};
+use axum::{routing::get, middleware::from_fn_with_state, Json, Router};
 use sqlx::SqlitePool;
 use tokio::signal;
 use tokio::sync::broadcast;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use crate::handlers;
+use crate::middleware::{self, rate_limit_middleware, RateLimiter};
 use crate::mcp_ws::ws_mcp_handler;
 use crate::polling::{self, FileChangeEvent, PollingConfig};
 use crate::state::HttpState;
@@ -37,10 +39,28 @@ async fn health_check() -> Json<HealthResponse> {
 
 /// Create the Axum router with all routes
 fn create_app(state: Arc<HttpState>) -> Router {
+    // Configure restrictive CORS based on environment
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(AllowOrigin::predicate(|origin, _| {
+            // Restrict to known origins in production
+            if cfg!(debug_assertions) {
+                // Allow all origins in dev mode for easier testing
+                true
+            } else {
+                // In production, check against allowed origins from env var
+                let allowed_origins = std::env::var("ALLOWED_ORIGINS")
+                    .unwrap_or_else(|_| "https://app.quilt.local,https://quilt.local".to_string());
+
+                allowed_origins
+                    .split(',')
+                    .any(|allowed| allowed.trim().as_bytes() == origin.as_bytes())
+            }
+        }))
+        .allow_methods(tower_http::cors::Any)
+        .allow_headers(tower_http::cors::Any);
+
+    // Create rate limiter: 100 requests per minute per IP
+    let rate_limiter = Arc::new(RateLimiter::new(100, Duration::from_secs(60)));
 
     Router::new()
         .route("/health", get(health_check))
@@ -53,6 +73,7 @@ fn create_app(state: Arc<HttpState>) -> Router {
         .route("/ws/mcp", axum::routing::get(ws_mcp_handler))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
+        .layer(from_fn_with_state(state.clone(), rate_limit_middleware))
         .with_state(state)
 }
 

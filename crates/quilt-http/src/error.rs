@@ -24,6 +24,9 @@ pub enum HttpError {
 
     #[error("Database error: {0}")]
     DatabaseError(String),
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
 }
 
 /// Error response body format
@@ -40,6 +43,7 @@ impl IntoResponse for HttpError {
             HttpError::ValidationError(_) => (StatusCode::BAD_REQUEST, "VALIDATION_ERROR"),
             HttpError::InternalError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_ERROR"),
             HttpError::DatabaseError(_) => (StatusCode::INTERNAL_SERVER_ERROR, "DATABASE_ERROR"),
+            HttpError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
         };
 
         let body = HttpErrorBody {

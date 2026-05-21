@@ -22,6 +22,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
         State,
     },
+    http::StatusCode,
     response::IntoResponse,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -120,13 +121,60 @@ pub fn routes() -> axum::Router<Arc<HttpState>> {
 pub async fn ws_mcp_handler(
     State(state): State<Arc<HttpState>>,
     ws: WebSocketUpgrade,
+    request: axum::http::Request<axum::body::Body>,
 ) -> Result<impl IntoResponse, HttpError> {
     debug!("WebSocket connection request to /ws/mcp");
 
-    // Optionally verify origin or authenticate here
+    // Authenticate the request
+    let auth_result = authenticate_request(&request).await;
+    if let Err(status) = auth_result {
+        return Err(HttpError::Unauthorized(
+            "Invalid or missing authentication".to_string(),
+        ));
+    }
+
     let _ = state;
 
     Ok(ws.on_upgrade(handle_mcp_ws))
+}
+
+/// Authenticate a request via Authorization header.
+///
+/// In production: requires valid Bearer token matching QUILT_API_KEY env var.
+/// In development: allows unauthenticated access for easier testing.
+async fn authenticate_request(request: &axum::http::Request<axum::body::Body>) -> Result<(), StatusCode> {
+    // Check for Authorization header
+    let auth_header = request
+        .headers()
+        .get("Authorization")
+        .and_then(|v| v.to_str().ok());
+
+    match auth_header {
+        Some(header) if header.starts_with("Bearer ") => {
+            let token = &header[7..];
+            // Validate token against environment variable
+            let expected_key = std::env::var("QUILT_API_KEY").unwrap_or_default();
+            if token == expected_key {
+                debug!("Authenticated request with valid API key");
+                Ok(())
+            } else {
+                warn!("Rejected request with invalid API key");
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        }
+        _ => {
+            // No Authorization header provided
+            if cfg!(debug_assertions) {
+                // Allow unauthenticated in debug/dev mode for easier testing
+                debug!("Dev mode: allowing unauthenticated request");
+                Ok(())
+            } else {
+                // Require authentication in production
+                warn!("Rejected unauthenticated request in production");
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        }
+    }
 }
 
 /// Handle the WebSocket upgrade and spawn MCP connection handler.
