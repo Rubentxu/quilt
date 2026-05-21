@@ -49,7 +49,7 @@ pub fn block_to_json(block: &Block) -> serde_json::Value {
         "parent_id": block.parent_id.map(|id| id.to_string()),
         "order": block.order,
         "level": block.level,
-        "content": block.content,
+        "content": block.content.as_plain_text(),
         "marker": block.marker.as_ref().map(|m| format!("{:?}", m)),
         "priority": block.priority.as_ref().map(|p| format!("{:?}", p)),
         "collapsed": block.collapsed,

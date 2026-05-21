@@ -20,11 +20,11 @@ pub use crate::types::*;
 use quilt_application::query_service::QueryService;
 use quilt_cognitive::tree_rag::ReportScope;
 use quilt_domain::entities::{
-    Block, BlockCreate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate,
+    Block, BlockCreate, BlockUpdate, DeepLink, DeepLinkCreate, LinkSourceType, LinkType, Page, PageCreate,
 };
 use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::{
-    BlockRepository, DeepLinkRepository, JournalRepository, PageRepository, SettingsRepository,
+    BlockRepository, BlockRepositoryExt, DeepLinkRepository, JournalRepository, PageRepository, SettingsRepository,
     TagRepository,
 };
 use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker, Uuid};
@@ -1133,6 +1133,11 @@ impl McpServer {
             // TaskScheduler tools
             "logseq_schedule_task" => self.tool_schedule_task(&params.arguments).await,
             "logseq_list_tasks" => self.tool_list_tasks(&params.arguments).await,
+            // Batch operations
+            "logseq_create_tree" => self.tool_create_tree(&params.arguments).await,
+            "logseq_move_tree" => self.tool_move_tree(&params.arguments).await,
+            "logseq_delete_tree" => self.tool_delete_tree(&params.arguments).await,
+            "logseq_batch_update" => self.tool_batch_update(&params.arguments).await,
             // Unknown tool - try plugin registry
             _ => self
                 .plugin_registry
@@ -2670,6 +2675,357 @@ impl McpServer {
             .collect();
 
         Ok(serde_json::to_string_pretty(&json_tasks).unwrap_or_else(|e| e.to_string()))
+    }
+
+    // ── Batch Operations ───────────────────────────────────────────────
+
+    async fn tool_create_tree(&self, args: &serde_json::Value) -> Result<String, String> {
+        let page_name = args
+            .get("page_name")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'page_name' parameter")?;
+        let tree = args
+            .get("tree")
+            .ok_or("Missing 'tree' parameter")?;
+
+        // Ensure page exists or create it
+        let page = match self.page_repo.get_by_name(page_name).await {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                let page = Page::new(PageCreate {
+                    name: page_name.to_string(),
+                    title: None,
+                    namespace_id: None,
+                    journal_day: None,
+                    format: BlockFormat::Markdown,
+                    file_id: None,
+                })
+                .map_err(|e| e.to_string())?;
+                self.page_repo
+                    .insert(&page)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                page
+            }
+            Err(e) => return Err(e.to_string()),
+        };
+
+        // Recursively create blocks from tree structure
+        let created = self.create_tree_recursive(&page.id, tree, None, 100.0).await?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "page_name": page_name,
+            "page_id": page.id.to_string(),
+            "created_blocks": created,
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    async fn create_tree_recursive(
+        &self,
+        page_id: &Uuid,
+        tree: &serde_json::Value,
+        parent_id: Option<Uuid>,
+        start_order: f64,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let mut created = Vec::new();
+        let mut order = start_order;
+
+        // Handle single block input (not an array)
+        let items = if tree.is_array() {
+            tree.as_array().unwrap()
+        } else {
+            std::slice::from_ref(tree)
+        };
+
+        for item in items {
+            let content = item
+                .get("content")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'content' in tree item")?;
+            let marker = item
+                .get("marker")
+                .and_then(|v| v.as_str())
+                .and_then(TaskMarker::from_str);
+            let properties = item
+                .get("properties")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .unwrap_or_default();
+
+            let block = Block::new(
+                BlockCreate {
+                    page_id: *page_id,
+                    content: BlockContent::from_text(content),
+                    parent_id,
+                    order,
+                    marker,
+                    format: BlockFormat::Markdown,
+                    properties,
+                },
+                &self.timezone_service,
+            )
+            .map_err(|e| e.to_string())?;
+
+            self.block_repo
+                .insert(&block)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let block_json = serde_json::json!({
+                "id": block.id.to_string(),
+                "content": content,
+                "parent_id": parent_id.map(|id| id.to_string()),
+                "order": order,
+            });
+            created.push(block_json);
+
+            // Process children recursively
+            if let Some(children) = item.get("children").and_then(|v| v.as_array()) {
+                for child in children {
+                    let child_content = child
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .ok_or("Missing 'content' in child")?;
+                    let child_marker = child
+                        .get("marker")
+                        .and_then(|v| v.as_str())
+                        .and_then(TaskMarker::from_str);
+                    let child_properties = child
+                        .get("properties")
+                        .and_then(|v| serde_json::from_value(v.clone()).ok())
+                        .unwrap_or_default();
+
+                    let child_block = Block::new(
+                        BlockCreate {
+                            page_id: *page_id,
+                            content: BlockContent::from_text(child_content),
+                            parent_id: Some(block.id),
+                            order: 100.0,
+                            marker: child_marker,
+                            format: BlockFormat::Markdown,
+                            properties: child_properties,
+                        },
+                        &self.timezone_service,
+                    )
+                    .map_err(|e| e.to_string())?;
+
+                    self.block_repo
+                        .insert(&child_block)
+                        .await
+                        .map_err(|e| e.to_string())?;
+
+                    let child_json = serde_json::json!({
+                        "id": child_block.id.to_string(),
+                        "content": child_content,
+                        "parent_id": block.id.to_string(),
+                        "order": 100.0,
+                    });
+                    created.push(child_json);
+                }
+            }
+
+            order += 100.0;
+        }
+
+        Ok(created)
+    }
+
+    async fn tool_move_tree(&self, args: &serde_json::Value) -> Result<String, String> {
+        let block_id_str = args
+            .get("block_id")
+            .and_then(|v: &serde_json::Value| v.as_str())
+            .ok_or("Missing 'block_id' parameter")?;
+        let block_id = Uuid::parse_str(block_id_str).ok_or_else(|| format!("Invalid UUID: {}", block_id_str))?;
+        let new_parent_id = parse_optional_uuid(args, "new_parent_id")?;
+        let new_order = args
+            .get("order")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(100.0);
+
+        // Get the block
+        let mut block = self
+            .block_repo
+            .get_or_fail(block_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // Update block with new parent and order
+        block.parent_id = new_parent_id;
+        block.order = new_order;
+        block.level = new_parent_id.map(|_| 2).unwrap_or(1);
+
+        self.block_repo
+            .update(&block)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "id": block.id.to_string(),
+            "parent_id": new_parent_id.map(|id| id.to_string()),
+            "order": new_order,
+            "level": block.level,
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    async fn tool_delete_tree(&self, args: &serde_json::Value) -> Result<String, String> {
+        let block_id_str = args
+            .get("block_id")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing 'block_id' parameter")?;
+        let block_id = Uuid::parse_str(block_id_str).ok_or_else(|| format!("Invalid UUID: {}", block_id_str))?;
+        let recursive = args
+            .get("recursive")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+
+        // Get the block
+        let block = self
+            .block_repo
+            .get_or_fail(block_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let mut deleted_ids = vec![block_id_str.to_string()];
+
+        if recursive {
+            // Get all blocks on this page to find subtree
+            let page_blocks = self
+                .block_repo
+                .get_by_page(block.page_id)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            // Find all descendants of this block
+            let subtree_ids = self.find_subtree_ids(block_id, &page_blocks);
+            for descendant_id in &subtree_ids {
+                self.block_repo
+                    .delete(*descendant_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                deleted_ids.push(descendant_id.to_string());
+            }
+        }
+
+        // Delete the block itself
+        self.block_repo
+            .delete(block_id)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "deleted_count": deleted_ids.len(),
+            "deleted_ids": deleted_ids,
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+    }
+
+    fn find_subtree_ids(&self, parent_id: Uuid, all_blocks: &[Block]) -> Vec<Uuid> {
+        let mut ids = Vec::new();
+        for block in all_blocks {
+            if block.parent_id == Some(parent_id) {
+                ids.push(block.id);
+                ids.extend(self.find_subtree_ids(block.id, all_blocks));
+            }
+        }
+        ids
+    }
+
+    async fn tool_batch_update(&self, args: &serde_json::Value) -> Result<String, String> {
+        let updates = args
+            .get("updates")
+            .and_then(|v| v.as_array())
+            .ok_or("Missing 'updates' parameter - expected array of block updates")?;
+
+        let mut results = Vec::new();
+        let mut error_count = 0;
+
+        for update_item in updates {
+            let block_id_str = update_item
+                .get("block_id")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing 'block_id' in update")?;
+            let block_id = match Uuid::parse_str(block_id_str) {
+                Some(id) => id,
+                None => {
+                    results.push(serde_json::json!({
+                        "block_id": block_id_str,
+                        "error": format!("Invalid UUID: {}", block_id_str),
+                    }));
+                    error_count += 1;
+                    continue;
+                }
+            };
+
+            // Build BlockUpdate from JSON
+            let content = update_item
+                .get("content")
+                .and_then(|v| v.as_str())
+                .map(BlockContent::from_text);
+
+            let parent_id = update_item.get("parent_id").map(|v| {
+                if v.is_null() {
+                    None
+                } else {
+                    v.as_str().and_then(Uuid::parse_str)
+                }
+            });
+
+            let block_update = BlockUpdate {
+                content,
+                parent_id,
+                order: update_item.get("order").and_then(|v| v.as_f64()),
+                level: update_item.get("level").and_then(|v| v.as_u64().map(|u| u as u8)),
+                marker: update_item.get("marker").and_then(|v| v.as_str()).and_then(TaskMarker::from_str),
+                priority: None,
+                properties: None,
+                scheduled: None,
+                deadline: None,
+                collapsed: None,
+            };
+
+            match self.block_repo.get_or_fail(block_id).await {
+                Ok(mut block) => {
+                    if let Err(e) = block.update(block_update.clone(), &self.timezone_service) {
+                        results.push(serde_json::json!({
+                            "block_id": block_id_str,
+                            "error": format!("Update failed: {}", e),
+                        }));
+                        error_count += 1;
+                        continue;
+                    }
+
+                    if let Err(e) = self.block_repo.update(&block).await {
+                        results.push(serde_json::json!({
+                            "block_id": block_id_str,
+                            "error": format!("Save failed: {}", e),
+                        }));
+                        error_count += 1;
+                        continue;
+                    }
+
+                    results.push(serde_json::json!({
+                        "block_id": block_id_str,
+                        "success": true,
+                    }));
+                }
+                Err(e) => {
+                    results.push(serde_json::json!({
+                        "block_id": block_id_str,
+                        "error": format!("Block not found: {}", e),
+                    }));
+                    error_count += 1;
+                }
+            }
+        }
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "total": updates.len(),
+            "success": updates.len() - error_count,
+            "errors": error_count,
+            "results": results,
+        }))
+        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
     }
 
     // Helper to parse scope string
