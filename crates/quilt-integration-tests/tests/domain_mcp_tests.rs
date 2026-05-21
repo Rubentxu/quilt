@@ -2,6 +2,7 @@
 //!
 //! These tests verify the full stack from MCP tools to database operations.
 
+use quilt_domain::content::BlockContent;
 use quilt_domain::services::TimezoneService;
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -202,7 +203,7 @@ async fn test_block_entity_creation() {
     let page_id = Uuid::new_v4();
     let create = BlockCreate {
         page_id,
-        content: "Test block content".to_string(),
+        content: BlockContent::from_text("Test block content"),
         parent_id: None,
         order: 1.0,
         marker: Some(TaskMarker::Todo),
@@ -212,7 +213,7 @@ async fn test_block_entity_creation() {
 
     let block = Block::new(create, &test_timezone()).expect("Block creation should succeed");
 
-    assert_eq!(block.content, "Test block content");
+    assert_eq!(block.content.as_plain_text(), "Test block content");
     assert_eq!(block.page_id, page_id);
     assert!(block.marker.is_some());
     assert_eq!(block.marker.unwrap(), TaskMarker::Todo);
@@ -228,7 +229,7 @@ async fn test_block_circular_reference_detection() {
     // Create a hierarchy: A -> B -> C
     let create_a = BlockCreate {
         page_id,
-        content: "Block A".to_string(),
+        content: BlockContent::from_text("Block A"),
         parent_id: None,
         order: 1.0,
         marker: None,
@@ -239,7 +240,7 @@ async fn test_block_circular_reference_detection() {
 
     let create_b = BlockCreate {
         page_id,
-        content: "Block B".to_string(),
+        content: BlockContent::from_text("Block B"),
         parent_id: Some(block_a.id),
         order: 1.0,
         marker: None,
@@ -250,7 +251,7 @@ async fn test_block_circular_reference_detection() {
 
     let create_c = BlockCreate {
         page_id,
-        content: "Block C".to_string(),
+        content: BlockContent::from_text("Block C"),
         parent_id: Some(block_b.id),
         order: 1.0,
         marker: None,
@@ -282,7 +283,7 @@ async fn test_block_update_logbook_on_done() {
 
     let create = BlockCreate {
         page_id: Uuid::new_v4(),
-        content: "Task".to_string(),
+        content: BlockContent::from_text("Task"),
         parent_id: None,
         order: 1.0,
         marker: None,
@@ -377,7 +378,7 @@ async fn test_block_insert_and_retrieve() {
     // Insert a block
     let create = BlockCreate {
         page_id,
-        content: "Test content".to_string(),
+        content: BlockContent::from_text("Test content"),
         parent_id: None,
         order: 1.0,
         marker: None,
@@ -396,7 +397,7 @@ async fn test_block_insert_and_retrieve() {
         .expect("Block should exist");
 
     assert_eq!(retrieved.id, block.id);
-    assert_eq!(retrieved.content, "Test content");
+    assert_eq!(retrieved.content.as_plain_text(), "Test content");
 }
 
 #[tokio::test]

@@ -36,3 +36,8 @@ serde_json = { workspace = true }
 [dev-dependencies]
 # Database
 sqlx = { workspace = true }
+
+# HTTP Testing
+axum-test = "15"
+http = "1"
+hyper = "1"

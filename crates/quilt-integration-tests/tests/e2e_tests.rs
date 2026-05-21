@@ -6,6 +6,7 @@
 //! 3. Journal page → Today's entries
 //! 4. MCP tool execution
 
+use quilt_domain::content::BlockContent;
 use quilt_domain::services::TimezoneService;
 use sqlx::SqlitePool;
 use std::time::Duration;
@@ -206,7 +207,7 @@ async fn test_e2e_block_creation_flow() {
     // Step 1: Create a block
     let create = BlockCreate {
         page_id,
-        content: "First block content".to_string(),
+        content: BlockContent::from_text("First block content"),
         parent_id: None,
         order: 1.0,
         marker: Some(TaskMarker::Todo),
@@ -224,7 +225,7 @@ async fn test_e2e_block_creation_flow() {
         .expect("Get by id should succeed")
         .expect("Block should exist");
 
-    assert_eq!(retrieved.content, "First block content");
+    assert_eq!(retrieved.content.as_plain_text(), "First block content");
     assert_eq!(retrieved.marker, Some(TaskMarker::Todo));
 }
 
@@ -256,7 +257,7 @@ async fn test_e2e_block_editing_flow() {
     // Create a block
     let create = BlockCreate {
         page_id,
-        content: "Original content".to_string(),
+        content: BlockContent::from_text("Original content"),
         parent_id: None,
         order: 1.0,
         marker: Some(TaskMarker::Todo),
@@ -273,7 +274,7 @@ async fn test_e2e_block_editing_flow() {
     block
         .update(
             quilt_domain::entities::BlockUpdate {
-                content: Some("Updated content".to_string()),
+                content: Some(BlockContent::from_text("Updated content")),
                 ..Default::default()
             },
             &test_timezone(),
@@ -289,7 +290,7 @@ async fn test_e2e_block_editing_flow() {
         .expect("Get by id should succeed")
         .expect("Block should exist");
 
-    assert_eq!(retrieved.content, "Updated content");
+    assert_eq!(retrieved.content.as_plain_text(), "Updated content");
 }
 
 #[tokio::test]
@@ -327,7 +328,7 @@ async fn test_e2e_page_to_block_to_edit_flow() {
     let block1 = Block::new(
         BlockCreate {
             page_id: page.id,
-            content: "First task".to_string(),
+            content: BlockContent::from_text("First task"),
             parent_id: None,
             order: 1.0,
             marker: Some(TaskMarker::Todo),
@@ -341,7 +342,7 @@ async fn test_e2e_page_to_block_to_edit_flow() {
     let block2 = Block::new(
         BlockCreate {
             page_id: page.id,
-            content: "Second task".to_string(),
+            content: BlockContent::from_text("Second task"),
             parent_id: Some(block1.id),
             order: 1.0,
             marker: Some(TaskMarker::Now),
@@ -531,7 +532,7 @@ async fn test_e2e_journal_flow() {
     let entry1 = Block::new(
         BlockCreate {
             page_id: page.id,
-            content: "Morning planning".to_string(),
+            content: BlockContent::from_text("Morning planning"),
             parent_id: None,
             order: 1.0,
             marker: None,
@@ -545,7 +546,7 @@ async fn test_e2e_journal_flow() {
     let entry2 = Block::new(
         BlockCreate {
             page_id: page.id,
-            content: "Afternoon review".to_string(),
+            content: BlockContent::from_text("Afternoon review"),
             parent_id: None,
             order: 2.0,
             marker: None,
@@ -651,7 +652,7 @@ async fn test_e2e_mcp_tool_block_operations() {
     let block = Block::new(
         BlockCreate {
             page_id,
-            content: "MCP created block".to_string(),
+            content: BlockContent::from_text("MCP created block"),
             parent_id: None,
             order: 1.0,
             marker: Some(TaskMarker::Todo),
@@ -671,7 +672,7 @@ async fn test_e2e_mcp_tool_block_operations() {
         .expect("Get should succeed")
         .expect("Block should exist");
 
-    assert_eq!(retrieved.content, "MCP created block");
+    assert_eq!(retrieved.content.as_plain_text(), "MCP created block");
     assert_eq!(retrieved.marker, Some(TaskMarker::Todo));
 }
 
@@ -853,7 +854,7 @@ async fn test_stress_many_blocks_on_page() {
         let block = Block::new(
             BlockCreate {
                 page_id,
-                content: format!("Stress test block {}", i),
+                content: BlockContent::from_text(format!("Stress test block {}", i)),
                 parent_id: None,
                 order: i as f64,
                 marker: None,
