@@ -3222,3 +3222,134 @@ body.dark ::-webkit-scrollbar-thumb:hover {
     border-radius: 4px;
     font-family: inherit;
 }
+
+/* ── Search Filters ──────────────────────────────────────────────────────────── */
+
+.search-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.filter-chip {
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.filter-chip:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.filter-chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+}
+
+.filter-panel {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+}
+
+.filter-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.filter-option {
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.filter-option:hover {
+    border-color: var(--border-hover);
+    color: var(--text-primary);
+}
+
+.filter-option.active {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.date-range-inputs {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.date-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 140px;
+}
+
+.date-input-group label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.date-input-group input[type="date"] {
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 0.8125rem;
+}
+
+.date-input-group input[type="date"]:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.tag-filter-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.tag-filter-input:focus {
+    border-color: var(--accent);
+    outline: none;
+}
+
+.tag-filter-input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    color: var(--text-secondary);
+}
