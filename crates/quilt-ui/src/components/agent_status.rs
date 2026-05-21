@@ -81,10 +81,7 @@ pub fn AgentStatusBar(activities: Vec<AgentActivity>) -> impl IntoView {
 }
 
 #[component]
-pub fn AgentBadge(
-    agent_name: String,
-    status: AgentStatus,
-) -> impl IntoView {
+pub fn AgentBadge(agent_name: String, status: AgentStatus) -> impl IntoView {
     view! {
         <span class={format!("agent-badge {}", status.color_class())}>
             <span class="agent-badge-icon">{status.icon()}</span>

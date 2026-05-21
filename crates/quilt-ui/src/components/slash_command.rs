@@ -8,6 +8,8 @@
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
+use wasm_bindgen::JsCast;
+use web_sys::{HtmlInputElement, KeyboardEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct SlashCommand {
@@ -140,6 +142,22 @@ pub fn get_default_commands() -> Vec<SlashCommand> {
             category: CommandCategory::Reference,
             template: Some("(( ".to_string()),
         },
+        SlashCommand {
+            id: "callout".to_string(),
+            label: "Callout".to_string(),
+            description: "Add an info callout box".to_string(),
+            icon: "💡".to_string(),
+            category: CommandCategory::Template,
+            template: Some("CALLOUT ".to_string()),
+        },
+        SlashCommand {
+            id: "table".to_string(),
+            label: "Table".to_string(),
+            description: "Insert a table template".to_string(),
+            icon: "⊞".to_string(),
+            category: CommandCategory::Template,
+            template: Some("| Column 1 | Column 2 |\n|----------|----------|\n| ".to_string()),
+        },
     ]
 }
 
@@ -167,26 +185,34 @@ pub fn filter_commands(query: &str, commands: &[SlashCommand]) -> Vec<CommandGro
 
 #[component]
 pub fn SlashCommandPalette(
-    is_open: bool,
-    query: String,
+    is_open: RwSignal<bool>,
+    query: RwSignal<String>,
     on_select: Callback<SlashCommand, ()>,
     on_close: Callback<(), ()>,
 ) -> impl IntoView {
     let all_commands = get_default_commands();
-    let query_sig = Signal::derive(move || query.clone());
-    let is_open_sig = Signal::derive(move || is_open);
-    let commands_sig = Memo::new(move |_| filter_commands(&query_sig.get(), &all_commands));
+    let commands_sig = Memo::new(move |_| filter_commands(&query.get(), &all_commands));
 
     view! {
-        <Show when={move || is_open_sig.get()}>
-            <div class="slash-command-overlay">
-                <div class="slash-command-palette">
+        <Show when={move || is_open.get()}>
+            <div class="slash-command-overlay" on:click={move |_| on_close.run(())}>
+                <div class="slash-command-palette" on:click={move |ev| ev.stop_propagation()}>
                     <div class="slash-command-header">
                         <input
                             type="text"
                             class="slash-command-input"
                             placeholder="Type a command or search..."
-                            value={query_sig.get()}
+                            value={query.get()}
+                            on:input={move |ev| {
+                                let target = ev.target().unwrap();
+                                let input: HtmlInputElement = target.unchecked_into();
+                                query.set(input.value());
+                            }}
+                            on:keydown={move |ev: KeyboardEvent| {
+                                if ev.key() == "Escape" {
+                                    on_close.run(());
+                                }
+                            }}
                         />
                     </div>
                     <div class="slash-command-list">
@@ -196,6 +222,11 @@ pub fn SlashCommandPalette(
                                 <For each={move || group.commands.clone()} key=|cmd| cmd.id.clone() let:cmd>
                                     <button
                                         class="slash-command-item"
+                                        on:click={move |_| {
+                                            on_select.run(cmd.clone());
+                                            is_open.set(false);
+                                            query.set(String::new());
+                                        }}
                                     >
                                         <span class="slash-command-icon">{cmd.icon.clone()}</span>
                                         <div class="slash-command-content">

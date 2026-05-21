@@ -63,6 +63,7 @@ pub fn OutlinerBlock(
     on_collapse: Option<Callback<(), ()>>,
     on_focus_next: Option<Callback<(), ()>>,
     on_focus_prev: Option<Callback<(), ()>>,
+    on_slash_command: Option<Callback<String, ()>>,
 ) -> impl IntoView {
     let marker = Marker::from_str(&block.marker);
     let priority = Priority::from_str(&block.priority);
@@ -112,6 +113,12 @@ pub fn OutlinerBlock(
             on:keydown={move |ev: KeyboardEvent| {
                 let key = ev.key();
                 match key.as_str() {
+                    "/" => {
+                        // Open slash command palette
+                        if let Some(callback) = &on_slash_command {
+                            callback.run("/".to_string());
+                        }
+                    }
                     "Enter" => {
                         // TODO: Enter edit mode when inline editing is implemented
                     }

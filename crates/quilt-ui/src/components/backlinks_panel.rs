@@ -37,10 +37,7 @@ impl RelationshipType {
 }
 
 #[component]
-pub fn BacklinksPanel(
-    backlinks: Vec<Backlink>,
-    current_page: String,
-) -> impl IntoView {
+pub fn BacklinksPanel(backlinks: Vec<Backlink>, current_page: String) -> impl IntoView {
     let backlinks_sig = Signal::derive(move || backlinks.clone());
     let current_page_sig = Signal::derive(move || current_page.clone());
 

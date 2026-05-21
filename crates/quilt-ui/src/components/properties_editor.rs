@@ -12,17 +12,11 @@ pub struct Property {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct BlockProperties {
     pub properties: Vec<Property>,
 }
 
-impl Default for BlockProperties {
-    fn default() -> Self {
-        Self {
-            properties: Vec::new(),
-        }
-    }
-}
 
 #[component]
 pub fn PropertiesEditor(
@@ -31,7 +25,7 @@ pub fn PropertiesEditor(
 ) -> impl IntoView {
     let edited_properties = RwSignal::new(properties.clone());
     let is_editing = RwSignal::new(false);
-    let on_update_clone = on_update.clone();
+    let on_update_clone = on_update;
     let original_properties = StoredValue::new(properties.clone());
 
     let properties_vec = move || {

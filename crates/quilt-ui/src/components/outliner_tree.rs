@@ -4,6 +4,7 @@
 //! with proper indentation, expand/collapse, and keyboard navigation.
 
 use crate::bridge::BlockDto;
+use crate::components::slash_command::{SlashCommand, SlashCommandPalette};
 use crate::components::OutlinerBlock;
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -84,6 +85,34 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
 
     // Track expanded state for each block
     let expanded_map = RwSignal::new(HashMap::<String, bool>::new());
+
+    // Slash command palette state
+    let slash_open = RwSignal::new(false);
+    let slash_query = RwSignal::new(String::new());
+    let _slash_block_id = RwSignal::new(String::new()); // Track which block opened the palette
+
+    // Handle slash command trigger
+    let on_slash_command = move |query: String| {
+        slash_query.set(query);
+        slash_open.set(true);
+    };
+
+    // Handle command selection
+    let on_slash_select = move |cmd: SlashCommand| {
+        // TODO: Insert command.template into the block that triggered it
+        // For now, just log the selection
+        log::info!(
+            "Slash command selected: {} with template: {:?}",
+            cmd.id,
+            cmd.template
+        );
+    };
+
+    // Close slash palette
+    let on_slash_close = move |_| {
+        slash_open.set(false);
+        slash_query.set(String::new());
+    };
 
     // Flatten tree for simpler rendering first
     let flattened_blocks = Signal::derive(move || {
@@ -179,10 +208,19 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
                                 let id = item_id6.clone();
                                 focus_prev(id);
                             }))}
+                            on_slash_command={Some(Callback::new(on_slash_command))}
                         />
                     </div>
                 }}
             </For>
+
+            {/* Slash Command Palette */}
+            <SlashCommandPalette
+                is_open={slash_open}
+                query={slash_query}
+                on_select={Callback::new(on_slash_select)}
+                on_close={Callback::new(on_slash_close)}
+            />
         </div>
     }
 }
