@@ -177,7 +177,7 @@ mod tests {
             format: quilt_domain::value_objects::BlockFormat::Markdown,
             marker: None,
             priority: None,
-            content: content.to_string(),
+            content: quilt_domain::content::BlockContent::from_text(content),
             properties: HashMap::new(),
             refs: Vec::new(),
             tags: Vec::new(),

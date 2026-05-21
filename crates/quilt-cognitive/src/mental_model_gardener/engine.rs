@@ -464,7 +464,7 @@ mod tests {
             format: BlockFormat::Markdown,
             marker: None,
             priority: None,
-            content: content.to_string(),
+            content: quilt_domain::content::BlockContent::from_text(content),
             properties: std::collections::HashMap::new(),
             refs: Vec::new(),
             tags: Vec::new(),

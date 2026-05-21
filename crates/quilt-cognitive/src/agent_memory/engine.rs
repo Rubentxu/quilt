@@ -116,21 +116,22 @@ impl AgentMemory {
                 continue;
             }
 
-            if let Ok(entry) = serde_json::from_str::<MemoryEntry>(
-                &serde_json::to_string(&block.content).unwrap_or_default(),
-            ) {
-                if let Some(ref q) = query.query {
-                    if !entry.content.to_lowercase().contains(&q.to_lowercase()) {
-                        continue;
-                    }
+            let entry = match store::block_to_entry(&block) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            if let Some(ref q) = query.query {
+                if !entry.content.to_lowercase().contains(&q.to_lowercase()) {
+                    continue;
                 }
-
-                let mut mutable_entry = entry.clone();
-                mutable_entry.last_accessed = chrono::Utc::now();
-                let _ = store::update(self.block_repo.as_ref(), &mutable_entry).await;
-
-                entries.push(entry);
             }
+
+            let mut mutable_entry = entry.clone();
+            mutable_entry.last_accessed = chrono::Utc::now();
+            let _ = store::update(self.block_repo.as_ref(), &mutable_entry).await;
+
+            entries.push(entry);
         }
 
         entries.sort_by(|a, b| {
@@ -246,11 +247,9 @@ impl AgentMemory {
             .await?;
 
         for block in blocks {
-            let content_str = serde_json::to_string(&block.content).ok();
-            if let Some(content_str) = content_str {
-                if let Ok(profile) = serde_json::from_str::<InteractionProfile>(&content_str) {
-                    return Ok(Some(profile));
-                }
+            let content_str = block.content.as_plain_text();
+            if let Ok(profile) = serde_json::from_str::<InteractionProfile>(&content_str) {
+                return Ok(Some(profile));
             }
         }
 

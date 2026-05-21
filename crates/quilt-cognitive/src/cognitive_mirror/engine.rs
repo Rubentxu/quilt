@@ -132,7 +132,7 @@ mod tests {
             format: BlockFormat::Markdown,
             marker: None,
             priority: None,
-            content: format!("Block {}", id),
+            content: quilt_domain::content::BlockContent::from_text(format!("Block {}", id)),
             properties: HashMap::new(),
             refs,
             tags: Vec::new(),

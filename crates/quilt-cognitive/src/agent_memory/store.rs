@@ -105,9 +105,14 @@ fn entry_to_block(entry: &MemoryEntry) -> Result<Block, StoreError> {
     })
 }
 
-fn block_to_entry(block: &Block) -> Result<MemoryEntry, StoreError> {
-    let content_str = serde_json::to_string(&block.content)?;
-    let entry: MemoryEntry = serde_json::from_str(&content_str)?;
+pub fn block_to_entry(block: &Block) -> Result<MemoryEntry, StoreError> {
+    let content_str = block.content.as_plain_text();
+    let mut entry: MemoryEntry = serde_json::from_str(&content_str)?;
+    
+    // Update timestamps from block
+    entry.created_at = block.created_at;
+    entry.last_accessed = block.updated_at;
+    
     Ok(entry)
 }
 
