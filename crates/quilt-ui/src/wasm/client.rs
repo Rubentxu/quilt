@@ -205,10 +205,16 @@ impl McpClient {
                 }
             }));
 
-        // on_error handler
+        // on_error handler - triggers reconnection state
+        let state_for_error = Arc::clone(&state);
         let on_error =
             Closure::<dyn FnMut(ErrorEvent)>::wrap(Box::new(move |event: ErrorEvent| {
                 log::error!("WebSocket error: {}", event.message());
+                // Trigger reconnection by updating state
+                let mut state = state_for_error.lock().unwrap();
+                if !matches!(*state, ConnectionState::Reconnecting { .. }) { 
+                    *state = ConnectionState::Reconnecting { attempt: 1 };
+                }
             }));
 
         // on_message handler

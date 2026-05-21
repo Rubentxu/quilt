@@ -7,6 +7,8 @@ pub mod app;
 pub mod bridge;
 pub mod components;
 pub mod pages;
+pub mod state;
+pub mod utils;
 pub mod wasm;
 
 use wasm_bindgen::prelude::*;
@@ -44,6 +46,29 @@ pub fn main() {
                     });
 
                     web_sys::console::log_1(&"Quilt UI mounted successfully!".into());
+
+                    // Set up global JS error handlers for unhandled rejections
+                    if let Some(window) = web_sys::window() {
+                        // Handle unhandled promise rejections
+                        let handler = Closure::<dyn FnMut(JsValue)>::wrap(Box::new(move |event| {
+                            log::error!("Unhandled promise rejection: {:?}", event);
+                        }));
+                        if window.add_event_listener_with_callback("unhandledrejection", handler.as_ref().unchecked_ref()).is_err() {
+                            web_sys::console::error_1(&"Failed to add unhandledrejection handler".into());
+                        } else {
+                            handler.forget(); // Keep handler alive
+                        }
+
+                        // Handle uncaught errors
+                        let error_handler = Closure::<dyn FnMut(JsValue)>::wrap(Box::new(move |event| {
+                            log::error!("Uncaught error: {:?}", event);
+                        }));
+                        if window.add_event_listener_with_callback("error", error_handler.as_ref().unchecked_ref()).is_err() {
+                            web_sys::console::error_1(&"Failed to add error handler".into());
+                        } else {
+                            error_handler.forget(); // Keep handler alive
+                        }
+                    }
 
                     // Forget the handle so the view stays mounted
                     handle.forget();
