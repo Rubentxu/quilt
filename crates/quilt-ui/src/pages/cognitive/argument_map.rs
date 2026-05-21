@@ -1,7 +1,7 @@
 //! Argument Map View — visualize argument structures
 //!
 //! Renders argument trees showing claim/evidence/rebuttal
-//! structure with color-coded edges.
+//! structure with color-coded edges and interactive node selection.
 
 use leptos::callback::Callable;
 use leptos::prelude::*;
@@ -68,10 +68,19 @@ fn node_color(role: &ArgumentRole) -> &'static str {
 
 fn edge_color(edge_type: &str) -> &'static str {
     match edge_type {
-        "supports" => "green",
-        "refutes" => "red",
-        "qualifies" => "blue",
-        _ => "gray",
+        "supports" => "#22c55e",
+        "refutes" => "#ef4444",
+        "qualifies" => "#6366f1",
+        _ => "#9ca3af",
+    }
+}
+
+fn role_label(role: &ArgumentRole) -> &'static str {
+    match role {
+        ArgumentRole::Claim => "CLAIM",
+        ArgumentRole::Evidence => "EVIDENCE",
+        ArgumentRole::Reasoning => "REASONING",
+        ArgumentRole::Rebuttal => "REBUTTAL",
     }
 }
 
@@ -108,15 +117,27 @@ fn MapErrorState(message: String, on_retry: Callback<()>) -> impl IntoView {
 // ── Argument Node Card ────────────────────────────────────────────────────────
 
 #[component]
-fn ArgumentNodeCard(node: ArgumentNodeDto) -> impl IntoView {
+fn ArgumentNodeCard(
+    node: ArgumentNodeDto,
+    is_selected: bool,
+    on_click: Callback<String>,
+) -> impl IntoView {
     let color = node_color(&node.role);
+    let label = role_label(&node.role);
+
     view! {
-        <div class="argument-node" style:border-left-color={color}>
+        <div
+            class="argument-node"
+            class:selected={is_selected}
+            style:border-left-color={color}
+            on:click={move |_| on_click.run(node.block_id.clone())}
+        >
             <div class="node-header">
-                <span class="node-role">{format!("{:?}", node.role)}</span>
-                <span class="node-strength">"{(node.strength * 100.0).round()}%"</span>
+                <span class="node-role">{label}</span>
+                <span class="node-strength">{format!("{:.0}%", node.strength * 100.0)}</span>
             </div>
             <div class="node-content">{node.content_preview}</div>
+            <div class="node-id">"#" {node.block_id.chars().take(8).collect::<String>()}</div>
         </div>
     }
 }
@@ -127,10 +148,16 @@ fn ArgumentNodeCard(node: ArgumentNodeDto) -> impl IntoView {
 fn ArgumentEdgeRow(edge: ArgumentEdgeDto) -> impl IntoView {
     let color = edge_color(&edge.edge_type);
     view! {
-        <div class="argument-edge" style:color={color}>
-            <span class="edge-arrow">"→"</span>
-            <span class="edge-type">{edge.edge_type}</span>
-            <span class="edge-confidence">"{(edge.confidence * 100.0).round()}%"</span>
+        <div class="argument-edge" style:border-left-color={color}>
+            <div class="edge-info">
+                <span class="edge-source">{edge.source.chars().take(8).collect::<String>()}</span>
+                <span class="edge-arrow">" → "</span>
+                <span class="edge-target">{edge.target.chars().take(8).collect::<String>()}</span>
+            </div>
+            <div class="edge-meta">
+                <span class="edge-type">{edge.edge_type}</span>
+                <span class="edge-confidence" style:color={color}>{format!("{:.0}%", edge.confidence * 100.0)}</span>
+            </div>
         </div>
     }
 }
@@ -138,7 +165,11 @@ fn ArgumentEdgeRow(edge: ArgumentEdgeDto) -> impl IntoView {
 // ── Argument Nodes List ───────────────────────────────────────────────────────
 
 #[component]
-fn ArgumentNodesList(nodes: Vec<ArgumentNodeDto>) -> impl IntoView {
+fn ArgumentNodesList(
+    nodes: Vec<ArgumentNodeDto>,
+    selected_id: Option<String>,
+    on_node_click: Callback<String>,
+) -> impl IntoView {
     let nodes_for_empty = nodes.clone();
     view! {
         <div class="nodes-list">
@@ -152,7 +183,14 @@ fn ArgumentNodesList(nodes: Vec<ArgumentNodeDto>) -> impl IntoView {
             >
                 <div class="nodes-container">
                     {nodes.iter().map(|n| {
-                        view! { <ArgumentNodeCard node={n.clone()} /> }
+                        let is_selected = selected_id.as_ref() == Some(&n.block_id);
+                        view! {
+                            <ArgumentNodeCard
+                                node={n.clone()}
+                                is_selected={is_selected}
+                                on_click={on_node_click}
+                            />
+                        }
                     }).collect::<Vec<_>>()}
                 </div>
             </Show>
@@ -190,6 +228,9 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
     // Clone page_name before capturing in Fn closure
     let page_name_for_fetch = page_name.clone();
 
+    // Selected node state
+    let selected_node = RwSignal::new(Option::<String>::None);
+
     // Async action to fetch argument map
     let fetch_arguments = Action::new_local(move |_: &()| {
         let name = page_name_for_fetch.clone();
@@ -224,6 +265,15 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
         let _ = fetch_arguments.dispatch(());
     }));
 
+    // Node click handler
+    let on_node_click = Callback::new(move |node_id: String| {
+        if selected_node.get() == Some(node_id.clone()) {
+            selected_node.set(None);
+        } else {
+            selected_node.set(Some(node_id));
+        }
+    });
+
     // Trigger initial fetch
     fetch_arguments.dispatch(());
 
@@ -232,12 +282,13 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
     let value = fetch_arguments.value();
     let cb = on_refresh.get_value();
     let page_name_for_header = page_name.clone();
+    let selected = selected_node;
 
     view! {
         <div class="argument-map-view">
             <div class="page-header">
                 <h2>"🔍 Argument Map: " {page_name_for_header}</h2>
-                <p class="page-subtitle">"Argument structure visualization"</p>
+                <p class="page-subtitle">"Click nodes to select • Edge color shows relationship type"</p>
             </div>
 
             <Show
@@ -281,6 +332,8 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
                                 Some(Ok(g)) => g.nodes,
                                 _ => vec![],
                             }}
+                            selected_id={selected.get()}
+                            on_node_click={on_node_click}
                         />
 
                         <ArgumentEdgesList

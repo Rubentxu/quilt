@@ -1,4 +1,4 @@
-//! Search view — search interface
+//! Search view — search interface with Enter key submission
 
 use crate::bridge::search_blocks;
 use leptos::prelude::*;
@@ -40,7 +40,7 @@ pub fn SearchView() -> impl IntoView {
             <div class="card" style="margin-bottom: 1rem">
                 <input
                     type="text"
-                    placeholder="Search blocks..."
+                    placeholder="Search blocks... (Press Enter)"
                     attr:data-testid="search-input"
                     on:keypress={move |e: web_sys::KeyboardEvent| {
                         if e.key() == "Enter" {

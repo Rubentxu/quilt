@@ -114,17 +114,19 @@ fn ModelErrorState(message: String, on_retry: Callback<()>) -> impl IntoView {
 #[component]
 fn BeliefCard(belief: BeliefDto) -> impl IntoView {
     let color = state_color(&belief.state);
+    let label = format!("{:?}", belief.state);
+
     view! {
         <div class="belief-card" style:border-left-color={color}>
             <div class="belief-header">
                 <span class="belief-statement">{belief.statement}</span>
-                <span class="belief-state">{format!("{:?}", belief.state)}</span>
+                <span class="belief-state" style:background={color} style:color="white">{label}</span>
             </div>
             <div class="belief-meta">
-                <span>"Confidence: {(belief.confidence * 100.0).round()}%"</span>
-                <span>"Evidence: {} blocks", belief.supporting_blocks</span>
-                <span>"Updated: {}", belief.last_updated</span>
+                <span>"Confidence: " <strong>{format!("{:.0}%", belief.confidence * 100.0)}</strong></span>
+                <span>"Evidence: " <strong>{belief.supporting_blocks}</strong>" blocks"</span>
             </div>
+            <div class="belief-updated">"Updated: " {belief.last_updated}</div>
         </div>
     }
 }
