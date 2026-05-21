@@ -25,18 +25,12 @@ use serde::{Deserialize, Serialize};
 /// - Dates
 /// - Tags
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct BlockContent {
     /// The sequence of segments that make up this content
     pub segments: Vec<BlockSegment>,
 }
 
-impl Default for BlockContent {
-    fn default() -> Self {
-        Self {
-            segments: Vec::new(),
-        }
-    }
-}
 
 impl BlockContent {
     /// Create a new BlockContent with a single text segment.
@@ -91,6 +85,11 @@ impl BlockContent {
     /// Convenience method equivalent to `self.as_plain_text().to_lowercase()`.
     pub fn to_lowercase(&self) -> String {
         self.as_plain_text().to_lowercase()
+    }
+
+    /// Check if plain text content contains a substring (case-sensitive).
+    pub fn contains(&self, needle: &str) -> bool {
+        self.as_plain_text().contains(needle)
     }
 
     /// Extract all page references from this content.

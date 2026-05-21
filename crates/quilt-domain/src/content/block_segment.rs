@@ -11,6 +11,7 @@
 //! - Tags
 
 use crate::value_objects::Uuid;
+use crate::Mark;
 use serde::{Deserialize, Serialize};
 
 /// A segment in a block's content.
@@ -135,6 +136,89 @@ impl BlockSegment {
         match self {
             BlockSegment::Text { content, .. } => content.chars().count(),
             _ => 0,
+        }
+    }
+
+    /// Convert this segment to a Markdown string.
+    pub fn to_markdown(&self) -> String {
+        match self {
+            BlockSegment::Text { content, marks } => {
+                let mut result = content.clone();
+                // Apply marks in reverse order so nested marks work correctly
+                // Order: Link, Highlight, Code, Strikethrough, Italic, Bold
+                for mark in marks {
+                    match mark {
+                        Mark::Bold => result = format!("**{}**", result),
+                        Mark::Italic => result = format!("*{}*", result),
+                        Mark::Strikethrough => result = format!("~~{}~~", result),
+                        Mark::Code => result = format!("`{}`", result),
+                        Mark::Highlight { color: _ } => {
+                            // TODO: Quilt uses colored highlights, standard Markdown doesn't
+                            // For now, render without the highlight marker
+                        }
+                        Mark::Link { url, label } => {
+                            if let Some(label) = label {
+                                result = format!("[{}]({})", label, url);
+                            } else {
+                                result = format!("[{}]({})", result, url);
+                            }
+                        }
+                    }
+                }
+                result
+            }
+            BlockSegment::PageRef { target: _, label } => {
+                if let Some(label) = label {
+                    format!("[[{}]]", label)
+                } else {
+                    // Cannot render UUID-only reference meaningfully in Markdown
+                    String::new()
+                }
+            }
+            BlockSegment::BlockRef { target } => {
+                format!("(({}))", target)
+            }
+            BlockSegment::Image { url, alt } => {
+                if let Some(alt) = alt {
+                    format!("![{}]({})", alt, url)
+                } else {
+                    format!("![]({})", url)
+                }
+            }
+            BlockSegment::Code { language, source } => {
+                format!("```{}\n{}\n```", language, source)
+            }
+            BlockSegment::Table { headers, rows } => {
+                // Simple Markdown table rendering
+                let mut result = String::new();
+                // Header row
+                result.push_str("| ");
+                result.push_str(&headers.join(" | "));
+                result.push_str(" |\n");
+                // Separator row
+                result.push_str("| ");
+                result.push_str(&headers.iter().map(|_| "---".to_string()).collect::<Vec<_>>().join(" | "));
+                result.push_str(" |\n");
+                // Data rows
+                for row in rows {
+                    result.push_str("| ");
+                    result.push_str(&row.join(" | "));
+                    result.push_str(" |\n");
+                }
+                result
+            }
+            BlockSegment::Date { value } => {
+                // Format date as YYYY-MM-DD
+                let date_str = value.to_string();
+                if date_str.len() == 8 {
+                    format!("{}-{}-{}", &date_str[0..4], &date_str[4..6], &date_str[6..8])
+                } else {
+                    date_str
+                }
+            }
+            BlockSegment::Tag { value } => {
+                format!("#{}", value)
+            }
         }
     }
 }
