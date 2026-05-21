@@ -484,7 +484,7 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(format_to_str(&block.format))
         .bind(block.marker.as_ref().map(|m| marker_to_str(m)))
         .bind(block.priority.as_ref().map(|p| priority_to_str(p)))
-        .bind(&serialize_block_content(&block.content))
+        .bind(serialize_block_content(&block.content))
         .bind(properties_to_blob(&block.properties))
         .bind(block.scheduled.as_ref().map(datetime_to_ts))
         .bind(block.deadline.as_ref().map(datetime_to_ts))
@@ -520,7 +520,7 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(format_to_str(&block.format))
         .bind(block.marker.as_ref().map(|m| marker_to_str(m)))
         .bind(block.priority.as_ref().map(|p| priority_to_str(p)))
-        .bind(&serialize_block_content(&block.content))
+        .bind(serialize_block_content(&block.content))
         .bind(properties_to_blob(&block.properties))
         .bind(block.scheduled.as_ref().map(datetime_to_ts))
         .bind(block.deadline.as_ref().map(datetime_to_ts))
@@ -1798,7 +1798,7 @@ mod tests {
         use quilt_domain::services::TimezoneService;
         let create = BlockCreate {
             page_id,
-            content: content.to_string(),
+            content: quilt_domain::content::BlockContent::from_text(content),
             parent_id: None,
             order: 1.0,
             marker: None,
@@ -1837,7 +1837,7 @@ mod tests {
 
         let found = repo.get_by_id(block.id).await.unwrap();
         assert!(found.is_some());
-        assert_eq!(found.unwrap().content, "Hello world");
+        assert_eq!(found.unwrap().content.as_plain_text(), "Hello world");
     }
 
     #[tokio::test]
@@ -1868,11 +1868,11 @@ mod tests {
         let mut block = make_block(page.id, "Original");
         repo.insert(&block).await.unwrap();
 
-        block.content = "Updated".to_string();
+        block.content = quilt_domain::content::BlockContent::from_text("Updated");
         repo.update(&block).await.unwrap();
 
         let found = repo.get_by_id(block.id).await.unwrap().unwrap();
-        assert_eq!(found.content, "Updated");
+        assert_eq!(found.content.as_plain_text(), "Updated");
     }
 
     #[tokio::test]
@@ -1961,7 +1961,7 @@ mod tests {
         // Should be visible again
         let found = repo.get_by_id(block.id).await.unwrap();
         assert!(found.is_some());
-        assert_eq!(found.unwrap().content, "To restore");
+        assert_eq!(found.unwrap().content.as_plain_text(), "To restore");
     }
 
     #[tokio::test]
