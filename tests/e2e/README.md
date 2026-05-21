@@ -64,34 +64,97 @@ just e2e-ui          # Open Playwright UI
 
 ```
 tests/e2e/
-└── quilt.spec.ts    # All P0 baseline tests
+├── pom/                    # Page Object Model
+│   ├── base.page.ts        # Base page object with common methods
+│   ├── sidebar.component.ts # Sidebar navigation component
+│   ├── search.page.ts      # Search page object
+│   ├── theme-toggle.component.ts # Theme toggle component
+│   ├── right-sidebar.component.ts # Right sidebar component
+│   └── index.ts           # Export all POM objects
+├── spec/                   # Test specifications
+│   ├── navigation.spec.ts  # Sidebar, mobile menu, deep linking, browser nav
+│   ├── search.spec.ts      # Search input, results, keyboard nav, empty states
+│   ├── theme.spec.ts       # Light/dark theme toggle and persistence
+│   ├── right-sidebar.spec.ts # Right sidebar open/close, tab switching
+│   └── error-handling.spec.ts # Offline, timeouts, empty states, 404
+├── quilt.spec.ts           # P0 baseline tests
+└── graph-view.spec.ts      # Graph view specific tests
 ```
 
 ### Test Categories
 
-- **Sidebar Navigation** - Route changes via sidebar links
-- **Search** - Search input, Enter key, results/empty states
+- **Navigation** - Mobile sidebar, active route highlighting, deep linking, back/forward
+- **Search** - Search input, full-text search, keyboard navigation, empty states
+- **Theme** - Light/dark toggle, persistence across navigation and reload
+- **Right Sidebar** - Open/close, tab switching (Properties, Backlinks, Annotations)
+- **Error Handling** - Offline handling, API timeouts, empty states, 404 pages
 - **Query** - DSL query input, execution, result/error handling
 - **Cognitive Dashboard** - Dashboard load, refresh action
 - **Pages View** - Page list render, content/empty states
+- **Graph View** - Canvas-based force-directed graph visualization
 
 ## Selectors
 
 Tests use stable `data-testid` attributes:
 
+### Navigation
 | Element | Selector |
 |---------|----------|
 | Sidebar Journal link | `[data-testid="nav-journal"]` |
 | Sidebar Pages link | `[data-testid="nav-pages"]` |
 | Sidebar Search link | `[data-testid="nav-search"]` |
 | Sidebar Query link | `[data-testid="nav-query"]` |
+| Sidebar Graph link | `[data-testid="nav-graph"]` |
 | Sidebar Cognitive link | `[data-testid="nav-cognitive"]` |
+| Mobile menu button | `[data-testid="mobile-menu-button"]` |
+
+### Search
+| Element | Selector |
+|---------|----------|
 | Search input | `[data-testid="search-input"]` |
+
+### Theme
+| Element | Selector |
+|---------|----------|
+| Theme toggle button | `[data-testid="theme-toggle"]` |
+
+### Right Sidebar
+| Element | Selector |
+|---------|----------|
+| Tab - Properties | `[data-testid="tab-properties"]` |
+| Tab - Backlinks | `[data-testid="tab-backlinks"]` |
+| Tab - Annotations | `[data-testid="tab-annotations"]` |
+
+### Query
+| Element | Selector |
+|---------|----------|
 | Query input | `[data-testid="query-input"]` |
 | Run Query button | `[data-testid="run-query-button"]` |
-| Cognitive refresh | `[data-testid="refresh-button"]` |
 | Query chip (task todo) | `[data-testid="query-chip-task-todo"]` |
 | Query chip (priority a) | `[data-testid="query-chip-priority-a"]` |
+
+### Cognitive Dashboard
+| Element | Selector |
+|---------|----------|
+| Refresh button | `[data-testid="refresh-button"]` |
+
+### Graph View
+| Element | Selector |
+|---------|----------|
+| Graph view container | `[data-testid="graph-view"]` |
+| Force graph canvas | `[data-testid="force-graph"]` |
+| Graph canvas | `[data-testid="graph-canvas"]` |
+| Graph controls | `[data-testid="graph-controls"]` |
+| Graph legend | `[data-testid="graph-legend"]` |
+| Zoom in button | `[data-testid="zoom-in"]` |
+| Zoom reset button | `[data-testid="zoom-reset"]` |
+| Zoom out button | `[data-testid="zoom-out"]` |
+| Graph filter (pages) | `[data-testid="graph-filter-pages"]` |
+| Graph filter (journals) | `[data-testid="graph-filter-journals"]` |
+| Graph error state | `[data-testid="graph-error"]` |
+| Graph empty state | `[data-testid="graph-empty"]` |
+| Graph retry button | `[data-testid="graph-retry-button"]` |
+| Graph error message | `[data-testid="graph-error-message"]` |
 
 ## CI Mode
 
