@@ -264,7 +264,12 @@ fn row_to_block(row: &sqlx::sqlite::SqliteRow) -> Result<Block, String> {
         format,
         marker,
         priority,
-        content: BlockContent::from_text(content),
+        // Parse content - try JSON (new format) first, then fall back to plain text (legacy)
+        content: if let Ok(c) = serde_json::from_str::<BlockContent>(&content) {
+            c
+        } else {
+            BlockContent::from_text(content)
+        },
         properties,
         refs,
         tags,
@@ -371,7 +376,7 @@ mod tests {
         let mut b1 = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: "Task one".to_string(),
+                content: BlockContent::from_text("Task one"),
                 marker: Some(TaskMarker::Todo),
                 ..Default::default()
             },
@@ -381,7 +386,7 @@ mod tests {
         let b2 = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: "Task two".to_string(),
+                content: BlockContent::from_text("Task two"),
                 marker: Some(TaskMarker::Done),
                 ..Default::default()
             },
@@ -391,7 +396,7 @@ mod tests {
         let b3 = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: "Not a task".to_string(),
+                content: BlockContent::from_text("Not a task"),
                 marker: None,
                 ..Default::default()
             },
@@ -407,7 +412,7 @@ mod tests {
         // Execute task query
         let result = service.execute("(task todo)", 100, &pool).await.unwrap();
         assert_eq!(result.count, 1);
-        assert_eq!(result.blocks[0].content, "Task one");
+        assert_eq!(result.blocks[0].content.as_plain_text(), "Task one");
     }
 
     #[tokio::test]
@@ -425,7 +430,7 @@ mod tests {
         let block = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: "Block on target page".to_string(),
+                content: BlockContent::from_text("Block on target page"),
                 ..Default::default()
             },
             &tz,
@@ -441,7 +446,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result.count, 1);
-        assert_eq!(result.blocks[0].content, "Block on target page");
+        assert_eq!(result.blocks[0].content.as_plain_text(), "Block on target page");
     }
 
     #[tokio::test]
@@ -470,7 +475,7 @@ mod tests {
         let mut b1 = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: "Priority A task".to_string(),
+                content: BlockContent::from_text("Priority A task"),
                 marker: Some(TaskMarker::Todo),
                 ..Default::default()
             },
@@ -482,7 +487,7 @@ mod tests {
         let mut b2 = Block::new(
             BlockCreate {
                 page_id: page.id,
-                content: "Priority B task".to_string(),
+                content: BlockContent::from_text("Priority B task"),
                 marker: Some(TaskMarker::Todo),
                 ..Default::default()
             },
@@ -511,6 +516,6 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(result.count, 1);
-        assert_eq!(result.blocks[0].content, "Priority A task");
+        assert_eq!(result.blocks[0].content.as_plain_text(), "Priority A task");
     }
 }

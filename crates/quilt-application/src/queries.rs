@@ -4,6 +4,7 @@
 //! Queries follow the CQRS pattern by encapsulating all read operations.
 
 use crate::errors::ApplicationError;
+use quilt_domain::content::BlockContent;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::{BlockRepository, BlockRepositoryExt, PageRepository};
 use quilt_domain::value_objects::{BlockFormat, Uuid};
@@ -642,7 +643,7 @@ mod tests {
             format,
             marker: None,
             priority: None,
-            content: content.to_string(),
+            content: BlockContent::from_text(content),
             properties: HashMap::new(),
             refs: vec![],
             tags: vec![],
@@ -714,9 +715,9 @@ mod tests {
         let blocks = result.unwrap();
         assert_eq!(blocks.len(), 3);
         // Verify sorted by order
-        assert_eq!(blocks[0].content, "Block 1");
-        assert_eq!(blocks[1].content, "Block 2");
-        assert_eq!(blocks[2].content, "Block 3");
+        assert_eq!(blocks[0].content.as_plain_text(), "Block 1");
+        assert_eq!(blocks[1].content.as_plain_text(), "Block 2");
+        assert_eq!(blocks[2].content.as_plain_text(), "Block 3");
     }
 
     #[tokio::test]
@@ -753,7 +754,7 @@ mod tests {
         assert!(result.is_ok());
         let blocks = result.unwrap();
         assert_eq!(blocks.len(), 1);
-        assert_eq!(blocks[0].content, "MD Block");
+        assert_eq!(blocks[0].content.as_plain_text(), "MD Block");
 
         // Filter by Org
         let result = query
@@ -762,7 +763,7 @@ mod tests {
         assert!(result.is_ok());
         let blocks = result.unwrap();
         assert_eq!(blocks.len(), 1);
-        assert_eq!(blocks[0].content, "Org Block");
+        assert_eq!(blocks[0].content.as_plain_text(), "Org Block");
     }
 
     #[tokio::test]
@@ -892,7 +893,7 @@ mod tests {
         assert!(result.is_ok());
         let found = result.unwrap();
         assert!(found.is_some());
-        assert_eq!(found.unwrap().content, "Found Block");
+        assert_eq!(found.unwrap().content.as_plain_text(), "Found Block");
     }
 
     #[tokio::test]

@@ -730,7 +730,7 @@ mod tests {
             parent_id,
             order,
             level,
-            content: String::new(),
+            content: BlockContent::default(),
             format: BlockFormat::Markdown,
             marker: None,
             priority: None,
@@ -862,7 +862,7 @@ mod tests {
         assert!(result.is_ok());
         let block = result.unwrap();
         assert_eq!(block.page_id, page_id);
-        assert_eq!(block.content, "Test content");
+        assert_eq!(block.content.as_plain_text(), "Test content");
         assert_eq!(block.format, BlockFormat::Markdown);
 
         // Verify it was inserted
@@ -898,19 +898,19 @@ mod tests {
         let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let update = BlockUpdate {
-            content: Some("Updated content".to_string()),
+            content: Some(BlockContent::from_text("Updated content")),
             ..Default::default()
         };
         let result = command.update(existing_block.id, update).await;
 
         assert!(result.is_ok());
         let updated = result.unwrap();
-        assert_eq!(updated.content, "Updated content");
+        assert_eq!(updated.content.as_plain_text(), "Updated content");
 
         // Verify it was updated
         let blocks = repo_clone.blocks.lock().unwrap();
         assert_eq!(
-            blocks.get(&existing_block.id).unwrap().content,
+            blocks.get(&existing_block.id).unwrap().content.as_plain_text(),
             "Updated content"
         );
     }
@@ -921,7 +921,7 @@ mod tests {
         let command = BlockCommand::new(Arc::new(repo), test_timezone());
 
         let update = BlockUpdate {
-            content: Some("New content".to_string()),
+            content: Some(BlockContent::from_text("New content")),
             ..Default::default()
         };
         let result = command.update(Uuid::new_v4(), update).await;
