@@ -25,6 +25,9 @@ pub struct GraphNodeDto {
     #[serde(rename = "nodeType")]
     pub node_type: String,
     pub journal: bool,
+    /// Cognitive type for overlay (Cluster, Frontier, Gap, Stable)
+    #[serde(rename = "cognitiveType", skip_serializing_if = "Option::is_none")]
+    pub cognitive_type: Option<String>,
 }
 
 /// An edge in the graph (link between nodes)

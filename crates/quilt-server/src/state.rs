@@ -2,6 +2,9 @@
 //!
 //! Holds the database pool, MCP server, search index, and other shared resources.
 
+use quilt_cognitive::{
+    ArgumentCartographer, CognitiveMirror, MorningBriefing, SerendipityEngine,
+};
 use quilt_cognitive::AIClient;
 use quilt_infrastructure::database::sqlite::connection::DbPool;
 use quilt_search::SearchIndexManager;
@@ -71,12 +74,25 @@ pub struct AppState {
     pub ai_client: Arc<RwLock<Arc<dyn AIClient>>>,
     /// Last opened graph ID (for deep link navigation)
     pub last_opened_graph: Arc<RwLock<Option<String>>>,
+    /// CognitiveMirror engine for analyzing block reference graphs
+    #[allow(dead_code)]
+    pub cognitive_mirror: Option<Arc<CognitiveMirror>>,
+    /// SerendipityEngine for discovering unexpected connections
+    #[allow(dead_code)]
+    pub serendipity_engine: Option<Arc<SerendipityEngine>>,
+    /// MorningBriefing for daily cognitive summaries
+    #[allow(dead_code)]
+    pub morning_briefing: Option<Arc<MorningBriefing>>,
+    /// ArgumentCartographer for mapping argument structures
+    #[allow(dead_code)]
+    pub argument_cartographer: Option<Arc<ArgumentCartographer>>,
 }
 
 impl AppState {
     /// Create a new AppState
     ///
     /// Initializes database pool, search index, and AI client.
+    #[allow(dead_code)]
     pub fn new(
         pool: DbPool,
         search_index: Arc<SearchIndexManager>,
@@ -91,6 +107,38 @@ impl AppState {
             navigation_tx,
             ai_client: Arc::new(RwLock::new(ai_client)),
             last_opened_graph: Arc::new(RwLock::new(None)),
+            cognitive_mirror: None,
+            serendipity_engine: None,
+            morning_briefing: None,
+            argument_cartographer: None,
+        }
+    }
+
+    /// Create a new AppState with cognitive engines
+    ///
+    /// Full constructor that includes all cognitive engines.
+    pub fn with_cognitive(
+        pool: DbPool,
+        search_index: Arc<SearchIndexManager>,
+        ai_client: Arc<dyn AIClient>,
+        cognitive_mirror: Arc<CognitiveMirror>,
+        serendipity_engine: Arc<SerendipityEngine>,
+        morning_briefing: Arc<MorningBriefing>,
+        argument_cartographer: Arc<ArgumentCartographer>,
+    ) -> Self {
+        // Create broadcast channel for navigation events
+        let (navigation_tx, _) = broadcast::channel(100);
+
+        Self {
+            pool,
+            search_index,
+            navigation_tx,
+            ai_client: Arc::new(RwLock::new(ai_client)),
+            last_opened_graph: Arc::new(RwLock::new(None)),
+            cognitive_mirror: Some(cognitive_mirror),
+            serendipity_engine: Some(serendipity_engine),
+            morning_briefing: Some(morning_briefing),
+            argument_cartographer: Some(argument_cartographer),
         }
     }
 

@@ -156,6 +156,9 @@ pub struct GraphNodeDto {
     pub name: String,
     pub node_type: String,
     pub journal: bool,
+    /// Cognitive type for overlay (Cluster, Frontier, Gap, Stable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cognitive_type: Option<String>,
 }
 
 /// An edge in the knowledge graph (represents a reference between pages)

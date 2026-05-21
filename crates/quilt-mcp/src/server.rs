@@ -2069,6 +2069,7 @@ impl McpServer {
                     "page".to_string()
                 },
                 journal: p.journal,
+                cognitive_type: None,
             })
             .collect();
 
