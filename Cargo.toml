@@ -11,6 +11,7 @@ members = [
     "crates/quilt-platform",
     "crates/quilt-bin",
     "crates/quilt-ui",
+    "crates/quilt-ui-plugin",
     "crates/quilt-cognitive",
     "crates/quilt-server",
     "crates/quilt-integration-tests",
