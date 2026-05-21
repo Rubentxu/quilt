@@ -1,0 +1,25 @@
+name: Performance Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  benchmarks:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Run backend benchmarks
+        run: cargo bench --package quilt-benchmarks -- --noplot
+      - name: Build WASM
+        run: |
+          cargo install wasm-pack
+          wasm-pack build --target web -p quilt-ui --release
+      - name: Check WASM size
+        run: bash scripts/check-wasm-size.sh
