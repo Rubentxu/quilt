@@ -6,6 +6,7 @@
 use crate::bridge::BlockDto;
 use crate::components::slash_command::{SlashCommand, SlashCommandPalette};
 use crate::components::OutlinerBlock;
+use crate::components::virtual_list::VirtualListState;
 use leptos::prelude::*;
 use std::collections::HashMap;
 
@@ -78,9 +79,13 @@ pub fn build_tree(blocks: &[BlockDto]) -> Vec<TreeBlock> {
     roots
 }
 
-/// OutlinerTree component - renders the full outliner tree
+/// OutlinerTree component - renders the full outliner tree with virtual scrolling
 #[component]
-pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
+pub fn OutlinerTree(
+    blocks: Vec<BlockDto>,
+    #[prop(default = 400.0)] viewport_height: f64,
+    #[prop(default = 50.0)] item_height: f64,
+) -> impl IntoView {
     let tree = Signal::derive(move || build_tree(&blocks));
 
     // Track expanded state for each block
@@ -126,6 +131,36 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
         flatten_nodes(&tree.get(), &mut result);
         result
     });
+
+    // Total items for virtual list
+    let total_items_signal = Signal::derive(move || flattened_blocks.get().len());
+    let total_items_rw = RwSignal::new(total_items_signal.get());
+
+    // Sync RwSignal with derived Signal
+    Effect::new(move |_| {
+        total_items_rw.set(total_items_signal.get());
+    });
+
+    // Virtual list state
+    let scroll_top = RwSignal::new(0.0f64);
+    let container_height_sig = RwSignal::new(viewport_height);
+
+    let virtual_state = VirtualListState::from_signals(
+        total_items_rw,
+        item_height,
+        scroll_top,
+        container_height_sig,
+    );
+
+    // Clone for use in multiple closures
+    let vs_for_height = virtual_state.clone();
+    let vs_for_offset = virtual_state.clone();
+    let vs_for_scroll = virtual_state.clone();
+
+    // Visible range
+    let visible_range = Signal::derive(move || virtual_state.visible_range());
+    let total_height = Signal::derive(move || vs_for_height.total_height());
+    let start_offset = Signal::derive(move || vs_for_offset.start_offset());
 
     // Get flat block IDs for keyboard navigation
     let flat_block_ids = Signal::derive(move || {
@@ -185,34 +220,60 @@ pub fn OutlinerTree(blocks: Vec<BlockDto>) -> impl IntoView {
     };
 
     view! {
-        <div class="outliner-tree" data-block-tree>
-            <For each={move || flattened_blocks.get()} key=|t| t.block.id.clone() let:item>
-                {let item_id = item.block.id.clone(); let item_id2 = item_id.clone(); let item_id3 = item_id.clone(); let _item_id4 = item_id.clone(); let item_id5 = item_id.clone(); let item_id6 = item_id.clone(); view! {
-                    <div
-                        class="outliner-node"
-                        data-block-id={item_id}
-                    >
-                        <OutlinerBlock
-                            block={item.block.clone()}
-                            has_children={!item.children.is_empty()}
-                            expanded={RwSignal::new(get_expanded(&item_id2))}
-                            on_collapse={Some(Callback::new(move |_| {
-                                let id = item_id3.clone();
-                                toggle_expanded(id);
-                            }))}
-                            on_focus_next={Some(Callback::new(move |_| {
-                                let id = item_id5.clone();
-                                focus_next(id);
-                            }))}
-                            on_focus_prev={Some(Callback::new(move |_| {
-                                let id = item_id6.clone();
-                                focus_prev(id);
-                            }))}
-                            on_slash_command={Some(Callback::new(on_slash_command))}
-                        />
-                    </div>
-                }}
-            </For>
+        <div
+            class="outliner-tree"
+            data-block-tree
+            on:scroll={move |e| {
+                use wasm_bindgen::JsCast;
+                if let Some(target) = e.target() {
+                    if let Ok(target) = target.dyn_into::<web_sys::HtmlDivElement>() {
+                        vs_for_scroll.update_scroll(target.scroll_top() as f64);
+                    }
+                }
+            }}
+        >
+            <div
+                class="virtual-scroll-container"
+                style:height={move || format!("{}px", total_height.get())}
+            >
+                <div
+                    class="virtual-scroll-offset"
+                    style:height={move || format!("{}px", start_offset.get())}
+                ></div>
+                <div class="virtual-scroll-items">
+                    <For each={move || {
+                        let range = visible_range.get();
+                        let blocks = flattened_blocks.get();
+                        blocks[range.start..range.end].to_vec()
+                    }} key=|t| t.block.id.clone() let:item>
+                        {let item_id = item.block.id.clone(); let item_id2 = item_id.clone(); let item_id3 = item_id.clone(); let _item_id4 = item_id.clone(); let item_id5 = item_id.clone(); let item_id6 = item_id.clone(); view! {
+                            <div
+                                class="outliner-node"
+                                data-block-id={item_id}
+                            >
+                                <OutlinerBlock
+                                    block={item.block.clone()}
+                                    has_children={!item.children.is_empty()}
+                                    expanded={RwSignal::new(get_expanded(&item_id2))}
+                                    on_collapse={Some(Callback::new(move |_| {
+                                        let id = item_id3.clone();
+                                        toggle_expanded(id);
+                                    }))}
+                                    on_focus_next={Some(Callback::new(move |_| {
+                                        let id = item_id5.clone();
+                                        focus_next(id);
+                                    }))}
+                                    on_focus_prev={Some(Callback::new(move |_| {
+                                        let id = item_id6.clone();
+                                        focus_prev(id);
+                                    }))}
+                                    on_slash_command={Some(Callback::new(on_slash_command.clone()))}
+                                />
+                            </div>
+                        }}
+                    </For>
+                </div>
+            </div>
 
             {/* Slash Command Palette */}
             <SlashCommandPalette
