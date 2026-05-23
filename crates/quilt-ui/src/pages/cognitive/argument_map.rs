@@ -237,7 +237,7 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
         async move {
             match bridge::get_argument_map(&name).await {
                 Ok(json) => match serde_json::from_value::<ArgumentMapResponse>(json.clone()) {
-                    Ok(resp) if !resp.available => Err(BridgeError::Unavailable(
+                    Ok(resp) if !resp.available => Err(BridgeError::Network(
                         resp.message
                             .unwrap_or_else(|| "Argument cartographer unavailable".into()),
                     )),
@@ -299,9 +299,9 @@ pub fn ArgumentMapView(page_name: String) -> impl IntoView {
                     when={move || !matches!(value.get(), Some(Err(_)))}
                     fallback={move || {
                         let msg = match value.get() {
-                            Some(Err(BridgeError::TauriError(s))) => s.clone(),
+                            Some(Err(BridgeError::Network(s))) => s.clone(),
                             Some(Err(BridgeError::JsonError(s))) => s.clone(),
-                            Some(Err(BridgeError::Unavailable(s))) => s.clone(),
+                            Some(Err(BridgeError::Network(s))) => s.clone(),
                             _ => String::new(),
                         };
                         view! { <MapErrorState message={msg} on_retry={cb} /> }

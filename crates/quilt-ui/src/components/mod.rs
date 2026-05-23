@@ -43,7 +43,7 @@ pub use graph_switcher::GraphSwitcher;
 pub use keyboard_shortcuts::{KeyboardShortcuts, ShortcutAction};
 
 pub use loading::Loading;
-pub use outliner_block::{Marker, OutlinerBlock, Priority};
+pub use outliner_block::{Marker, OnDedent, OnDeleteEmpty, OnIndent, OutlinerBlock, Priority};
 pub use outliner_tree::{build_tree, OutlinerTree, TreeBlock};
 pub use properties_editor::{BlockProperties, PropertiesEditor, Property};
 pub use retry_button::RetryButton;

@@ -38,7 +38,10 @@ pub async fn serve_index_html() -> Response {
     }
 }
 
-/// Serve static assets (JS, WASM, CSS, etc.)
+/// Serve static assets (JS, WASM, CSS, etc.) with SPA fallback.
+///
+/// If the requested file exists in wasm_assets, serve it.
+/// Otherwise, serve index.html so Leptos router can handle client-side routing.
 pub async fn serve_assets(axum::extract::Path(path): axum::extract::Path<String>) -> Response {
     let dir = assets_dir();
     let file_path = dir.join(&path);
@@ -48,30 +51,46 @@ pub async fn serve_assets(axum::extract::Path(path): axum::extract::Path<String>
         return (StatusCode::FORBIDDEN, "Path escape attempt").into_response();
     }
 
-    match std::fs::read(&file_path) {
-        Ok(content) => {
-            let content_type = match path.rsplit('.').next() {
-                Some("wasm") => "application/wasm",
-                Some("js") => "application/javascript",
-                Some("css") => "text/css",
-                Some("html") => "text/html",
-                Some("json") => "application/json",
-                Some("png") => "image/png",
-                Some("ico") => "image/x-icon",
-                _ => "application/octet-stream",
-            };
+    // Check if the file exists and has a static asset extension
+    let has_asset_extension = matches!(
+        path.rsplit('.').next(),
+        Some("wasm" | "js" | "css" | "html" | "json" | "png" | "ico" | "svg" | "woff" | "woff2" | "ttf")
+    );
 
-            (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, content_type)],
-                Body::from(content),
-            )
-                .into_response()
+    if has_asset_extension {
+        // Try to serve the static file
+        match std::fs::read(&file_path) {
+            Ok(content) => {
+                let content_type = match path.rsplit('.').next() {
+                    Some("wasm") => "application/wasm",
+                    Some("js") => "application/javascript",
+                    Some("css") => "text/css",
+                    Some("html") => "text/html",
+                    Some("json") => "application/json",
+                    Some("png") => "image/png",
+                    Some("ico") => "image/x-icon",
+                    Some("svg") => "image/svg+xml",
+                    Some("woff") => "font/woff",
+                    Some("woff2") => "font/woff2",
+                    Some("ttf") => "font/ttf",
+                    _ => "application/octet-stream",
+                };
+
+                (
+                    StatusCode::OK,
+                    [(header::CONTENT_TYPE, content_type)],
+                    Body::from(content),
+                )
+                    .into_response()
+            }
+            Err(e) => {
+                warn!("Asset not found: {:?}: {}", file_path, e);
+                (StatusCode::NOT_FOUND, "Not found").into_response()
+            }
         }
-        Err(e) => {
-            warn!("Asset not found: {:?}: {}", file_path, e);
-            (StatusCode::NOT_FOUND, "Not found").into_response()
-        }
+    } else {
+        // SPA fallback: serve index.html for client-side routing
+        serve_index_html().await
     }
 }
 

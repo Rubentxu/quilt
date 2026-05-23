@@ -13,7 +13,7 @@ use tracing::instrument;
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_domain::entities::{Page, PageCreate};
-use quilt_domain::repositories::PageRepository;
+use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::value_objects::{BlockFormat, JournalDay};
 use quilt_infrastructure::database::sqlite::repositories::SqlitePageRepository;
 
@@ -56,6 +56,7 @@ pub fn routes() -> Router {
         .route("/", get(list_pages).post(create_page))
         .route("/journal/:date", get(get_journal))
         .route("/:name", get(get_page))
+        .route("/:name/blocks", get(get_page_blocks))
 }
 
 /// GET /api/v1/pages
@@ -145,4 +146,35 @@ pub async fn get_journal(
     };
 
     Ok(Json(PageDto::from(page)))
+}
+
+/// GET /api/v1/pages/:name/blocks
+/// Returns all blocks for a page
+#[instrument(skip(state))]
+pub async fn get_page_blocks(
+    Path(name): Path<String>,
+    Extension(state): Extension<AppState>,
+) -> Result<Json<Vec<crate::handlers::blocks::BlockDto>>, AppError> {
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
+    let block_repo = quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository::new(state.pool.clone());
+
+    // Find the page by name
+    let page = page_repo
+        .get_by_name(&name)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
+
+    // Get all blocks for this page
+    let blocks = block_repo
+        .get_by_page(page.id)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let block_dtos: Vec<crate::handlers::blocks::BlockDto> = blocks
+        .into_iter()
+        .map(|b| (b, Some(page.name.clone())).into())
+        .collect();
+
+    Ok(Json(block_dtos))
 }

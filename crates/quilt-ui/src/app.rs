@@ -9,7 +9,7 @@ use crate::pages::cognitive::{
     ArgumentMapView, CognitiveDashboard, MentalModelGarden, SerendipityFeed,
 };
 use crate::pages::{
-    graph::GraphView, journal::JournalView, page_list::PagesView, query::QueryView,
+    graph::GraphView, journal::JournalView, page_editor::PageEditor, page_list::PagesView, query::QueryView,
     search::SearchView,
 };
 use crate::state::{provide_app_state, use_app_state};
@@ -186,6 +186,7 @@ fn MainContentWithSidebar() -> impl IntoView {
                     <Route path=path!("/journal") view=JournalView />
                     <Route path=path!("/journal/:date") view=JournalView />
                     <Route path=path!("/pages") view=PagesView />
+                    <Route path=path!("/pages/:id") view=PageEditor />
                     <Route path=path!("/search") view=SearchView />
                     <Route path=path!("/query") view=QueryView />
                     <Route path=path!("/cognitive") view=CognitiveDashboard />

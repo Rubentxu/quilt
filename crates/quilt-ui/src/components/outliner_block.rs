@@ -6,15 +6,16 @@
 //! - Expand/collapse toggle
 //! - Keyboard navigation (Tab, Shift+Tab, Enter, Escape, ArrowUp/ArrowDown)
 //! - Lazy image loading via IntersectionObserver
-//!
-//! Note: Inline editing is pending due to closure capture constraints in Leptos 0.7
+//! - **ContentEditable Logseq-style editing** - seamless inline editing
 
 use crate::bridge::BlockDto;
+use crate::bridge::update_block;
 use leptos::prelude::*;
+use leptos::task::spawn_local;
 use wasm_bindgen::{JsCast, JsValue};
 use wasm_bindgen::closure::Closure;
 use web_sys::{HtmlImageElement, IntersectionObserver, IntersectionObserverEntry};
-use web_sys::KeyboardEvent;
+use web_sys::HtmlElement;
 
 /// Marker options for blocks
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +122,16 @@ struct ObserverHandle {
     block_id: String,
 }
 
+/// Callback for Tab to indent (make block a child of previous sibling)
+pub type OnIndent = Callback<String, ()>;
+
+/// Callback for Shift+Tab to dedent (move block up one level)
+pub type OnDedent = Callback<String, ()>;
+
+/// Callback for Backspace on empty block
+/// Returns true if the block was handled (deleted or merged)
+pub type OnDeleteEmpty = Callback<String, bool>;
+
 /// Outliner block component - displays a single block with indentation
 #[component]
 pub fn OutlinerBlock(
@@ -131,6 +142,15 @@ pub fn OutlinerBlock(
     on_focus_next: Option<Callback<(), ()>>,
     on_focus_prev: Option<Callback<(), ()>>,
     on_slash_command: Option<Callback<String, ()>>,
+    /// Called when Tab is pressed to indent this block
+    #[prop(default = None)]
+    on_indent: Option<OnIndent>,
+    /// Called when Shift+Tab is pressed to dedent this block
+    #[prop(default = None)]
+    on_dedent: Option<OnDedent>,
+    /// Called when Backspace is pressed on an empty block
+    #[prop(default = None)]
+    on_delete_empty: Option<OnDeleteEmpty>,
 ) -> impl IntoView {
     let marker = Marker::from_str(&block.marker);
     let priority = Priority::from_str(&block.priority);
@@ -170,7 +190,8 @@ pub fn OutlinerBlock(
     let block_id = block.id.clone();
     let block_id2 = block.id.clone();
     let block_id3 = block.id.clone();
-    let block_id4 = block.id.clone();
+    let block_id4 = block_id.clone();
+    let block_id_for_save = block.id.clone();
 
     // Setup lazy image loading for this block
     // Called once when block is created
@@ -182,44 +203,8 @@ pub fn OutlinerBlock(
             data-block-id={block_id.clone()}
             style:padding-left={format!("{}px", indent_px)}
             tabindex="0"
-            on:keydown={move |ev: KeyboardEvent| {
-                let key = ev.key();
-                match key.as_str() {
-                    "/" => {
-                        // Open slash command palette
-                        if let Some(callback) = &on_slash_command {
-                            callback.run("/".to_string());
-                        }
-                    }
-                    "Enter" => {
-                        // TODO: Enter edit mode when inline editing is implemented
-                    }
-                    "ArrowDown" => {
-                        if let Some(callback) = &on_focus_next {
-                            callback.run(());
-                        }
-                    }
-                    "ArrowUp" => {
-                        if let Some(callback) = &on_focus_prev {
-                            callback.run(());
-                        }
-                    }
-                    "Tab" => {
-                        ev.prevent_default();
-                        if ev.shift_key() {
-                            if let Some(callback) = &on_focus_prev {
-                                callback.run(());
-                            }
-                        } else if let Some(callback) = &on_focus_next {
-                            callback.run(());
-                        }
-                    }
-                    _ => {}
-                }
-            }}
         >
             <div class="outliner-block-row">
-                {/* Expand/collapse toggle */}
                 <Show when={move || has_children}>
                     <button
                         class="outliner-expand"
@@ -236,25 +221,37 @@ pub fn OutlinerBlock(
                     </button>
                 </Show>
 
-                {/* Marker indicator */}
                 <span class={format!("task-marker {}", marker_class)}>
                     {marker_icon}
                 </span>
 
-                {/* Priority indicator */}
                 <Show when={move || priority != Priority::None}>
                     <span class={format!("task-priority {}", priority_class)}>
                         {priority_label}
                     </span>
                 </Show>
 
-                {/* Content - display only for now */}
-                <span
+                <div
                     class="block-content"
-                    data-testid={format!("block-content-{}", block_id3)}
+                    contenteditable="true"
+                    data-block-id={block_id3}
+                    on:blur={move |ev: web_sys::FocusEvent| {
+                        if let Some(target) = ev.target() {
+                            if let Ok(element) = target.dyn_into::<HtmlElement>() {
+                                let new_content = element.text_content().unwrap_or_default();
+                                if new_content != block.content {
+                                    let id_to_save = block_id_for_save.clone();
+                                    log::info!("Saving block {}: '{}'", id_to_save, new_content);
+                                    spawn_local(async move {
+                                        let _ = update_block(&id_to_save, &new_content, None, None, None, None).await;
+                                    });
+                                }
+                            }
+                        }
+                    }}
                 >
                     {block.content.clone()}
-                </span>
+                </div>
             </div>
         </div>
     }

@@ -1,12 +1,12 @@
 //! Pages view — page listing with Logseq-style
 
-use crate::bridge::list_pages;
+use crate::bridge::{list_pages, PageDto};
 use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
 
 /// Pages listing view - Logseq style
 #[component]
 pub fn PagesView() -> impl IntoView {
-    // Action to fetch all pages
     let fetch_pages = Action::new_local(|_: &()| async move {
         match list_pages().await {
             Ok(pages) => Some(pages),
@@ -29,36 +29,42 @@ pub fn PagesView() -> impl IntoView {
 
             <Show when={move || fetch_pages.pending().get()} fallback={move || {
                 view! {
-                    <Show when={move || {
-                        fetch_pages
-                            .value()
-                            .get()
-                            .flatten()
-                            .is_some_and(|p| !p.is_empty())
-                    }} fallback={move || view! {
-                        <div class="pages-empty">
-                            <p>"No pages yet. Create your first page!"</p>
-                        </div>
-                    }}>
-                        <ul class="pages-list">
-                            {fetch_pages.value().get().unwrap_or(None).unwrap_or_default().iter().map(|p| {
-                                let title = p.title.clone().unwrap_or(p.name.clone());
-                                let icon = if p.journal { "📅" } else { "📄" };
-                                view! {
-                                    <li>
-                                        <button class="page-row">
-                                            <span class="page-row-icon">{icon}</span>
-                                            <span class="page-row-title">{title}</span>
-                                        </button>
-                                    </li>
-                                }
-                            }).collect::<Vec<_>>()}
-                        </ul>
-                    </Show>
+                    <PagesList pages={fetch_pages.value().get().unwrap_or(None).unwrap_or_default()} />
                 }
             }}>
                 <div class="loading">"Loading pages..."</div>
             </Show>
         </div>
+    }
+}
+
+/// Separate component for the actual pages list
+#[component]
+fn PagesList(pages: Vec<PageDto>) -> impl IntoView {
+    let navigate = use_navigate();
+
+    view! {
+        <ul class="pages-list">
+            {pages.iter().map(|p| {
+                let page_id = p.id.clone();
+                let title = p.title.clone().unwrap_or(p.name.clone());
+                let icon = if p.journal { "📅" } else { "📄" };
+                let nav = navigate.clone();
+                view! {
+                    <li>
+                        <button
+                            class="page-row"
+                            on:click={move |_| {
+                                let target = format!("/pages/{}", page_id);
+                                nav(&target, Default::default());
+                            }}
+                        >
+                            <span class="page-row-icon">{icon}</span>
+                            <span class="page-row-title">{title}</span>
+                        </button>
+                    </li>
+                }
+            }).collect::<Vec<_>>()}
+        </ul>
     }
 }

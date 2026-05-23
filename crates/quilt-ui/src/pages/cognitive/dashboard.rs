@@ -245,9 +245,9 @@ pub fn CognitiveDashboard() -> impl IntoView {
                     {move || {
                         let msg = match fetch_briefing.value().get() {
                             Some(Err(e)) => match e {
-                                bridge::BridgeError::TauriError(s) => s.clone(),
+                                bridge::BridgeError::Network(s) => s.clone(),
                                 bridge::BridgeError::JsonError(s) => s.clone(),
-                                bridge::BridgeError::Unavailable(s) => s.clone(),
+                                bridge::BridgeError::Network(s) => s.clone(),
                             },
                             _ => String::new(),
                         };

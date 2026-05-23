@@ -3313,6 +3313,7 @@ dependencies = [
  "console_error_panic_hook",
  "console_log",
  "futures-channel",
+ "gloo-net",
  "gloo-timers",
  "js-sys",
  "leptos",
