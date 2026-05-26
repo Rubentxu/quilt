@@ -1,5 +1,6 @@
 use crate::bridge::BlockDto;
-use crate::components::block_editor::{BlockEditor, TreeOps};
+use crate::components::block_editor::TreeOps;
+use crate::components::cm6_block_editor::Cm6BlockEditor;
 use crate::editor::decorations::DecorationManager;
 use crate::outliner::history::OutlinerCommand;
 use crate::outliner::page::PageOutliner;
@@ -181,7 +182,7 @@ pub fn Block(
                     let os = on_save.clone();
                     let oc = on_cancel.clone();
                     vec![view! {
-                        <BlockEditor
+                        <Cm6BlockEditor
                             block=block
                             on_save=os
                             on_cancel=oc
