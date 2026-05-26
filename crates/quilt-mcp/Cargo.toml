@@ -8,11 +8,7 @@ license.workspace = true
 description = "MCP protocol layer - server, tools, resources, and notifications"
 
 [dependencies]
-quilt-domain = { path = "../quilt-domain" }
 quilt-application = { path = "../quilt-application" }
-quilt-search = { path = "../quilt-search" }
-quilt-cognitive = { path = "../quilt-cognitive" }
-sqlx.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
@@ -25,3 +21,6 @@ tracing.workspace = true
 
 [dev-dependencies]
 quilt-infrastructure = { path = "../quilt-infrastructure" }
+quilt-search = { path = "../quilt-search" }
+quilt-test-helpers = { path = "../quilt-test-helpers" }
+sqlx.workspace = true

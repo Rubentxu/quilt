@@ -3,7 +3,8 @@
 //! This module converts [`QueryExpr`] AST nodes into SQL WHERE clauses
 //! with properly parameterized values for safe database queries.
 
-use crate::parser::{PropertyOp, QueryExpr, QueryValue, SortDirection};
+use crate::dialect::{SqlDialect, SqliteDialect};
+use crate::parser::{QueryExpr, QueryValue};
 
 /// SQL parameter type for safe query parameterization.
 #[derive(Debug, Clone)]
@@ -30,6 +31,27 @@ impl SqlParam {
     }
 }
 
+/// Result of an analyze operation.
+/// Uses JSON values since analysis types are owned by quilt-analysis.
+#[derive(Debug, Clone)]
+pub enum AnalyzeResult {
+    /// Structural mirror analysis result (JSON serialized StructureMap)
+    StructureMap(serde_json::Value),
+    /// Serendipity connections result (JSON serialized connections)
+    SerendipityConnections(serde_json::Value),
+}
+
+/// Errors that can occur during analyze execution.
+#[derive(Debug, thiserror::Error)]
+pub enum AnalyzeError {
+    #[error("Analysis engine not configured: {0}")]
+    EngineNotConfigured(String),
+    #[error("Analysis execution failed: {0}")]
+    ExecutionFailed(String),
+    #[error("Block repository error: {0}")]
+    Repository(String),
+}
+
 /// Query executor that converts AST to SQL.
 ///
 /// This executor transforms [`QueryExpr`] AST nodes into SQL WHERE clauses
@@ -47,15 +69,41 @@ impl SqlParam {
 /// let (sql, params) = executor.build_sql(&expr, 100);
 /// ```
 #[derive(Debug, Clone)]
-pub struct QueryExecutor {
+pub struct QueryExecutor<D = SqliteDialect>
+where
+    D: SqlDialect,
+{
     /// Whether to include ORDER BY RANDOM() for SAMPLE
     pub sample_limit: Option<usize>,
+    dialect: D,
+}
+
+impl Default for QueryExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryExecutor {
     /// Creates a new `QueryExecutor` with default settings.
     pub fn new() -> Self {
-        Self { sample_limit: None }
+        Self {
+            sample_limit: None,
+            dialect: SqliteDialect,
+        }
+    }
+}
+
+impl<D> QueryExecutor<D>
+where
+    D: SqlDialect,
+{
+    /// Creates a new `QueryExecutor` with a custom dialect.
+    pub fn with_dialect(dialect: D) -> Self {
+        Self {
+            sample_limit: None,
+            dialect,
+        }
     }
 
     /// Builds a SQL WHERE clause from a query expression.
@@ -102,7 +150,7 @@ impl QueryExecutor {
 
             QueryExpr::Priority(priorities) => {
                 let placeholders: Vec<_> = priorities.iter().map(|_| "?".to_string()).collect();
-                let sql = format!("priority COLLATE NOCASE IN ({})", placeholders.join(", "));
+                let sql = format!("priority IN ({})", placeholders.join(", "));
                 let params: Vec<_> = priorities
                     .iter()
                     .map(|p| SqlParam::String(p.to_lowercase()))
@@ -138,28 +186,11 @@ impl QueryExecutor {
             }
 
             QueryExpr::Between { field, start, end } => {
-                // Resolve time offsets to timestamps for date fields
-                let date_fields = [
-                    "created_at",
-                    "updated_at",
-                    "scheduled",
-                    "deadline",
-                    "start_time",
-                ];
-                let is_date_field = date_fields.contains(&field.as_str());
-
-                let (start_val, end_val) = if is_date_field {
-                    (
-                        self.value_to_timestamp_param(start),
-                        self.value_to_timestamp_param(end),
-                    )
-                } else {
-                    (self.value_to_param(start), self.value_to_param(end))
-                };
-
-                // Use b. prefix for date fields to avoid ambiguity with pages table
-                let qualified_field = if date_fields.contains(&field.as_str()) {
-                    format!("b.{}", field)
+                let start_val = self.value_to_param(start);
+                let end_val = self.value_to_param(end);
+                // Use b. prefix for fields that might conflict with pages table
+                let qualified_field = if field == "created_at" {
+                    "b.created_at".to_string()
                 } else {
                     field.clone()
                 };
@@ -167,57 +198,10 @@ impl QueryExecutor {
                 (sql, vec![start_val, end_val])
             }
 
-            QueryExpr::Property {
-                key,
-                op,
-                value,
-                value2,
-            } => {
-                let json_path = format!("$.{}", key);
+            QueryExpr::Property { key, value } => {
                 let val = self.value_to_param(value);
-
-                match op {
-                    PropertyOp::Equals => {
-                        let sql = format!("json_extract(properties, '{}') = ?", json_path);
-                        (sql, vec![val])
-                    }
-                    PropertyOp::NotEquals => {
-                        let sql = format!("json_extract(properties, '{}') != ?", json_path);
-                        (sql, vec![val])
-                    }
-                    PropertyOp::Contains => {
-                        let sql = format!(
-                            "json_extract(properties, '{}') LIKE '%' || ? || '%'",
-                            json_path
-                        );
-                        (sql, vec![val])
-                    }
-                    PropertyOp::GreaterThan => {
-                        let sql = format!("json_extract(properties, '{}') > ?", json_path);
-                        (sql, vec![val])
-                    }
-                    PropertyOp::LessThan => {
-                        let sql = format!("json_extract(properties, '{}') < ?", json_path);
-                        (sql, vec![val])
-                    }
-                    PropertyOp::GreaterThanOrEqual => {
-                        let sql = format!("json_extract(properties, '{}') >= ?", json_path);
-                        (sql, vec![val])
-                    }
-                    PropertyOp::LessThanOrEqual => {
-                        let sql = format!("json_extract(properties, '{}') <= ?", json_path);
-                        (sql, vec![val])
-                    }
-                    PropertyOp::Between => {
-                        let val2 = value2
-                            .as_ref()
-                            .map(|v| self.value_to_param(v))
-                            .unwrap_or(val.clone());
-                        let sql =
-                            format!("json_extract(properties, '{}') BETWEEN ? AND ?", json_path);
-                        (sql, vec![val, val2])
-                    }
-                }
+                let sql = format!("{} = ?", self.dialect.property_path(key));
+                (sql, vec![val])
             }
 
             QueryExpr::Tags(tag) => {
@@ -226,44 +210,49 @@ impl QueryExecutor {
                 (sql, vec![SqlParam::String(param)])
             }
 
-            // Phase 2: SQL generation for new variants
-            QueryExpr::Table(exprs) => {
-                // Table combines inner expressions with AND
-                if exprs.is_empty() {
-                    ("1 = 1".to_string(), vec![])
-                } else {
-                    let clauses: Vec<_> = exprs.iter().map(|e| self.build_where(e)).collect();
-                    let sqls: Vec<_> = clauses.iter().map(|(s, _)| format!("({})", s)).collect();
-                    let params: Vec<_> = clauses.iter().flat_map(|(_, p)| p.clone()).collect();
-                    (sqls.join(" AND "), params)
-                }
-            }
-            QueryExpr::SortBy {
-                field: _,
-                direction: _,
-                inner,
+            QueryExpr::Aggregate {
+                inner, group_by, ..
             } => {
-                // SortBy: process inner expression for WHERE clause
-                // ORDER BY is handled in build_sql
-                self.build_where(inner)
+                let (inner_where, params) = self.build_where(inner);
+                let prop_path = self.dialect.property_path(group_by);
+                let null_check = format!("{} IS NOT NULL", prop_path);
+                let where_clause = if inner_where.is_empty() {
+                    null_check.clone()
+                } else {
+                    format!("{} AND {}", inner_where, null_check)
+                };
+                (
+                    format!("{} AND {} GROUP BY {}", where_clause, prop_path, prop_path),
+                    params,
+                )
             }
-            QueryExpr::Exists(key) => {
-                // Exists: json_extract(properties, '$.key') IS NOT NULL
-                let sql = format!("json_extract(properties, '$.{}') IS NOT NULL", key);
-                (sql, vec![])
+
+            // Stats is handled in build_sql(), not build_where()
+            // build_where() cannot handle Stats because aggregate functions
+            // cannot appear in WHERE clauses
+            QueryExpr::Stats { .. } => {
+                panic!("Stats variant cannot be used in build_where(); use build_sql() instead")
             }
-            QueryExpr::Missing(key) => {
-                // Missing: json_extract(properties, '$.key') IS NULL
-                let sql = format!("json_extract(properties, '$.{}') IS NULL", key);
-                (sql, vec![])
+
+            QueryExpr::GroupBy { inner, property } => {
+                let (inner_where, params) = self.build_where(inner);
+                let prop_path = self.dialect.property_path(property);
+                let null_check = format!("{} IS NOT NULL", prop_path);
+                let where_clause = if inner_where.is_empty() {
+                    null_check.clone()
+                } else {
+                    format!("{} AND {}", inner_where, null_check)
+                };
+                (
+                    format!("{} AND {} GROUP BY {}", where_clause, prop_path, prop_path),
+                    params,
+                )
             }
-            QueryExpr::Namespace(ns) => {
-                // Namespace: correlated subquery filtering by page namespace
-                // Namespace is stored as a path on the page (e.g., "projects/work")
-                let sql =
-                    "EXISTS (SELECT 1 FROM pages p WHERE p.id = b.page_id AND p.namespace = ?)"
-                        .to_string();
-                (sql, vec![SqlParam::String(ns.clone())])
+
+            // Analyze is handled in build_analyze_sql(), not build_where()
+            // Analyze is a top-level only operator that cannot be nested
+            QueryExpr::Analyze { .. } => {
+                panic!("Analyze variant cannot be used in build_where(); use build_analyze_sql() instead")
             }
         }
     }
@@ -271,7 +260,7 @@ impl QueryExecutor {
     /// Builds a full SQL query from a query expression.
     ///
     /// Generates a complete SQL SELECT statement with proper JOINs,
-    /// WHERE clause, ORDER BY (if SortBy), and LIMIT.
+    /// WHERE clause, and LIMIT.
     ///
     /// # Arguments
     ///
@@ -300,50 +289,87 @@ impl QueryExecutor {
     /// assert!(sql.contains("LIMIT 100"));
     /// ```
     pub fn build_sql(&self, expr: &QueryExpr, limit: usize) -> (String, Vec<SqlParam>) {
-        let (where_clause, params) = self.build_where(expr);
-
-        let mut sql = String::from(
-            "SELECT b.*, p.name as page_name \
-             FROM blocks b \
-             JOIN pages p ON b.page_id = p.id \
-             WHERE ",
-        );
-
-        sql.push_str(&where_clause);
-
-        // Handle SAMPLE - random ordering
-        if matches!(expr, QueryExpr::Sample(_)) {
-            sql.push_str(" ORDER BY RANDOM()");
-        }
-
-        // Handle SortBy - add ORDER BY clause
-        if let QueryExpr::SortBy {
-            field, direction, ..
-        } = expr
-        {
-            let direction_sql = match direction {
-                SortDirection::Asc => "ASC",
-                SortDirection::Desc => "DESC",
-            };
-            // Check if field is an integer (column index) or string (column name)
-            if field.parse::<i64>().is_ok() {
-                // Integer column index - use directly
-                sql.push_str(&format!(" ORDER BY {} {}", field, direction_sql));
-            } else {
-                // String column name - qualify if it's a known column
-                let qualified_field = match field.as_str() {
-                    "created_at" | "updated_at" | "scheduled" | "deadline" => {
-                        format!("b.{}", field)
-                    }
-                    _ => field.clone(),
+        // Handle aggregate variants with special SQL generation
+        match expr {
+            QueryExpr::Aggregate {
+                inner,
+                group_by,
+                aggregate_fn,
+            } => {
+                let (inner_where, params) = self.build_where(inner);
+                let prop_path = self.dialect.property_path(group_by);
+                let fn_sql = self.dialect.aggregate_fn(aggregate_fn.clone(), &prop_path);
+                let null_check = format!("{} IS NOT NULL", prop_path);
+                let where_clause = if inner_where.is_empty() {
+                    null_check.clone()
+                } else {
+                    format!("{} AND {}", inner_where, null_check)
                 };
-                sql.push_str(&format!(" ORDER BY {} {}", qualified_field, direction_sql));
+                let sql = format!(
+                    "SELECT {}, {} \
+                     FROM blocks b \
+                     JOIN pages p ON b.page_id = p.id \
+                     WHERE {} \
+                     GROUP BY {}",
+                    prop_path, fn_sql, where_clause, prop_path
+                );
+                (sql, params)
+            }
+
+            QueryExpr::Stats { property, compute } => {
+                let prop_path = self.dialect.property_path(property);
+                let fn_sql = self.dialect.stats_fn(compute.clone(), &prop_path);
+                let sql = format!(
+                    "SELECT {} \
+                     FROM blocks b \
+                     JOIN pages p ON b.page_id = p.id \
+                     WHERE {} IS NOT NULL",
+                    fn_sql, prop_path
+                );
+                (sql, vec![])
+            }
+
+            QueryExpr::GroupBy { inner, property } => {
+                let (inner_where, params) = self.build_where(inner);
+                let prop_path = self.dialect.property_path(property);
+                let null_check = format!("{} IS NOT NULL", prop_path);
+                let where_clause = if inner_where.is_empty() {
+                    null_check.clone()
+                } else {
+                    format!("{} AND {}", inner_where, null_check)
+                };
+                let sql = format!(
+                    "SELECT DISTINCT {} \
+                     FROM blocks b \
+                     JOIN pages p ON b.page_id = p.id \
+                     WHERE {}",
+                    prop_path, where_clause
+                );
+                (sql, params)
+            }
+
+            _ => {
+                let (where_clause, params) = self.build_where(expr);
+
+                let mut sql = String::from(
+                    "SELECT b.*, p.name as page_name \
+                     FROM blocks b \
+                     JOIN pages p ON b.page_id = p.id \
+                     WHERE ",
+                );
+
+                sql.push_str(&where_clause);
+
+                // Handle SAMPLE
+                if matches!(expr, QueryExpr::Sample(_)) {
+                    sql.push_str(" ORDER BY RANDOM()");
+                }
+
+                sql.push_str(&format!(" LIMIT {}", limit));
+
+                (sql, params)
             }
         }
-
-        sql.push_str(&format!(" LIMIT {}", limit));
-
-        (sql, params)
     }
 
     /// Convert QueryValue to SqlParam
@@ -357,54 +383,38 @@ impl QueryExecutor {
         }
     }
 
-    /// Convert a QueryValue to a timestamp SqlParam (i64 unix timestamp).
+    /// Builds a SQL query for analyze operations.
     ///
-    /// Resolves TimeOffset strings (like "-7d") and Date strings (like "2024-01-15")
-    /// to unix timestamps for comparison against INTEGER timestamp columns.
-    fn value_to_timestamp_param(&self, value: &QueryValue) -> SqlParam {
-        use crate::time_helpers::{parse_time_helper, TimeOffset};
-        use chrono::NaiveDate;
-
-        match value {
-            QueryValue::TimeOffset(s) => {
-                if let Some(offset) = TimeOffset::parse(s) {
-                    let date = offset.to_date(chrono::Utc::now().date_naive());
-                    let dt = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-                    SqlParam::Integer(dt.timestamp())
-                } else if let Some(date) = parse_time_helper(s) {
-                    let dt = date.and_hms_opt(0, 0, 0).unwrap().and_utc();
-                    SqlParam::Integer(dt.timestamp())
+    /// Extracts the inner expression, builds the WHERE clause from it,
+    /// and returns a SQL query that selects blocks for analysis.
+    pub fn build_analyze_sql(
+        &self,
+        expr: &QueryExpr,
+    ) -> Result<(String, Vec<SqlParam>), crate::parser::ParseError> {
+        match expr {
+            QueryExpr::Analyze { inner, .. } => {
+                let (where_clause, params) = self.build_where(inner);
+                let sql = if where_clause.is_empty() {
+                    format!(
+                        "SELECT b.* FROM blocks b JOIN pages p ON b.page_id = p.id LIMIT {}",
+                        1000 // hard cap for analyze
+                    )
                 } else {
-                    // Fallback: treat as string
-                    SqlParam::String(s.clone())
-                }
+                    format!(
+                        "SELECT b.*, p.name as page_name \
+                         FROM blocks b \
+                         JOIN pages p ON b.page_id = p.id \
+                         WHERE {} \
+                         LIMIT {}",
+                        where_clause, 1000
+                    )
+                };
+                Ok((sql, params))
             }
-            QueryValue::Date(d) => {
-                if let Ok(naive) = NaiveDate::parse_from_str(d, "%Y-%m-%d") {
-                    let dt = naive.and_hms_opt(0, 0, 0).unwrap().and_utc();
-                    SqlParam::Integer(dt.timestamp())
-                } else {
-                    SqlParam::String(d.clone())
-                }
-            }
-            QueryValue::Integer(n) => SqlParam::Integer(*n),
-            QueryValue::String(s) => {
-                // Try parsing as a date string
-                if let Ok(naive) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-                    let dt = naive.and_hms_opt(0, 0, 0).unwrap().and_utc();
-                    SqlParam::Integer(dt.timestamp())
-                } else {
-                    SqlParam::String(s.clone())
-                }
-            }
-            QueryValue::Boolean(b) => SqlParam::Boolean(*b),
+            _ => Err(crate::parser::ParseError::Invalid(
+                "Expected Analyze expression".to_string(),
+            )),
         }
-    }
-}
-
-impl Default for QueryExecutor {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -559,15 +569,12 @@ mod tests {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Property {
             key: "author".to_string(),
-            op: PropertyOp::Equals,
             value: QueryValue::String("John".to_string()),
-            value2: None,
         };
         let (sql, params) = executor.build_where(&expr);
 
         assert!(sql.contains("json_extract"));
         assert!(sql.contains("$.author"));
-        assert!(sql.contains("= ?"));
         assert_eq!(params.len(), 1);
     }
 
@@ -576,9 +583,7 @@ mod tests {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Property {
             key: "count".to_string(),
-            op: PropertyOp::Equals,
             value: QueryValue::Integer(42),
-            value2: None,
         };
         let (sql, params) = executor.build_where(&expr);
 
@@ -592,129 +597,13 @@ mod tests {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Property {
             key: "active".to_string(),
-            op: PropertyOp::Equals,
             value: QueryValue::Boolean(true),
-            value2: None,
         };
         let (sql, params) = executor.build_where(&expr);
 
         assert!(sql.contains("json_extract"));
         assert_eq!(params.len(), 1);
         assert_eq!(params[0].as_string(), "true");
-    }
-
-    #[test]
-    fn test_property_query_not_equals() {
-        let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "status".to_string(),
-            op: PropertyOp::NotEquals,
-            value: QueryValue::String("done".to_string()),
-            value2: None,
-        };
-        let (sql, params) = executor.build_where(&expr);
-
-        assert!(sql.contains("json_extract"));
-        assert!(sql.contains("!= ?"));
-        assert_eq!(params.len(), 1);
-    }
-
-    #[test]
-    fn test_property_query_contains() {
-        let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "name".to_string(),
-            op: PropertyOp::Contains,
-            value: QueryValue::String("test".to_string()),
-            value2: None,
-        };
-        let (sql, params) = executor.build_where(&expr);
-
-        assert!(sql.contains("json_extract"));
-        assert!(sql.contains("LIKE '%' || ? || '%'"));
-        assert_eq!(params.len(), 1);
-    }
-
-    #[test]
-    fn test_property_query_greater_than() {
-        let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "count".to_string(),
-            op: PropertyOp::GreaterThan,
-            value: QueryValue::Integer(10),
-            value2: None,
-        };
-        let (sql, params) = executor.build_where(&expr);
-
-        assert!(sql.contains("json_extract"));
-        assert!(sql.contains("> ?"));
-        assert_eq!(params.len(), 1);
-    }
-
-    #[test]
-    fn test_property_query_less_than() {
-        let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "count".to_string(),
-            op: PropertyOp::LessThan,
-            value: QueryValue::Integer(100),
-            value2: None,
-        };
-        let (sql, params) = executor.build_where(&expr);
-
-        assert!(sql.contains("json_extract"));
-        assert!(sql.contains("< ?"));
-        assert_eq!(params.len(), 1);
-    }
-
-    #[test]
-    fn test_property_query_greater_than_or_equal() {
-        let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "count".to_string(),
-            op: PropertyOp::GreaterThanOrEqual,
-            value: QueryValue::Integer(10),
-            value2: None,
-        };
-        let (sql, params) = executor.build_where(&expr);
-
-        assert!(sql.contains("json_extract"));
-        assert!(sql.contains(">= ?"));
-        assert_eq!(params.len(), 1);
-    }
-
-    #[test]
-    fn test_property_query_less_than_or_equal() {
-        let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "count".to_string(),
-            op: PropertyOp::LessThanOrEqual,
-            value: QueryValue::Integer(100),
-            value2: None,
-        };
-        let (sql, params) = executor.build_where(&expr);
-
-        assert!(sql.contains("json_extract"));
-        assert!(sql.contains("<= ?"));
-        assert_eq!(params.len(), 1);
-    }
-
-    #[test]
-    fn test_property_query_between() {
-        let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "count".to_string(),
-            op: PropertyOp::Between,
-            value: QueryValue::Integer(10),
-            value2: Some(QueryValue::Integer(100)),
-        };
-        let (sql, params) = executor.build_where(&expr);
-
-        assert!(sql.contains("json_extract"));
-        assert!(sql.contains("BETWEEN ? AND ?"));
-        assert_eq!(params.len(), 2);
-        assert_eq!(params[0].as_string(), "10");
-        assert_eq!(params[1].as_string(), "100");
     }
 
     #[test]
@@ -728,7 +617,7 @@ mod tests {
 
         assert!(sql.contains("NOT"));
         assert!(sql.contains("AND"));
-        assert!(sql.contains("priority"));
+        assert!(sql.contains("priority IN"));
         assert_eq!(params.len(), 2);
     }
 
@@ -795,5 +684,48 @@ mod tests {
         assert!(sql.contains("WHERE b.created_at BETWEEN ? AND ?"));
         assert!(sql.contains("LIMIT 50"));
         assert_eq!(params.len(), 2);
+    }
+
+    // Analyze tests
+
+    #[test]
+    fn test_build_analyze_sql_simple() {
+        use crate::parser::AnalyzeKind;
+        let executor = QueryExecutor::new();
+        let expr = QueryExpr::Analyze {
+            inner: Box::new(QueryExpr::Task(vec!["todo".to_string()])),
+            kind: AnalyzeKind::StructuralMirror,
+        };
+        let (sql, _params) = executor.build_analyze_sql(&expr).unwrap();
+        assert!(sql.contains("SELECT b.*"));
+        assert!(sql.contains("FROM blocks b"));
+        assert!(sql.contains("JOIN pages p"));
+        assert!(sql.contains("marker IN"));
+        assert!(sql.contains("LIMIT 1000"));
+    }
+
+    #[test]
+    fn test_build_analyze_sql_page_filter() {
+        use crate::parser::AnalyzeKind;
+        let executor = QueryExecutor::new();
+        let expr = QueryExpr::Analyze {
+            inner: Box::new(QueryExpr::Page("Test".to_string())),
+            kind: AnalyzeKind::Serendipity {
+                limit: None,
+                min_confidence: None,
+                temporal_window_days: None,
+            },
+        };
+        let (sql, _params) = executor.build_analyze_sql(&expr).unwrap();
+        assert!(sql.contains("SELECT b.*"));
+        assert!(sql.contains("EXISTS"));
+    }
+
+    #[test]
+    fn test_build_analyze_sql_non_analyze_error() {
+        let executor = QueryExecutor::new();
+        let expr = QueryExpr::Task(vec!["todo".to_string()]);
+        let result = executor.build_analyze_sql(&expr);
+        assert!(result.is_err());
     }
 }

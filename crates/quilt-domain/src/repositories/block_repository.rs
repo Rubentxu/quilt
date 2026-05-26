@@ -2,7 +2,7 @@
 
 use crate::entities::Block;
 use crate::errors::DomainError;
-use crate::value_objects::{JournalDay, Uuid};
+use crate::value_objects::Uuid;
 use async_trait::async_trait;
 
 /// BlockRepository is the abstraction for block data access.
@@ -26,28 +26,11 @@ pub trait BlockRepository: Send + Sync {
     /// Insert a new block
     async fn insert(&self, block: &Block) -> Result<(), DomainError>;
 
-    /// Update an existing Block
+    /// Update an existing block
     async fn update(&self, block: &Block) -> Result<(), DomainError>;
 
-    /// Soft-delete a block by ID (sets deleted_at timestamp)
+    /// Delete a block by ID
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
-
-    /// Hard-delete a block by ID (permanent removal from database)
-    async fn hard_delete(&self, id: Uuid) -> Result<(), DomainError>;
-
-    /// Restore a soft-deleted block (sets deleted_at to NULL)
-    async fn restore(&self, id: Uuid) -> Result<(), DomainError>;
-
-    /// Get blocks that were soft-deleted since a given timestamp
-    async fn get_deleted_since(
-        &self,
-        since: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Vec<Block>, DomainError>;
-
-    /// Get all soft-deleted blocks (recycle bin)
-    ///
-    /// Returns all blocks where deleted_at is not NULL, ordered by deletion time.
-    async fn recycle_bin(&self) -> Result<Vec<Block>, DomainError>;
 
     /// Move a block to a new parent with new order
     async fn move_block(
@@ -72,19 +55,18 @@ pub trait BlockRepository: Send + Sync {
     /// Get the count of blocks on a page
     async fn count_by_page(&self, page_id: Uuid) -> Result<usize, DomainError>;
 
-    /// Get all blocks created on a specific journal day.
-    async fn get_blocks_by_journal_day(&self, day: JournalDay) -> Result<Vec<Block>, DomainError>;
+    /// Get the total count of all blocks
+    async fn count_all(&self) -> Result<usize, DomainError>;
 
-    /// Get orphan blocks (blocks with no journal_day).
-    ///
-    /// These are blocks created before the migration or on non-journal pages.
-    async fn get_orphan_blocks(&self) -> Result<Vec<Block>, DomainError>;
+    /// Execute a DSL query and return blocks.
+    /// Used by SearchUseCases to execute parsed DSL queries.
+    async fn query_dsl(&self, sql: &str, params: &[String]) -> Result<Vec<Block>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods
 #[async_trait]
 pub trait BlockRepositoryExt: BlockRepository {
-    /// Check if a block exists (excluding soft-deleted)
+    /// Check if a block exists
     async fn exists(&self, id: Uuid) -> Result<bool, DomainError> {
         Ok(self.get_by_id(id).await?.is_some())
     }
@@ -94,12 +76,6 @@ pub trait BlockRepositoryExt: BlockRepository {
         self.get_by_id(id)
             .await?
             .ok_or(DomainError::BlockNotFound(id))
-    }
-
-    /// Soft-delete a block or fail if not found
-    async fn soft_delete_or_fail(&self, id: Uuid) -> Result<(), DomainError> {
-        self.get_or_fail(id).await?;
-        self.delete(id).await
     }
 }
 

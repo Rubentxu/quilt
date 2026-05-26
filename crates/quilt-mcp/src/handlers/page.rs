@@ -1,195 +1,140 @@
-//! Page handler implementation for MCP tools.
+//! Page tool handler
 //!
-//! Implements [`PageHandler`](super::PageHandler) trait for page-related
-//! MCP tools like list_pages, get_page_blocks, get_journal, create_task, etc.
+//! Owns: quilt_list_pages, quilt_get_page_blocks, quilt_get_journal
 
-use super::{HandlerResult, PageHandler as PageHandlerTrait};
+use crate::handlers::ToolHandler;
+use crate::serialization::block_to_json;
+use crate::tools::Tool;
+use crate::use_cases::PageUseCases;
 use async_trait::async_trait;
-use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
-use quilt_domain::content::BlockContent;
-use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::services::TimezoneService;
-use quilt_domain::value_objects::{BlockFormat, JournalDay, TaskMarker};
-use std::str::FromStr;
+use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
 
-/// Default implementation of [`PageHandler`].
-pub struct DefaultPageHandler {
-    block_repo: Arc<dyn BlockRepository>,
-    page_repo: Arc<dyn PageRepository>,
-    timezone_service: Arc<TimezoneService>,
+/// Page tool handler.
+pub struct PageToolHandler {
+    page_use_cases: Arc<dyn PageUseCases>,
 }
 
-impl DefaultPageHandler {
-    /// Create a new page handler.
-    pub fn new(
-        block_repo: Arc<dyn BlockRepository>,
-        page_repo: Arc<dyn PageRepository>,
-        timezone_service: Arc<TimezoneService>,
-    ) -> Self {
-        Self {
-            block_repo,
-            page_repo,
-            timezone_service,
-        }
+impl PageToolHandler {
+    pub fn new(page_use_cases: Arc<dyn PageUseCases>) -> Self {
+        Self { page_use_cases }
     }
 }
 
 #[async_trait]
-impl PageHandlerTrait for DefaultPageHandler {
-    #[instrument(skip(self))]
-    async fn list_pages(&self) -> HandlerResult {
-        let pages = self.page_repo.get_all().await.map_err(|e| e.to_string())?;
-
-        let page_list: Vec<serde_json::Value> = pages
-            .iter()
-            .map(|p| {
-                serde_json::json!({
-                    "id": p.id.to_string(),
-                    "name": p.name,
-                    "title": p.title,
-                    "journal": p.journal,
-                })
-            })
-            .collect();
-
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "count": page_list.len(),
-            "pages": page_list,
-        }))
-        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+impl ToolHandler for PageToolHandler {
+    fn tools(&self) -> Vec<Tool> {
+        vec![
+            Tool {
+                name: "quilt_list_pages".to_string(),
+                description: "List all pages in the graph".to_string(),
+                input_schema: serde_json::json!({ "type": "object", "properties": {} }),
+            },
+            Tool {
+                name: "quilt_get_page_blocks".to_string(),
+                description: "Get all blocks on a page".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "page_name": { "type": "string", "description": "Page name" },
+                        "format": { "type": "string", "description": "Format: markdown or org", "default": "markdown" }
+                    },
+                    "required": ["page_name"]
+                }),
+            },
+            Tool {
+                name: "quilt_get_journal".to_string(),
+                description: "Get or create a journal page for a specific date".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "date": { "type": "string", "description": "Date in YYYY-MM-DD format" }
+                    },
+                    "required": ["date"]
+                }),
+            },
+        ]
     }
 
-    #[instrument(skip(self))]
-    async fn get_page_blocks(&self, params: super::PageBlocksParams) -> HandlerResult {
-        let page = self
-            .page_repo
-            .get_by_name(&params.page_name)
-            .await
-            .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("Page not found: {}", params.page_name))?;
-
-        let blocks = self
-            .block_repo
-            .get_by_page(page.id)
-            .await
-            .map_err(|e| e.to_string())?;
-
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "page": { "id": page.id.to_string(), "name": page.name },
-            "blocks": blocks.iter().map(|b| {
-                serde_json::json!({
-                    "id": b.id.to_string(),
-                    "content": &b.content,
-                    "page_id": b.page_id.to_string(),
-                })
-            }).collect::<Vec<_>>(),
-            "count": blocks.len(),
-        }))
-        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
-    }
-
-    #[instrument(skip(self))]
-    async fn get_journal(&self, params: super::JournalParams) -> HandlerResult {
-        let day = JournalDay::from_str(&params.date).map_err(|e| e.to_string())?;
-
-        let page = match self
-            .page_repo
-            .get_journal(day)
-            .await
-            .map_err(|e| e.to_string())?
-        {
-            Some(p) => p,
-            None => {
-                // Create journal page
-                let page =
-                    Page::new_journal(day, BlockFormat::Markdown).map_err(|e| e.to_string())?;
-                self.page_repo
-                    .insert(&page)
+    #[instrument(skip(self, args))]
+    async fn execute(&self, name: &str, args: &Value) -> Result<String, String> {
+        match name {
+            "quilt_list_pages" => {
+                let pages = self
+                    .page_use_cases
+                    .list()
                     .await
                     .map_err(|e| e.to_string())?;
-                page
+
+                let page_list: Vec<serde_json::Value> = pages
+                    .iter()
+                    .map(|p| {
+                        serde_json::json!({
+                            "id": p.id.to_string(),
+                            "name": p.name,
+                            "title": p.title,
+                            "journal": p.journal,
+                        })
+                    })
+                    .collect();
+
+                Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "count": page_list.len(),
+                    "pages": page_list,
+                }))
+                .unwrap_or_else(|e| e.to_string()))
             }
-        };
 
-        let blocks = self
-            .block_repo
-            .get_by_page(page.id)
-            .await
-            .map_err(|e| e.to_string())?;
+            "quilt_get_page_blocks" => {
+                let page_name = args
+                    .get("page_name")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'page_name'")?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "page": { "id": page.id.to_string(), "name": page.name, "journal_day": day.as_i32() },
-            "blocks": blocks.iter().map(|b| {
-                serde_json::json!({
-                    "id": b.id.to_string(),
-                    "content": &b.content,
-                    "page_id": b.page_id.to_string(),
-                })
-            }).collect::<Vec<_>>(),
-            "block_count": blocks.len(),
-        }))
-        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
-    }
+                let page_with_blocks = self
+                    .page_use_cases
+                    .get_blocks(page_name)
+                    .await
+                    .map_err(|e| e.to_string())?;
 
-    #[instrument(skip(self))]
-    async fn create_task(&self, params: super::CreateTaskParams) -> HandlerResult {
-        // Ensure page exists
-        let page = match self.page_repo.get_by_name(&params.page_name).await {
-            Ok(Some(p)) => p,
-            Ok(None) => {
-                let p = Page::new(PageCreate {
-                    name: params.page_name.clone(),
-                    title: None,
-                    namespace_id: None,
-                    journal_day: None,
-                    format: BlockFormat::Markdown,
-                    file_id: None,
-                })
-                .map_err(|e| e.to_string())?;
-                self.page_repo.insert(&p).await.map_err(|e| e.to_string())?;
-                p
+                Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "page": { "id": page_with_blocks.page.id.to_string(), "name": page_with_blocks.page.name },
+                    "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
+                    "count": page_with_blocks.blocks.len(),
+                })).unwrap_or_else(|e| e.to_string()))
             }
-            Err(e) => return Err(e.to_string()),
-        };
 
-        let marker = params
-            .priority
-            .as_ref()
-            .map(|p| match p.to_lowercase().as_str() {
-                "a" => TaskMarker::Now,
-                "b" => TaskMarker::Later,
-                "c" => TaskMarker::Todo,
-                _ => TaskMarker::Todo,
-            })
-            .unwrap_or(TaskMarker::Todo);
+            "quilt_get_journal" => {
+                let date = args
+                    .get("date")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'date'")?;
 
-        let block = Block::new(
-            BlockCreate {
-                page_id: page.id,
-                content: BlockContent::from_text(params.content.clone()),
-                parent_id: None,
-                order: 1.0,
-                marker: Some(marker),
-                format: BlockFormat::Markdown,
-                properties: Default::default(),
-            },
-            &self.timezone_service,
-        )
-        .map_err(|e| e.to_string())?;
+                let page = self
+                    .page_use_cases
+                    .get_or_create_journal(date)
+                    .await
+                    .map_err(|e| e.to_string())?;
 
-        self.block_repo
-            .insert(&block)
-            .await
-            .map_err(|e| e.to_string())?;
+                // Get blocks for this page by name
+                let page_with_blocks = self
+                    .page_use_cases
+                    .get_blocks(&page.name)
+                    .await
+                    .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "id": block.id.to_string(),
-            "page_name": params.page_name,
-            "content": params.content,
-            "marker": format!("{:?}", marker),
-        }))
-        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+                // Get journal_day value
+                let journal_day = page.journal_day.map(|d| d.as_i32());
+
+                Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "page": { "id": page.id.to_string(), "name": page.name, "journal_day": journal_day },
+                    "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
+                    "block_count": page_with_blocks.blocks.len(),
+                })).unwrap_or_else(|e| e.to_string()))
+            }
+
+            _ => Err(format!("Unknown tool: {}", name)),
+        }
     }
 }

@@ -1,104 +1,80 @@
-//! Application sidebar navigation with Logseq-style light theme
-//!
-//! Uses PluginRegistry for dynamic navigation items from plugins.
-//! Currently uses hardcoded nav items; plugin integration is via extension points.
-
-use crate::components::graph_switcher::GraphSwitcher;
-use crate::components::theme::ThemeToggle;
 use leptos::prelude::*;
-use leptos_router::{components::*, hooks::use_location};
+use leptos_router::components::*;
 
-/// Sidebar navigation component - Logseq light style
 #[component]
-pub fn Sidebar() -> impl IntoView {
-    // Get current path for active state
-    let current_path = use_location().pathname;
+pub fn LeftSidebar(#[prop(into)] open: Signal<bool>) -> impl IntoView {
+    let set_open = use_context::<WriteSignal<bool>>().unwrap_or_else(|| {
+        let (_, w) = signal(true);
+        w
+    });
 
     view! {
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">
-                    <span class="sidebar-logo-icon">"🧠"</span>
-                    <span class="sidebar-logo-text">"Quilt"</span>
-                </div>
-                <GraphSwitcher />
-            </div>
-
-            <nav class="sidebar-nav" aria-label="Main navigation">
-                <A
-                    href="/journal"
-                    attr:class={move || format!("sidebar-nav-item{}", if current_path.get() == "/journal" || current_path.get() == "/" { " active" } else { "" })}
-                    attr:aria-current={move || if current_path.get() == "/journal" || current_path.get() == "/" { "page" } else { "false" }}
-                    attr:data-testid="nav-journal"
+        <aside class=move || {
+            if open.get() { "w-60 border-r border-border bg-sidebar flex flex-col shrink-0 transition-all duration-200" }
+            else { "w-0 overflow-hidden transition-all duration-200" }
+        }>
+            <div class="p-4 border-b border-border flex items-center justify-between">
+                <h1 class="text-lg font-semibold">"Quilt"</h1>
+                <button
+                    class="text-text-muted hover:text-text p-1"
+                    on:click=move |_| set_open.set(false)
                 >
-                    <span class="nav-icon">"📅"</span>
-                    <span class="nav-label">"Journal"</span>
-                </A>
-                <A
-                    href="/pages"
-                    attr:class={move || format!("sidebar-nav-item{}", if current_path.get() == "/pages" { " active" } else { "" })}
-                    attr:aria-current={move || if current_path.get() == "/pages" { "page" } else { "false" }}
-                    attr:data-testid="nav-pages"
-                >
-                    <span class="nav-icon">"📄"</span>
-                    <span class="nav-label">"Pages"</span>
-                </A>
-                <A
-                    href="/search"
-                    attr:class={move || format!("sidebar-nav-item{}", if current_path.get() == "/search" { " active" } else { "" })}
-                    attr:aria-current={move || if current_path.get() == "/search" { "page" } else { "false" }}
-                    attr:data-testid="nav-search"
-                >
-                    <span class="nav-icon">"🔍"</span>
-                    <span class="nav-label">"Search"</span>
-                </A>
-                <A
-                    href="/query"
-                    attr:class={move || format!("sidebar-nav-item{}", if current_path.get() == "/query" { " active" } else { "" })}
-                    attr:aria-current={move || if current_path.get() == "/query" { "page" } else { "false" }}
-                    attr:data-testid="nav-query"
-                >
-                    <span class="nav-icon">"💬"</span>
-                    <span class="nav-label">"Query"</span>
-                </A>
-                <A
-                    href="/graph"
-                    attr:class={move || format!("sidebar-nav-item{}", if current_path.get() == "/graph" { " active" } else { "" })}
-                    attr:aria-current={move || if current_path.get() == "/graph" { "page" } else { "false" }}
-                    attr:data-testid="nav-graph"
-                >
-                    <span class="nav-icon">"🌐"</span>
-                    <span class="nav-label">"Graph"</span>
-                </A>
-                <A
-                    href="/cognitive"
-                    attr:class={move || format!("sidebar-nav-item{}", if current_path.get().starts_with("/cognitive") { " active" } else { "" })}
-                    attr:aria-current={move || if current_path.get().starts_with("/cognitive") { "page" } else { "false" }}
-                    attr:data-testid="nav-cognitive"
-                >
-                    <span class="nav-icon">"🧠"</span>
-                    <span class="nav-label">"Cognitive"</span>
-                </A>
-            </nav>
-
-            <div class="sidebar-agent">
-                <button class="sidebar-agent-btn">
-                    <span class="agent-icon">"🤖"</span>
-                    <span class="agent-label">"Agent"</span>
-                    <span class="agent-chevron">"›"</span>
+                    "«"
                 </button>
-                <p class="sidebar-agent-hint">
-                    "Agent on current page —"
-                    <br />
-                    "connect backend to enable"
-                </p>
             </div>
 
-            <div class="sidebar-footer">
-                <ThemeToggle />
-                <button class="sidebar-footer-btn">"⚙️"</button>
-                <button class="sidebar-footer-btn">"?"</button>
-            </div>
+            <nav class="flex-1 overflow-y-auto p-2">
+                <SidebarSection title="Navigation">
+                    <SidebarLink href="/journal" icon="📅" label="Journals" />
+                    <SidebarLink href="/pages" icon="📄" label="All Pages" />
+                    <SidebarLink href="/search" icon="🔍" label="Search" />
+                </SidebarSection>
+
+                <SidebarSection title="Favorites">
+                    <p class="text-xs text-text-muted px-3 py-2">"No favorites yet"</p>
+                </SidebarSection>
+
+                <SidebarSection title="Recent Pages">
+                    <p class="text-xs text-text-muted px-3 py-2">"No recent pages"</p>
+                </SidebarSection>
+            </nav>
         </aside>
+
+        <Show when=move || !open.get()>
+            <button
+                class="fixed top-2 left-2 z-50 bg-surface hover:bg-surface-hover p-2 rounded border border-border text-text-muted hover:text-text"
+                on:click=move |_| set_open.set(true)
+            >
+                "»"
+            </button>
+        </Show>
+    }
+}
+
+#[component]
+fn SidebarSection(children: Children, title: &'static str) -> impl IntoView {
+    view! {
+        <div class="mb-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted px-3 py-1">
+                {title}
+            </h3>
+            <div>{children()}</div>
+        </div>
+    }
+}
+
+#[component]
+fn SidebarLink(
+    #[prop(into)] href: String,
+    #[prop(into)] icon: String,
+    #[prop(into)] label: String,
+) -> impl IntoView {
+    view! {
+        <A href=href>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded hover:bg-surface-hover text-sm transition-colors">
+                <span>{icon}</span>
+                <span class="flex-1">{label}</span>
+            </div>
+        </A>
     }
 }

@@ -1,194 +1,16 @@
 //! Search service using FTS5
 
+use async_trait::async_trait;
 use lru::LruCache;
 use sqlx::SqlitePool;
 use std::num::NonZeroUsize;
-use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
-use tracing::instrument;
-
-/// Circuit breaker states
-const CB_CLOSED: u8 = 0;
-const CB_OPEN: u8 = 1;
-const CB_HALF_OPEN: u8 = 2;
-
-/// Circuit breaker for search resilience
-#[derive(Debug, Clone)]
-pub struct CircuitBreaker {
-    failure_count: Arc<AtomicU32>,
-    last_failure: Arc<AtomicU64>,
-    state: Arc<AtomicU8>,
-    last_success: Arc<AtomicU64>,
-}
-
-impl CircuitBreaker {
-    /// Create a new circuit breaker in the closed (normal) state.
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self {
-            failure_count: Arc::new(AtomicU32::new(0)),
-            last_failure: Arc::new(AtomicU64::new(0)),
-            state: Arc::new(AtomicU8::new(CB_CLOSED)),
-            last_success: Arc::new(AtomicU64::new(0)),
-        }
-    }
-
-    /// Returns true if the circuit is open (rejecting requests without trying).
-    #[allow(dead_code)]
-    pub fn is_open(&self) -> bool {
-        self.state.load(Ordering::Relaxed) == CB_OPEN
-    }
-
-    /// Returns true if the circuit is half-open (allowing a trial request).
-    #[allow(dead_code)]
-    pub fn is_half_open(&self) -> bool {
-        self.state.load(Ordering::Relaxed) == CB_HALF_OPEN
-    }
-
-    /// Record a successful operation — resets failure count and closes the circuit.
-    #[allow(dead_code)]
-    pub fn record_success(&self) {
-        self.failure_count.store(0, Ordering::Relaxed);
-        self.state.store(CB_CLOSED, Ordering::Relaxed);
-        self.last_success.store(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs(),
-            Ordering::Relaxed,
-        );
-    }
-
-    /// Record a failed operation — increments failure count and may open the circuit.
-    #[allow(dead_code)]
-    pub fn record_failure(&self) {
-        let count = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
-        if count >= 3 {
-            self.state.store(CB_OPEN, Ordering::Relaxed);
-            self.last_failure.store(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-                Ordering::Relaxed,
-            );
-        }
-    }
-
-    /// Check if the circuit should transition from Open to HalfOpen after cooldown.
-    /// Returns true if the transition to HalfOpen was made.
-    #[allow(dead_code)]
-    pub fn try_reset(&self) -> bool {
-        if self.state.load(Ordering::Relaxed) == CB_OPEN {
-            let elapsed = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                .saturating_sub(self.last_failure.load(Ordering::Relaxed));
-            if elapsed >= 30 {
-                self.state.store(CB_HALF_OPEN, Ordering::Relaxed);
-                return true;
-            }
-        }
-        false
-    }
-
-    /// Returns the number of seconds until the circuit can try to reset.
-    #[allow(dead_code)]
-    pub fn retry_after_secs(&self) -> u64 {
-        if self.state.load(Ordering::Relaxed) == CB_OPEN {
-            let elapsed = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                .saturating_sub(self.last_failure.load(Ordering::Relaxed));
-            30u64.saturating_sub(elapsed)
-        } else {
-            0
-        }
-    }
-}
-
-impl Default for CircuitBreaker {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Search errors including circuit breaker state
-#[derive(Debug, thiserror::Error)]
-pub enum SearchError {
-    #[error("Search temporarily unavailable. Retry after {0} seconds.")]
-    CircuitOpen(u64),
-
-    #[error("Query error: {0}")]
-    QueryError(String),
-
-    #[error("Database error: {0}")]
-    DatabaseError(String),
-}
-
-impl From<SearchError> for String {
-    fn from(e: SearchError) -> String {
-        e.to_string()
-    }
-}
-
-/// Check if a sqlx error is transient and worth retrying.
-fn is_transient_error(e: &sqlx::Error) -> bool {
-    match e {
-        sqlx::Error::Database(db) => db
-            .code()
-            .map(|c| c == "SQLITE_BUSY" || c == "SQLITE_LOCKED")
-            .unwrap_or(false),
-        sqlx::Error::Io(_) => true,
-        sqlx::Error::PoolTimedOut => true,
-        _ => false,
-    }
-}
-
-/// Retry a database operation with exponential backoff.
-/// Returns the result of the operation, or a SearchError on failure.
-async fn retry_db_op<F, Fut, T>(mut op: F) -> Result<T, SearchError>
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = Result<T, sqlx::Error>>,
-{
-    // Spec: 5s base delay, 60s max per retry, 300s max total elapsed
-    // Delays: [5s, 10s, 20s, 40s, 60s] (5 retries, doubling each time)
-    let delays = [5_000u64, 10_000, 20_000, 40_000, 60_000]; // ms
-    let max_elapsed = 300_000; // 300s in ms
-    let start = std::time::Instant::now();
-
-    for (i, delay) in delays.iter().enumerate() {
-        // Check if we've exceeded max elapsed time
-        if start.elapsed().as_millis() as u64 > max_elapsed {
-            return Err(SearchError::DatabaseError(
-                "Retry operation exceeded max elapsed time of 300s".to_string(),
-            ));
-        }
-
-        match op().await {
-            Ok(result) => return Ok(result),
-            Err(e) if i == delays.len() - 1 => {
-                return Err(SearchError::DatabaseError(e.to_string()));
-            }
-            Err(e) if !is_transient_error(&e) => {
-                return Err(SearchError::DatabaseError(e.to_string()));
-            }
-            Err(_e) => {
-                tokio::time::sleep(tokio::time::Duration::from_millis(*delay)).await;
-            }
-        }
-    }
-    unreachable!("retry_db_op should always return in the loop")
-}
+use thiserror::Error;
 
 /// Search result with ranking
 #[derive(Debug, Clone)]
 pub struct SearchResult {
     pub block_id: String,
-    pub page_id: String,
     pub page_name: String,
     pub content: String,
     pub snippet: String,
@@ -199,35 +21,46 @@ pub struct SearchResult {
 #[derive(Debug, sqlx::FromRow)]
 pub struct FtsSearchRow {
     pub block_id: String,
-    pub page_id: String,
     pub page_name: String,
     pub content: String,
     pub rank: f64,
 }
 
+/// Errors that can occur during search operations.
+#[derive(Debug, Error)]
+pub enum SearchError {
+    #[error("FTS5 query failed: {0}")]
+    Fts5Query(#[from] sqlx::Error),
+
+    #[error("Query sanitization failed: {0}")]
+    Sanitization(String),
+
+    #[error("Cache error: {0}")]
+    Cache(String),
+}
+
+/// Main search service trait — object-safe, async-only.
+#[async_trait]
+pub trait SearchServiceTrait: Send + Sync {
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>, SearchError>;
+    async fn fuzzy_search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, SearchError>;
+}
+
 /// Search service with caching and FTS5 integration
 pub struct SearchService {
-    pool: SqlitePool,
+    pool: Arc<SqlitePool>,
     cache: Arc<Mutex<LruCache<String, Vec<SearchResult>>>>,
-    circuit_breaker: Arc<CircuitBreaker>,
 }
 
 impl SearchService {
-    pub fn new(pool: SqlitePool) -> Self {
+    pub fn new(pool: Arc<SqlitePool>) -> Self {
         Self {
             pool,
             cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
-            circuit_breaker: Arc::new(CircuitBreaker::new()),
-        }
-    }
-
-    /// Create a new SearchService with a custom circuit breaker (for testing).
-    #[allow(dead_code)]
-    pub fn with_circuit_breaker(pool: SqlitePool, circuit_breaker: Arc<CircuitBreaker>) -> Self {
-        Self {
-            pool,
-            cache: Arc::new(Mutex::new(LruCache::new(NonZeroUsize::new(1000).unwrap()))),
-            circuit_breaker,
         }
     }
 
@@ -235,10 +68,6 @@ impl SearchService {
     ///
     /// Sanitizes the query string to avoid FTS5 syntax errors, then executes
     /// against the `blocks_fts` virtual table, joining with `blocks` and `pages`.
-    ///
-    /// Uses a circuit breaker to prevent cascading failures and retries with
-    /// exponential backoff on transient database errors.
-    #[instrument(skip(self))]
     pub async fn search(
         &self,
         query: &str,
@@ -247,96 +76,51 @@ impl SearchService {
         let sanitized = Self::sanitize_fts5_query(query);
         let cache_key = format!("search:{}:{}", sanitized, limit);
 
-        // Check cache first — cache hits bypass the circuit breaker entirely
+        // Check cache first
         {
-            let mut cache = self.cache.lock().unwrap();
+            let mut cache = self
+                .cache
+                .lock()
+                .map_err(|e| SearchError::Cache(e.to_string()))?;
             if let Some(cached) = cache.get(&cache_key) {
                 return Ok(cached.clone());
             }
         }
 
-        // Check circuit breaker before attempting DB operation
-        if self.circuit_breaker.is_open() {
-            let retry_after = self.circuit_breaker.retry_after_secs();
-            return Err(SearchError::CircuitOpen(retry_after));
+        let results = self.search_fts(&sanitized, limit).await?;
+
+        // Cache the result
+        {
+            let mut cache = self
+                .cache
+                .lock()
+                .map_err(|e| SearchError::Cache(e.to_string()))?;
+            cache.put(cache_key, results.clone());
         }
-
-        // Try reset if circuit is in open state (checking cooldown)
-        let _ = self.circuit_breaker.try_reset();
-
-        // Execute the FTS query with retry wrapper
-        let pool = &self.pool;
-        let cb = &self.circuit_breaker;
-
-        let result = retry_db_op(|| {
-            let sanitized = sanitized.clone();
-            async move {
-                let rows: Vec<FtsSearchRow> = sqlx::query_as::<_, FtsSearchRow>(
-                    r#"
-                    SELECT hex(b.id) as block_id, hex(b.page_id) as page_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
-                    FROM blocks_fts fts
-                    JOIN blocks b ON fts.rowid = b.rowid
-                    JOIN pages p ON b.page_id = p.id
-                    WHERE blocks_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                    "#,
-                )
-                .bind(&sanitized)
-                .bind(limit as i64)
-                .fetch_all(pool)
-                .await?;
-
-                Ok(rows)
-            }
-        })
-        .await;
-
-        match result {
-            Ok(rows) => {
-                cb.record_success();
-                let results: Vec<SearchResult> = rows
-                    .into_iter()
-                    .map(|row| Self::row_to_result(row, &sanitized, 128))
-                    .collect();
-
-                // Cache the result
-                {
-                    let mut cache = self.cache.lock().unwrap();
-                    cache.put(cache_key, results.clone());
-                }
-                Ok(results)
-            }
-            Err(e) => {
-                cb.record_failure();
-                Err(e)
-            }
-        }
+        Ok(results)
     }
 
     /// Execute a low-level FTS5 query and return ranked rows.
-    #[instrument(skip(self))]
     pub async fn search_fts(
         &self,
         query: &str,
         limit: usize,
     ) -> Result<Vec<SearchResult>, SearchError> {
         let rows: Vec<FtsSearchRow> = sqlx::query_as::<_, FtsSearchRow>(
-                    r#"
-                    SELECT hex(b.id) as block_id, hex(b.page_id) as page_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
-                    FROM blocks_fts fts
-                    JOIN blocks b ON fts.rowid = b.rowid
-                    JOIN pages p ON b.page_id = p.id
-                    WHERE blocks_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                    "#,
-                )
+            r#"
+            SELECT hex(b.id) as block_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
+            FROM blocks_fts fts
+            JOIN blocks b ON fts.rowid = b.rowid
+            JOIN pages p ON b.page_id = p.id
+            WHERE blocks_fts MATCH ?
+            ORDER BY rank
+            LIMIT ?
+            "#,
+        )
         .bind(query)
         .bind(limit as i64)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| SearchError::DatabaseError(format!("FTS5 query failed: {}", e)))?;
+        .fetch_all(self.pool.as_ref())
+        .await?;
 
         let results: Vec<SearchResult> = rows
             .into_iter()
@@ -350,9 +134,6 @@ impl SearchService {
     /// First tries FTS5 with `*` prefix matching on each term.
     /// Falls back to `LIKE '%term%'` pattern matching on both
     /// block contents and page names if FTS5 returns no results.
-    ///
-    /// Uses the circuit breaker to fail fast when the database is unhealthy.
-    #[instrument(skip(self))]
     pub async fn fuzzy_search(
         &self,
         query: &str,
@@ -361,101 +142,22 @@ impl SearchService {
         let cache_key = format!("fuzzy:{}:{}", query, limit);
 
         {
-            let mut cache = self.cache.lock().unwrap();
+            let mut cache = self
+                .cache
+                .lock()
+                .map_err(|e| SearchError::Cache(e.to_string()))?;
             if let Some(cached) = cache.get(&cache_key) {
                 return Ok(cached.clone());
             }
         }
 
-        // Check circuit breaker before attempting DB operations
-        if self.circuit_breaker.is_open() {
-            let retry_after = self.circuit_breaker.retry_after_secs();
-            return Err(SearchError::CircuitOpen(retry_after));
-        }
-
-        let _ = self.circuit_breaker.try_reset();
-
-        // Try FTS5 prefix search first with retry
+        // Try FTS5 prefix search first
         let fuzzy_query = Self::build_fuzzy_query(query);
-        let pool = &self.pool;
-        let cb = &self.circuit_breaker;
+        let mut results = self.search_fts(&fuzzy_query, limit).await?;
 
-        let fts_result = retry_db_op(|| {
-            let fuzzy_query = fuzzy_query.clone();
-            async move {
-                let rows: Vec<FtsSearchRow> = sqlx::query_as::<_, FtsSearchRow>(
-                    r#"
-                    SELECT hex(b.id) as block_id, hex(b.page_id) as page_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
-                    FROM blocks_fts fts
-                    JOIN blocks b ON fts.rowid = b.rowid
-                    JOIN pages p ON b.page_id = p.id
-                    WHERE blocks_fts MATCH ?
-                    ORDER BY rank
-                    LIMIT ?
-                    "#,
-                )
-                .bind(&fuzzy_query)
-                .bind(limit as i64)
-                .fetch_all(pool)
-                .await?;
-                Ok(rows)
-            }
-        })
-        .await;
-
-        let mut results: Vec<SearchResult> = match fts_result {
-            Ok(rows) => {
-                cb.record_success();
-                rows.into_iter()
-                    .map(|row| Self::row_to_result(row, &fuzzy_query, 128))
-                    .collect()
-            }
-            Err(e) => {
-                cb.record_failure();
-                return Err(e);
-            }
-        };
-
-        // Fallback to LIKE if FTS5 returned nothing (with retry)
+        // Fallback to LIKE if FTS5 returned nothing
         if results.is_empty() {
-            let pool = &self.pool;
-            let fallback_result = retry_db_op(|| {
-                let query = query.to_string();
-                async move {
-                    let like_pattern = format!("%{}%", query);
-                    let rows = sqlx::query_as::<_, FtsSearchRow>(
-                        r#"
-                        SELECT DISTINCT hex(b.id) as block_id, p.name as page_name, b.content, 0.0 as rank
-                        FROM blocks b
-                        JOIN pages p ON b.page_id = p.id
-                        WHERE b.content LIKE ? OR p.name LIKE ?
-                        ORDER BY p.name
-                        LIMIT ?
-                        "#,
-                    )
-                    .bind(&like_pattern)
-                    .bind(&like_pattern)
-                    .bind(limit as i64)
-                    .fetch_all(pool)
-                    .await?;
-                    Ok(rows)
-                }
-            })
-            .await;
-
-            match fallback_result {
-                Ok(rows) => {
-                    self.circuit_breaker.record_success();
-                    results = rows
-                        .into_iter()
-                        .map(|row| Self::row_to_result(row, query, 128))
-                        .collect();
-                }
-                Err(e) => {
-                    self.circuit_breaker.record_failure();
-                    return Err(e);
-                }
-            }
+            results = self.like_fallback_search(query, limit).await?;
         }
 
         // Apply custom scoring: shorter page names and exact matches rank higher
@@ -478,12 +180,42 @@ impl SearchService {
         results.truncate(limit);
 
         {
-            let mut cache = self.cache.lock().unwrap();
+            let mut cache = self
+                .cache
+                .lock()
+                .map_err(|e| SearchError::Cache(e.to_string()))?;
             cache.put(cache_key, results.clone());
         }
-
-        self.circuit_breaker.record_success();
         Ok(results)
+    }
+
+    /// LIKE-based fallback search on block content and page names.
+    async fn like_fallback_search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>, SearchError> {
+        let like_pattern = format!("%{}%", query);
+        let rows = sqlx::query_as::<_, FtsSearchRow>(
+            r#"
+            SELECT DISTINCT hex(b.id) as block_id, p.name as page_name, b.content, 0.0 as rank
+            FROM blocks b
+            JOIN pages p ON b.page_id = p.id
+            WHERE b.content LIKE ? OR p.name LIKE ?
+            ORDER BY p.name
+            LIMIT ?
+            "#,
+        )
+        .bind(&like_pattern)
+        .bind(&like_pattern)
+        .bind(limit as i64)
+        .fetch_all(self.pool.as_ref())
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| Self::row_to_result(row, query, 128))
+            .collect())
     }
 
     /// Sanitize user input for FTS5.
@@ -539,7 +271,6 @@ impl SearchService {
     pub fn row_to_result(row: FtsSearchRow, query: &str, snippet_len: usize) -> SearchResult {
         SearchResult {
             block_id: row.block_id,
-            page_id: row.page_id,
             page_name: row.page_name,
             content: row.content.clone(),
             snippet: Self::generate_snippet(&row.content, query, snippet_len),
@@ -549,33 +280,23 @@ impl SearchService {
 
     /// Clear the search cache
     pub fn clear_cache(&self) {
-        self.cache.lock().unwrap().clear();
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
+        }
     }
 }
 
-/// Extension: synchronous search for CLI use
-///
-/// Uses `tokio::runtime::Handle::current().block_on()` to bridge sync/async.
-impl SearchService {
-    #[instrument(skip(self))]
-    pub fn blocking_search(
-        &self,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<SearchResult>, SearchError> {
-        let handle = tokio::runtime::Handle::try_current()
-            .map_err(|_| SearchError::DatabaseError("No Tokio runtime active".to_string()))?;
-        handle.block_on(self.search(query, limit))
+#[async_trait]
+impl SearchServiceTrait for SearchService {
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchResult>, SearchError> {
+        SearchService::search(self, query, limit).await
     }
-
-    pub fn blocking_fuzzy_search(
+    async fn fuzzy_search(
         &self,
         query: &str,
         limit: usize,
     ) -> Result<Vec<SearchResult>, SearchError> {
-        let handle = tokio::runtime::Handle::try_current()
-            .map_err(|_| SearchError::DatabaseError("No Tokio runtime active".to_string()))?;
-        handle.block_on(self.fuzzy_search(query, limit))
+        SearchService::fuzzy_search(self, query, limit).await
     }
 }
 
@@ -775,14 +496,12 @@ mod tests {
     fn test_row_to_result() {
         let row = FtsSearchRow {
             block_id: "abc".to_string(),
-            page_id: "def".to_string(),
             page_name: "Test Page".to_string(),
             content: "This is test content".to_string(),
             rank: -1.5,
         };
         let result = SearchService::row_to_result(row, "test", 50);
         assert_eq!(result.block_id, "abc");
-        assert_eq!(result.page_id, "def");
         assert_eq!(result.page_name, "Test Page");
         assert_eq!(result.score, -1.5);
     }
@@ -790,7 +509,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_finds_results() {
         let pool = setup_test_db().await;
-        let service = SearchService::new(pool);
+        let service = SearchService::new(Arc::new(pool));
 
         let results = service.search("rust", 10).await.unwrap();
         assert!(
@@ -803,7 +522,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_no_results() {
         let pool = setup_test_db().await;
-        let service = SearchService::new(pool);
+        let service = SearchService::new(Arc::new(pool));
 
         let results = service.search("nonexistent", 10).await.unwrap();
         assert!(results.is_empty());
@@ -812,7 +531,7 @@ mod tests {
     #[tokio::test]
     async fn test_fuzzy_search_prefix() {
         let pool = setup_test_db().await;
-        let service = SearchService::new(pool);
+        let service = SearchService::new(Arc::new(pool));
 
         // "Hel" should match "Hello" via prefix matching
         let results = service.fuzzy_search("Hel", 10).await.unwrap();
@@ -825,7 +544,7 @@ mod tests {
     #[tokio::test]
     async fn test_fuzzy_search_like_fallback() {
         let pool = setup_test_db().await;
-        let service = SearchService::new(pool);
+        let service = SearchService::new(Arc::new(pool));
 
         // "power" should match "powerful" via LIKE fallback
         let results = service.fuzzy_search("power", 10).await.unwrap();
@@ -838,7 +557,7 @@ mod tests {
     #[tokio::test]
     async fn test_search_cache_hit() {
         let pool = setup_test_db().await;
-        let service = SearchService::new(pool);
+        let service = SearchService::new(Arc::new(pool));
 
         let first = service.search("rust", 10).await.unwrap();
         let second = service.search("rust", 10).await.unwrap();
@@ -848,7 +567,7 @@ mod tests {
     #[tokio::test]
     async fn test_clear_cache() {
         let pool = setup_test_db().await;
-        let service = SearchService::new(pool);
+        let service = SearchService::new(Arc::new(pool));
 
         let _ = service.search("rust", 10).await.unwrap();
         service.clear_cache();

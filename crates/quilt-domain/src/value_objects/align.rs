@@ -22,8 +22,7 @@ impl Align {
     }
 
     /// Parse from string
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "left" | "l" => Some(Align::Left),
             "center" | "c" | "centre" => Some(Align::Center),
@@ -56,9 +55,9 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        assert_eq!(Align::from_str("left"), Some(Align::Left));
-        assert_eq!(Align::from_str("center"), Some(Align::Center));
-        assert_eq!(Align::from_str("right"), Some(Align::Right));
-        assert_eq!(Align::from_str("center"), Some(Align::Center));
+        assert_eq!(Align::parse_str("left"), Some(Align::Left));
+        assert_eq!(Align::parse_str("center"), Some(Align::Center));
+        assert_eq!(Align::parse_str("right"), Some(Align::Right));
+        assert_eq!(Align::parse_str("center"), Some(Align::Center));
     }
 }

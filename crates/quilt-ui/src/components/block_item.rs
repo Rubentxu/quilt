@@ -1,7 +1,7 @@
 //! Block item component
 
-use crate::bridge::BlockDto;
 use leptos::prelude::*;
+use crate::bridge::BlockDto;
 
 /// Simple block display component
 #[component]

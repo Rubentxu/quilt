@@ -3,7 +3,9 @@
 use std::fmt;
 
 /// BlockFormat represents the content format of a block.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum BlockFormat {
     /// Markdown format
     #[default]
@@ -30,8 +32,7 @@ impl BlockFormat {
     }
 
     /// Parse from string
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "markdown" | "md" => Some(BlockFormat::Markdown),
             "org" | "org-mode" => Some(BlockFormat::Org),
@@ -62,11 +63,11 @@ mod tests {
     #[test]
     fn test_from_str() {
         assert_eq!(
-            BlockFormat::from_str("markdown"),
+            BlockFormat::parse_str("markdown"),
             Some(BlockFormat::Markdown)
         );
-        assert_eq!(BlockFormat::from_str("md"), Some(BlockFormat::Markdown));
-        assert_eq!(BlockFormat::from_str("org"), Some(BlockFormat::Org));
-        assert_eq!(BlockFormat::from_str("unknown"), None);
+        assert_eq!(BlockFormat::parse_str("md"), Some(BlockFormat::Markdown));
+        assert_eq!(BlockFormat::parse_str("org"), Some(BlockFormat::Org));
+        assert_eq!(BlockFormat::parse_str("unknown"), None);
     }
 }

@@ -5,31 +5,18 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
-description = "Platform adapters - CLI and server utilities"
+description = "Platform adapters - Tauri desktop shell and CLI"
 
 [dependencies]
-quilt-domain = { path = "../quilt-domain" }
 quilt-application = { path = "../quilt-application" }
-quilt-infrastructure = { path = "../quilt-infrastructure" }
-quilt-mcp = { path = "../quilt-mcp" }
-quilt-cognitive = { path = "../quilt-cognitive", features = ["ollama", "openai"] }
-quilt-query = { path = "../quilt-query" }
-quilt-search = { path = "../quilt-search" }
 clap.workspace = true
 anyhow.workspace = true
-thiserror.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-sqlx.workspace = true
 chrono.workspace = true
-notify.workspace = true
-
-# Metrics
-metrics = { workspace = true }
-metrics-exporter-prometheus = { workspace = true }
 
 [dev-dependencies]
 tempfile.workspace = true

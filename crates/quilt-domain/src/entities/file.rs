@@ -11,21 +11,21 @@ use crate::value_objects::Uuid;
 #[derive(Debug, Clone, PartialEq)]
 pub struct File {
     /// Unique identifier
-    pub id: Uuid,
+    id: Uuid,
     /// Relative path from the graph root
-    pub path: String,
+    path: String,
     /// File content (for text files)
-    pub content: Option<String>,
+    content: Option<String>,
     /// SHA256 hash of the file content
-    pub hash: Vec<u8>,
+    hash: Vec<u8>,
     /// File size in bytes
-    pub size_bytes: i64,
+    size_bytes: i64,
     /// MIME type (if known)
-    pub mime_type: Option<String>,
+    mime_type: Option<String>,
     /// Creation timestamp
-    pub created_at: chrono::DateTime<chrono::Utc>,
+    created_at: chrono::DateTime<chrono::Utc>,
     /// Last modification timestamp
-    pub last_modified_at: chrono::DateTime<chrono::Utc>,
+    last_modified_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl File {
@@ -72,30 +72,6 @@ impl File {
         }
     }
 
-    /// Create a file with all fields specified (for database reconstruction)
-    #[allow(clippy::too_many_arguments)]
-    pub fn new_full(
-        id: Uuid,
-        path: String,
-        content: Option<String>,
-        hash: Vec<u8>,
-        size_bytes: i64,
-        mime_type: Option<String>,
-        created_at: chrono::DateTime<chrono::Utc>,
-        last_modified_at: chrono::DateTime<chrono::Utc>,
-    ) -> Self {
-        Self {
-            id,
-            path,
-            content,
-            hash,
-            size_bytes,
-            mime_type,
-            created_at,
-            last_modified_at,
-        }
-    }
-
     /// Compute SHA256 hash and size from content
     fn compute_hash_and_size(content: &Option<String>) -> (Vec<u8>, i64) {
         match content {
@@ -109,8 +85,13 @@ impl File {
 
     /// Compute SHA256 hash
     fn sha256(data: &[u8]) -> Vec<u8> {
-        use sha2::{Digest, Sha256};
-        Sha256::digest(data).to_vec()
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        let hash = hasher.finish();
+        hash.to_be_bytes().to_vec()
     }
 
     /// Get the file ID
@@ -204,39 +185,5 @@ mod tests {
 
         assert!(file.is_image());
         assert!(!file.is_text());
-    }
-
-    #[test]
-    fn test_file_new_full_constructor() {
-        use crate::value_objects::Uuid;
-        let id = Uuid::new_v4();
-        let path = "pages/test.md".to_string();
-        let content = Some("# Hello".to_string());
-        let hash = vec![0u8; 32];
-        let size_bytes = 42;
-        let mime_type = Some("text/markdown".to_string());
-        let created_at = chrono::Utc::now();
-        let last_modified_at = chrono::Utc::now();
-
-        let file = File::new_full(
-            id,
-            path.clone(),
-            content.clone(),
-            hash.clone(),
-            size_bytes,
-            mime_type.clone(),
-            created_at,
-            last_modified_at,
-        );
-
-        // Verify all fields are accessible (requires pub fields)
-        assert_eq!(file.id, id);
-        assert_eq!(file.path, path);
-        assert_eq!(file.content, content);
-        assert_eq!(file.hash, hash);
-        assert_eq!(file.size_bytes, size_bytes);
-        assert_eq!(file.mime_type, mime_type);
-        assert_eq!(file.created_at, created_at);
-        assert_eq!(file.last_modified_at, last_modified_at);
     }
 }

@@ -9,17 +9,15 @@ description = "Query DSL - parser, AST, and executor for Logseq-style queries"
 
 [dependencies]
 quilt-domain = { path = "../quilt-domain" }
+pest = "2.7"
+serde_json.workspace = true
 chrono.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
-pest.workspace = true
-pest_derive.workspace = true
+sqlx.workspace = true
 uuid.workspace = true
-regex = "1"
 
 [dev-dependencies]
-# sqlx is only used in tests and dev code - not in the query parser/AST source
-sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "uuid", "chrono"] }
 tokio.workspace = true
 tokio-test.workspace = true
 quilt-application = { path = "../quilt-application" }

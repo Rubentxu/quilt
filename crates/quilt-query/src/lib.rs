@@ -40,13 +40,13 @@
 //! let (sql, params) = executor.build_sql(&expr, 100);
 //! ```
 
+pub mod dialect;
 pub mod executor;
-pub mod grammar;
 pub mod parser;
 pub mod time_helpers;
 
-pub use executor::QueryExecutor;
-pub use grammar::QueryGrammar;
+pub use dialect::{SqlDialect, SqliteDialect, WindowFnKind};
+pub use executor::{AnalyzeError, AnalyzeResult, QueryExecutor, SqlParam};
 pub use parser::{
-    preprocess, validate, ParseError, PropertyOp, QueryExpr, QueryParser, SortDirection,
+    AggregateFn, AnalyzeKind, ParseError, QueryError, QueryExpr, QueryParser, StatsFn,
 };

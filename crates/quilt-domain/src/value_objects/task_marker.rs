@@ -1,6 +1,7 @@
 //! TaskMarker value object - task status markers
 
 use std::fmt;
+use std::str::FromStr;
 
 /// TaskMarker represents the status of a task block.
 ///
@@ -10,7 +11,9 @@ use std::fmt;
 /// - TODO: Needs to be done
 /// - DONE: Completed
 /// - CANCELLED: Cancelled/abandoned
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum TaskMarker {
     /// Currently being worked on
     Now,
@@ -64,18 +67,27 @@ impl TaskMarker {
     }
 
     /// Parse from string
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Option<Self> {
+        s.parse().ok()
+    }
+}
+
+impl FromStr for TaskMarker {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "now" => Some(TaskMarker::Now),
-            "later" => Some(TaskMarker::Later),
-            "todo" => Some(TaskMarker::Todo),
-            "done" => Some(TaskMarker::Done),
-            "cancelled" | "canceled" => Some(TaskMarker::Cancelled),
-            _ => None,
+            "now" => Ok(TaskMarker::Now),
+            "later" => Ok(TaskMarker::Later),
+            "todo" => Ok(TaskMarker::Todo),
+            "done" => Ok(TaskMarker::Done),
+            "cancelled" | "canceled" => Ok(TaskMarker::Cancelled),
+            _ => Err(()),
         }
     }
+}
 
+impl TaskMarker {
     /// Get all valid markers in order
     pub fn all() -> &'static [TaskMarker] {
         &[
@@ -113,12 +125,12 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        assert_eq!(TaskMarker::from_str("todo"), Some(TaskMarker::Todo));
-        assert_eq!(TaskMarker::from_str("DONE"), Some(TaskMarker::Done));
+        assert_eq!(TaskMarker::parse_str("todo"), Some(TaskMarker::Todo));
+        assert_eq!(TaskMarker::parse_str("DONE"), Some(TaskMarker::Done));
         assert_eq!(
-            TaskMarker::from_str("canceled"),
+            TaskMarker::parse_str("canceled"),
             Some(TaskMarker::Cancelled)
         );
-        assert_eq!(TaskMarker::from_str("unknown"), None);
+        assert_eq!(TaskMarker::parse_str("unknown"), None);
     }
 }

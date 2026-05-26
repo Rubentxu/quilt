@@ -1,11 +1,7 @@
 //! Quilt Platform
 //!
-//! This crate provides platform adapters: Tauri desktop shell and CLI.
+//! This crate provides platform adapters: CLI.
 
 pub mod cli;
-pub mod init;
-pub mod mcp_transport;
-pub mod tauri;
-pub mod watcher;
 
 pub use cli::QuiltCLI;

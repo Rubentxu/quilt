@@ -1,7 +1,7 @@
 //! Task item component
 
-use crate::bridge::BlockDto;
 use leptos::prelude::*;
+use crate::bridge::BlockDto;
 
 /// Individual task item in a task list
 #[component]

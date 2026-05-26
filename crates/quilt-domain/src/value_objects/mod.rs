@@ -14,16 +14,11 @@ pub use asset_type::AssetType;
 pub use block_format::BlockFormat;
 pub use journal_day::JournalDay;
 pub use priority::Priority;
-pub use property_value::PropertyValue;
+pub use property_value::{parse_properties, PropertyValue};
 pub use task_marker::TaskMarker;
 pub use uuid::Uuid;
 
 /// Trait for types that can be converted to a string representation
 pub trait AsDisplayString {
     fn as_str(&self) -> String;
-}
-
-/// Trait for types that can be parsed from a string
-pub trait FromDisplayString: Sized {
-    fn from_str(s: &str) -> Option<Self>;
 }

@@ -1,9 +1,5 @@
-//! Pest grammar integration
+//! Pest grammar integration (deferred)
 //!
-//! This module provides the Pest parser generated from `grammar/query.pest`.
-
-use pest_derive::Parser;
-
-#[derive(Parser)]
-#[grammar = "grammar/query.pest"]
-pub struct QueryGrammar;
+//! The query parser currently uses a hand-written recursive descent parser
+//! in `parser.rs`. Pest integration with the grammar file at `grammar/query.pest`
+//! is deferred for a future iteration.

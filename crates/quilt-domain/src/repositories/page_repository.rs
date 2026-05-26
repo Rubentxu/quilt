@@ -35,26 +35,6 @@ pub trait PageRepository: Send + Sync {
     /// Delete a page by ID
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
 
-    /// Soft-delete a page by ID (sets deleted_at timestamp)
-    async fn soft_delete(&self, id: Uuid) -> Result<(), DomainError>;
-
-    /// Hard-delete a page by ID (permanent removal from database)
-    async fn hard_delete(&self, id: Uuid) -> Result<(), DomainError>;
-
-    /// Restore a soft-deleted page (sets deleted_at to NULL)
-    async fn restore(&self, id: Uuid) -> Result<(), DomainError>;
-
-    /// Get all soft-deleted pages (recycle bin)
-    ///
-    /// Returns all pages where deleted_at is not NULL, ordered by deletion time.
-    async fn recycle_bin(&self) -> Result<Vec<Page>, DomainError>;
-
-    /// Get pages that were soft-deleted since a given timestamp
-    async fn get_deleted_since(
-        &self,
-        since: chrono::DateTime<chrono::Utc>,
-    ) -> Result<Vec<Page>, DomainError>;
-
     /// Get pages updated since a given timestamp
     async fn get_updated_since(
         &self,
@@ -69,12 +49,6 @@ pub trait PageRepository: Send + Sync {
 
     /// Search pages by name
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<Page>, DomainError>;
-
-    /// Get all orphan pages (pages with no blocks)
-    ///
-    /// An orphan page is one that has no associated blocks.
-    /// This is useful for cleanup and data integrity checks.
-    async fn get_orphan_pages(&self) -> Result<Vec<Page>, DomainError>;
 }
 
 /// PageRepositoryExt provides additional convenience methods

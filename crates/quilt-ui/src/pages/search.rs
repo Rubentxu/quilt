@@ -1,94 +1,82 @@
-//! Search view — search interface with Enter key submission
-
-use crate::bridge::search_blocks;
+use crate::bridge::{self, SearchResultDto};
 use leptos::prelude::*;
+use leptos_router::components::A;
 
-/// Search interface view
 #[component]
 pub fn SearchView() -> impl IntoView {
-    let search_query = StoredValue::new(String::new());
+    let (query, set_query) = signal(String::new());
+    let (results, set_results) = signal(Vec::<SearchResultDto>::new());
+    let (searching, set_searching) = signal(false);
 
-    // Action to search blocks
-    let perform_search = Action::new_local(move |query: &String| {
-        let q = query.clone();
-        async move {
-            if q.trim().is_empty() {
-                vec![]
-            } else {
-                match search_blocks(&q, 50).await {
-                    Ok(results) => results,
-                    Err(e) => {
-                        log::warn!("Search failed: {}", e);
-                        vec![]
-                    }
-                }
-            }
+    Effect::new(move || {
+        let q = query.get();
+        if q.is_empty() {
+            set_results.set(vec![]);
+            return;
         }
+        if q.len() < 2 {
+            return;
+        }
+        set_searching.set(true);
+        wasm_bindgen_futures::spawn_local(async move {
+            match bridge::search(&q).await {
+                Ok(r) => set_results.set(r),
+                Err(_) => set_results.set(vec![]),
+            }
+            set_searching.set(false);
+        });
     });
-
-    // Derived state
-    let is_loading = move || perform_search.pending().get();
-    let get_results = move || perform_search.value().get().unwrap_or_default();
 
     view! {
         <div class="search-view">
-            <div class="page-header">
-                <h2>"Search"</h2>
-                <p class="page-subtitle">"Search your knowledge graph"</p>
-            </div>
+            <h1 class="text-2xl font-bold mb-6">"Search"</h1>
 
-            <div class="card" style="margin-bottom: 1rem">
+            <div class="relative mb-6">
                 <input
                     type="text"
-                    placeholder="Search blocks... (Press Enter)"
-                    attr:data-testid="search-input"
-                    on:keypress={move |e: web_sys::KeyboardEvent| {
-                        if e.key() == "Enter" {
-                            let target = event_target::<web_sys::HtmlInputElement>(&e);
-                            let value = target.value();
-                            if !value.trim().is_empty() {
-                                search_query.set_value(value.clone());
-                                perform_search.dispatch(value);
-                            }
-                        }
-                    }}
+                    class="w-full px-4 py-3 bg-surface border border-border rounded-lg text-text placeholder-text-muted focus:outline-none focus:border-accent"
+                    placeholder="Search pages and blocks..."
+                    prop:value=move || query.get()
+                    on:input=move |ev| set_query.set(event_target_value(&ev))
                 />
             </div>
 
-            <Show when={is_loading} fallback={move || {
-                view! {
-                    <Show when={move || !search_query.get_value().trim().is_empty()} fallback={move || view! {
-                        <div class="card">
-                            <p class="empty-state">"Enter a search term to find blocks"</p>
-                        </div>
-                    }}>
-                        <Show when={move || !get_results().is_empty()} fallback={move || view! {
-                            <div class="card">
-                                <p class="empty-state">"No results found"</p>
-                            </div>
-                        }}>
-                            <div class="search-results">
-                                <p class="results-count">{format!("{} result(s) found", get_results().len())}</p>
-                                {get_results().iter().map(|r| view! {
-                                    <div class="card" style="margin-bottom: 0.5rem">
-                                        <div class="search-result-item">
-                                            <div class="result-meta">
-                                                <span class="result-page">{r.page_name.clone()}</span>
-                                                <span class="result-block-id">{"#".to_string() + &r.block_id}</span>
-                                            </div>
-                                            <div class="result-snippet">
-                                                {r.snippet.as_deref().unwrap_or(&r.content).to_string()}
-                                            </div>
-                                        </div>
-                                    </div>
-                                }).collect::<Vec<_>>()}
-                            </div>
-                        </Show>
+            <Show when=move || searching.get()>
+                <div class="text-text-muted text-sm">"Searching..."</div>
+            </Show>
+
+            <Show
+                when=move || !searching.get() && !results.get().is_empty()
+                fallback=move || view! {
+                    <Show when=move || !query.get().is_empty() && !searching.get()>
+                        <div class="text-text-muted text-sm">"No results found"</div>
                     </Show>
                 }
-            }}>
-                <div class="loading">"Searching..."</div>
+            >
+                <div class="space-y-2">
+                    <For each=move || results.get() key=|r| r.block_id.clone() let:result>
+                        <SearchResult result=result />
+                    </For>
+                </div>
             </Show>
         </div>
+    }
+}
+
+#[component]
+fn SearchResult(result: SearchResultDto) -> impl IntoView {
+    let href = format!("/page/{}", result.page_name);
+    let name = result.page_name.clone();
+    let snippet = result
+        .snippet
+        .clone()
+        .unwrap_or_else(|| result.content.clone());
+    view! {
+        <A href=href>
+            <div class="block p-3 rounded hover:bg-surface-hover border border-border transition-colors">
+                <div class="text-xs text-text-muted mb-1">{name}</div>
+                <div class="text-sm">{snippet}</div>
+            </div>
+        </A>
     }
 }

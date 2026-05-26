@@ -8,53 +8,44 @@
 //! The MCP server bridges AI agents with the Quilt domain layer:
 //!
 //! - [`McpServer`]: Main server handling MCP requests
-//! - [`types`]: MCP protocol request/response types
-//! - [`cognitive`]: Cognitive engine status DTOs
+//! - [`protocol::McpRequest`] / [`protocol::McpResponse`]: Request/response types
 //! - [`tools`]: Tool definitions for AI agent actions
 //! - [`resources`]: Resource definitions for graph data access
 //! - [`notifications`]: Event notification support
-//! - [`errors`]: MCP protocol error codes and types
+//! - [`handlers`]: Tool and resource handler implementations
 //!
 //! # Available Tools
 //!
-//! - `logseq_query`: Execute a Logseq DSL query
-//! - `create_block`: Create a new content block
-//! - `search`: Full-text search across blocks
-//! - `get_block_tree`: Get a block with its children
-//! - `get_page_blocks`: Get all blocks on a page
-//! - `list_pages`: List all pages
-//! - `get_journal`: Get journal page for a date
-//! - `create_task`: Create a task (block with marker)
-//! - `link_blocks`: Create a reference between blocks
-//! - `get_backlinks`: Get blocks that reference a block
-//! - `delete_block`: Delete a block
+//! Core tools (9 total):
+//! - `quilt_query`: Execute a Quilt DSL query
+//! - `quilt_search`: Full-text search across blocks
+//! - `quilt_create_block`: Create a new content block
+//! - `quilt_delete_block`: Delete a block
+//! - `quilt_link_blocks`: Create a reference between blocks
+//! - `quilt_get_block_tree`: Get a block with its children
+//! - `quilt_get_backlinks`: Get blocks that reference a block
+//! - `quilt_list_pages`: List all pages
+//! - `quilt_get_page_blocks`: Get all blocks on a page
+//! - `quilt_get_journal`: Get journal page for a date
+//! - `quilt_create_task`: Create a task (block with marker)
+//!
+//! # Resources
+//!
+//! - `quilt://graph`: Full graph statistics
+//! - `quilt://pages`: All pages list
+//! - `quilt://journals`: Journal pages list
+//! - `quilt://tags`: All tags with usage counts
 
-pub mod cognitive;
-pub mod errors;
 pub mod handlers;
-pub mod helpers;
-pub mod hooks;
 pub mod notifications;
-pub mod plugin;
+pub mod protocol;
 pub mod resources;
+pub mod serialization;
 pub mod server;
 pub mod tools;
-pub mod types;
 
-pub use cognitive::CognitiveEngineStatus;
-pub use errors::{McpError, McpErrorCode};
-pub use helpers::{
-    block_to_json, deep_link_to_json, parse_optional_marker, parse_optional_uuid, parse_uuid,
-};
-pub use hooks::{
-    HookDispatcher, HookError, HookEvent, HookEventKind, HookFilter, HookResult, HookSubscription,
-    Priority,
-};
-pub use plugin::{Plugin, PluginContext, PluginError, PluginManifest, PluginRegistry};
+pub use protocol::{McpRequest, McpResponse};
 pub use server::McpServer;
-pub use types::{
-    CallToolParams, ClientCapabilities, ContentBlock, InitializeParams, InitializeResult,
-    McpRequest, McpResponse, ReadResourceParams, ResourceCapabilities, ResourceContent,
-    ResourceReadResult, ResourcesListResult, Roots, Sampling, ServerCapabilities, ServerInfo,
-    ToolCapabilities, ToolsCallResult, ToolsListResult,
-};
+
+// Re-export use_cases for handler construction
+pub use quilt_application::use_cases;

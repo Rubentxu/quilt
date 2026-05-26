@@ -2,17 +2,14 @@
 
 query = { SOI ~ expr ~ EOI }
 
-WHITESPACE = _{ " " | "\t" | "\r" | "\n" }
-
-expr = _{ page_ref | self_ref | task | priority | page | tags | block_content | sample | between | property | and | or | not | table | sort_by | exists | missing | namespace }
+expr = { and | or | not | between | property | task | priority | page | tags | page_ref | self_ref | block_content | sample }
 
 and = { "(" ~ "and" ~ expr+ ~ ")" }
 or = { "(" ~ "or" ~ expr+ ~ ")" }
 not = { "(" ~ "not" ~ expr ~ ")" }
 
 between = { "(" ~ "between" ~ value ~ value ~ ")" }
-property = { "(" ~ "property" ~ string ~ property_op? ~ value+ ~ ")" }
-property_op = { "!=" | ">=" | "<=" | ">" | "<" | "contains" | "between" }
+property = { "(" ~ "property" ~ string ~ value ~ ")" }
 task = { "(" ~ "task" ~ task_marker+ ~ ")" }
 priority = { "(" ~ "priority" ~ priority_level+ ~ ")" }
 page = { "(" ~ "page" ~ string ~ ")" }
@@ -22,20 +19,13 @@ self_ref = { "self" }
 block_content = { "(" ~ "full-text-search" ~ string ~ ")" }
 sample = { "(" ~ "sample" ~ integer ~ ")" }
 
-table = { "(" ~ "table" ~ expr+ ~ ")" }
-sort_by = { "(" ~ "sort-by" ~ (string | integer) ~ direction? ~ expr ~ ")" }
-direction = { "asc" | "desc" }
-exists = { "(" ~ "exists" ~ string ~ ")" }
-missing = { "(" ~ "missing" ~ string ~ ")" }
-namespace = { "(" ~ "namespace" ~ string ~ ")" }
-
 task_marker = { "now" | "later" | "todo" | "done" | "cancelled" }
 priority_level = { "a" | "b" | "c" }
 
 value = { string | integer | date | time_helper | boolean }
 string = { "\"" ~ quoted_string ~ "\"" }
 quoted_string = { (!"\"" ~ ANY)* }
-integer = @{ ASCII_DIGIT+ }
+integer = { ASCII_DIGIT+ }
 date = { integer ~ "-" ~ integer ~ "-" ~ integer }
 time_helper = { "-"? ~ integer ~ ("d" | "w" | "m" | "y" | "h" | "n") }
 boolean = { "true" | "false" }

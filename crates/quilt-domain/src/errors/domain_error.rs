@@ -39,47 +39,11 @@ pub enum DomainError {
     /// Invalid or corrupt data
     InvalidData(String),
 
-    // Repository errors (infrastructure, but defined here for convenience)
-    /// Database error (wraps infrastructure error)
-    Database(String),
+    // Repository errors (storage, defined here for convenience)
+    /// Storage error (data couldn't be stored or retrieved)
+    Storage(String),
     /// Feature not yet implemented
     NotImplemented(&'static str),
-
-    // Property validation errors
-    /// Property validation failed
-    PropertyValidationError {
-        /// The property that failed validation
-        property: String,
-        /// The validation error message
-        error: String,
-    },
-
-    // Timezone and settings errors
-    /// Invalid timezone identifier (e.g., "Moon/Mars")
-    InvalidTimezone(String),
-    /// Invalid user settings configuration
-    InvalidConfiguration(String),
-
-    // Class validation errors
-    /// Class validation failed
-    ClassValidationError {
-        /// The class that failed validation
-        class_id: Uuid,
-        /// The validation error message
-        error: String,
-    },
-    /// A required property is missing
-    MissingRequiredProperty {
-        /// The missing property ID
-        property_id: Uuid,
-    },
-    /// Circular inheritance detected
-    CircularInheritance {
-        /// The class involved in the cycle
-        class_id: Uuid,
-        /// Error message
-        message: String,
-    },
 }
 
 impl fmt::Display for DomainError {
@@ -118,37 +82,11 @@ impl fmt::Display for DomainError {
             DomainError::InvalidData(msg) => {
                 write!(f, "Invalid data: {}", msg)
             }
-            DomainError::Database(msg) => {
-                write!(f, "Database error: {}", msg)
+            DomainError::Storage(msg) => {
+                write!(f, "Storage error: {}", msg)
             }
             DomainError::NotImplemented(feature) => {
                 write!(f, "Not implemented: {}", feature)
-            }
-            DomainError::PropertyValidationError { property, error } => {
-                write!(
-                    f,
-                    "Property validation failed for '{}': {}",
-                    property, error
-                )
-            }
-            DomainError::ClassValidationError { class_id, error } => {
-                write!(f, "Class validation failed for {}: {}", class_id, error)
-            }
-            DomainError::MissingRequiredProperty { property_id } => {
-                write!(f, "Missing required property: {}", property_id)
-            }
-            DomainError::CircularInheritance { class_id, message } => {
-                write!(
-                    f,
-                    "Circular inheritance detected for class {}: {}",
-                    class_id, message
-                )
-            }
-            DomainError::InvalidTimezone(tz) => {
-                write!(f, "Invalid timezone: {}", tz)
-            }
-            DomainError::InvalidConfiguration(msg) => {
-                write!(f, "Invalid configuration: {}", msg)
             }
         }
     }

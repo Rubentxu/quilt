@@ -1,70 +1,63 @@
-//! Pages view — page listing with Logseq-style
-
-use crate::bridge::{list_pages, PageDto};
+use crate::bridge::{self, PageDto};
+use crate::components::loading::Loading;
 use leptos::prelude::*;
-use leptos_router::hooks::use_navigate;
+use leptos_router::components::A;
 
-/// Pages listing view - Logseq style
 #[component]
 pub fn PagesView() -> impl IntoView {
-    let fetch_pages = Action::new_local(|_: &()| async move {
-        match list_pages().await {
-            Ok(pages) => Some(pages),
-            Err(e) => {
-                log::warn!("Failed to load pages: {}", e);
-                None
-            }
-        }
-    });
+    let (pages, set_pages) = signal(Vec::<PageDto>::new());
+    let (loading, set_loading) = signal(true);
 
-    // Trigger initial fetch
-    fetch_pages.dispatch(());
+    Effect::new(move || {
+        wasm_bindgen_futures::spawn_local(async move {
+            set_loading.set(true);
+            match bridge::list_pages().await {
+                Ok(p) => set_pages.set(p),
+                Err(_) => set_pages.set(vec![]),
+            }
+            set_loading.set(false);
+        });
+    });
 
     view! {
         <div class="pages-view">
-            <header class="pages-header">
-                <h1 class="pages-title">"Pages"</h1>
-                <p class="pages-subtitle">"All your pages"</p>
-            </header>
+            <h1 class="text-2xl font-bold mb-6">"All Pages"</h1>
 
-            <Show when={move || fetch_pages.pending().get()} fallback={move || {
-                view! {
-                    <PagesList pages={fetch_pages.value().get().unwrap_or(None).unwrap_or_default()} />
+            <Show when=move || loading.get()>
+                <Loading />
+            </Show>
+
+            <Show
+                when=move || !loading.get() && !pages.get().is_empty()
+                fallback=move || view! {
+                    <Show when=move || !loading.get()>
+                        <div class="text-text-muted text-sm py-4">"No pages yet"</div>
+                    </Show>
                 }
-            }}>
-                <div class="loading">"Loading pages..."</div>
+            >
+                <div class="space-y-1">
+                    <For each=move || pages.get() key=|p| p.id.clone() let:page>
+                        <PageListItem page=page />
+                    </For>
+                </div>
             </Show>
         </div>
     }
 }
 
-/// Separate component for the actual pages list
 #[component]
-fn PagesList(pages: Vec<PageDto>) -> impl IntoView {
-    let navigate = use_navigate();
-
+fn PageListItem(page: PageDto) -> impl IntoView {
+    let href = format!("/page/{}", page.name);
+    let name = page.name.clone();
+    let is_journal = page.journal;
     view! {
-        <ul class="pages-list">
-            {pages.iter().map(|p| {
-                let page_id = p.id.clone();
-                let title = p.title.clone().unwrap_or(p.name.clone());
-                let icon = if p.journal { "📅" } else { "📄" };
-                let nav = navigate.clone();
-                view! {
-                    <li>
-                        <button
-                            class="page-row"
-                            on:click={move |_| {
-                                let target = format!("/pages/{}", page_id);
-                                nav(&target, Default::default());
-                            }}
-                        >
-                            <span class="page-row-icon">{icon}</span>
-                            <span class="page-row-title">{title}</span>
-                        </button>
-                    </li>
-                }
-            }).collect::<Vec<_>>()}
-        </ul>
+        <A href=href>
+            <div class="flex items-center gap-2 px-3 py-2 rounded hover:bg-surface-hover transition-colors">
+                <span class="text-sm">{name}</span>
+                {is_journal.then(|| view! {
+                    <span class="text-xs bg-accent/20 text-accent px-1.5 py-0.5 rounded">"journal"</span>
+                })}
+            </div>
+        </A>
     }
 }

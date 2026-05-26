@@ -3,7 +3,19 @@
 use std::fmt;
 
 /// Priority represents the priority level of a task.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Default,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum Priority {
     /// High priority (A)
     A,
@@ -44,8 +56,7 @@ impl Priority {
     }
 
     /// Parse from string
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Option<Self> {
         Self::from_char(s.chars().next()?)
     }
 

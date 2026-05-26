@@ -1,38 +1,34 @@
 //! Quilt Application Layer
 //!
-//! Use cases and orchestration logic implementing the CQRS pattern.
+//! Use cases and orchestration logic.
 //!
-//! # Architecture
+//! # Use Cases
 //!
-//! This crate follows Command Query Responsibility Segregation (CQRS):
-//! - **Commands** ([`commands`] module): Write operations that modify domain state
-//! - **Queries** ([`queries`] module): Read operations that retrieve domain data
-//! - **Query Service** ([`query_service`] module): High-level query DSL parsing and SQL generation
+//! The [`use_cases`] module provides higher-level use case traits that
+//! encapsulate common workflows. These are used by presentation layers
+//! (MCP, REST) to interact with the domain.
 //!
 //! # Key Types
 //!
-//! - [`BlockCommand`] / [`BlockQuery`]: Handlers for block operations
-//! - [`PageCommand`] / [`PageQuery`]: Handlers for page operations
-//! - [`SyncCommand`]: Handlers for sync operations
 //! - [`ApplicationError`]: Unified error type for all application-level failures
 
-pub mod commands;
+pub mod bootstrap;
 pub mod errors;
-#[cfg(feature = "tokio-runtime")]
-pub mod event_bridge;
-#[cfg(feature = "tokio-runtime")]
-pub mod event_bus;
-pub mod queries;
-pub mod services;
 
-pub mod query_service;
-
-pub mod sync_commands;
-pub mod sync_service;
+// Use cases module - higher-level operations for presentation layers
+pub mod use_cases;
 
 // Re-exports
-pub use commands::{BlockCommand, BlockCommandHandler, PageCommand, PageCommandHandler};
+pub use bootstrap::AppServices;
 pub use errors::ApplicationError;
-pub use queries::{BlockQuery, BlockQueryHandler, PageQuery, PageQueryHandler};
-pub use sync_commands::{SyncCommand, SyncCommandHandler, SyncResult};
-pub use sync_service::{ConflictInfo, SyncService, SyncServiceConfig, SyncServiceState};
+
+// Use case traits (re-exported for convenience)
+pub use use_cases::{
+    BlockTree, BlockUseCases, GraphSnapshot, JournalSummary, PageSummary, PageUseCases,
+    PageWithBlocks, QueryPlan, ResourceUseCases, SearchResult, SearchUseCases, TagSummary,
+};
+
+// Domain types re-exported for use by presentation layers (MCP, REST)
+// This allows quilt-mcp to use domain types without a direct quilt-domain dependency
+pub use quilt_domain::entities::Block;
+pub use quilt_domain::value_objects::{parse_properties, JournalDay, TaskMarker, Uuid};

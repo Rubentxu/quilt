@@ -12,9 +12,6 @@ use std::fmt;
 /// - Float: decimal numbers
 /// - Date: timestamps
 /// - Reference: links to other entities
-/// - Url: URL string
-/// - Checkbox: boolean represented as checkbox
-/// - Node: reference to a block or page (node reference)
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum PropertyValue {
     /// Plain text value
@@ -31,12 +28,6 @@ pub enum PropertyValue {
     Ref(String),
     /// Array of values
     Array(Vec<PropertyValue>),
-    /// URL value
-    Url(String),
-    /// Checkbox (boolean with checkbox semantics)
-    Checkbox(bool),
-    /// Node reference (block or page ID)
-    Node(String),
 }
 
 impl PropertyValue {
@@ -70,21 +61,6 @@ impl PropertyValue {
         PropertyValue::Ref(s.into())
     }
 
-    /// Create a URL property value
-    pub fn url(s: impl Into<String>) -> Self {
-        PropertyValue::Url(s.into())
-    }
-
-    /// Create a checkbox property value
-    pub fn checkbox(b: bool) -> Self {
-        PropertyValue::Checkbox(b)
-    }
-
-    /// Create a node reference property value
-    pub fn node(s: impl Into<String>) -> Self {
-        PropertyValue::Node(s.into())
-    }
-
     /// Get the type name
     pub fn type_name(&self) -> &'static str {
         match self {
@@ -95,9 +71,6 @@ impl PropertyValue {
             PropertyValue::Date(_) => "date",
             PropertyValue::Ref(_) => "ref",
             PropertyValue::Array(_) => "array",
-            PropertyValue::Url(_) => "url",
-            PropertyValue::Checkbox(_) => "checkbox",
-            PropertyValue::Node(_) => "node",
         }
     }
 
@@ -107,15 +80,14 @@ impl PropertyValue {
             PropertyValue::String(s) => serde_json::Value::String(s.clone()),
             PropertyValue::Boolean(b) => serde_json::Value::Bool(*b),
             PropertyValue::Integer(i) => serde_json::Value::Number((*i).into()),
-            PropertyValue::Float(f) => serde_json::json!(*f),
+            PropertyValue::Float(f) => {
+                serde_json::from_value(serde_json::json!(*f)).unwrap_or(serde_json::Value::Null)
+            }
             PropertyValue::Date(dt) => serde_json::Value::String(dt.to_rfc3339()),
             PropertyValue::Ref(s) => serde_json::Value::String(s.clone()),
             PropertyValue::Array(arr) => {
                 serde_json::Value::Array(arr.iter().map(|v| v.to_json()).collect())
             }
-            PropertyValue::Url(s) => serde_json::Value::String(s.clone()),
-            PropertyValue::Checkbox(b) => serde_json::Value::Bool(*b),
-            PropertyValue::Node(s) => serde_json::Value::String(s.clone()),
         }
     }
 
@@ -158,9 +130,6 @@ impl fmt::Display for PropertyValue {
                 }
                 write!(f, "]")
             }
-            PropertyValue::Url(url) => write!(f, "{}", url),
-            PropertyValue::Checkbox(b) => write!(f, "[{}]", if *b { "x" } else { " " }),
-            PropertyValue::Node(id) => write!(f, "->{}", id),
         }
     }
 }

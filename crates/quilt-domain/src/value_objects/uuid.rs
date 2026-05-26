@@ -1,18 +1,10 @@
 //! Uuid value object - wrapper around UUID with convenience methods
-//!
-//! # Serialization Note
-//! This type derives `Serialize` and `Deserialize` because `Uuid` genuinely needs
-//! serialization for MCP/JSON interop. This is a justified exception to the
-//! principle of minimal derives - the domain cleanup removed these derives assuming
-//! they weren't needed, but the cognitive crate's DTO types require them.
 
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 /// Uuid wraps a UUID with convenience methods for Quilt.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Uuid(uuid::Uuid);
 
 impl Uuid {

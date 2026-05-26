@@ -132,46 +132,9 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             refs BLOB NOT NULL DEFAULT '[]',
-            tags BLOB NOT NULL DEFAULT '[]',
-            journal_day INTEGER,
-            updated_journal_day INTEGER,
-            deleted_at INTEGER
+            tags BLOB NOT NULL DEFAULT '[]'
         )
         "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // Add journal_day columns if they don't exist (for existing databases)
-    sqlx::query("ALTER TABLE blocks ADD COLUMN IF NOT EXISTS journal_day INTEGER")
-        .execute(pool)
-        .await
-        .ok(); // Ignore error if column exists
-    sqlx::query("ALTER TABLE blocks ADD COLUMN IF NOT EXISTS updated_journal_day INTEGER")
-        .execute(pool)
-        .await
-        .ok(); // Ignore error if column exists
-
-    // Create user_settings table (singleton)
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS user_settings (
-            id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-            timezone TEXT NOT NULL DEFAULT 'UTC',
-            journal_format TEXT NOT NULL DEFAULT '%Y-%m-%d',
-            start_of_week INTEGER NOT NULL DEFAULT 1 CHECK (start_of_week BETWEEN 0 AND 6),
-            preferred_format TEXT NOT NULL DEFAULT 'markdown' CHECK (preferred_format IN ('markdown', 'org')),
-            updated_at INTEGER NOT NULL
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // Initialize default settings if not exists
-    sqlx::query(
-        r#"INSERT OR IGNORE INTO user_settings (id, timezone, journal_format, start_of_week, preferred_format, updated_at)
-           VALUES (1, 'UTC', '%Y-%m-%d', 1, 'markdown', unixepoch('now'))"#,
     )
     .execute(pool)
     .await?;
@@ -189,8 +152,7 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
             original_name TEXT,
             journal INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            deleted_at INTEGER
+            updated_at INTEGER NOT NULL
         )
         "#,
     )
@@ -205,7 +167,6 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
             content TEXT,
             hash BLOB NOT NULL,
             size_bytes INTEGER NOT NULL,
-            mime_type TEXT,
             created_at INTEGER NOT NULL,
             last_modified_at INTEGER NOT NULL
         )
@@ -271,19 +232,6 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
 
     sqlx::query(
         r#"
-        CREATE TABLE IF NOT EXISTS aliases (
-            page_id BLOB NOT NULL,
-            alias TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            PRIMARY KEY (page_id, alias)
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
         CREATE TABLE IF NOT EXISTS journals (
             journal_day INTEGER PRIMARY KEY,
             page_id BLOB NOT NULL UNIQUE,
@@ -306,126 +254,6 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     .execute(pool)
     .await?;
 
-    // ── Property Definition Tables ───────────────────────────────────────
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS property_definitions (
-            id BLOB PRIMARY KEY NOT NULL,
-            db_ident TEXT NOT NULL UNIQUE,
-            title TEXT NOT NULL,
-            property_type TEXT NOT NULL,
-            cardinality TEXT NOT NULL DEFAULT 'one',
-            view_context TEXT NOT NULL DEFAULT 'block',
-            public INTEGER NOT NULL DEFAULT 1,
-            queryable INTEGER NOT NULL DEFAULT 1,
-            hidden INTEGER NOT NULL DEFAULT 0,
-            attribute TEXT,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS closed_values (
-            id BLOB PRIMARY KEY NOT NULL,
-            property_id BLOB NOT NULL,
-            db_ident TEXT NOT NULL,
-            value TEXT NOT NULL,
-            icon TEXT,
-            "order" REAL NOT NULL DEFAULT 0,
-            created_at INTEGER NOT NULL,
-            FOREIGN KEY (property_id) REFERENCES property_definitions(id) ON DELETE CASCADE
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS block_properties (
-            block_id BLOB NOT NULL,
-            property_id BLOB NOT NULL,
-            value_type TEXT NOT NULL,
-            value_json TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            PRIMARY KEY (block_id, property_id),
-            FOREIGN KEY (block_id) REFERENCES blocks(id) ON DELETE CASCADE,
-            FOREIGN KEY (property_id) REFERENCES property_definitions(id) ON DELETE CASCADE
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    // ── Class Definition Tables ──────────────────────────────────────────
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS class_definitions (
-            id BLOB PRIMARY KEY NOT NULL,
-            db_ident TEXT NOT NULL UNIQUE,
-            title TEXT NOT NULL,
-            icon TEXT,
-            builtin INTEGER NOT NULL DEFAULT 0,
-            user_defined INTEGER NOT NULL DEFAULT 0,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS class_inheritance (
-            class_id BLOB NOT NULL,
-            parent_id BLOB NOT NULL,
-            PRIMARY KEY (class_id, parent_id),
-            FOREIGN KEY (class_id) REFERENCES class_definitions(id) ON DELETE CASCADE,
-            FOREIGN KEY (parent_id) REFERENCES class_definitions(id) ON DELETE CASCADE
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS class_required_properties (
-            class_id BLOB NOT NULL,
-            property_id BLOB NOT NULL,
-            PRIMARY KEY (class_id, property_id),
-            FOREIGN KEY (class_id) REFERENCES class_definitions(id) ON DELETE CASCADE,
-            FOREIGN KEY (property_id) REFERENCES property_definitions(id) ON DELETE CASCADE
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS class_default_properties (
-            class_id BLOB NOT NULL,
-            property_id BLOB NOT NULL,
-            default_value_json TEXT NOT NULL,
-            PRIMARY KEY (class_id, property_id),
-            FOREIGN KEY (class_id) REFERENCES class_definitions(id) ON DELETE CASCADE,
-            FOREIGN KEY (property_id) REFERENCES property_definitions(id) ON DELETE CASCADE
-        )
-        "#,
-    )
-    .execute(pool)
-    .await?;
-
     // Create indices
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_blocks_page_id ON blocks(page_id)")
         .execute(pool)
@@ -439,65 +267,16 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_blocks_updated_at ON blocks(updated_at)")
         .execute(pool)
         .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_blocks_priority ON blocks(priority)")
-        .execute(pool)
-        .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_blocks_deleted_at ON blocks(deleted_at)")
-        .execute(pool)
-        .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_pages_name ON pages(name)")
         .execute(pool)
         .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_pages_journal_day ON pages(journal_day)")
         .execute(pool)
         .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_pages_namespace ON pages(namespace_id)")
-        .execute(pool)
-        .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_pages_deleted_at ON pages(deleted_at)")
-        .execute(pool)
-        .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_refs_target_id ON refs(target_id)")
         .execute(pool)
         .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag)")
-        .execute(pool)
-        .await?;
-
-    // Property and class indices
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_definitions_db_ident ON property_definitions(db_ident)")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_closed_values_property_id ON closed_values(property_id)",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_block_properties_block_id ON block_properties(block_id)",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_block_properties_property_id ON block_properties(property_id)")
-        .execute(pool)
-        .await?;
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_class_definitions_db_ident ON class_definitions(db_ident)",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query(
-        "CREATE INDEX IF NOT EXISTS idx_class_inheritance_class_id ON class_inheritance(class_id)",
-    )
-    .execute(pool)
-    .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_class_inheritance_parent_id ON class_inheritance(parent_id)")
-        .execute(pool)
-        .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_class_required_properties_class_id ON class_required_properties(class_id)")
-        .execute(pool)
-        .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_class_default_properties_class_id ON class_default_properties(class_id)")
         .execute(pool)
         .await?;
 

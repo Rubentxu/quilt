@@ -60,29 +60,29 @@ impl TimeOffset {
     pub fn parse(s: &str) -> Option<Self> {
         let s = s.trim();
 
-        let (sign, rest) = if let Some(stripped) = s.strip_prefix('-') {
-            (-1, stripped)
+        let (sign, rest) = if s.starts_with('-') {
+            (-1, &s[1..])
         } else {
             (1, s)
         };
 
-        if let Some(stripped) = rest.strip_suffix('d') {
-            let n: i64 = stripped.parse().ok()?;
+        if rest.ends_with('d') {
+            let n: i64 = rest[..rest.len() - 1].parse().ok()?;
             Some(TimeOffset::Days(n * sign))
-        } else if let Some(stripped) = rest.strip_suffix('w') {
-            let n: i64 = stripped.parse().ok()?;
+        } else if rest.ends_with('w') {
+            let n: i64 = rest[..rest.len() - 1].parse().ok()?;
             Some(TimeOffset::Weeks(n * sign))
-        } else if let Some(stripped) = rest.strip_suffix('m') {
-            let n: i64 = stripped.parse().ok()?;
+        } else if rest.ends_with('m') {
+            let n: i64 = rest[..rest.len() - 1].parse().ok()?;
             Some(TimeOffset::Months(n * sign))
-        } else if let Some(stripped) = rest.strip_suffix('y') {
-            let n: i64 = stripped.parse().ok()?;
+        } else if rest.ends_with('y') {
+            let n: i64 = rest[..rest.len() - 1].parse().ok()?;
             Some(TimeOffset::Years(n * sign))
-        } else if let Some(stripped) = rest.strip_suffix('h') {
-            let n: i64 = stripped.parse().ok()?;
+        } else if rest.ends_with('h') {
+            let n: i64 = rest[..rest.len() - 1].parse().ok()?;
             Some(TimeOffset::Hours(n * sign))
-        } else if let Some(stripped) = rest.strip_suffix('n') {
-            let n: i64 = stripped.parse().ok()?;
+        } else if rest.ends_with('n') {
+            let n: i64 = rest[..rest.len() - 1].parse().ok()?;
             Some(TimeOffset::Minutes(n * sign))
         } else {
             None
@@ -227,7 +227,6 @@ mod tests {
         let base = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         let offset = TimeOffset::Days(1);
         let result = offset.to_date(base);
-        // Positive offset means future: Jan 15 + 1 day = Jan 16
         assert_eq!(result, NaiveDate::from_ymd_opt(2024, 1, 16).unwrap());
     }
 
@@ -237,7 +236,6 @@ mod tests {
         let base = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         let offset = TimeOffset::Weeks(1);
         let result = offset.to_date(base);
-        // Positive offset means future: Jan 15 + 1 week = Jan 22
         assert_eq!(result, NaiveDate::from_ymd_opt(2024, 1, 22).unwrap());
     }
 
@@ -267,7 +265,7 @@ mod tests {
         let base = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         let offset = TimeOffset::Hours(24);
         let result = offset.to_date(base);
-        // 24 hours forward from Jan 15 = Jan 16
+        // Hours ARE added and 24 hours crosses a day boundary
         assert_eq!(result, NaiveDate::from_ymd_opt(2024, 1, 16).unwrap());
     }
 
@@ -299,10 +297,10 @@ mod tests {
     fn test_parse_time_helper_offset() {
         let result = parse_time_helper("-7d");
         assert!(result.is_some());
-        // Negative offset means 7 days in the past
+        // -7d means 7 days in the past (consistent with "yesterday")
         let today = Utc::now().date_naive();
         let diff = today.signed_duration_since(result.unwrap()).num_days();
-        // -7d gives 7 days in the PAST (diff is positive because today > past date)
+        // -7d gives 7 days in the PAST, so diff should be positive 7
         assert_eq!(diff, 7);
     }
 
@@ -357,7 +355,6 @@ mod tests {
         let base = NaiveDate::from_ymd_opt(2024, 1, 15).unwrap();
         let offset = TimeOffset::Days(-7);
         let result = offset.to_date(base);
-        // Negative offset means past: Jan 15 + (-7 days) = Jan 8
         assert_eq!(result, NaiveDate::from_ymd_opt(2024, 1, 8).unwrap());
     }
 }

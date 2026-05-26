@@ -11,17 +11,12 @@ description = "Quilt CLI binary"
 name = "quilt"
 path = "src/main.rs"
 
-[[bin]]
-name = "quilt-mcp"
-path = "src/mcp_main.rs"
-
 [dependencies]
-quilt-domain = { path = "../quilt-domain" }
 quilt-platform = { path = "../quilt-platform" }
-quilt-mcp = { path = "../quilt-mcp" }
-quilt-cognitive = { path = "../quilt-cognitive" }
+quilt-application = { path = "../quilt-application" }
 quilt-infrastructure = { path = "../quilt-infrastructure" }
 quilt-search = { path = "../quilt-search" }
 anyhow.workspace = true
 tokio.workspace = true
 clap.workspace = true
+sqlx.workspace = true

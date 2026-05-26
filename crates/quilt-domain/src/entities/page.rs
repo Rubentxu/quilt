@@ -162,19 +162,6 @@ impl Page {
     }
 }
 
-impl Default for PageCreate {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            title: None,
-            namespace_id: None,
-            journal_day: None,
-            format: BlockFormat::Markdown,
-            file_id: None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +223,18 @@ mod tests {
         assert!(page.journal);
         assert!(page.journal_day.is_some());
         assert_eq!(page.name, "2026-05-02");
+    }
+}
+
+impl Default for PageCreate {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            title: None,
+            namespace_id: None,
+            journal_day: None,
+            format: BlockFormat::Markdown,
+            file_id: None,
+        }
     }
 }

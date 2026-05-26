@@ -2,6 +2,7 @@
 //!
 //! These tests use real in-memory SQLite to verify the full query pipeline.
 
+use quilt_application::SearchUseCases;
 use sqlx::SqlitePool;
 use uuid::Uuid;
 
@@ -153,9 +154,12 @@ async fn test_e2e_task_query() {
     let pool = setup_test_db().await;
     let (_page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
 
-    // Parse and build SQL using query service
-    let service = quilt_application::query_service::QueryService::new();
-    let result = service.prepare("(task todo)", 100).expect("query failed");
+    // Parse and build SQL using search use cases
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(task todo)", 100)
+        .await
+        .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
     assert_eq!(result_count, 1, "Should find exactly 1 todo block");
@@ -166,8 +170,11 @@ async fn test_e2e_priority_query() {
     let pool = setup_test_db().await;
     let (_page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
-    let result = service.prepare("(priority a)", 100).expect("query failed");
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(priority a)", 100)
+        .await
+        .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
     assert_eq!(
@@ -181,11 +188,12 @@ async fn test_e2e_and_query() {
     let pool = setup_test_db().await;
     let (_page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
 
     // Query: todo AND priority a - should find the todo block with priority a
-    let result = service
-        .prepare("(and (task todo) (priority a))", 100)
+    let result = use_cases
+        .query("(and (task todo) (priority a))", 100)
+        .await
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
@@ -195,8 +203,9 @@ async fn test_e2e_and_query() {
     );
 
     // Query: todo AND done - should find 0 blocks (nothing is both)
-    let result2 = service
-        .prepare("(and (task todo) (task done))", 100)
+    let result2 = use_cases
+        .query("(and (task todo) (task done))", 100)
+        .await
         .expect("query failed");
 
     let result_count2 = execute_query(&pool, &result2.sql, &result2.params).await;
@@ -211,9 +220,10 @@ async fn test_e2e_page_query() {
     let pool = setup_test_db().await;
     let (_page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
-    let result = service
-        .prepare("(page \"test-page\")", 100)
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(page \"test-page\")", 100)
+        .await
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
@@ -260,8 +270,11 @@ async fn test_e2e_page_ref_query() {
         .await
         .expect("failed to populate FTS");
 
-    let service = quilt_application::query_service::QueryService::new();
-    let result = service.prepare("[[test-page]]", 100).expect("query failed");
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("[[test-page]]", 100)
+        .await
+        .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
     assert_eq!(
@@ -275,10 +288,11 @@ async fn test_e2e_fts_query() {
     let pool = setup_test_db().await;
     seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
 
-    let result = service
-        .prepare("(full-text-search \"todo\")", 100)
+    let result = use_cases
+        .query("(full-text-search \"todo\")", 100)
+        .await
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
@@ -288,8 +302,9 @@ async fn test_e2e_fts_query() {
     );
 
     // Query for something not in the content
-    let result2 = service
-        .prepare("(full-text-search \"nonexistent\")", 100)
+    let result2 = use_cases
+        .query("(full-text-search \"nonexistent\")", 100)
+        .await
         .expect("query failed");
 
     let result_count2 = execute_query(&pool, &result2.sql, &result2.params).await;
@@ -304,11 +319,12 @@ async fn test_e2e_no_results() {
     let pool = setup_test_db().await;
     seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
 
     // Query for a marker that doesn't exist
-    let result = service
-        .prepare("(task cancelled)", 100)
+    let result = use_cases
+        .query("(task cancelled)", 100)
+        .await
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
@@ -323,12 +339,12 @@ async fn test_e2e_between_query() {
     let pool = setup_test_db().await;
     seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
 
     // Use a wide range that should include all blocks
-    // Note: pest has a limitation with unquoted integers, using quoted integers
-    let result = service
-        .prepare("(between \"0\" \"9999999999999\")", 100)
+    let result = use_cases
+        .query("(between 0 9999999999999)", 100)
+        .await
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
@@ -338,8 +354,9 @@ async fn test_e2e_between_query() {
     );
 
     // Use a narrow range that should exclude all blocks
-    let result2 = service
-        .prepare("(between \"9999999999998\" \"9999999999999\")", 100)
+    let result2 = use_cases
+        .query("(between 9999999999998 9999999999999)", 100)
+        .await
         .expect("query failed");
 
     let result_count2 = execute_query(&pool, &result2.sql, &result2.params).await;
@@ -354,11 +371,12 @@ async fn test_e2e_or_query() {
     let pool = setup_test_db().await;
     seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
 
     // Query: todo OR done - should find 2 blocks
-    let result = service
-        .prepare("(or (task todo) (task done))", 100)
+    let result = use_cases
+        .query("(or (task todo) (task done))", 100)
+        .await
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
@@ -370,11 +388,12 @@ async fn test_e2e_not_query() {
     let pool = setup_test_db().await;
     seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
 
     // Query: NOT done - should find 1 block (the todo block)
-    let result = service
-        .prepare("(not (task done))", 100)
+    let result = use_cases
+        .query("(not (task done))", 100)
+        .await
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
@@ -386,10 +405,10 @@ async fn test_e2e_self_ref() {
     let pool = setup_test_db().await;
     seed_test_data(&pool).await;
 
-    let service = quilt_application::query_service::QueryService::new();
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
 
     // SelfRef should match all blocks (1 = 1 is always true)
-    let result = service.prepare("self", 100).expect("query failed");
+    let result = use_cases.query("self", 100).await.expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
     assert_eq!(result_count, 2, "SelfRef should match all blocks");
