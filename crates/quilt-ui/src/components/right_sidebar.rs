@@ -6,6 +6,8 @@
 //! - Can hold multiple items
 //! - Resizable (min 320px, max 70% viewport)
 
+use crate::bridge::BacklinkDto;
+use crate::components::backlinks_panel::BacklinksPanel;
 use leptos::prelude::*;
 
 #[component]
@@ -14,6 +16,13 @@ pub fn RightSidebar(#[prop(into)] open: Signal<bool>) -> impl IntoView {
         let (_, w) = signal(false);
         w
     });
+
+    let backlinks_rw = use_context::<RwSignal<Vec<BacklinkDto>>>();
+    let backlinks = Signal::derive(move || backlinks_rw.map(|b| b.get()).unwrap_or_default());
+
+    let backlinks_loading_rw = use_context::<RwSignal<bool>>();
+    let backlinks_loading =
+        Signal::derive(move || backlinks_loading_rw.map(|b| b.get()).unwrap_or(false));
 
     view! {
         <Show when=move || open.get()>
@@ -33,7 +42,10 @@ pub fn RightSidebar(#[prop(into)] open: Signal<bool>) -> impl IntoView {
                         <h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">
                             "Linked References"
                         </h3>
-                        <p class="text-xs text-text-muted">"No backlinks yet"</p>
+                        <BacklinksPanel
+                            backlinks=backlinks
+                            loading=backlinks_loading
+                        />
                     </div>
 
                     <div class="mb-4">

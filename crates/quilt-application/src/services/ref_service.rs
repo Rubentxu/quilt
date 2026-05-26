@@ -356,12 +356,9 @@ mod tests {
         let target_id = Uuid::new_v4();
 
         // Directly insert into repo
-        repo.sync_refs(
-            block_id,
-            &[(target_id, RefType::PageRef)],
-        )
-        .await
-        .unwrap();
+        repo.sync_refs(block_id, &[(target_id, RefType::PageRef)])
+            .await
+            .unwrap();
 
         // Create a fresh service and rebuild from repo
         let mut service = RefService::new(repo);
@@ -421,10 +418,7 @@ mod tests {
         assert_eq!(service.get_forward_refs(block_id).len(), 1);
 
         // Save with empty content — should clear refs
-        service
-            .on_block_saved(block_id, "", None)
-            .await
-            .unwrap();
+        service.on_block_saved(block_id, "", None).await.unwrap();
 
         assert!(service.get_forward_refs(block_id).is_empty());
         assert_eq!(service.get_backlinks(target_id).len(), 0);
@@ -488,17 +482,38 @@ mod tests {
 
         // Verify forward refs from source
         let forward = service.get_forward_refs(block_id);
-        assert_eq!(forward.len(), 1, "Only the resolved page ref should be in forward refs");
+        assert_eq!(
+            forward.len(),
+            1,
+            "Only the resolved page ref should be in forward refs"
+        );
         assert_eq!(forward[0], (test_page_id, RefType::PageRef));
 
         // Read: get backlinks to TestPage
         let backlinks = service.get_backlinks(test_page_id);
-        assert_eq!(backlinks.len(), 1, "TestPage should have exactly one backlink");
-        assert_eq!(backlinks[0].0, block_id, "Backlink source should be our block");
-        assert_eq!(backlinks[0].1, RefType::PageRef, "Backlink type should be PageRef");
+        assert_eq!(
+            backlinks.len(),
+            1,
+            "TestPage should have exactly one backlink"
+        );
+        assert_eq!(
+            backlinks[0].0, block_id,
+            "Backlink source should be our block"
+        );
+        assert_eq!(
+            backlinks[0].1,
+            RefType::PageRef,
+            "Backlink type should be PageRef"
+        );
 
         // Verify OtherPage has no backlinks
-        assert!(service.get_backlinks(other_page_id).is_empty(), "OtherPage should have no backlinks");
-        assert!(service.get_backlinks(Uuid::new_v4()).is_empty(), "Unknown page should have no backlinks");
+        assert!(
+            service.get_backlinks(other_page_id).is_empty(),
+            "OtherPage should have no backlinks"
+        );
+        assert!(
+            service.get_backlinks(Uuid::new_v4()).is_empty(),
+            "Unknown page should have no backlinks"
+        );
     }
 }

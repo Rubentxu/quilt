@@ -35,18 +35,12 @@ pub trait RefRepository: Send + Sync {
     /// Get all references from a specific source entity.
     ///
     /// Returns a list of `(target_id, ref_type)` pairs.
-    async fn get_forward_refs(
-        &self,
-        source_id: Uuid,
-    ) -> Result<Vec<(Uuid, RefType)>, DomainError>;
+    async fn get_forward_refs(&self, source_id: Uuid) -> Result<Vec<(Uuid, RefType)>, DomainError>;
 
     /// Get all references that point to a specific target entity (backlinks).
     ///
     /// Returns a list of `(source_id, ref_type)` pairs.
-    async fn get_backlinks(
-        &self,
-        target_id: Uuid,
-    ) -> Result<Vec<(Uuid, RefType)>, DomainError>;
+    async fn get_backlinks(&self, target_id: Uuid) -> Result<Vec<(Uuid, RefType)>, DomainError>;
 
     /// Synchronize references for a source entity.
     ///
@@ -55,11 +49,8 @@ pub trait RefRepository: Send + Sync {
     /// 1. Delete existing refs for `source_id`
     /// 2. Insert the new set of refs
     /// 3. Do both in a single transaction
-    async fn sync_refs(
-        &self,
-        source_id: Uuid,
-        refs: &[(Uuid, RefType)],
-    ) -> Result<(), DomainError>;
+    async fn sync_refs(&self, source_id: Uuid, refs: &[(Uuid, RefType)])
+        -> Result<(), DomainError>;
 
     /// Rebuild the entire reference index from persistent storage.
     ///

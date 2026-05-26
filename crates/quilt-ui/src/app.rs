@@ -1,5 +1,6 @@
 //! Application root component with Logseq-like layout
 
+use crate::bridge::BacklinkDto;
 use crate::components::right_sidebar::RightSidebar;
 use crate::components::sidebar::LeftSidebar;
 use crate::pages::{
@@ -13,11 +14,15 @@ use leptos_router::{components::*, path};
 pub fn App() -> impl IntoView {
     let (left_sidebar_open, set_left_sidebar_open) = signal(true);
     let (right_sidebar_open, set_right_sidebar_open) = signal(false);
+    let backlinks = RwSignal::new(Vec::<BacklinkDto>::new());
+    let backlinks_loading = RwSignal::new(false);
 
     provide_context(left_sidebar_open);
     provide_context(set_left_sidebar_open);
     provide_context(right_sidebar_open);
     provide_context(set_right_sidebar_open);
+    provide_context(backlinks);
+    provide_context(backlinks_loading);
 
     view! {
         <Stylesheet href="/style.css" />

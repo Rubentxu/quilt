@@ -166,8 +166,7 @@ fn get_global_api() -> Result<Object> {
     if api.is_undefined() || api.is_null() {
         return Err(Cm6BridgeError::GlobalNotAvailable);
     }
-    api
-        .dyn_into::<Object>()
+    api.dyn_into::<Object>()
         .map_err(|_| Cm6BridgeError::GlobalNotAvailable)
 }
 

@@ -1,6 +1,7 @@
 //! Quilt UI components
 
 pub mod autocomplete_dropdown;
+pub mod backlinks_panel;
 pub mod block;
 pub mod block_editor;
 pub mod cm6_block_editor;

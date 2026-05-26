@@ -64,7 +64,12 @@ mod tests {
 
     #[test]
     fn test_ref_type_roundtrip() {
-        for variant in &[RefType::PageRef, RefType::BlockRef, RefType::Tag, RefType::Alias] {
+        for variant in &[
+            RefType::PageRef,
+            RefType::BlockRef,
+            RefType::Tag,
+            RefType::Alias,
+        ] {
             let s = variant.as_str();
             let parsed = RefType::from_str(s).unwrap();
             assert_eq!(*variant, parsed);

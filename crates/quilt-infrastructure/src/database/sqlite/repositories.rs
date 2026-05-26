@@ -952,9 +952,8 @@ impl SqliteRefRepository {
     }
 
     fn map_ref_type(s: &str) -> Result<RefType, DomainError> {
-        RefType::from_str(s).ok_or_else(|| {
-            DomainError::InvalidData(format!("Unknown ref_type: {}", s))
-        })
+        RefType::from_str(s)
+            .ok_or_else(|| DomainError::InvalidData(format!("Unknown ref_type: {}", s)))
     }
 
     fn ref_type_to_str(rt: &RefType) -> &'static str {
@@ -964,10 +963,7 @@ impl SqliteRefRepository {
 
 #[async_trait]
 impl RefRepository for SqliteRefRepository {
-    async fn get_forward_refs(
-        &self,
-        source_id: Uuid,
-    ) -> Result<Vec<(Uuid, RefType)>, DomainError> {
+    async fn get_forward_refs(&self, source_id: Uuid) -> Result<Vec<(Uuid, RefType)>, DomainError> {
         let rows = sqlx::query(
             "SELECT target_id, ref_type FROM refs WHERE source_id = ? ORDER BY ref_type",
         )
@@ -987,10 +983,7 @@ impl RefRepository for SqliteRefRepository {
             .collect()
     }
 
-    async fn get_backlinks(
-        &self,
-        target_id: Uuid,
-    ) -> Result<Vec<(Uuid, RefType)>, DomainError> {
+    async fn get_backlinks(&self, target_id: Uuid) -> Result<Vec<(Uuid, RefType)>, DomainError> {
         let rows = sqlx::query(
             "SELECT source_id, ref_type FROM refs WHERE target_id = ? ORDER BY ref_type",
         )
@@ -1030,15 +1023,13 @@ impl RefRepository for SqliteRefRepository {
 
         // Insert new refs
         for (target_id, ref_type) in refs {
-            sqlx::query(
-                "INSERT INTO refs (source_id, target_id, ref_type) VALUES (?, ?, ?)",
-            )
-            .bind(uuid_to_blob(&source_id))
-            .bind(uuid_to_blob(target_id))
-            .bind(Self::ref_type_to_str(ref_type))
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| DomainError::Storage(format!("insert ref: {}", e)))?;
+            sqlx::query("INSERT INTO refs (source_id, target_id, ref_type) VALUES (?, ?, ?)")
+                .bind(uuid_to_blob(&source_id))
+                .bind(uuid_to_blob(target_id))
+                .bind(Self::ref_type_to_str(ref_type))
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| DomainError::Storage(format!("insert ref: {}", e)))?;
         }
 
         tx.commit()

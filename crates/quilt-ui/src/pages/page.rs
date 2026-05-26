@@ -121,10 +121,20 @@ pub fn PageView() -> impl IntoView {
     };
     provide_context(page_outliner);
 
+    // ── Backlinks signal from root context ──
+    let backlinks = use_context::<RwSignal<Vec<bridge::BacklinkDto>>>();
+    let backlinks_loading = use_context::<RwSignal<bool>>();
+
     // ── Data loading effect ──
     Effect::new(move || {
         let name = page_name();
         let pn = page_names;
+
+        // Clear backlinks immediately when navigating to a new page
+        if let Some(ref bl) = backlinks {
+            bl.set(vec![]);
+        }
+
         wasm_bindgen_futures::spawn_local(async move {
             set_loading.set(true);
             match bridge::get_page_blocks(&name).await {
@@ -135,6 +145,21 @@ pub fn PageView() -> impl IntoView {
                 let names: Vec<String> = pages.into_iter().map(|p| p.name).collect();
                 pn.set(names);
             }
+
+            // Fetch backlinks for this page
+            if let Some(ref bl) = backlinks {
+                if let Some(ref bll) = backlinks_loading {
+                    bll.set(true);
+                }
+                match bridge::get_page_backlinks(&name).await {
+                    Ok(b) => bl.set(b),
+                    Err(_) => bl.set(vec![]),
+                }
+                if let Some(ref bll) = backlinks_loading {
+                    bll.set(false);
+                }
+            }
+
             set_loading.set(false);
         });
     });
@@ -173,11 +198,7 @@ pub fn PageView() -> impl IntoView {
                     // Mod+. (Mac) / default zoom in — show only selected block's subtree
                     "." => {
                         ev.prevent_default();
-                        zoom_into_selected_block(
-                            &selection_state,
-                            &blocks,
-                            &zoom_id,
-                        );
+                        zoom_into_selected_block(&selection_state, &blocks, &zoom_id);
                         return;
                     }
                     // Mod+, (Mac) / default zoom out — show full page
@@ -197,11 +218,7 @@ pub fn PageView() -> impl IntoView {
                 match ev.key().as_str() {
                     "ArrowRight" => {
                         ev.prevent_default();
-                        zoom_into_selected_block(
-                            &selection_state,
-                            &blocks,
-                            &zoom_id,
-                        );
+                        zoom_into_selected_block(&selection_state, &blocks, &zoom_id);
                         return;
                     }
                     "ArrowLeft" => {
