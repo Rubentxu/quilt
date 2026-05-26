@@ -9,7 +9,7 @@
 
 use anyhow::Result;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -23,7 +23,28 @@ mod state;
 use crate::handlers::metrics;
 use crate::state::AppState;
 use quilt_application::services::ref_service::RefService;
+use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
+#[cfg(feature = "cognitive")]
+use quilt_cognitive::AIClient;
+
+/// Ensure the vault directory structure exists (.quilt folder and quilt.db)
+fn ensure_vault_exists(vault_path: &Path) -> Result<PathBuf, anyhow::Error> {
+    let quilt_dir = vault_path.join(".quilt");
+    let db_path = quilt_dir.join("quilt.db");
+
+    if !quilt_dir.exists() {
+        std::fs::create_dir_all(&quilt_dir)?;
+        tracing::info!("Created .quilt directory at {:?}", quilt_dir);
+    }
+
+    if !db_path.exists() {
+        std::fs::write(&db_path, "")?;
+        tracing::info!("Created database file at {:?}", db_path);
+    }
+
+    Ok(db_path)
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -56,21 +77,19 @@ async fn main() -> Result<()> {
     // Initialize Prometheus metrics (if enabled)
     let _metrics_handle = metrics::init_metrics();
 
-    // Initialize state using the platform initialization
-    let init = quilt_platform::init::HttpServerInit::new(vault_path)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to initialize: {}", e))?;
+    // Initialize vault directory and database pool
+    let db_path = ensure_vault_exists(&vault_path)?;
+    let pool = create_pool(&db_path).await?;
+    run_migrations(&pool).await?;
 
-    info!("Vault ready at {:?}", init.vault_config.vault_path);
+    info!("Vault ready at {:?}", vault_path);
     info!("Database pool created");
 
     // Create AppState
-    let search_index = Arc::new(quilt_search::SearchIndexManager::new(init.pool.clone()));
-    let ai_client: Arc<dyn quilt_cognitive::AIClient> =
-        Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
+    let search_index = Arc::new(quilt_search::SearchIndexManager::new(pool.clone()));
 
     // Initialize bidirectional reference service
-    let ref_repo = Arc::new(SqliteRefRepository::new(init.pool.clone()));
+    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
     let mut ref_service = RefService::new(ref_repo);
     ref_service
         .rebuild_from_repo()
@@ -79,7 +98,21 @@ async fn main() -> Result<()> {
     info!("Reference index rebuilt with {} entries", ref_service.index().len());
     let ref_service = Arc::new(RwLock::new(ref_service));
 
-    let state = AppState::new(init.pool, search_index, ai_client, ref_service);
+    // Build state — with or without AI client depending on feature flag
+    #[cfg(feature = "cognitive")]
+    let ai_client: Arc<dyn AIClient> =
+        Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
+
+    let state = {
+        #[cfg(feature = "cognitive")]
+        {
+            AppState::with_ai_client(pool, search_index, ai_client, ref_service)
+        }
+        #[cfg(not(feature = "cognitive"))]
+        {
+            AppState::new(pool, search_index, ref_service)
+        }
+    };
 
     // Create router
     let app = routes::create_app(state);
@@ -100,5 +133,4 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// Required for SearchIndexManager::new
-use std::sync::Arc;
+

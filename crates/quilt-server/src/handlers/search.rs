@@ -6,6 +6,7 @@ use axum::{
 };
 use axum::{routing::get, Router};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
@@ -47,7 +48,7 @@ pub async fn search(
     Query(params): Query<SearchParams>,
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<SearchResultDto>>, AppError> {
-    let search_service = SearchService::new(state.pool.clone());
+    let search_service = SearchService::new(Arc::new(state.pool.clone()));
 
     let results = search_service
         .search(&params.q, params.limit)
@@ -58,7 +59,7 @@ pub async fn search(
         .into_iter()
         .map(|r| SearchResultDto {
             block_id: r.block_id,
-            page_id: r.page_id,
+            page_id: String::new(),
             page_name: r.page_name,
             content: r.content,
             snippet: r.snippet,

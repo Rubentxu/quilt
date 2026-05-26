@@ -12,4 +12,5 @@ pub mod indexing;
 pub mod search;
 
 pub use indexing::SearchIndex;
+pub use indexing::SearchIndex as SearchIndexManager;
 pub use search::{SearchError, SearchResult, SearchService, SearchServiceTrait};

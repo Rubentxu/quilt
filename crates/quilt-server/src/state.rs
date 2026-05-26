@@ -3,9 +3,12 @@
 //! Holds the database pool, MCP server, search index, and other shared resources.
 
 use quilt_application::services::ref_service::RefService;
+#[cfg(feature = "cognitive")]
 use quilt_cognitive::{
-    ArgumentCartographer, CognitiveMirror, MorningBriefing, SerendipityEngine,
+    ai_client::MockAIClient, ArgumentCartographer, CognitiveMirror, MorningBriefing,
+    SerendipityEngine,
 };
+#[cfg(feature = "cognitive")]
 use quilt_cognitive::AIClient;
 use quilt_infrastructure::database::sqlite::connection::DbPool;
 use quilt_search::SearchIndexManager;
@@ -71,57 +74,93 @@ pub struct AppState {
     pub search_index: Arc<SearchIndexManager>,
     /// Broadcast sender for navigation events (WebSocket)
     pub navigation_tx: broadcast::Sender<NavigationEvent>,
-    /// AI client for cognitive engines — can be reconfigured at runtime
-    pub ai_client: Arc<RwLock<Arc<dyn AIClient>>>,
     /// Last opened graph ID (for deep link navigation)
     pub last_opened_graph: Arc<RwLock<Option<String>>>,
-    /// CognitiveMirror engine for analyzing block reference graphs
-    #[allow(dead_code)]
-    pub cognitive_mirror: Option<Arc<CognitiveMirror>>,
-    /// SerendipityEngine for discovering unexpected connections
-    #[allow(dead_code)]
-    pub serendipity_engine: Option<Arc<SerendipityEngine>>,
-    /// MorningBriefing for daily cognitive summaries
-    #[allow(dead_code)]
-    pub morning_briefing: Option<Arc<MorningBriefing>>,
-    /// ArgumentCartographer for mapping argument structures
-    #[allow(dead_code)]
-    pub argument_cartographer: Option<Arc<ArgumentCartographer>>,
     /// Bidirectional reference service for O(1) backlink queries
     pub ref_service: Arc<RwLock<RefService>>,
+    /// AI client for cognitive engines — can be reconfigured at runtime
+    #[cfg(feature = "cognitive")]
+    pub ai_client: Arc<RwLock<Arc<dyn AIClient>>>,
+    /// CognitiveMirror engine for analyzing block reference graphs
+    #[cfg(feature = "cognitive")]
+    pub cognitive_mirror: Option<Arc<CognitiveMirror>>,
+    /// SerendipityEngine for discovering unexpected connections
+    #[cfg(feature = "cognitive")]
+    pub serendipity_engine: Option<Arc<SerendipityEngine>>,
+    /// MorningBriefing for daily cognitive summaries
+    #[cfg(feature = "cognitive")]
+    pub morning_briefing: Option<Arc<MorningBriefing>>,
+    /// ArgumentCartographer for mapping argument structures
+    #[cfg(feature = "cognitive")]
+    pub argument_cartographer: Option<Arc<ArgumentCartographer>>,
 }
 
 impl AppState {
     /// Create a new AppState
     ///
-    /// Initializes database pool, search index, and AI client.
+    /// Initializes database pool, search index, reference service.
+    /// When the `cognitive` feature is enabled, also creates a default mock AI client.
     #[allow(dead_code)]
     pub fn new(
         pool: DbPool,
         search_index: Arc<SearchIndexManager>,
-        ai_client: Arc<dyn AIClient>,
         ref_service: Arc<RwLock<RefService>>,
     ) -> Self {
         // Create broadcast channel for navigation events
         let (navigation_tx, _) = broadcast::channel(100);
 
+        #[cfg(feature = "cognitive")]
+        let ai_client: Arc<dyn AIClient> = Arc::new(MockAIClient::new());
+
         Self {
             pool,
             search_index,
             navigation_tx,
-            ai_client: Arc::new(RwLock::new(ai_client)),
             last_opened_graph: Arc::new(RwLock::new(None)),
+            ref_service,
+            #[cfg(feature = "cognitive")]
+            ai_client: Arc::new(RwLock::new(ai_client)),
+            #[cfg(feature = "cognitive")]
+            cognitive_mirror: None,
+            #[cfg(feature = "cognitive")]
+            serendipity_engine: None,
+            #[cfg(feature = "cognitive")]
+            morning_briefing: None,
+            #[cfg(feature = "cognitive")]
+            argument_cartographer: None,
+        }
+    }
+
+    /// Create a new AppState with an externally-provided AI client
+    ///
+    /// When the `cognitive` feature is enabled, allows injecting a specific
+    /// AI client implementation (e.g., from main.rs).
+    #[cfg(feature = "cognitive")]
+    pub fn with_ai_client(
+        pool: DbPool,
+        search_index: Arc<SearchIndexManager>,
+        ai_client: Arc<dyn AIClient>,
+        ref_service: Arc<RwLock<RefService>>,
+    ) -> Self {
+        let (navigation_tx, _) = broadcast::channel(100);
+        Self {
+            pool,
+            search_index,
+            navigation_tx,
+            last_opened_graph: Arc::new(RwLock::new(None)),
+            ref_service,
+            ai_client: Arc::new(RwLock::new(ai_client)),
             cognitive_mirror: None,
             serendipity_engine: None,
             morning_briefing: None,
             argument_cartographer: None,
-            ref_service,
         }
     }
 
     /// Create a new AppState with cognitive engines
     ///
     /// Full constructor that includes all cognitive engines.
+    #[cfg(feature = "cognitive")]
     pub fn with_cognitive(
         pool: DbPool,
         search_index: Arc<SearchIndexManager>,
@@ -132,20 +171,18 @@ impl AppState {
         morning_briefing: Arc<MorningBriefing>,
         argument_cartographer: Arc<ArgumentCartographer>,
     ) -> Self {
-        // Create broadcast channel for navigation events
         let (navigation_tx, _) = broadcast::channel(100);
-
         Self {
             pool,
             search_index,
             navigation_tx,
-            ai_client: Arc::new(RwLock::new(ai_client)),
             last_opened_graph: Arc::new(RwLock::new(None)),
+            ref_service,
+            ai_client: Arc::new(RwLock::new(ai_client)),
             cognitive_mirror: Some(cognitive_mirror),
             serendipity_engine: Some(serendipity_engine),
             morning_briefing: Some(morning_briefing),
             argument_cartographer: Some(argument_cartographer),
-            ref_service,
         }
     }
 

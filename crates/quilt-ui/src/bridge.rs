@@ -70,7 +70,7 @@ impl std::fmt::Display for BridgeError {
 
 impl std::error::Error for BridgeError {}
 
-const BASE_URL: &str = "http://127.0.0.1:3541/api";
+const BASE_URL: &str = "http://127.0.0.1:3737/api/v1";
 
 pub async fn get_page_blocks(page_name: &str) -> Result<Vec<BlockDto>, BridgeError> {
     let url = format!("{}/pages/{}/blocks", BASE_URL, page_name);

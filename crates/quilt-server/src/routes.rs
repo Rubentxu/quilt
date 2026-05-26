@@ -18,7 +18,7 @@ pub fn create_app(state: AppState) -> Router {
         CorsLayer::new()
     };
 
-    Router::new()
+    let router = Router::new()
         // Health check
         .route(
             "/health",
@@ -38,8 +38,6 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/blocks", handlers::blocks::routes())
         .nest("/api/v1/pages", handlers::pages::routes())
         .nest("/api/v1/search", handlers::search::routes())
-        .nest("/api/v1/cognitive", handlers::cognitive::routes())
-        .nest("/api/v1/ai-config", handlers::ai_config::routes())
         .nest("/api/v1/navigate", handlers::navigate::routes())
         // Frontend serving (catch-all for SPA)
         .route(
@@ -49,8 +47,16 @@ pub fn create_app(state: AppState) -> Router {
         .route(
             "/*path",
             axum::routing::get(handlers::frontend::serve_assets),
-        )
-        // Layers
+        );
+
+    // Cognitive routes — only nest when the feature is enabled
+    #[cfg(feature = "cognitive")]
+    let router = router
+        .nest("/api/v1/ai-config", handlers::ai_config::routes())
+        .nest("/api/v1/cognitive", handlers::cognitive::routes());
+
+    // Layers
+    router
         .layer(axum::Extension(state))
         .layer(cors)
         .layer(tower_http::trace::TraceLayer::new_for_http())

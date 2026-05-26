@@ -10,13 +10,11 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use tracing::instrument;
 
-use std::sync::Arc;
-
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_domain::entities::{Page, PageCreate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
+use quilt_domain::value_objects::{BlockFormat, JournalDay};
 use quilt_infrastructure::database::sqlite::repositories::SqlitePageRepository;
 
 /// A page returned to the frontend
@@ -100,7 +98,7 @@ pub async fn get_page_unlinked_references(
             .map_err(|e| AppError::Internal(e.to_string()))?;
 
         let content_preview = if let Some(source_block) = block {
-            let plain_text = source_block.content.as_plain_text();
+            let plain_text = source_block.content;
             if plain_text.len() > 100 {
                 format!("{}...", &plain_text[..100])
             } else {
@@ -277,7 +275,7 @@ pub async fn get_page_backlinks(
                 .map(|p| p.name)
                 .unwrap_or_else(|| "unknown".to_string());
 
-            let plain_text = source_block.content.as_plain_text();
+            let plain_text = source_block.content;
             let content_preview = if plain_text.len() > 100 {
                 format!("{}...", &plain_text[..100])
             } else {

@@ -11,6 +11,7 @@ members = [
     "crates/quilt-ui",
     "crates/quilt-analysis",
     "crates/quilt-test-helpers",
+    "crates/quilt-server",
 ]
 resolver = "2"
 
@@ -72,6 +73,12 @@ notify = { version = "6", default-features = false, features = ["macos_kqueue"] 
 # For testing
 tempfile = "3"
 tokio-test = "0.4"
+
+# PDF generation
+genpdf = "0.2"
+
+# Markdown parsing
+pulldown-cmark = "0.13"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

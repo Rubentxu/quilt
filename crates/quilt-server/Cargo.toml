@@ -39,7 +39,7 @@ quilt-domain = { path = "../quilt-domain" }
 quilt-application = { path = "../quilt-application" }
 quilt-infrastructure = { path = "../quilt-infrastructure" }
 quilt-mcp = { path = "../quilt-mcp" }
-quilt-cognitive = { path = "../quilt-cognitive" }
+quilt-cognitive = { path = "../quilt-cognitive", optional = true }
 quilt-search = { path = "../quilt-search" }
 quilt-platform = { path = "../quilt-platform" }
 
@@ -55,6 +55,10 @@ bytes = "1"
 # Metrics
 metrics = { workspace = true }
 metrics-exporter-prometheus = { workspace = true }
+
+[features]
+default = []
+cognitive = ["quilt-cognitive"]
 
 [dev-dependencies]
 tokio-test.workspace = true

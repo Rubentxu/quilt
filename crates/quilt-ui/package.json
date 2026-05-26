@@ -12,5 +12,8 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
     "tailwindcss": "^4.0.0"
+  },
+  "dependencies": {
+    "postcss-cli": "^11.0.1"
   }
 }

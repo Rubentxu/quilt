@@ -1,14 +1,3 @@
 [build]
 target = "index.html"
 dist = "dist"
-
-[watch]
-ignore = ["target", "node_modules", "dist"]
-
-[build.target]
-# Trunk handles WASM + HTML bundling, copies index.html to dist/
-# CSS is pre-built by tailwindcss CLI in Terminal 1
-
-[build.tools]
-# Tailwind integration is external (npm run tailwind:watch)
-# Trunk only serves static files from dist/
