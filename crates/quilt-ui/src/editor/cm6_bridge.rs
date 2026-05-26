@@ -82,6 +82,19 @@ pub struct Cm6Callbacks {
     /// Called when Escape is pressed while the autocomplete dropdown
     /// is active (cancel/close dropdown).
     pub on_ac_cancel: Option<js_sys::Function>,
+    // ── Slash command callbacks ──
+    /// Called when the slash query text changes. Receives the full
+    /// query string (including the initial empty string after `/`).
+    pub on_slash_query: Option<js_sys::Function>,
+    /// Called when ArrowUp (-1) or ArrowDown (1) is pressed while
+    /// the slash command dropdown is active.
+    pub on_slash_navigate: Option<js_sys::Function>,
+    /// Called when Enter is pressed while the slash command dropdown
+    /// is active (confirm selected command).
+    pub on_slash_select: Option<js_sys::Function>,
+    /// Called when Escape is pressed while the slash command dropdown
+    /// is active (cancel/close dropdown and return to editing).
+    pub on_slash_cancel: Option<js_sys::Function>,
 }
 
 impl Cm6Callbacks {
@@ -100,6 +113,10 @@ impl Cm6Callbacks {
             on_ac_navigate: None,
             on_ac_select: None,
             on_ac_cancel: None,
+            on_slash_query: None,
+            on_slash_navigate: None,
+            on_slash_select: None,
+            on_slash_cancel: None,
         }
     }
 
@@ -153,6 +170,22 @@ impl Cm6Callbacks {
         if let Some(ref f) = self.on_ac_cancel {
             Reflect::set(&obj, &"onAcCancel".into(), f)
                 .map_err(|e| Cm6BridgeError::JsError(format!("set onAcCancel: {:?}", e)))?;
+        }
+        if let Some(ref f) = self.on_slash_query {
+            Reflect::set(&obj, &"onSlashQuery".into(), f)
+                .map_err(|e| Cm6BridgeError::JsError(format!("set onSlashQuery: {:?}", e)))?;
+        }
+        if let Some(ref f) = self.on_slash_navigate {
+            Reflect::set(&obj, &"onSlashNavigate".into(), f)
+                .map_err(|e| Cm6BridgeError::JsError(format!("set onSlashNavigate: {:?}", e)))?;
+        }
+        if let Some(ref f) = self.on_slash_select {
+            Reflect::set(&obj, &"onSlashSelect".into(), f)
+                .map_err(|e| Cm6BridgeError::JsError(format!("set onSlashSelect: {:?}", e)))?;
+        }
+        if let Some(ref f) = self.on_slash_cancel {
+            Reflect::set(&obj, &"onSlashCancel".into(), f)
+                .map_err(|e| Cm6BridgeError::JsError(format!("set onSlashCancel: {:?}", e)))?;
         }
         Ok(obj)
     }
@@ -298,6 +331,17 @@ impl Cm6Handle {
         Some((top, left, bottom))
     }
 
+    /// Tell CM6 whether the slash command dropdown is active.
+    /// When active, all keyboard input is captured for the slash query
+    /// instead of being inserted into the document.
+    pub fn set_slash_state(&self, active: bool) -> Result<()> {
+        call_api_method(
+            "setSlashState",
+            &[self.id.clone(), JsValue::from(active)],
+        )?;
+        Ok(())
+    }
+
     /// Access the raw JsValue ID (for FFI edge cases).
     pub fn id(&self) -> &JsValue {
         &self.id
@@ -364,5 +408,9 @@ mod tests {
         assert!(cbs.on_ac_navigate.is_none());
         assert!(cbs.on_ac_select.is_none());
         assert!(cbs.on_ac_cancel.is_none());
+        assert!(cbs.on_slash_query.is_none());
+        assert!(cbs.on_slash_navigate.is_none());
+        assert!(cbs.on_slash_select.is_none());
+        assert!(cbs.on_slash_cancel.is_none());
     }
 }

@@ -53,10 +53,13 @@
 
 use crate::bridge::BlockDto;
 use crate::components::autocomplete_dropdown::{AutocompleteDropdown, DropdownController};
+use crate::components::slash_command::{
+    filter_commands, get_default_commands, SlashCommand, SlashCommandAction, SlashContext,
+};
 use crate::editor::cm6_bridge::{self, Cm6Callbacks, Cm6Handle};
 use crate::editor::decorations::DecorationManager;
 use crate::outliner::page::PageOutliner;
-use crate::parser::autocomplete::AutocompleteTrigger;
+use crate::parser::autocomplete::{AutocompleteCategory, AutocompleteItem, AutocompleteTrigger};
 use crate::parser::autocomplete_pipeline::{
     autocomplete_at_cursor, autocomplete_at_cursor_with_service, compute_insertion,
 };
@@ -150,6 +153,66 @@ fn try_create_cm6(
     Cm6Handle::create(container, content, callbacks).map_err(|e| e.to_string())
 }
 
+/// Apply a `SlashCommandAction` to the editor state.
+///
+/// This is called after a slash command is selected. It updates the content
+/// signal, sets marker/priority via callbacks, and signals the CM6 update
+/// via `slash_result`.
+fn apply_slash_action(
+    action: &SlashCommandAction,
+    content_signal: &RwSignal<String>,
+    result_signal: &RwSignal<Option<(String, u32)>>,
+    on_set_marker: &Option<Arc<dyn Fn(String) + Send + Sync>>,
+    on_set_priority: &Option<Arc<dyn Fn(String) + Send + Sync>>,
+    on_save: &(impl Fn(String, Option<String>) + Clone + Send + Sync + 'static),
+    current_content: &str,
+) {
+    match action {
+        SlashCommandAction::UpdateContent { content, cursor } => {
+            content_signal.set(content.clone());
+            result_signal.set(Some((content.clone(), *cursor as u32)));
+            on_save(content.clone(), Some("slash".into()));
+        }
+        SlashCommandAction::InsertAtCursor { text } => {
+            let new_content = format!("{}{}", current_content, text);
+            let new_cursor = new_content.len();
+            content_signal.set(new_content.clone());
+            result_signal.set(Some((new_content.clone(), new_cursor as u32)));
+            on_save(new_content, Some("slash".into()));
+        }
+        SlashCommandAction::SetMarker(marker) => {
+            if let Some(ref cb) = on_set_marker {
+                cb(marker.clone());
+            }
+        }
+        SlashCommandAction::SetPriority(priority) => {
+            if let Some(ref cb) = on_set_priority {
+                cb(priority.clone());
+            }
+        }
+        SlashCommandAction::ActivateAutocomplete(text) => {
+            let new_content = format!("{}{}", current_content, text);
+            let new_cursor = new_content.len();
+            content_signal.set(new_content.clone());
+            result_signal.set(Some((new_content.clone(), new_cursor as u32)));
+            on_save(new_content, Some("slash".into()));
+        }
+        SlashCommandAction::Composite(actions) => {
+            for a in actions {
+                apply_slash_action(
+                    a,
+                    content_signal,
+                    result_signal,
+                    on_set_marker,
+                    on_set_priority,
+                    on_save,
+                    current_content,
+                );
+            }
+        }
+    }
+}
+
 #[component]
 pub fn Cm6BlockEditor(
     #[prop(into)] block: Signal<BlockDto>,
@@ -163,10 +226,21 @@ pub fn Cm6BlockEditor(
     /// Pass empty vec if page data is not yet loaded.
     #[prop(optional)]
     page_names: Vec<String>,
+    /// Optional callback when a slash command sets a block marker (TODO/DOING/DONE).
+    /// The string is the marker value (e.g., "todo", "doing", "done").
+    #[prop(optional)]
+    on_set_marker: Option<Arc<dyn Fn(String) + Send + Sync>>,
+    /// Optional callback when a slash command sets a block priority (A/B/C).
+    #[prop(optional)]
+    on_set_priority: Option<Arc<dyn Fn(String) + Send + Sync>>,
 ) -> impl IntoView {
     let content = RwSignal::new(block.get().content.clone());
     let el_ref: NodeRef<leptos::html::Div> = NodeRef::new();
     let on_save_blur = on_save.clone();
+    // Clone these before they're consumed by closures (handle_slash_select etc.)
+    let on_save_for_slash = on_save.clone();
+    let on_set_marker_for_slash = on_set_marker.clone();
+    let on_set_priority_for_slash = on_set_priority.clone();
     let tree_ops = tree_ops.unwrap_or_default();
     let cm6_handle: Rc<RefCell<Option<Cm6Handle>>> = Rc::new(RefCell::new(None));
 
@@ -192,6 +266,19 @@ pub fn Cm6BlockEditor(
     // Updated on each onChange via the cm6_handle's cursor_coords() method.
     // Tuple is (viewport_bottom, viewport_left) for fixed positioning below cursor.
     let ac_cursor_pos: RwSignal<Option<(f64, f64)>> = RwSignal::new(None);
+
+    // ── Slash command state (signals for dropdown rendering) ──
+    let all_commands: Arc<Vec<SlashCommand>> = Arc::new(get_default_commands());
+    let slash_visible: RwSignal<bool> = RwSignal::new(false);
+    let slash_query: RwSignal<String> = RwSignal::new(String::new());
+    let slash_display_items: RwSignal<Vec<AutocompleteItem>> = RwSignal::new(Vec::new());
+    let slash_selected: RwSignal<usize> = RwSignal::new(0usize);
+    let slash_controller: RwSignal<Option<DropdownController>> = RwSignal::new(None);
+    // Maps display indices back to all_commands indices for execution.
+    let slash_orig_indices: RwSignal<Vec<usize>> = RwSignal::new(Vec::new());
+    // Signal bridge for view-layer closures (same pattern as ac_result).
+    let slash_result: RwSignal<Option<(String, u32)>> = RwSignal::new(None);
+    let slash_cursor_pos: RwSignal<Option<(f64, f64)>> = RwSignal::new(None);
 
     // ── Effect: push autocomplete results (content + cursor) to CM6 ──
     Effect::new({
@@ -220,6 +307,33 @@ pub fn Cm6BlockEditor(
         }
     });
 
+    // ── Effect: sync slash command visibility to CM6 ──
+    Effect::new({
+        let cm6_handle = cm6_handle.clone();
+        move || {
+            let visible = slash_visible.get();
+            if let Some(ref handle) = *cm6_handle.borrow() {
+                let _ = handle.set_slash_state(visible);
+            }
+        }
+    });
+
+    // ── Effect: push slash command results (content + cursor) to CM6 ──
+    Effect::new({
+        let cm6_handle = cm6_handle.clone();
+        move || {
+            if let Some((ref text, cursor)) = slash_result.get() {
+                if let Some(ref handle) = *cm6_handle.borrow() {
+                    let _ = handle.set_slash_state(false);
+                    let _ = handle.set_content_with_cursor(text, cursor);
+                    let decos = compute_decorations_json(text);
+                    let _ = handle.set_decorations(&decos);
+                }
+                slash_result.set(None);
+            }
+        }
+    });
+
     // ── Lifecycle: mount CM6 when the div is available ──
     Effect::new({
         let el_ref = el_ref;
@@ -239,6 +353,17 @@ pub fn Cm6BlockEditor(
         let ac_trigger_kind_effect = ac_trigger_kind;
         let ac_controller_effect = ac_controller;
         let ac_result_effect = ac_result;
+
+        // Clones for slash command closures (move into Effect)
+        let all_cmds_effect = all_commands.clone();
+        let slash_visible_effect = slash_visible;
+        let slash_query_effect = slash_query;
+        let slash_display_items_effect = slash_display_items;
+        let slash_selected_effect = slash_selected;
+        let slash_controller_effect = slash_controller;
+        let slash_orig_indices_effect = slash_orig_indices;
+        let slash_result_effect = slash_result;
+        let slash_cursor_pos_effect = slash_cursor_pos;
 
         move || {
             let el = el_ref.get();
@@ -463,6 +588,158 @@ pub fn Cm6BlockEditor(
                 }) as Box<dyn Fn()>)
             };
 
+            // ── Slash command callbacks ──
+            // These parallel the autocomplete callbacks but for the slash menu.
+
+            let on_slash_query_cb = {
+                let all_cmds = all_cmds_effect.clone();
+                let s_visible = slash_visible_effect;
+                let s_query = slash_query_effect;
+                let s_items = slash_display_items_effect;
+                let s_selected = slash_selected_effect;
+                let s_controller = slash_controller_effect;
+                let s_orig = slash_orig_indices_effect;
+                let s_cursor_pos = slash_cursor_pos_effect;
+                let cm6_handle_q = cm6_handle.clone();
+                Closure::wrap(Box::new(move |query: String| {
+                    s_query.set(query.clone());
+
+                    let groups = filter_commands(&query, &all_cmds);
+                    let mut display_items: Vec<AutocompleteItem> = Vec::new();
+                    let mut orig_indices: Vec<usize> = Vec::new();
+
+                    for group in &groups {
+                        for &cmd_idx in &group.commands {
+                            let cmd = &all_cmds[cmd_idx];
+                            display_items.push(AutocompleteItem {
+                                label: format!("{} {}", cmd.icon, cmd.label),
+                                insert_text: cmd.label.clone(),
+                                description: Some(cmd.description.clone()),
+                                category: AutocompleteCategory::SlashCommand,
+                            });
+                            orig_indices.push(cmd_idx);
+                        }
+                    }
+
+                    let count = display_items.len();
+                    s_items.set(display_items);
+                    s_orig.set(orig_indices);
+
+                    if count > 0 {
+                        s_selected.set(0);
+                        s_controller.set(Some(DropdownController::new(count)));
+                        s_visible.set(true);
+
+                        // Query cursor position for dropdown placement
+                        let coords = cm6_handle_q
+                            .borrow()
+                            .as_ref()
+                            .and_then(|h| h.cursor_coords());
+                        if let Some((_top, left, bottom)) = coords {
+                            s_cursor_pos.set(Some((bottom, left)));
+                        }
+                    } else {
+                        s_visible.set(false);
+                        s_controller.set(None);
+                        s_cursor_pos.set(None);
+                    }
+                }) as Box<dyn Fn(String)>)
+            };
+
+            let on_slash_navigate_cb = {
+                let s_sel = slash_selected_effect;
+                let s_ctrl = slash_controller_effect;
+                Closure::wrap(Box::new(move |direction: i32| {
+                    s_ctrl.update(|c| {
+                        if let Some(ref mut ctrl) = c {
+                            if direction > 0 {
+                                ctrl.move_down();
+                            } else {
+                                ctrl.move_up();
+                            }
+                            s_sel.set(ctrl.selected());
+                        }
+                    });
+                }) as Box<dyn Fn(i32)>)
+            };
+
+            let on_slash_select_cb = {
+                let all_cmds = all_cmds_effect.clone();
+                let content_s = content_signal;
+                let s_visible = slash_visible_effect;
+                let s_query = slash_query_effect;
+                let s_items = slash_display_items_effect;
+                let s_selected = slash_selected_effect;
+                let s_controller = slash_controller_effect;
+                let s_orig = slash_orig_indices_effect;
+                let s_result = slash_result_effect;
+                let s_cursor_pos = slash_cursor_pos_effect;
+                let on_save_s = on_save_effect.clone();
+                let on_set_marker_s = on_set_marker.clone();
+                let on_set_priority_s = on_set_priority.clone();
+                let block_id_s = block_id.clone();
+                Closure::wrap(Box::new(move || {
+                    let selected = s_selected.get_untracked();
+                    let orig_indices = s_orig.get_untracked();
+                    if selected >= orig_indices.len() {
+                        return;
+                    }
+                    let cmd_idx = orig_indices[selected];
+                    if cmd_idx >= all_cmds.len() {
+                        return;
+                    }
+                    let cmd = &all_cmds[cmd_idx];
+
+                    let current_content = content_s.get_untracked();
+                    let cursor = current_content.len(); // Approximate cursor at end
+                    let ctx = SlashContext {
+                        content: current_content.clone(),
+                        cursor_offset: cursor,
+                        block_id: block_id_s.clone(),
+                        marker: None,  // Will be filled from block signal if needed
+                        priority: None,
+                    };
+
+                    let action = (cmd.execute)(&ctx);
+                    apply_slash_action(
+                        &action,
+                        &content_s,
+                        &s_result,
+                        &on_set_marker_s,
+                        &on_set_priority_s,
+                        &on_save_s,
+                        &current_content,
+                    );
+
+                    // Close the slash menu
+                    s_visible.set(false);
+                    s_query.set(String::new());
+                    s_items.set(Vec::new());
+                    s_orig.set(Vec::new());
+                    s_controller.set(None);
+                    s_cursor_pos.set(None);
+                }) as Box<dyn Fn()>)
+            };
+
+            let on_slash_cancel_cb = {
+                let s_visible = slash_visible_effect;
+                let s_query = slash_query_effect;
+                let s_items = slash_display_items_effect;
+                let s_selected = slash_selected_effect;
+                let s_controller = slash_controller_effect;
+                let s_orig = slash_orig_indices_effect;
+                let s_cursor_pos = slash_cursor_pos_effect;
+                Closure::wrap(Box::new(move || {
+                    s_visible.set(false);
+                    s_query.set(String::new());
+                    s_items.set(Vec::new());
+                    s_selected.set(0);
+                    s_controller.set(None);
+                    s_orig.set(Vec::new());
+                    s_cursor_pos.set(None);
+                }) as Box<dyn Fn()>)
+            };
+
             // ── Build Cm6Callbacks ──
             let callbacks = Cm6Callbacks {
                 on_change: Some(
@@ -537,6 +814,30 @@ pub fn Cm6BlockEditor(
                         .unchecked_ref::<js_sys::Function>()
                         .clone(),
                 ),
+                on_slash_query: Some(
+                    on_slash_query_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_slash_navigate: Some(
+                    on_slash_navigate_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_slash_select: Some(
+                    on_slash_select_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_slash_cancel: Some(
+                    on_slash_cancel_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
             };
 
             // ── Create the editor (with retry for JS bundle race) ──
@@ -561,6 +862,10 @@ pub fn Cm6BlockEditor(
                     on_ac_navigate_cb.forget();
                     on_ac_select_cb.forget();
                     on_ac_cancel_cb.forget();
+                    on_slash_query_cb.forget();
+                    on_slash_navigate_cb.forget();
+                    on_slash_select_cb.forget();
+                    on_slash_cancel_cb.forget();
                 }
                 Err(e) => {
                     log::warn!("CM6 init failed for block {}: {}", bid, e);
@@ -596,6 +901,12 @@ pub fn Cm6BlockEditor(
     let on_blur_cb = move |_| {
         ac_visible.set(false);
         ac_cursor_pos.set(None);
+        slash_visible.set(false);
+        slash_query.set(String::new());
+        slash_display_items.set(Vec::new());
+        slash_orig_indices.set(Vec::new());
+        slash_controller.set(None);
+        slash_cursor_pos.set(None);
         on_save_blur.clone()(content.get_untracked(), None);
     };
 
@@ -611,7 +922,7 @@ pub fn Cm6BlockEditor(
         let ac_controller = ac_controller;
         let ac_result = ac_result;
         let ac_cursor_pos = ac_cursor_pos;
-        let on_save = on_save;
+        let on_save = on_save.clone();
         move |idx: usize| {
             let current = content_signal.get_untracked();
             let trigger_kind = ac_trigger_kind.get_untracked();
@@ -639,6 +950,59 @@ pub fn Cm6BlockEditor(
         }
     };
 
+    // ── Slash command select callback (mouse click) ──
+    let handle_slash_select = {
+        let all_cmds = all_commands.clone();
+        let content_signal = content;
+        let slash_visible = slash_visible;
+        let slash_query = slash_query;
+        let slash_display_items = slash_display_items;
+        let _slash_selected = slash_selected;
+        let slash_controller = slash_controller;
+        let slash_orig_indices = slash_orig_indices;
+        let slash_result = slash_result;
+        let slash_cursor_pos = slash_cursor_pos;
+        let on_save = on_save_for_slash;
+        let on_set_marker = on_set_marker_for_slash;
+        let on_set_priority = on_set_priority_for_slash;
+        move |idx: usize| {
+            let orig_indices = slash_orig_indices.get_untracked();
+            if idx >= orig_indices.len() {
+                return;
+            }
+            let cmd_idx = orig_indices[idx];
+            if cmd_idx >= all_cmds.len() {
+                return;
+            }
+            let cmd = &all_cmds[cmd_idx];
+            let current_content = content_signal.get_untracked();
+            let ctx = SlashContext {
+                content: current_content.clone(),
+                cursor_offset: current_content.len(),
+                block_id: String::new(),
+                marker: None,
+                priority: None,
+            };
+            let action = (cmd.execute)(&ctx);
+            apply_slash_action(
+                &action,
+                &content_signal,
+                &slash_result,
+                &on_set_marker,
+                &on_set_priority,
+                &on_save,
+                &current_content,
+            );
+            // Close the slash menu
+            slash_visible.set(false);
+            slash_query.set(String::new());
+            slash_display_items.set(Vec::new());
+            slash_orig_indices.set(Vec::new());
+            slash_controller.set(None);
+            slash_cursor_pos.set(None);
+        }
+    };
+
     view! {
         <div class="block-editor-wrapper relative">
             <div
@@ -658,6 +1022,39 @@ pub fn Cm6BlockEditor(
                         // Split rendering based on whether cursor position is available:
                         // if set, pass cursor_coords for fixed positioning near cursor;
                         // otherwise omit the prop for default flow positioning.
+                        if let Some((top, left)) = cursor_pos {
+                            (view! {
+                                <AutocompleteDropdown
+                                    items=items
+                                    selected_index=sel_idx
+                                    on_select=cb
+                                    visible=true
+                                    cursor_coords=(top, left)
+                                />
+                            }).into_any()
+                        } else {
+                            (view! {
+                                <AutocompleteDropdown
+                                    items=items
+                                    selected_index=sel_idx
+                                    on_select=cb
+                                    visible=true
+                                />
+                            }).into_any()
+                        }
+                    } else {
+                        (view! { <div></div> }).into_any()
+                    }
+                }}
+            </Show>
+
+            <Show when=move || slash_visible.get()>
+                {{
+                    let items = slash_display_items.get();
+                    let sel_idx = slash_selected.get();
+                    let cb = handle_slash_select.clone();
+                    let cursor_pos = slash_cursor_pos.get();
+                    if !items.is_empty() {
                         if let Some((top, left)) = cursor_pos {
                             (view! {
                                 <AutocompleteDropdown

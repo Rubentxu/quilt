@@ -270,6 +270,33 @@ pub fn Block(
                     let os = on_save.clone();
                     let oc = on_cancel.clone();
                     let page_names = page_names_signal.get();
+
+                    // Callback to update block marker from slash commands
+                    let on_set_marker_cb = {
+                        let bid = block.get().id.clone();
+                        let sb = set_blocks;
+                        Arc::new(move |marker: String| {
+                            sb.update(|blocks| {
+                                if let Some(b) = blocks.iter_mut().find(|b| b.id == bid) {
+                                    b.marker = Some(marker.clone());
+                                }
+                            });
+                        }) as Arc<dyn Fn(String) + Send + Sync>
+                    };
+
+                    // Callback to update block priority from slash commands
+                    let on_set_priority_cb = {
+                        let bid = block.get().id.clone();
+                        let sb = set_blocks;
+                        Arc::new(move |priority: String| {
+                            sb.update(|blocks| {
+                                if let Some(b) = blocks.iter_mut().find(|b| b.id == bid) {
+                                    b.priority = Some(priority.clone());
+                                }
+                            });
+                        }) as Arc<dyn Fn(String) + Send + Sync>
+                    };
+
                     vec![view! {
                         <Cm6BlockEditor
                             block=block
@@ -277,6 +304,8 @@ pub fn Block(
                             on_cancel=oc
                             tree_ops=tree_ops.clone()
                             page_names=page_names
+                            on_set_marker=on_set_marker_cb
+                            on_set_priority=on_set_priority_cb
                         />
                     }.into_any()]
                 } else {

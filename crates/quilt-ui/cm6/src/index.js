@@ -10,25 +10,38 @@
 //   focus(id)
 //   getCursorOffset(id) → number
 //   setAutocompleteState(id, active)
+//   setSlashState(id, active)
 //   setDecorations(id, decorationsJson)
+//   getCursorCoords(id) → {top, left, bottom} | null
+//   hasEditor(id) → boolean
 //
 // `callbacks` is an object with optional function properties:
-//   onChange(text)             — called on every document change
-//   onEnter(offset)            — Enter without modifiers
-//   onTab()                    — Tab without modifiers
-//   onShiftTab()               — Shift+Tab
-//   onEscape()                 — Escape (cancel editing)
-//   onBackspace()              — Backspace on empty line
-//   onCtrlBackspace()          — Ctrl+Backspace (merge with next)
-//   onUndo()                   — Ctrl+Z
-//   onRedo()                   — Ctrl+Shift+Z or Ctrl+Y
-//   onAcNavigate(direction)    — ArrowUp(-1)/ArrowDown(1) in autocomplete
-//   onAcSelect()               — Enter when autocomplete dropdown is active
-//   onAcCancel()               — Escape when autocomplete dropdown is active
+//   onChange(text)                 — called on every document change
+//   onEnter(offset)                — Enter without modifiers
+//   onTab()                        — Tab without modifiers
+//   onShiftTab()                   — Shift+Tab
+//   onEscape()                     — Escape (cancel editing)
+//   onBackspace()                  — Backspace on empty line
+//   onCtrlBackspace()              — Ctrl+Backspace (merge with next)
+//   onUndo()                       — Ctrl+Z
+//   onRedo()                       — Ctrl+Shift+Z or Ctrl+Y
+//   onAcNavigate(direction)        — ArrowUp(-1)/ArrowDown(1) in autocomplete
+//   onAcSelect()                   — Enter when autocomplete dropdown is active
+//   onAcCancel()                   — Escape when autocomplete dropdown is active
+//   onSlashQuery(query)            — Slash query text changed
+//   onSlashNavigate(direction)     — ArrowUp(-1)/ArrowDown(1) in slash menu
+//   onSlashSelect()                — Enter when slash menu is active
+//   onSlashCancel()                — Escape when slash menu is active
 //
 // Undo/redo is intentionally NOT handled by CM6's history extension.
 // The Outliner/HistoryStack on the Rust side owns undo/redo.
 // We dispatch the keyboard shortcuts to Rust callbacks instead.
+//
+// Slash commands: when the user types "/", it is intercepted and NOT
+// inserted into the document. Instead, the editor enters "slash mode"
+// where subsequent keystrokes build a query string for the slash
+// command dropdown. All keyboard input is captured by a keydown event
+// handler until Enter/Escape commits or cancels.
 
 import { EditorView, keymap, Decoration } from '@codemirror/view';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
@@ -112,6 +125,7 @@ function toggleFormatting(view, openMarker, closeMarker) {
 // (typing, cursor movement, selection, clipboard) are preserved.
 // Autocomplete navigation keys are conditionally active only when
 // the editor's `dropdownActive` flag is true.
+// Slash command keys are conditionally active when `slashActive` is true.
 function buildKeymap(cbs) {
   const bindings = [];
 
@@ -126,13 +140,80 @@ function buildKeymap(cbs) {
 
   // ── Text formatting shortcuts (editor-level, not outliner operations) ──
   // These modify text within the CM6 editor using markdown markers.
-  // If no text is selected, the marker pair is inserted with cursor between.
-  // If text is already wrapped with matching markers, they are removed (toggle).
   bindings.push({ key: 'Mod-b', run: (view) => toggleFormatting(view, '**', '**') });
   bindings.push({ key: 'Mod-i', run: (view) => toggleFormatting(view, '*', '*') });
   bindings.push({ key: 'Mod-Shift-h', run: (view) => toggleFormatting(view, '^^', '^^') });
   bindings.push({ key: 'Mod-Shift-s', run: (view) => toggleFormatting(view, '~~', '~~') });
   bindings.push({ key: 'Mod-`', run: (view) => toggleFormatting(view, '`', '`') });
+
+  // ── Slash command trigger ──
+  // "/" is intercepted here to start slash mode. The actual character
+  // capture during slash mode is handled by domEventHandlers.keydown.
+  if (cbs.onSlashQuery) {
+    bindings.push({
+      key: '/',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (!entry || entry.slashActive || entry.dropdownActive) return false;
+        entry.slashActive = true;
+        entry.slashQuery = '';
+        cbs.onSlashQuery('');
+        return true; // prevent / from being inserted
+      },
+    });
+  }
+
+  // Slash command navigation — only active when slash menu is visible
+  if (cbs.onSlashNavigate) {
+    bindings.push({
+      key: 'ArrowDown',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.slashActive) { cbs.onSlashNavigate(1); return true; }
+        return false;
+      },
+    });
+    bindings.push({
+      key: 'ArrowUp',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.slashActive) { cbs.onSlashNavigate(-1); return true; }
+        return false;
+      },
+    });
+  }
+
+  if (cbs.onSlashSelect) {
+    bindings.push({
+      key: 'Enter',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.slashActive) {
+          entry.slashActive = false;
+          entry.slashQuery = '';
+          cbs.onSlashSelect();
+          return true;
+        }
+        return false; // Fall through
+      },
+    });
+  }
+
+  if (cbs.onSlashCancel) {
+    bindings.push({
+      key: 'Escape',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.slashActive) {
+          entry.slashActive = false;
+          entry.slashQuery = '';
+          cbs.onSlashCancel();
+          return true;
+        }
+        return false; // Fall through
+      },
+    });
+  }
 
   // Autocomplete navigation — only active when dropdown is visible
   if (cbs.onAcNavigate) {
@@ -160,8 +241,7 @@ function buildKeymap(cbs) {
       run: () => {
         const entry = editors.get(currentEditingId);
         if (entry?.dropdownActive) { cbs.onAcSelect(); return true; }
-        // Fall through to the outliner Enter handler below
-        return false;
+        return false; // Fall through to the outliner Enter handler
       },
     });
   }
@@ -172,8 +252,7 @@ function buildKeymap(cbs) {
       run: () => {
         const entry = editors.get(currentEditingId);
         if (entry?.dropdownActive) { cbs.onAcCancel(); return true; }
-        // Fall through to the Escape handler below
-        return false;
+        return false; // Fall through to the Escape handler below
       },
     });
   }
@@ -239,7 +318,6 @@ const api = {
     const cbs = callbacks || {};
 
     // Build state without CM6's history extension.
-    // We use a minimal subset of basicSetup manually so we can exclude history.
     const state = EditorState.create({
       doc: content,
       extensions: [
@@ -252,7 +330,7 @@ const api = {
           // Remove history-related bindings from defaultKeymap
           return b.key !== 'Mod-z' && b.key !== 'Mod-y' && b.key !== 'Mod-Shift-z';
         })),
-        // Our custom bindings (Enter, Tab, undo→outliner, ac nav, etc.)
+        // Our custom bindings (Enter, Tab, undo→outliner, slash, ac nav, etc.)
         keymap.of(buildKeymap(cbs)),
         // Update listener to fire onChange
         EditorView.updateListener.of((update) => {
@@ -267,15 +345,46 @@ const api = {
             }
           }
         }),
-        // Single-line mode: prevent newlines from being inserted by paste etc.
-        EditorState.transactionFilter.of((tr) => {
-          if (tr.docChanged) {
-            const newDoc = tr.state.doc.toString();
-            // If the new content contains a newline, filter it out
-            // Actually this is complex — let's rely on the keymap to prevent Enter
-            // but still allow pasted content to flow naturally.
-          }
-          return tr;
+        // DOM event handlers: capture input during slash mode
+        EditorView.domEventHandlers({
+          keydown: (event, view) => {
+            const entry = editors.get(id);
+            if (!entry?.slashActive) return false;
+
+            // During slash mode, capture ALL keyboard input.
+            // The keymap bindings for Enter/Escape/Arrows above handle
+            // their respective actions, but we also need to capture
+            // printable characters for the query and prevent them from
+            // being inserted into the document.
+
+            // Let the keymap handle Enter, Escape, Arrows first.
+            // For these keys, the keymap binding returned true and
+            // already handled the action. We just return false here
+            // to let the event be handled at the keymap level.
+            if (event.key === 'Enter' || event.key === 'Escape' ||
+                event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+              return false; // Already handled by keymap
+            }
+
+            // Prevent default for all other keys during slash mode
+            event.preventDefault();
+
+            if (event.key === 'Backspace') {
+              entry.slashQuery = entry.slashQuery.slice(0, -1);
+              if (cbs.onSlashQuery) cbs.onSlashQuery(entry.slashQuery);
+              return true;
+            }
+
+            // Single printable character (not modifier keys)
+            if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+              entry.slashQuery += event.key;
+              if (cbs.onSlashQuery) cbs.onSlashQuery(entry.slashQuery);
+              return true;
+            }
+
+            // Consume all other keys during slash mode silently
+            return true;
+          },
         }),
       ],
     });
@@ -292,6 +401,8 @@ const api = {
       view,
       cachedContent: content,
       dropdownActive: false,
+      slashActive: false,
+      slashQuery: '',
     });
     currentEditingId = id;
 
@@ -387,6 +498,20 @@ const api = {
     const entry = editors.get(id);
     if (!entry) return;
     entry.dropdownActive = !!active;
+  },
+
+  /**
+   * Enable or disable slash command mode.
+   * When active, all keyboard input is captured for the slash
+   * command query instead of the document.
+   */
+  setSlashState(id, active) {
+    const entry = editors.get(id);
+    if (!entry) return;
+    entry.slashActive = !!active;
+    if (!active) {
+      entry.slashQuery = '';
+    }
   },
 
   /**

@@ -9,3 +9,4 @@ pub mod keyboard_handlers;
 pub mod loading;
 pub mod right_sidebar;
 pub mod sidebar;
+pub mod slash_command;
