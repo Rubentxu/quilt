@@ -15,6 +15,9 @@
 pub mod bootstrap;
 pub mod errors;
 
+// Services module — application-level orchestration
+pub mod services;
+
 // Use cases module - higher-level operations for presentation layers
 pub mod use_cases;
 

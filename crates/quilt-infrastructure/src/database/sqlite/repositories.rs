@@ -31,7 +31,10 @@ use std::collections::HashMap;
 use crate::database::sqlite::connection::DbPool;
 use quilt_domain::entities::{Block, Page};
 use quilt_domain::errors::DomainError;
-use quilt_domain::repositories::{BlockRepository, PageRepository, TagRepository};
+use quilt_domain::references::RefType;
+use quilt_domain::repositories::{
+    BlockRepository, PageRepository, RefRepository, RefRow, TagRepository,
+};
 use quilt_domain::value_objects::{
     BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
 };
@@ -919,6 +922,156 @@ impl TagRepository for SqliteTagRepository {
     }
 }
 
+// ── SqliteRefRepository ───────────────────────────────────────────────
+
+/// SQLite implementation of the [`RefRepository`] trait.
+///
+/// This repository provides persistent storage for the bidirectional
+/// reference model using the `refs` table with `source_id`, `target_id`,
+/// and `ref_type` columns.
+///
+/// # Schema
+///
+/// ```sql
+/// CREATE TABLE refs (
+///     source_id BLOB NOT NULL,
+///     target_id BLOB NOT NULL,
+///     ref_type TEXT NOT NULL CHECK(ref_type IN ('page_ref','block_ref','tag','alias')),
+///     created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+///     PRIMARY KEY (source_id, target_id, ref_type)
+/// );
+/// ```
+pub struct SqliteRefRepository {
+    pool: DbPool,
+}
+
+impl SqliteRefRepository {
+    /// Creates a new `SqliteRefRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    fn map_ref_type(s: &str) -> Result<RefType, DomainError> {
+        RefType::from_str(s).ok_or_else(|| {
+            DomainError::InvalidData(format!("Unknown ref_type: {}", s))
+        })
+    }
+
+    fn ref_type_to_str(rt: &RefType) -> &'static str {
+        rt.as_str()
+    }
+}
+
+#[async_trait]
+impl RefRepository for SqliteRefRepository {
+    async fn get_forward_refs(
+        &self,
+        source_id: Uuid,
+    ) -> Result<Vec<(Uuid, RefType)>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT target_id, ref_type FROM refs WHERE source_id = ? ORDER BY ref_type",
+        )
+        .bind(uuid_to_blob(&source_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_forward_refs: {}", e)))?;
+
+        rows.iter()
+            .map(|row| {
+                let target_blob: Vec<u8> = row.get("target_id");
+                let target = blob_to_uuid(&target_blob)?;
+                let ref_type_str: String = row.get("ref_type");
+                let ref_type = Self::map_ref_type(&ref_type_str)?;
+                Ok((target, ref_type))
+            })
+            .collect()
+    }
+
+    async fn get_backlinks(
+        &self,
+        target_id: Uuid,
+    ) -> Result<Vec<(Uuid, RefType)>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT source_id, ref_type FROM refs WHERE target_id = ? ORDER BY ref_type",
+        )
+        .bind(uuid_to_blob(&target_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_backlinks: {}", e)))?;
+
+        rows.iter()
+            .map(|row| {
+                let source_blob: Vec<u8> = row.get("source_id");
+                let source = blob_to_uuid(&source_blob)?;
+                let ref_type_str: String = row.get("ref_type");
+                let ref_type = Self::map_ref_type(&ref_type_str)?;
+                Ok((source, ref_type))
+            })
+            .collect()
+    }
+
+    async fn sync_refs(
+        &self,
+        source_id: Uuid,
+        refs: &[(Uuid, RefType)],
+    ) -> Result<(), DomainError> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| DomainError::Storage(format!("begin transaction: {}", e)))?;
+
+        // Delete all existing refs for this source
+        sqlx::query("DELETE FROM refs WHERE source_id = ?")
+            .bind(uuid_to_blob(&source_id))
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| DomainError::Storage(format!("delete refs: {}", e)))?;
+
+        // Insert new refs
+        for (target_id, ref_type) in refs {
+            sqlx::query(
+                "INSERT INTO refs (source_id, target_id, ref_type) VALUES (?, ?, ?)",
+            )
+            .bind(uuid_to_blob(&source_id))
+            .bind(uuid_to_blob(target_id))
+            .bind(Self::ref_type_to_str(ref_type))
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| DomainError::Storage(format!("insert ref: {}", e)))?;
+        }
+
+        tx.commit()
+            .await
+            .map_err(|e| DomainError::Storage(format!("commit transaction: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn rebuild_index(&self) -> Result<Vec<RefRow>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT source_id, target_id, ref_type FROM refs ORDER BY source_id, target_id",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("rebuild_index: {}", e)))?;
+
+        rows.iter()
+            .map(|row| {
+                let source_blob: Vec<u8> = row.get("source_id");
+                let target_blob: Vec<u8> = row.get("target_id");
+                let ref_type_str: String = row.get("ref_type");
+
+                Ok(RefRow {
+                    source_id: blob_to_uuid(&source_blob)?,
+                    target_id: blob_to_uuid(&target_blob)?,
+                    ref_type: Self::map_ref_type(&ref_type_str)?,
+                })
+            })
+            .collect()
+    }
+}
+
 // ── Integration Tests ────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1230,5 +1383,146 @@ mod tests {
         let counts = tag_repo.get_tag_counts().await.unwrap();
         let common = counts.iter().find(|(t, _)| t == "common").unwrap();
         assert_eq!(common.1, 2);
+    }
+
+    // ── RefRepository Tests ─────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_ref_sync_refs_and_get_forward() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool);
+        let source_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        repo.sync_refs(source_id, &[(target_id, RefType::BlockRef)])
+            .await
+            .unwrap();
+
+        let forward = repo.get_forward_refs(source_id).await.unwrap();
+        assert_eq!(forward.len(), 1);
+        assert_eq!(forward[0], (target_id, RefType::BlockRef));
+    }
+
+    #[tokio::test]
+    async fn test_ref_get_backlinks() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool);
+        let source_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        repo.sync_refs(source_id, &[(target_id, RefType::PageRef)])
+            .await
+            .unwrap();
+
+        let backlinks = repo.get_backlinks(target_id).await.unwrap();
+        assert_eq!(backlinks.len(), 1);
+        assert_eq!(backlinks[0], (source_id, RefType::PageRef));
+    }
+
+    #[tokio::test]
+    async fn test_ref_sync_replaces_old_refs() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool.clone());
+        let source_id = Uuid::new_v4();
+        let target1 = Uuid::new_v4();
+        let target2 = Uuid::new_v4();
+
+        // First sync: reference target1
+        repo.sync_refs(source_id, &[(target1, RefType::BlockRef)])
+            .await
+            .unwrap();
+        assert_eq!(repo.get_forward_refs(source_id).await.unwrap().len(), 1);
+
+        // Second sync: reference target2 only
+        repo.sync_refs(source_id, &[(target2, RefType::BlockRef)])
+            .await
+            .unwrap();
+
+        let forward = repo.get_forward_refs(source_id).await.unwrap();
+        assert_eq!(forward.len(), 1);
+        assert_eq!(forward[0], (target2, RefType::BlockRef));
+
+        // target1 should have no backlinks
+        assert_eq!(repo.get_backlinks(target1).await.unwrap().len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_ref_multiple_types_same_target() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool);
+        let source_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        repo.sync_refs(
+            source_id,
+            &[
+                (target_id, RefType::PageRef),
+                (target_id, RefType::BlockRef),
+            ],
+        )
+        .await
+        .unwrap();
+
+        let forward = repo.get_forward_refs(source_id).await.unwrap();
+        assert_eq!(forward.len(), 2);
+
+        let types: Vec<RefType> = forward.iter().map(|(_, t)| *t).collect();
+        assert!(types.contains(&RefType::PageRef));
+        assert!(types.contains(&RefType::BlockRef));
+    }
+
+    #[tokio::test]
+    async fn test_ref_rebuild_index() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool);
+        let source_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        repo.sync_refs(source_id, &[(target_id, RefType::Tag)])
+            .await
+            .unwrap();
+
+        let rows = repo.rebuild_index().await.unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].source_id, source_id);
+        assert_eq!(rows[0].target_id, target_id);
+        assert_eq!(rows[0].ref_type, RefType::Tag);
+    }
+
+    #[tokio::test]
+    async fn test_ref_empty_forward_refs() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool);
+        let source_id = Uuid::new_v4();
+
+        let forward = repo.get_forward_refs(source_id).await.unwrap();
+        assert!(forward.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_ref_empty_backlinks() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool);
+        let target_id = Uuid::new_v4();
+
+        let backlinks = repo.get_backlinks(target_id).await.unwrap();
+        assert!(backlinks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_ref_sync_empty_list_clears_refs() {
+        let pool = setup_test_db().await;
+        let repo = SqliteRefRepository::new(pool);
+        let source_id = Uuid::new_v4();
+        let target_id = Uuid::new_v4();
+
+        repo.sync_refs(source_id, &[(target_id, RefType::BlockRef)])
+            .await
+            .unwrap();
+        assert_eq!(repo.get_forward_refs(source_id).await.unwrap().len(), 1);
+
+        // Sync with empty list — should clear
+        repo.sync_refs(source_id, &[]).await.unwrap();
+        assert!(repo.get_forward_refs(source_id).await.unwrap().is_empty());
     }
 }

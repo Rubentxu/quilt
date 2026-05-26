@@ -188,13 +188,20 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Refs table — enhanced schema with ref_type column.
+    // Drop the old table first (early dev — no production data) and recreate
+    // with the full schema including ref_type as part of the primary key.
+    sqlx::query("DROP TABLE IF EXISTS refs")
+        .execute(pool)
+        .await?;
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS refs (
             source_id BLOB NOT NULL,
             target_id BLOB NOT NULL,
-            created_at INTEGER NOT NULL,
-            PRIMARY KEY (source_id, target_id)
+            ref_type TEXT NOT NULL CHECK(ref_type IN ('page_ref','block_ref','tag','alias')),
+            created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+            PRIMARY KEY (source_id, target_id, ref_type)
         )
         "#,
     )
@@ -273,7 +280,10 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_pages_journal_day ON pages(journal_day)")
         .execute(pool)
         .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_refs_target_id ON refs(target_id)")
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_refs_source ON refs(source_id)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_refs_target ON refs(target_id, ref_type)")
         .execute(pool)
         .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_tags_tag ON tags(tag)")

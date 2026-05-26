@@ -9,10 +9,12 @@
 //! - `value_objects/` - Immutable value types (JournalDay, TaskMarker, etc.)
 //! - `repositories/` - Repository traits (abstractions, not implementations)
 //! - `services/` - Domain services (outliner logic, etc.)
+//! - `references/` - Reference model (Ref, RefType, RefIndex)
 //! - `errors/` - Domain-specific error types
 
 pub mod entities;
 pub mod errors;
+pub mod references;
 pub mod repositories;
 pub mod services;
 pub mod value_objects;
@@ -20,6 +22,7 @@ pub mod value_objects;
 // Re-exports for convenience
 pub use entities::{Asset, Block, File, Journal, Page, Tag};
 pub use errors::DomainError;
+pub use references::{Ref, RefIndex, RefType};
 pub use value_objects::{
     Align, AssetType, BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
 };
