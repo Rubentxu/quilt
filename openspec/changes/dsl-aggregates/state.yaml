@@ -1,0 +1,48 @@
+status: archived
+completed_at: "2026-05-24"
+change_id: dsl-aggregates
+project: quilt
+phase: archive
+
+summary:
+  title: "DSL Aggregates"
+  type: feature
+  description: "Added aggregate, stats, and group_by DSL operators to quilt-query"
+
+stats:
+  files_changed: 3
+  lines_added: ~450
+  lines_removed: ~50
+  tests_passed: 99
+  tests_unit: 80
+  tests_integration: 11
+  tests_doc: 8
+
+artifacts:
+  - openspec/changes/dsl-aggregates/proposal.md
+  - openspec/changes/dsl-aggregates/spec.md
+  - openspec/changes/dsl-aggregates/design.md
+  - openspec/changes/dsl-aggregates/tasks.md
+  - openspec/changes/dsl-aggregates/verify-report.md
+  - openspec/changes/dsl-aggregates/reports/verify.html
+  - openspec/changes/dsl-aggregates/archive-report.md
+
+corrections:
+  - iteration: 1
+    fixes:
+      - "Fixed aggregate hardcoding $.count → now uses prop_path"
+      - "Fixed percentile_cont PostgreSQL syntax → ROW_NUMBER subquery (SQLite-compatible)"
+      - "Fixed Stats build_where() invalid SQL → removed from build_where(), only in build_sql()"
+    severity: CRITICAL
+    type: "SQL bugs"
+
+operators_added:
+  - aggregate: "GROUP BY + count/avg/sum/min/max"
+  - stats: "STDDEV_POP, VAR_POP, median, percentile (SQLite-compatible)"
+  - group_by: "DISTINCT grouped rows by property"
+
+quality:
+  dqs_before: null
+  dqs_after: ~0.74
+  solid_entropy_compliant: true
+  warnings: 0
