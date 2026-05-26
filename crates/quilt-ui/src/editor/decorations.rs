@@ -186,6 +186,289 @@ impl DecorationManager {
     }
 }
 
+/// Rich render item for property-aware display in the non-editing view.
+///
+/// Each variant carries enough information to be rendered with proper
+/// visual treatment (badges, pills, icons) without referencing parser
+/// internals. The range is needed for in-place text replacement when
+/// the user interacts with a property.
+#[derive(Debug, Clone)]
+pub enum RenderItem {
+    /// Standard decorated text segment (existing behavior — tags, refs, plain text)
+    DecoratedText {
+        text: String,
+        css_class: &'static str,
+        label: String,
+    },
+    /// Status property `status:: TODO` / `status:: DOING` / `status:: DONE`
+    PropertyStatus {
+        full_text: String,
+        key: String,
+        value: String,
+        valid: bool,
+        range: Range,
+    },
+    /// Priority property `priority:: A` / `priority:: B` / `priority:: C`
+    PropertyPriority {
+        full_text: String,
+        key: String,
+        value: String,
+        valid: bool,
+        range: Range,
+    },
+    /// Date property `scheduled:: YYYY-MM-DD`
+    PropertyScheduled {
+        full_text: String,
+        key: String,
+        value: String,
+        range: Range,
+    },
+    /// Deadline property `deadline:: YYYY-MM-DD`
+    PropertyDeadline {
+        full_text: String,
+        key: String,
+        value: String,
+        range: Range,
+    },
+    /// Tags property `tags:: a, b, c`
+    PropertyTags {
+        full_text: String,
+        key: String,
+        value: String,
+        tags: Vec<String>,
+        range: Range,
+    },
+    /// Generic/unknown property key:: value
+    PropertyGeneric {
+        full_text: String,
+        key: String,
+        value: String,
+        range: Range,
+    },
+}
+
+/// Check if a property key is a known first-class property.
+pub fn is_known_property(key: &str) -> bool {
+    matches!(
+        key.to_lowercase().as_str(),
+        "status" | "priority" | "scheduled" | "deadline" | "tags"
+    )
+}
+
+/// Get valid values for a known property key (status/priority).
+pub fn known_property_values(key: &str) -> Option<&'static [&'static str]> {
+    match key.to_lowercase().as_str() {
+        "status" => Some(&["TODO", "DOING", "DONE"]),
+        "priority" => Some(&["A", "B", "C"]),
+        _ => None,
+    }
+}
+
+impl DecorationManager {
+    /// Build rich render items suitable for the non-editing property-aware view.
+    ///
+    /// This extends `decorated_segments` by adding semantic information
+    /// for typed properties (status, priority, dates, tags) so the view
+    /// can render them with proper visual treatment and interactivity.
+    ///
+    /// Non-property segments fall back to standard `RenderItem::DecoratedText`.
+    pub fn build_render_items(content: &str, parsed: &ParsedContent) -> Vec<RenderItem> {
+        if content.is_empty() {
+            return vec![];
+        }
+
+        let decorations = Self::build_decorations(parsed);
+        Self::apply_render_items(content, &decorations)
+    }
+
+    /// Apply decorations to text, producing rich render items.
+    ///
+    /// For property segments, checks the key against known types and
+    /// produces typed variants. Unknown properties become `PropertyGeneric`.
+    /// Non-property segments fall back to `DecoratedText`.
+    fn apply_render_items(content: &str, decorations: &[Decoration]) -> Vec<RenderItem> {
+        if content.is_empty() {
+            return vec![];
+        }
+
+        let mut sorted: Vec<&Decoration> = decorations.iter().collect();
+        sorted.sort_by_key(|d| d.range.start);
+
+        // Build a map from range.start -> Segment for looking up property details
+        let mut items = Vec::new();
+        let mut pos = 0;
+
+        for deco in sorted {
+            // Emit plain text before this decoration
+            if deco.range.start > pos {
+                let text = &content[pos..deco.range.start];
+                items.push(RenderItem::DecoratedText {
+                    text: text.to_string(),
+                    css_class: "",
+                    label: String::new(),
+                });
+            }
+
+            let text = &content[deco.range.start..deco.range.end];
+
+            match &deco.kind {
+                DecorationKind::Property { key } => {
+                    // We need the value: it's after `key:: `
+                    // Compute by stripping the key prefix and ":: " separator
+                    let key_prefix = format!("{}::", key);
+                    let value_part = if text.starts_with(&key_prefix) {
+                        text[key_prefix.len()..].trim().to_string()
+                    } else {
+                        String::new()
+                    };
+
+                    let range = deco.range.clone();
+                    let lower_key = key.to_lowercase();
+
+                    match lower_key.as_str() {
+                        "status" => {
+                            let valid = matches!(
+                                value_part.to_uppercase().as_str(),
+                                "TODO" | "DOING" | "DONE"
+                            );
+                            items.push(RenderItem::PropertyStatus {
+                                full_text: text.to_string(),
+                                key: key.clone(),
+                                value: value_part.clone(),
+                                valid,
+                                range,
+                            });
+                        }
+                        "priority" => {
+                            let valid = matches!(value_part.to_uppercase().as_str(), "A" | "B" | "C");
+                            items.push(RenderItem::PropertyPriority {
+                                full_text: text.to_string(),
+                                key: key.clone(),
+                                value: value_part.clone(),
+                                valid,
+                                range,
+                            });
+                        }
+                        "scheduled" => {
+                            items.push(RenderItem::PropertyScheduled {
+                                full_text: text.to_string(),
+                                key: key.clone(),
+                                value: value_part.clone(),
+                                range,
+                            });
+                        }
+                        "deadline" => {
+                            items.push(RenderItem::PropertyDeadline {
+                                full_text: text.to_string(),
+                                key: key.clone(),
+                                value: value_part.clone(),
+                                range,
+                            });
+                        }
+                        "tags" => {
+                            let tags: Vec<String> = value_part
+                                .split(',')
+                                .map(|t| t.trim().to_string())
+                                .filter(|t| !t.is_empty())
+                                .collect();
+                            items.push(RenderItem::PropertyTags {
+                                full_text: text.to_string(),
+                                key: key.clone(),
+                                value: value_part.clone(),
+                                tags,
+                                range,
+                            });
+                        }
+                        _ => {
+                            items.push(RenderItem::PropertyGeneric {
+                                full_text: text.to_string(),
+                                key: key.clone(),
+                                value: value_part.clone(),
+                                range,
+                            });
+                        }
+                    }
+                }
+                // Non-property decorations: render as styled text
+                _ => {
+                    let (css_class, label) = match &deco.kind {
+                        DecorationKind::PageLink { page_name } => {
+                            ("decoration-page-ref", page_name.clone())
+                        }
+                        DecorationKind::BlockLink { block_uuid } => {
+                            ("decoration-block-ref", block_uuid.clone())
+                        }
+                        DecorationKind::Tag { tag_name } => {
+                            ("decoration-tag", format!("#{}", tag_name))
+                        }
+                        DecorationKind::SearchMatch { query } => {
+                            ("decoration-search", query.clone())
+                        }
+                        DecorationKind::AutocompleteActive { .. } => {
+                            ("decoration-autocomplete", String::new())
+                        }
+                        DecorationKind::Property { .. } => unreachable!(), // handled above
+                    };
+
+                    items.push(RenderItem::DecoratedText {
+                        text: text.to_string(),
+                        css_class,
+                        label,
+                    });
+                }
+            }
+
+            pos = deco.range.end;
+        }
+
+        // Emit remaining plain text after last decoration
+        if pos < content.len() {
+            let text = &content[pos..];
+            items.push(RenderItem::DecoratedText {
+                text: text.to_string(),
+                css_class: "",
+                label: String::new(),
+            });
+        }
+
+        items
+    }
+
+    /// Compute the next status in the cycle: TODO → DOING → DONE → TODO
+    pub fn cycle_status(current: &str) -> &'static str {
+        match current.to_uppercase().as_str() {
+            "TODO" => "DOING",
+            "DOING" => "DONE",
+            "DONE" => "TODO",
+            _ => "TODO",
+        }
+    }
+
+    /// Compute the next priority in the cycle: A → B → C → A
+    pub fn cycle_priority(current: &str) -> &'static str {
+        match current.to_uppercase().as_str() {
+            "A" => "B",
+            "B" => "C",
+            "C" => "A",
+            _ => "A",
+        }
+    }
+}
+
+/// Replace a property value in the content string given its range and key.
+///
+/// Given the original content, the range covering the full property
+/// expression, the key, and the new value, produces the updated content.
+pub fn replace_property_value(content: &str, range: &Range, key: &str, new_value: &str) -> String {
+    format!(
+        "{}{}:: {}{}",
+        &content[..range.start],
+        key,
+        new_value,
+        &content[range.end..]
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -437,5 +720,287 @@ mod tests {
         if let Some(seg) = prop_seg {
             assert_eq!(seg.label, "status");
         }
+    }
+
+    // ── build_render_items tests ──
+
+    #[test]
+    fn test_render_items_plain_text() {
+        let parser = InlineParser::default();
+        let content = "hello world";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        assert_eq!(items.len(), 1, "Plain text should produce 1 item");
+        match &items[0] {
+            RenderItem::DecoratedText { text, css_class, .. } => {
+                assert_eq!(text, "hello world");
+                assert_eq!(*css_class, "");
+            }
+            other => panic!("Expected DecoratedText, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_status_property_valid() {
+        let parser = InlineParser::default();
+        let content = "status:: TODO";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        assert_eq!(items.len(), 1, "Should produce 1 render item");
+        match &items[0] {
+            RenderItem::PropertyStatus {
+                key,
+                value,
+                valid,
+                ..
+            } => {
+                assert_eq!(key, "status");
+                assert_eq!(value, "TODO");
+                assert!(valid, "TODO should be valid status");
+            }
+            other => panic!("Expected PropertyStatus, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_status_property_invalid() {
+        let parser = InlineParser::default();
+        let content = "status:: INVALID";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        match &items[0] {
+            RenderItem::PropertyStatus { valid, .. } => {
+                assert!(!valid, "INVALID should not be valid status");
+            }
+            other => panic!("Expected PropertyStatus, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_priority_property() {
+        let parser = InlineParser::default();
+        let content = "priority:: A";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        match &items[0] {
+            RenderItem::PropertyPriority {
+                key,
+                value,
+                valid,
+                ..
+            } => {
+                assert_eq!(key, "priority");
+                assert_eq!(value, "A");
+                assert!(valid, "A should be valid priority");
+            }
+            other => panic!("Expected PropertyPriority, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_priority_invalid() {
+        let parser = InlineParser::default();
+        let content = "priority:: X";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        match &items[0] {
+            RenderItem::PropertyPriority { valid, .. } => {
+                assert!(!valid, "X should not be valid priority");
+            }
+            other => panic!("Expected PropertyPriority, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_scheduled_property() {
+        let parser = InlineParser::default();
+        let content = "scheduled:: 2026-05-28";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        match &items[0] {
+            RenderItem::PropertyScheduled { key, value, .. } => {
+                assert_eq!(key, "scheduled");
+                assert_eq!(value, "2026-05-28");
+            }
+            other => panic!("Expected PropertyScheduled, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_deadline_property() {
+        let parser = InlineParser::default();
+        let content = "deadline:: 2026-05-30";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        match &items[0] {
+            RenderItem::PropertyDeadline { key, value, .. } => {
+                assert_eq!(key, "deadline");
+                assert_eq!(value, "2026-05-30");
+            }
+            other => panic!("Expected PropertyDeadline, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_tags_property() {
+        let parser = InlineParser::default();
+        let content = "tags:: a, b, c";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        match &items[0] {
+            RenderItem::PropertyTags {
+                key,
+                value,
+                tags,
+                ..
+            } => {
+                assert_eq!(key, "tags");
+                assert_eq!(value, "a, b, c");
+                assert_eq!(tags.len(), 3);
+                assert!(tags.contains(&"a".to_string()));
+                assert!(tags.contains(&"b".to_string()));
+                assert!(tags.contains(&"c".to_string()));
+            }
+            other => panic!("Expected PropertyTags, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_generic_property() {
+        let parser = InlineParser::default();
+        let content = "custom:: some_value";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        match &items[0] {
+            RenderItem::PropertyGeneric { key, value, .. } => {
+                assert_eq!(key, "custom");
+                assert_eq!(value, "some_value");
+            }
+            other => panic!("Expected PropertyGeneric, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_render_items_mixed_content() {
+        let parser = InlineParser::default();
+        let content = "Meeting #team about [[Project]] status:: DOING priority:: A";
+        let parsed = parser.parse(content);
+        let items = DecorationManager::build_render_items(content, &parsed);
+
+        // Should have: text, tag, text, pageref, text, status, text, priority
+        assert!(
+            items.len() >= 5,
+            "Mixed content should produce multiple items, got {}",
+            items.len()
+        );
+
+        let status_found = items.iter().any(|item| matches!(item, RenderItem::PropertyStatus { .. }));
+        let priority_found = items.iter().any(|item| matches!(item, RenderItem::PropertyPriority { .. }));
+        let _tag_found = items.iter().any(|item| matches!(item, RenderItem::DecoratedText { css_class: "decoration-tag", .. }));
+
+        assert!(status_found, "Should find PropertyStatus");
+        assert!(priority_found, "Should find PropertyPriority");
+    }
+
+    #[test]
+    fn test_render_items_empty_content() {
+        let items = DecorationManager::build_render_items("", &ParsedContent::default());
+        assert!(
+            items.is_empty(),
+            "Empty content should produce no items"
+        );
+    }
+
+    // ── cycle_status tests ──
+
+    #[test]
+    fn test_cycle_status_todo_to_doing() {
+        assert_eq!(DecorationManager::cycle_status("TODO"), "DOING");
+    }
+
+    #[test]
+    fn test_cycle_status_doing_to_done() {
+        assert_eq!(DecorationManager::cycle_status("DOING"), "DONE");
+    }
+
+    #[test]
+    fn test_cycle_status_done_to_todo() {
+        assert_eq!(DecorationManager::cycle_status("DONE"), "TODO");
+    }
+
+    #[test]
+    fn test_cycle_status_case_insensitive() {
+        assert_eq!(DecorationManager::cycle_status("todo"), "DOING");
+        assert_eq!(DecorationManager::cycle_status("doing"), "DONE");
+        assert_eq!(DecorationManager::cycle_status("done"), "TODO");
+    }
+
+    #[test]
+    fn test_cycle_status_unknown_defaults_to_todo() {
+        assert_eq!(DecorationManager::cycle_status("invalid"), "TODO");
+    }
+
+    // ── cycle_priority tests ──
+
+    #[test]
+    fn test_cycle_priority_a_to_b() {
+        assert_eq!(DecorationManager::cycle_priority("A"), "B");
+    }
+
+    #[test]
+    fn test_cycle_priority_b_to_c() {
+        assert_eq!(DecorationManager::cycle_priority("B"), "C");
+    }
+
+    #[test]
+    fn test_cycle_priority_c_to_a() {
+        assert_eq!(DecorationManager::cycle_priority("C"), "A");
+    }
+
+    #[test]
+    fn test_cycle_priority_case_insensitive() {
+        assert_eq!(DecorationManager::cycle_priority("a"), "B");
+        assert_eq!(DecorationManager::cycle_priority("b"), "C");
+        assert_eq!(DecorationManager::cycle_priority("c"), "A");
+    }
+
+    #[test]
+    fn test_cycle_priority_unknown_defaults_to_a() {
+        assert_eq!(DecorationManager::cycle_priority("X"), "A");
+    }
+
+    // ── replace_property_value tests ──
+
+    #[test]
+    fn test_replace_property_value_status() {
+        let content = "status:: TODO";
+        let range = Range::new(0, 13); // covers all 13 chars of "status:: TODO"
+        let result = replace_property_value(content, &range, "status", "DOING");
+        assert_eq!(result, "status:: DOING");
+    }
+
+    #[test]
+    fn test_replace_property_value_with_context() {
+        let content = "Meeting status:: TODO priority:: A";
+        let range = Range::new(8, 21); // covers "status:: TODO" = 13 chars
+        let result = replace_property_value(content, &range, "status", "DOING");
+        assert_eq!(result, "Meeting status:: DOING priority:: A");
+    }
+
+    #[test]
+    fn test_replace_property_value_empty_string() {
+        let content = "";
+        let range = Range::new(0, 0);
+        let result = replace_property_value(content, &range, "key", "value");
+        assert_eq!(result, "key:: value");
     }
 }

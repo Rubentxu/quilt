@@ -1,12 +1,13 @@
 use crate::bridge::BlockDto;
 use crate::components::block_editor::TreeOps;
 use crate::components::cm6_block_editor::Cm6BlockEditor;
-use crate::editor::decorations::DecorationManager;
+use crate::editor::decorations::{
+    replace_property_value, DecorationManager, RenderItem,
+};
 use crate::outliner::history::OutlinerCommand;
 use crate::outliner::page::PageOutliner;
 use crate::outliner::selection::SelectionState;
 use crate::outliner::tree::{indent, merge_with_next, outdent, split_block};
-use crate::parser::semantic_adapter::display_tags;
 use crate::parser::InlineParser;
 use leptos::prelude::*;
 use log::warn;
@@ -311,7 +312,6 @@ pub fn Block(
                 } else {
                     let b = block.get();
                     let content = b.content.clone();
-                    let tags = display_tags(&content, 5);
                     let marker = b.marker.clone().unwrap_or_default();
                     let icon = match marker.as_str() {
                         "todo" => "○",
@@ -321,46 +321,93 @@ pub fn Block(
                         _ => "",
                     };
 
-                    // Build decorated segments from parsed content
+                    // Build property-aware render items from parsed content
                     let parser = InlineParser::default();
                     let parsed = parser.parse(&content);
-                    let segments = DecorationManager::decorated_segments(&content, &parsed);
+                    let render_items =
+                        DecorationManager::build_render_items(&content, &parsed);
+                    let block_id = b.id.clone();
+                    let block_content_for_undo = before_content_for_undo;
+
+                    // Helper closures for property interactions
+                    let on_property_status_click = {
+                        let bid = block_id.clone();
+                        let content_c = content.clone();
+                        let ri = render_items.clone();
+                        let sb = set_blocks;
+                        move |idx: usize| {
+                            if idx < ri.len() {
+                                if let RenderItem::PropertyStatus {
+                                    ref key,
+                                    ref value,
+                                    ref range,
+                                    ..
+                                } = ri[idx]
+                                {
+                                    let new_val = DecorationManager::cycle_status(value);
+                                    let new_content =
+                                        replace_property_value(&content_c, range, key, new_val);
+                                    sb.update(|blocks| {
+                                        if let Some(b) = blocks.iter_mut().find(|b| b.id == bid) {
+                                            b.content = new_content;
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    };
+
+                    let on_property_priority_click = {
+                        let bid = block_id;
+                        let content_c = content;
+                        let ri = render_items.clone();
+                        let sb = set_blocks;
+                        move |idx: usize| {
+                            if idx < ri.len() {
+                                if let RenderItem::PropertyPriority {
+                                    ref key,
+                                    ref value,
+                                    ref range,
+                                    ..
+                                } = ri[idx]
+                                {
+                                    let new_val = DecorationManager::cycle_priority(value);
+                                    let new_content =
+                                        replace_property_value(&content_c, range, key, new_val);
+                                    sb.update(|blocks| {
+                                        if let Some(b) = blocks.iter_mut().find(|b| b.id == bid) {
+                                            b.content = new_content;
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                    };
+
+                    let icon_str: String = icon.to_string();
+                    let on_start_edit_cb = {
+                        let sel = selection_state.clone();
+                        let bid = block.get().id.clone();
+                        let bcu = block_content_for_undo;
+                        let se = set_editing;
+                        let block_signal = block;
+                        move || {
+                            if let Some(ref s) = sel {
+                                s.select(&bid);
+                            }
+                            bcu.set(block_signal.get().content.clone());
+                            se.set(true);
+                        }
+                    };
 
                     vec![view! {
-                        <div>
-                            <div class="flex-1 text-sm cursor-text min-h-[1.5em] break-words"
-                                on:click=move |_| {
-                                    if let Some(ref s) = selection_state {
-                                        s.select(&block.get().id);
-                                    }
-                                    before_content_for_undo.set(block.get().content.clone());
-                                    set_editing.set(true);
-                                }
-                            >
-                                {if icon.is_empty() { String::new() } else { format!("{} ", icon) }}
-                                {segments.into_iter().map(|seg| {
-                                    let css_class = seg.css_class;
-                                    view! {
-                                        <span class={css_class}>
-                                            {seg.text}
-                                        </span>
-                                    }
-                                }).collect::<Vec<_>>()}
-                            </div>
-                            {if !tags.is_empty() {
-                                view! {
-                                    <div class="flex flex-wrap gap-1 mt-0.5">
-                                        {tags.into_iter().map(|tag| view! {
-                                            <span class="text-xs px-1.5 py-0.5 rounded bg-surface-hover text-text-muted">
-                                                {format!("#{}", tag)}
-                                            </span>
-                                        }).collect::<Vec<_>>()}
-                                    </div>
-                                }.into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
-                            }}
-                        </div>
+                        <PropertyContentView
+                            icon=icon_str
+                            render_items=render_items
+                            on_status_click=std::sync::Arc::new(on_property_status_click)
+                            on_priority_click=std::sync::Arc::new(on_property_priority_click)
+                            on_start_edit=Callback::from(on_start_edit_cb)
+                        />
                     }.into_any()]
                 }}
             </div>
@@ -382,4 +429,182 @@ pub fn Block(
             }}
         </div>
     }
+}
+
+/// Non-editing view of a block with property-aware rich rendering.
+///
+/// Extracted as a separate component to avoid deep brace nesting in the
+/// main `view!` template, which can confuse the Leptos proc-macro.
+#[component]
+fn PropertyContentView(
+    /// Icon character (○ ● ✓ ✕) for task marker
+    icon: String,
+    /// Property render items
+    render_items: Vec<RenderItem>,
+    /// Click handler for status properties (cycles TODO/DOING/DONE)
+    on_status_click: std::sync::Arc<dyn Fn(usize) + Send + Sync + 'static>,
+    /// Click handler for priority properties (cycles A/B/C)
+    on_priority_click: std::sync::Arc<dyn Fn(usize) + Send + Sync + 'static>,
+    /// Called when the block is clicked to start editing
+    on_start_edit: leptos::prelude::Callback<(), ()>,
+) -> impl IntoView {
+    view! {
+        <div
+            class="flex-1 text-sm cursor-text min-h-[1.5em] break-words"
+            on:click=move |_| { on_start_edit.run(()); }
+        >
+            {if icon.is_empty() { String::new() } else { format!("{} ", icon) }}
+            {render_property_items(
+                render_items,
+                on_status_click,
+                on_priority_click,
+            )}
+        </div>
+    }
+}
+
+/// Render a list of `RenderItem`s into HTML view children with property-aware styling.
+///
+/// Plain text, tags, and refs get their standard decoration CSS classes.
+/// Properties get rich visual treatment: status badges, priority pills,
+/// date icons, tag pills, and generic property key/value styling.
+fn render_property_items(
+    items: Vec<RenderItem>,
+    on_status_click: std::sync::Arc<dyn Fn(usize) + Send + Sync + 'static>,
+    on_priority_click: std::sync::Arc<dyn Fn(usize) + Send + Sync + 'static>,
+) -> Vec<leptos::prelude::AnyView> {
+    items
+        .into_iter()
+        .enumerate()
+        .map(|(idx, item)| match item {
+            RenderItem::DecoratedText {
+                text,
+                css_class,
+                label: _,
+            } => {
+                if css_class.is_empty() {
+                    view! { <span>{text}</span> }.into_any()
+                } else {
+                    view! { <span class={css_class}>{text}</span> }.into_any()
+                }
+            }
+            RenderItem::PropertyStatus {
+                full_text: _,
+                key,
+                value,
+                valid: _,
+                range: _,
+            } => {
+                let status_class = match value.to_uppercase().as_str() {
+                    "TODO" => "prop-status-todo",
+                    "DOING" => "prop-status-doing",
+                    "DONE" => "prop-status-done",
+                    _ => "prop-status-invalid",
+                };
+                let circle = match value.to_uppercase().as_str() {
+                    "TODO" => "○",
+                    "DOING" => "●",
+                    "DONE" => "✓",
+                    _ => "?",
+                };
+                let cb = on_status_click.clone();
+                view! {
+                    <span class="prop-key">{key}:: </span>
+                    <span
+                        class={format!("prop-status {}", status_class)}
+                        on:click=move |ev| {
+                            ev.stop_propagation();
+                            cb(idx);
+                        }
+                    >
+                        <span class="prop-status-circle">{circle}</span>
+                        <span class="prop-status-text">{value.clone()}</span>
+                    </span>
+                }.into_any()
+            }
+            RenderItem::PropertyPriority {
+                full_text: _,
+                key,
+                value,
+                valid: _,
+                range: _,
+            } => {
+                let pill_class = match value.to_uppercase().as_str() {
+                    "A" => "prop-priority-A",
+                    "B" => "prop-priority-B",
+                    "C" => "prop-priority-C",
+                    _ => "prop-priority-invalid",
+                };
+                let cb = on_priority_click.clone();
+                view! {
+                    <span class="prop-key">{key}:: </span>
+                    <span
+                        class={format!("prop-priority {}", pill_class)}
+                        on:click=move |ev| {
+                            ev.stop_propagation();
+                            cb(idx);
+                        }
+                    >
+                        <span class="prop-priority-letter">{value.clone()}</span>
+                    </span>
+                }.into_any()
+            }
+            RenderItem::PropertyScheduled {
+                full_text: _,
+                key,
+                value,
+                range: _,
+            } => {
+                view! {
+                    <span class="prop-key">{key}:: </span>
+                    <span class="prop-date prop-date-scheduled" title={format!("Scheduled: {}", value)}>
+                        <span class="prop-date-icon">"📅"</span>
+                        <span class="prop-date-text">{value.clone()}</span>
+                    </span>
+                }.into_any()
+            }
+            RenderItem::PropertyDeadline {
+                full_text: _,
+                key,
+                value,
+                range: _,
+            } => {
+                view! {
+                    <span class="prop-key">{key}:: </span>
+                    <span class="prop-date prop-date-deadline" title={format!("Deadline: {}", value)}>
+                        <span class="prop-date-icon">"⏰"</span>
+                        <span class="prop-date-text">{value.clone()}</span>
+                    </span>
+                }.into_any()
+            }
+            RenderItem::PropertyTags {
+                full_text: _,
+                key,
+                value: _,
+                tags,
+                range: _,
+            } => {
+                view! {
+                    <span class="prop-key">{key}:: </span>
+                    <span class="prop-tags">
+                        {tags.into_iter().map(|tag| {
+                            let colors = ["prop-tag-blue", "prop-tag-green", "prop-tag-orange", "prop-tag-purple", "prop-tag-teal"];
+                            let color_idx = tag.len() % colors.len();
+                            view! {
+                                <span class={format!("prop-tag-pill {}", colors[color_idx])}>
+                                    {tag}
+                                </span>
+                            }
+                        }).collect::<Vec<_>>()}
+                    </span>
+                }.into_any()
+            }
+            RenderItem::PropertyGeneric { key, value, .. } => {
+                view! {
+                    <span class="prop-key">{key}:: </span>
+                    <span class="prop-value">{value.clone()}</span>
+                }.into_any()
+            }
+        })
+        .collect()
 }
