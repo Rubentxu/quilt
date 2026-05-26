@@ -69,5 +69,49 @@ Finished `dev` profile (no warnings)
 ## Files Modified
 - `crates/quilt-ui/src/components/keyboard_handlers.rs` - DOM cursor API
 - `crates/quilt-ui/src/components/block_editor.rs` - TreeOps struct, callback props
-- `crates/quilt-ui/src/components/block.rs` - TreeOps wiring, error logging
+- `crates/quilt-ui/src/components/block.rs` - TreeOps wiring, error logging, data-block-id attribute
 - `crates/quilt-ui/src/outliner/tree.rs` - Tests, clippy fixes
+
+---
+
+## Batch 2: Remaining Keyboard Navigation Features
+
+### Status: COMPLETE ✅
+
+### 1. Text Formatting Shortcuts (CM6 Editor) ✅
+- **File**: `crates/quilt-ui/cm6/src/index.js`
+- Added `toggleFormatting(view, openMarker, closeMarker)` — a generic toggle helper
+- Formatting keybindings in `buildKeymap()`: `Mod+B` (bold `**`), `Mod+I` (italic `*`), `Mod+Shift+H` (highlight `^^`), `Mod+Shift+S` (strikethrough `~~`), `` Mod+` `` (inline code `` ` ``)
+- All toggles: no selection → insert marker pair with cursor centered; selection with matching markers → unwrap; selection without markers → wrap
+- These are CM6 editor-level operations, NOT outliner operations — text mutations within the editor naturally fire the `onChange` callback which syncs to Rust content signals
+
+### 2. Navigation Polish ✅
+- **File**: `crates/quilt-ui/src/pages/page.rs`
+- **Auto-select first block**: Effect watches for blocks to load; one-shot selects `blocks[0]` when the page has blocks
+- **Zoom in (Mod+. / Alt+Right)**: `zoom_into_selected_block()` sets `zoom_id` to the selected block's ID; the `filtered_blocks` derived signal shows only that block + its descendants. Toggle-like: zooming into an already-zoomed block zooms out.
+- **Zoom out (Mod+, / Alt+Left)**: Sets `zoom_id` to `None`, showing the full page
+- `filtered_blocks` uses BFS with `HashSet` dedup to collect the subtree
+
+### 3. Scroll Into View ✅
+- **File**: `crates/quilt-ui/src/pages/page.rs` + `crates/quilt-ui/src/components/block.rs`
+- Effect watches `selected_block_id` and calls `Element::scroll_into_view()` on the matching `[data-block-id]` element
+- Block component now adds `data-block-id="<id>"` to the selectable div — enables querySelector targeting
+
+### Files Modified (Batch 2)
+| File | Action | What Was Done |
+|------|--------|---------------|
+| `crates/quilt-ui/cm6/src/index.js` | Modified | Added 5 text formatting keybindings with toggle helper |
+| `crates/quilt-ui/src/pages/page.rs` | Modified | Added zoom state, filtered_blocks, auto-select, scroll-into-view, zoom handlers |
+| `crates/quilt-ui/src/components/block.rs` | Modified | Added `data-block-id` attribute for scroll targeting |
+
+### Build Verification
+- `cargo check -p quilt-ui` — clean ✅
+- `cargo test --lib -p quilt-ui` — 206/206 pass ✅
+- `node bundle.mjs` — CM6 bundle builds clean ✅
+
+### Deviations from Spec
+- `Alt+Right` / `Alt+Left` for zoom only work in non-editing mode (CM6 captures Alt+Arrow for word navigation). Editing-mode zoom uses `Mod+.` / `Mod+,` exclusively.
+- The `filtered_blocks` zoom is the simplest implementation: it regenerates the list on every signal change. For a production page with thousands of blocks, a memoized version may be needed, but this is fine for current scale.
+
+### Remaining Work
+- None for this work unit. Ready for verify.
