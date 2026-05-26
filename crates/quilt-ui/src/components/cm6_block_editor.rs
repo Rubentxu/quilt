@@ -176,7 +176,8 @@ pub fn Cm6BlockEditor(
     // ── Autocomplete state (signals for dropdown rendering) ──
     let ac_service = AcService(Arc::new(create_default_service(page_names)));
     let ac_svc = ac_service.0.clone();
-    let ac_items: RwSignal<Vec<crate::parser::autocomplete::AutocompleteItem>> = RwSignal::new(Vec::new());
+    let ac_items: RwSignal<Vec<crate::parser::autocomplete::AutocompleteItem>> =
+        RwSignal::new(Vec::new());
     let ac_visible: RwSignal<bool> = RwSignal::new(false);
     let ac_selected: RwSignal<usize> = RwSignal::new(0usize);
     let ac_trigger_kind: RwSignal<Option<String>> = RwSignal::new(None);
@@ -221,7 +222,7 @@ pub fn Cm6BlockEditor(
 
     // ── Lifecycle: mount CM6 when the div is available ──
     Effect::new({
-        let el_ref = el_ref.clone();
+        let el_ref = el_ref;
         let block_id = block.get().id.clone();
         let cm6_handle = cm6_handle.clone();
         let page_outliner = page_outliner.clone();
@@ -464,18 +465,78 @@ pub fn Cm6BlockEditor(
 
             // ── Build Cm6Callbacks ──
             let callbacks = Cm6Callbacks {
-                on_change: Some(on_change_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_enter: Some(on_enter_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_tab: Some(on_tab_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_shift_tab: Some(on_shift_tab_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_escape: Some(on_escape_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_backspace: Some(on_backspace_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_ctrl_backspace: Some(on_ctrl_backspace_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_undo: Some(on_undo_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_redo: Some(on_redo_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_ac_navigate: Some(on_ac_navigate_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_ac_select: Some(on_ac_select_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
-                on_ac_cancel: Some(on_ac_cancel_cb.as_ref().unchecked_ref::<js_sys::Function>().clone()),
+                on_change: Some(
+                    on_change_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_enter: Some(
+                    on_enter_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_tab: Some(
+                    on_tab_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_shift_tab: Some(
+                    on_shift_tab_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_escape: Some(
+                    on_escape_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_backspace: Some(
+                    on_backspace_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_ctrl_backspace: Some(
+                    on_ctrl_backspace_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_undo: Some(
+                    on_undo_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_redo: Some(
+                    on_redo_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_ac_navigate: Some(
+                    on_ac_navigate_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_ac_select: Some(
+                    on_ac_select_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
+                on_ac_cancel: Some(
+                    on_ac_cancel_cb
+                        .as_ref()
+                        .unchecked_ref::<js_sys::Function>()
+                        .clone(),
+                ),
             };
 
             // ── Create the editor (with retry for JS bundle race) ──

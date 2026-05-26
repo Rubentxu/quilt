@@ -166,7 +166,9 @@ fn get_global_api() -> Result<Object> {
     if api.is_undefined() || api.is_null() {
         return Err(Cm6BridgeError::GlobalNotAvailable);
     }
-    Ok(api.dyn_into::<Object>().map_err(|_| Cm6BridgeError::GlobalNotAvailable)?)
+    api
+        .dyn_into::<Object>()
+        .map_err(|_| Cm6BridgeError::GlobalNotAvailable)
 }
 
 /// Call a method on the global API with given args.
@@ -240,7 +242,11 @@ impl Cm6Handle {
     pub fn set_content_with_cursor(&self, content: &str, cursor_offset: u32) -> Result<()> {
         call_api_method(
             "setContentAndCursor",
-            &[self.id.clone(), content.into(), JsValue::from(cursor_offset)],
+            &[
+                self.id.clone(),
+                content.into(),
+                JsValue::from(cursor_offset),
+            ],
         )?;
         Ok(())
     }
@@ -272,10 +278,9 @@ impl Cm6Handle {
     /// Returns 0 if unavailable.
     pub fn cursor_offset(&self) -> Result<u32> {
         let result = call_api_method("getCursorOffset", &[self.id.clone()])?;
-        result
-            .as_f64()
-            .map(|n| n as u32)
-            .ok_or_else(|| Cm6BridgeError::JsError("getCursorOffset did not return a number".into()))
+        result.as_f64().map(|n| n as u32).ok_or_else(|| {
+            Cm6BridgeError::JsError("getCursorOffset did not return a number".into())
+        })
     }
 
     /// Get cursor viewport-relative coordinates.

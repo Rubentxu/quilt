@@ -497,9 +497,7 @@ mod tests {
 
     #[test]
     fn test_apply_split_block() {
-        let mut blocks = vec![
-            make_block("b1", None, "Hello World", 1, 1.0),
-        ];
+        let mut blocks = vec![make_block("b1", None, "Hello World", 1, 1.0)];
         let cmd = OutlinerCommand::SplitBlock {
             block_id: "b1".into(),
             new_block_id: "b2".into(),
@@ -560,9 +558,7 @@ mod tests {
 
     #[test]
     fn test_apply_structural_block_not_found() {
-        let mut blocks = vec![
-            make_block("b1", None, "A", 1, 1.0),
-        ];
+        let mut blocks = vec![make_block("b1", None, "A", 1, 1.0)];
         let cmd = OutlinerCommand::MergeBlock {
             target_id: "bogus".into(),
             source_id: "b2".into(),
@@ -577,9 +573,7 @@ mod tests {
 
     #[test]
     fn test_apply_structural_non_structural() {
-        let mut blocks = vec![
-            make_block("b1", None, "A", 1, 1.0),
-        ];
+        let mut blocks = vec![make_block("b1", None, "A", 1, 1.0)];
         let cmd = OutlinerCommand::SetContent {
             block_id: "b1".into(),
             before: "A".into(),
@@ -594,9 +588,7 @@ mod tests {
 
     #[test]
     fn test_apply_merge_block_source_already_gone() {
-        let mut blocks = vec![
-            make_block("b1", None, "Hello World", 1, 1.0),
-        ];
+        let mut blocks = vec![make_block("b1", None, "Hello World", 1, 1.0)];
         // Source b2 was already removed — command should fail gracefully
         let cmd = OutlinerCommand::MergeBlock {
             target_id: "b1".into(),
@@ -613,9 +605,7 @@ mod tests {
 
     #[test]
     fn test_apply_split_preserves_parent_and_page() {
-        let mut blocks = vec![
-            make_block("b1", Some("page1"), "Hello World", 2, 1.5),
-        ];
+        let mut blocks = vec![make_block("b1", Some("page1"), "Hello World", 2, 1.5)];
         let cmd = OutlinerCommand::SplitBlock {
             block_id: "b1".into(),
             new_block_id: "b2".into(),
@@ -625,7 +615,11 @@ mod tests {
         let ok = apply_structural_mutation(&mut blocks, &cmd);
         assert!(ok);
         assert_eq!(blocks.len(), 2);
-        assert_eq!(blocks[1].parent_id, Some("page1".into()), "parent preserved");
+        assert_eq!(
+            blocks[1].parent_id,
+            Some("page1".into()),
+            "parent preserved"
+        );
         assert_eq!(blocks[1].page_id, "page1", "page_id preserved");
         assert_eq!(blocks[1].level, 2, "level preserved");
         assert!(blocks[1].order > 1.5, "new block order > original");
@@ -635,9 +629,7 @@ mod tests {
 
     #[test]
     fn test_apply_split_block_not_found() {
-        let mut blocks = vec![
-            make_block("b1", None, "A", 1, 1.0),
-        ];
+        let mut blocks = vec![make_block("b1", None, "A", 1, 1.0)];
         let cmd = OutlinerCommand::SplitBlock {
             block_id: "bogus".into(),
             new_block_id: "b2".into(),
@@ -653,9 +645,7 @@ mod tests {
 
     #[test]
     fn test_apply_split_then_merge_roundtrip() {
-        let mut blocks = vec![
-            make_block("b1", None, "Hello World", 1, 1.0),
-        ];
+        let mut blocks = vec![make_block("b1", None, "Hello World", 1, 1.0)];
 
         // Split
         let split = OutlinerCommand::SplitBlock {
@@ -688,9 +678,7 @@ mod tests {
 
     /// Helper: create a PageOutliner wired to apply_structural_mutation
     /// through a shared Vec<BlockDto>.
-    fn make_mutation_outliner(
-        shared: Arc<std::sync::Mutex<Vec<BlockDto>>>,
-    ) -> PageOutliner {
+    fn make_mutation_outliner(shared: Arc<std::sync::Mutex<Vec<BlockDto>>>) -> PageOutliner {
         let sb = shared.clone();
         let apply = move |_: &str, _: &str| {
             // Content apply — not used in these structural tests
@@ -707,9 +695,13 @@ mod tests {
 
     #[test]
     fn test_structural_undo_redo_split() {
-        let shared = Arc::new(std::sync::Mutex::new(vec![
-            make_block("b1", None, "Hello World", 1, 1.0),
-        ]));
+        let shared = Arc::new(std::sync::Mutex::new(vec![make_block(
+            "b1",
+            None,
+            "Hello World",
+            1,
+            1.0,
+        )]));
         let outliner = make_mutation_outliner(shared.clone());
 
         // Record split
@@ -826,9 +818,13 @@ mod tests {
 
     #[test]
     fn test_interleaved_content_and_structural_undo_redo() {
-        let shared = Arc::new(std::sync::Mutex::new(vec![
-            make_block("b1", None, "Hello World", 1, 1.0),
-        ]));
+        let shared = Arc::new(std::sync::Mutex::new(vec![make_block(
+            "b1",
+            None,
+            "Hello World",
+            1,
+            1.0,
+        )]));
         let sb = shared.clone();
         let apply = move |block_id: &str, content: &str| {
             let mut blocks = sb.lock().unwrap();
@@ -897,9 +893,9 @@ mod tests {
 
     #[test]
     fn test_structural_undo_redo_none() {
-        let shared = Arc::new(std::sync::Mutex::new(vec![
-            make_block("b1", None, "A", 1, 1.0),
-        ]));
+        let shared = Arc::new(std::sync::Mutex::new(vec![make_block(
+            "b1", None, "A", 1, 1.0,
+        )]));
         let outliner = make_mutation_outliner(shared.clone());
         assert!(!outliner.undo(), "no undo");
         assert!(!outliner.redo(), "no redo");

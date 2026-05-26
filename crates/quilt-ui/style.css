@@ -121,3 +121,24 @@ body {
     background: rgba(42, 161, 152, 0.2);
     border-radius: 2px;
 }
+
+/* ── Block selection indicator (keyboard-first navigation) ── */
+
+/* Selected block: blue/teal left border */
+.block-selected {
+    border-left: 3px solid var(--color-accent);
+    padding-left: calc(0.25rem - 3px); /* compensate for border width */
+    background: rgba(42, 161, 152, 0.05);
+    border-radius: 0 4px 4px 0;
+}
+
+/* Block bullet is clickable to select */
+.block-bullet {
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Outliner container must be focusable for keyboard events */
+.outliner:focus {
+    outline: none;
+}

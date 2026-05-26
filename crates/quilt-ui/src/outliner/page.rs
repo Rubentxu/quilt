@@ -12,7 +12,9 @@
 //! - Structural operations (indent, outdent, split, merge) are integrated
 //!   via `record_structural` and `structural_apply`.
 
-use crate::outliner::history::{build_content_command, invert_command, HistoryStack, OutlinerCommand};
+use crate::outliner::history::{
+    build_content_command, invert_command, HistoryStack, OutlinerCommand,
+};
 use std::sync::Arc;
 
 /// Error returned by `PageOutliner` when an operation is not supported yet.
@@ -74,11 +76,7 @@ impl PageOutliner {
     /// - `structural_apply`: callback invoked with an `OutlinerCommand` for structural
     ///   operations (split, merge, indent, outdent). The caller is responsible for
     ///   mutating the block list to reflect the command.
-    pub fn new_with_structural<F, G>(
-        capacity: usize,
-        apply: F,
-        structural_apply: G,
-    ) -> Self
+    pub fn new_with_structural<F, G>(capacity: usize, apply: F, structural_apply: G) -> Self
     where
         F: Fn(&str, &str) + Send + Sync + 'static,
         G: Fn(&OutlinerCommand) + Send + Sync + 'static,
@@ -199,8 +197,12 @@ fn dispatch_undo_redo(
     structural: &dyn Fn(&OutlinerCommand),
 ) -> bool {
     match cmd {
-        OutlinerCommand::SetContent { block_id, after, .. }
-        | OutlinerCommand::AutocompleteInsert { block_id, after, .. } => {
+        OutlinerCommand::SetContent {
+            block_id, after, ..
+        }
+        | OutlinerCommand::AutocompleteInsert {
+            block_id, after, ..
+        } => {
             apply(block_id, after);
             true
         }
@@ -232,16 +234,13 @@ mod tests {
 
     /// Helper: create a recording outliner with a structural callback.
     /// Uses `Arc<std::sync::Mutex>` for recording (thread-safe, standard Rust).
-    fn make_structural_outliner(
-    ) -> (
+    fn make_structural_outliner() -> (
         PageOutliner,
         Arc<Mutex<Vec<(String, String)>>>,
         Arc<Mutex<Vec<OutlinerCommand>>>,
     ) {
-        let recorded_content: Arc<Mutex<Vec<(String, String)>>> =
-            Arc::new(Mutex::new(Vec::new()));
-        let recorded_struct: Arc<Mutex<Vec<OutlinerCommand>>> =
-            Arc::new(Mutex::new(Vec::new()));
+        let recorded_content: Arc<Mutex<Vec<(String, String)>>> = Arc::new(Mutex::new(Vec::new()));
+        let recorded_struct: Arc<Mutex<Vec<OutlinerCommand>>> = Arc::new(Mutex::new(Vec::new()));
 
         let rc = recorded_content.clone();
         let content_apply = move |block_id: &str, content: &str| {
@@ -325,11 +324,7 @@ mod tests {
         recorded.lock().unwrap().clear();
         let ok = outliner.undo();
         assert!(ok, "undo should succeed");
-        assert_eq!(
-            recorded.lock().unwrap().len(),
-            1,
-            "undo calls apply once"
-        );
+        assert_eq!(recorded.lock().unwrap().len(), 1, "undo calls apply once");
         assert_eq!(recorded.lock().unwrap()[0].1, "old", "undo restores old");
         assert!(!outliner.can_undo(), "After undo, nothing to undo");
         assert!(outliner.can_redo(), "After undo, can redo");
@@ -409,12 +404,7 @@ mod tests {
     fn test_autocomplete_insert_undo_redo() {
         let (outliner, recorded) = make_recording_outliner();
 
-        outliner.record_content_change(
-            "b1",
-            "see [[proj",
-            "see [[Project Alpha]]",
-            Some("page"),
-        );
+        outliner.record_content_change("b1", "see [[proj", "see [[Project Alpha]]", Some("page"));
 
         assert!(outliner.can_undo());
         assert_eq!(recorded.lock().unwrap()[0].1, "see [[Project Alpha]]");
@@ -479,8 +469,7 @@ mod tests {
             category: AutocompleteCategory::Page,
         };
 
-        let result =
-            compute_insertion(content, &trigger, &item).expect("autocomplete insertion");
+        let result = compute_insertion(content, &trigger, &item).expect("autocomplete insertion");
 
         let (outliner, recorded) = make_recording_outliner();
 
@@ -680,10 +669,7 @@ mod tests {
         assert!(outliner.undo(), "Should undo content change");
         {
             let guard = recorded_content.lock().unwrap();
-            assert_eq!(
-                guard[0].1, "lo",
-                "Content undo restores 'lo'"
-            );
+            assert_eq!(guard[0].1, "lo", "Content undo restores 'lo'");
         }
 
         // Undo structural (split → merge)
@@ -941,7 +927,11 @@ mod tests {
         outliner.record_structural(cmd.clone());
 
         let struct_calls = recorded_struct.lock().unwrap();
-        assert_eq!(struct_calls.len(), 1, "structural_apply called once on record");
+        assert_eq!(
+            struct_calls.len(),
+            1,
+            "structural_apply called once on record"
+        );
         match &struct_calls[0] {
             OutlinerCommand::Indent { block_id, .. } => {
                 assert_eq!(block_id, "b2");
@@ -967,7 +957,11 @@ mod tests {
         outliner.record_structural(cmd.clone());
 
         let struct_calls = recorded_struct.lock().unwrap();
-        assert_eq!(struct_calls.len(), 1, "structural_apply called once on record");
+        assert_eq!(
+            struct_calls.len(),
+            1,
+            "structural_apply called once on record"
+        );
         match &struct_calls[0] {
             OutlinerCommand::Outdent { block_id, .. } => {
                 assert_eq!(block_id, "b2");
@@ -1008,14 +1002,23 @@ mod tests {
             } => {
                 assert_eq!(block_id, "b2");
                 // old/new should be swapped in the inverse
-                assert_eq!(old_parent.as_deref(), Some("b1"),
-                    "undo inverse: old_parent should be the former new_parent");
-                assert!((old_order - 2.001).abs() < f64::EPSILON,
-                    "undo inverse: old_order should be the former new_order");
-                assert!(new_parent.is_none(),
-                    "undo inverse: new_parent should be the former old_parent (None)");
-                assert!((new_order - 2.0).abs() < f64::EPSILON,
-                    "undo inverse: new_order should be the former old_order");
+                assert_eq!(
+                    old_parent.as_deref(),
+                    Some("b1"),
+                    "undo inverse: old_parent should be the former new_parent"
+                );
+                assert!(
+                    (old_order - 2.001).abs() < f64::EPSILON,
+                    "undo inverse: old_order should be the former new_order"
+                );
+                assert!(
+                    new_parent.is_none(),
+                    "undo inverse: new_parent should be the former old_parent (None)"
+                );
+                assert!(
+                    (new_order - 2.0).abs() < f64::EPSILON,
+                    "undo inverse: new_order should be the former old_order"
+                );
             }
             other => panic!("Expected Indent (inverse), got {:?}", other),
         }
@@ -1052,14 +1055,23 @@ mod tests {
             } => {
                 assert_eq!(block_id, "b2");
                 // old/new should be swapped in the inverse
-                assert!(old_parent.is_none(),
-                    "undo inverse: old_parent should be the former new_parent (None)");
-                assert!((old_order - 2.0).abs() < f64::EPSILON,
-                    "undo inverse: old_order should be the former new_order");
-                assert_eq!(new_parent.as_deref(), Some("b1"),
-                    "undo inverse: new_parent should be the former old_parent");
-                assert!((new_order - 1.5).abs() < f64::EPSILON,
-                    "undo inverse: new_order should be the former old_order");
+                assert!(
+                    old_parent.is_none(),
+                    "undo inverse: old_parent should be the former new_parent (None)"
+                );
+                assert!(
+                    (old_order - 2.0).abs() < f64::EPSILON,
+                    "undo inverse: old_order should be the former new_order"
+                );
+                assert_eq!(
+                    new_parent.as_deref(),
+                    Some("b1"),
+                    "undo inverse: new_parent should be the former old_parent"
+                );
+                assert!(
+                    (new_order - 1.5).abs() < f64::EPSILON,
+                    "undo inverse: new_order should be the former old_order"
+                );
             }
             other => panic!("Expected Outdent (inverse), got {:?}", other),
         }

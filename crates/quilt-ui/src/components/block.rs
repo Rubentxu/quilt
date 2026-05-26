@@ -4,6 +4,7 @@ use crate::components::cm6_block_editor::Cm6BlockEditor;
 use crate::editor::decorations::DecorationManager;
 use crate::outliner::history::OutlinerCommand;
 use crate::outliner::page::PageOutliner;
+use crate::outliner::selection::SelectionState;
 use crate::outliner::tree::{indent, merge_with_next, outdent, split_block};
 use crate::parser::semantic_adapter::display_tags;
 use crate::parser::InlineParser;
@@ -29,8 +30,74 @@ pub fn Block(
 
     // Retrieve page names for autocomplete (populated by PageView).
     // Falls back to empty vec if context is not provided.
-    let page_names_signal = use_context::<RwSignal<Vec<String>>>()
-        .unwrap_or_else(|| RwSignal::new(Vec::new()));
+    let page_names_signal =
+        use_context::<RwSignal<Vec<String>>>().unwrap_or_else(|| RwSignal::new(Vec::new()));
+
+    // Retrieve SelectionState for keyboard-first navigation (optional).
+    let selection_state: Option<SelectionState> = use_context();
+
+    // Determine if THIS block is currently selected.
+    let is_selected = Signal::derive({
+        let block_id = block.get().id.clone();
+        move || {
+            selection_state
+                .as_ref()
+                .and_then(|s| s.selected_block_id.get())
+                .is_some_and(|id| id == block_id)
+        }
+    });
+
+    // Watch for edit_request: if this block was requested to start editing,
+    // set local editing to true and consume the request.
+    let block_id_for_effect = block.get().id.clone();
+    Effect::new({
+        let block_id = block_id_for_effect.clone();
+        let edit_req = selection_state;
+        move || {
+            if let Some(ref sel) = edit_req {
+                if sel.edit_request.get().as_deref() == Some(&block_id) {
+                    set_editing.set(true);
+                    sel.edit_request.set(None);
+                }
+            }
+        }
+    });
+
+    // When editing state changes locally, sync to SelectionState.
+    Effect::new({
+        let block_id = block_id_for_effect.clone();
+        let sel = selection_state;
+        move || {
+            if editing.get() {
+                if let Some(ref s) = sel {
+                    s.set_editing(&block_id);
+                }
+            } else {
+                if let Some(ref s) = sel {
+                    if s.editing_block_id.get().as_deref() == Some(&block_id) {
+                        s.clear_editing();
+                    }
+                }
+            }
+        }
+    });
+
+    // Watch for collapse_request from page-level keyboard handler.
+    Effect::new({
+        let block_id = block_id_for_effect.clone();
+        let sel = selection_state;
+        let sc = set_collapsed;
+        move || {
+            if let Some(ref s) = sel {
+                if let Some((id, val)) = s.collapse_request.get() {
+                    if id == block_id {
+                        sc.set(val);
+                        s.collapse_request.set(None);
+                    }
+                }
+            }
+        }
+    });
 
     // Track the content at the START of the current edit session for undo/redo.
     // Updated when the user clicks to edit; not captured at component creation time.
@@ -40,31 +107,41 @@ pub fn Block(
 
     let on_save = {
         let outliner = page_outliner.clone();
+        let sel = selection_state;
         let block_id = block.get().id.clone();
 
         move |content: String, trigger: Option<String>| {
             let before = before_content_for_undo.get_untracked();
-            // Record the change through PageOutliner (history + state mutation).
-            // The `trigger` parameter distinguishes autocomplete insertions
-            // ("page", "tag", "property", "block") from manual typing (None).
             if let Some(ref o) = outliner {
                 o.record_content_change(&block_id, &before, &content, trigger.as_deref());
             }
-            // Update baseline so the next edit session captures the current state
             before_content_for_undo.set(content);
             set_editing.set(false);
+            // After saving, keep the block selected (not editing).
+            if let Some(ref s) = sel {
+                s.select(&block_id);
+                s.clear_editing();
+            }
         }
     };
 
-    let on_cancel = move || {
-        set_editing.set(false);
+    let on_cancel = {
+        let sel = selection_state;
+        let block_id = block.get().id.clone();
+        move || {
+            set_editing.set(false);
+            // Keep the block selected after cancelling.
+            if let Some(ref s) = sel {
+                s.select(&block_id);
+                s.clear_editing();
+            }
+        }
     };
 
     let on_indent = {
         let outliner = page_outliner.clone();
         move || {
             let block_id = block.get().id.clone();
-            // Capture state BEFORE mutation
             let before = block.get();
             let old_parent = before.parent_id.clone();
             let old_order = before.order;
@@ -74,8 +151,6 @@ pub fn Block(
                     warn!("Indent failed: {}", e);
                     return;
                 }
-                // Read state AFTER mutation (inside the update closure,
-                // after the tree operation has been applied)
                 if let Some(after) = blocks_mut.iter().find(|b| b.id == block_id) {
                     if let Some(ref o) = outliner {
                         let cmd = OutlinerCommand::Indent {
@@ -127,13 +202,9 @@ pub fn Block(
             let block_id = block.get().id.clone();
             set_blocks.update(|blocks_mut| {
                 if let Ok((old_block, new_block)) = split_block(blocks_mut, &block_id, cursor) {
-                    // Record the structural operation through PageOutliner
-                    // so it participates in undo/redo with full semantic data.
                     if let Some(ref o) = outliner {
-                        let (first, second) = (
-                            old_block.content.clone(),
-                            new_block.content.clone(),
-                        );
+                        let (first, second) =
+                            (old_block.content.clone(), new_block.content.clone());
                         let cmd = crate::outliner::history::OutlinerCommand::SplitBlock {
                             block_id: block_id.clone(),
                             new_block_id: new_block.id.clone(),
@@ -170,11 +241,22 @@ pub fn Block(
     view! {
         <div class="block-group">
             <div class="flex items-start gap-1 py-0.5 group hover:bg-surface-hover rounded-sm transition-colors"
-                 style=move || format!("padding-left: {}px", (block.get().level.saturating_sub(1)) * 24)
+                 class:block-selected=is_selected
+                 style=move || format!(
+                     "padding-left: {}px",
+                     (block.get().level.saturating_sub(1)) * 24
+                 )
             >
                 <button
-                    class="w-5 h-5 flex items-center justify-center text-text-muted hover:text-text shrink-0 mt-0.5"
-                    on:click=move |_| set_collapsed.update(|c| *c = !*c)
+                    class="w-5 h-5 flex items-center justify-center text-text-muted hover:text-text shrink-0 mt-0.5 block-bullet"
+                    on:click=move |_| {
+                        if let Some(ref s) = selection_state {
+                            s.select(&block.get().id);
+                        }
+                        if has_children {
+                            set_collapsed.update(|c| *c = !*c);
+                        }
+                    }
                 >
                     {move || if has_children {
                         if collapsed.get() { "▶" } else { "▼" }
@@ -218,8 +300,9 @@ pub fn Block(
                         <div>
                             <div class="flex-1 text-sm cursor-text min-h-[1.5em] break-words"
                                 on:click=move |_| {
-                                    // Capture the current block content as the "before"
-                                    // state for the upcoming edit session.
+                                    if let Some(ref s) = selection_state {
+                                        s.select(&block.get().id);
+                                    }
                                     before_content_for_undo.set(block.get().content.clone());
                                     set_editing.set(true);
                                 }
