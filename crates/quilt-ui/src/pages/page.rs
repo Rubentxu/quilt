@@ -8,6 +8,7 @@ use crate::outliner::selection::SelectionState;
 use crate::outliner::tree::apply_structural_mutation;
 use leptos::prelude::*;
 use leptos_router::hooks::use_params_map;
+use std::collections::HashSet;
 use web_sys::KeyboardEvent;
 
 #[component]
@@ -30,6 +31,72 @@ pub fn PageView() -> impl IntoView {
     // Create SelectionState for keyboard-first navigation and provide as context.
     let selection_state = SelectionState::new();
     provide_context(selection_state);
+
+    // ── Zoom state for Mod+. / Mod+, (zoom in/out) ──
+    // When zoomed into a block, only that block and its descendants are shown.
+    let zoom_id: RwSignal<Option<String>> = RwSignal::new(None);
+
+    // Derive filtered block list based on zoom state.
+    let filtered_blocks = Signal::derive({
+        let blocks = blocks;
+        move || {
+            let zoom = zoom_id.get();
+            let list = blocks.get();
+            match zoom {
+                None => list,
+                Some(ref root_id) => {
+                    let mut result = Vec::new();
+                    let mut to_process = vec![root_id.clone()];
+                    let mut seen = HashSet::new();
+                    while let Some(id) = to_process.pop() {
+                        if !seen.insert(id.clone()) {
+                            continue;
+                        }
+                        if let Some(b) = list.iter().find(|b| b.id == id) {
+                            result.push(b.clone());
+                        }
+                        for b in list.iter() {
+                            if b.parent_id.as_deref() == Some(&id) {
+                                to_process.push(b.id.clone());
+                            }
+                        }
+                    }
+                    result.sort_by(|a, b| a.order.partial_cmp(&b.order).unwrap());
+                    result
+                }
+            }
+        }
+    });
+
+    // Auto-select the first block when page loads (one-shot).
+    let has_auto_selected = RwSignal::new(false);
+    Effect::new({
+        let sel = selection_state;
+        move || {
+            if has_auto_selected.get_untracked() {
+                return;
+            }
+            let b = blocks.get();
+            if !b.is_empty() {
+                sel.select(&b[0].id);
+                has_auto_selected.set(true);
+            }
+        }
+    });
+
+    // Scroll the selected block into view when selection changes.
+    Effect::new({
+        let sel = selection_state;
+        move || {
+            if let Some(ref id) = sel.selected_block_id.get() {
+                if let Ok(Some(el)) =
+                    document().query_selector(&format!("[data-block-id=\"{}\"]", id))
+                {
+                    el.scroll_into_view();
+                }
+            }
+        }
+    });
 
     // Create the PageOutliner coordinator with both a content-applier callback
     // and a structural-applier callback. Both update the blocks signal.
@@ -103,9 +170,47 @@ pub fn PageView() -> impl IntoView {
                         toggle_collapse_selected_block(&selection_state, &blocks);
                         return;
                     }
+                    // Mod+. (Mac) / default zoom in — show only selected block's subtree
+                    "." => {
+                        ev.prevent_default();
+                        zoom_into_selected_block(
+                            &selection_state,
+                            &blocks,
+                            &zoom_id,
+                        );
+                        return;
+                    }
+                    // Mod+, (Mac) / default zoom out — show full page
+                    "," => {
+                        ev.prevent_default();
+                        zoom_id.set(None);
+                        return;
+                    }
                     _ => {}
                 }
                 return;
+            }
+
+            // ── Alt+Arrow shortcuts: only when NOT editing ──
+            // (CM6 captures Alt+Arrow for word navigation in editing mode)
+            if !is_editing && ev.alt_key() {
+                match ev.key().as_str() {
+                    "ArrowRight" => {
+                        ev.prevent_default();
+                        zoom_into_selected_block(
+                            &selection_state,
+                            &blocks,
+                            &zoom_id,
+                        );
+                        return;
+                    }
+                    "ArrowLeft" => {
+                        ev.prevent_default();
+                        zoom_id.set(None);
+                        return;
+                    }
+                    _ => {}
+                }
             }
 
             // ── Plain keys: only when NOT editing ──
@@ -170,7 +275,7 @@ pub fn PageView() -> impl IntoView {
                     tabindex="0"
                     on:keydown=on_page_keydown
                 >
-                    <For each=move || blocks.get() key=|b| b.id.clone() let:block>
+                    <For each=move || filtered_blocks.get() key=|b| b.id.clone() let:block>
                         <Block block=Signal::derive(move || block.clone()) blocks=blocks set_blocks=set_blocks children=vec![] />
                     </For>
                 </div>
@@ -355,4 +460,24 @@ fn toggle_collapse_selected_block(sel: &SelectionState, blocks: &ReadSignal<Vec<
         None => return,
     };
     sel.request_collapse(&id, !currently_collapsed);
+}
+
+/// Zoom into the selected block: filter display to only that block
+/// and its descendants. If already zoomed into that block, zoom out.
+fn zoom_into_selected_block(
+    sel: &SelectionState,
+    _blocks: &ReadSignal<Vec<BlockDto>>,
+    zoom_id: &RwSignal<Option<String>>,
+) {
+    let current = sel.selected_block_id.get_untracked();
+    let id = match current {
+        Some(ref id) => id.clone(),
+        None => return,
+    };
+    // If already zoomed into this block, zoom out (toggle).
+    if zoom_id.get_untracked().as_deref() == Some(&id) {
+        zoom_id.set(None);
+    } else {
+        zoom_id.set(Some(id));
+    }
 }

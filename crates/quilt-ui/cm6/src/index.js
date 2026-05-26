@@ -65,6 +65,47 @@ function mod(ctrl, key) {
   return `${ctrl ? 'Mod-' : ''}${key}`;
 }
 
+// ── Text formatting ──
+// Wrap or unwrap a text selection with the given markers.
+// Returns true if a change was dispatched (key handled).
+function toggleFormatting(view, openMarker, closeMarker) {
+  const { from, to } = view.state.selection.main;
+  const selectedText = view.state.sliceDoc(from, to);
+
+  if (selectedText.length === 0) {
+    // No selection: insert marker pair, position cursor between them
+    view.dispatch({
+      changes: { from, insert: openMarker + closeMarker },
+      selection: { anchor: from + openMarker.length },
+    });
+    return true;
+  }
+
+  // Check if already wrapped with matching markers
+  const innerLen = selectedText.length - openMarker.length - closeMarker.length;
+  if (
+    innerLen > 0 &&
+    selectedText.startsWith(openMarker) &&
+    selectedText.endsWith(closeMarker)
+  ) {
+    // Toggle off: remove markers, keep inner text selected
+    const inner = selectedText.slice(openMarker.length, -closeMarker.length);
+    view.dispatch({
+      changes: { from, to, insert: inner },
+      selection: { anchor: from, head: from + inner.length },
+    });
+    return true;
+  }
+
+  // Toggle on: wrap selection with markers, keep wrapped area selected
+  const wrapped = openMarker + selectedText + closeMarker;
+  view.dispatch({
+    changes: { from, to, insert: wrapped },
+    selection: { anchor: from, head: from + wrapped.length },
+  });
+  return true;
+}
+
 // Build the CM6 keymap from the callbacks object.
 // Undo/redo keybindings are replaced with custom callbacks that
 // delegate to the Rust-side Outliner. All other default bindings
@@ -82,6 +123,16 @@ function buildKeymap(cbs) {
     bindings.push({ key: 'Mod-Shift-z', run: () => { cbs.onRedo(); return true; } });
     bindings.push({ key: 'Mod-y', run: () => { cbs.onRedo(); return true; } });
   }
+
+  // ── Text formatting shortcuts (editor-level, not outliner operations) ──
+  // These modify text within the CM6 editor using markdown markers.
+  // If no text is selected, the marker pair is inserted with cursor between.
+  // If text is already wrapped with matching markers, they are removed (toggle).
+  bindings.push({ key: 'Mod-b', run: (view) => toggleFormatting(view, '**', '**') });
+  bindings.push({ key: 'Mod-i', run: (view) => toggleFormatting(view, '*', '*') });
+  bindings.push({ key: 'Mod-Shift-h', run: (view) => toggleFormatting(view, '^^', '^^') });
+  bindings.push({ key: 'Mod-Shift-s', run: (view) => toggleFormatting(view, '~~', '~~') });
+  bindings.push({ key: 'Mod-`', run: (view) => toggleFormatting(view, '`', '`') });
 
   // Autocomplete navigation — only active when dropdown is visible
   if (cbs.onAcNavigate) {

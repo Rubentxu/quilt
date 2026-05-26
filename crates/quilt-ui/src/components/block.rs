@@ -242,6 +242,7 @@ pub fn Block(
         <div class="block-group">
             <div class="flex items-start gap-1 py-0.5 group hover:bg-surface-hover rounded-sm transition-colors"
                  class:block-selected=is_selected
+                 data-block-id={move || block.get().id.clone()}
                  style=move || format!(
                      "padding-left: {}px",
                      (block.get().level.saturating_sub(1)) * 24
