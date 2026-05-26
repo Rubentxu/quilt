@@ -7,6 +7,7 @@
 //! - Ordering
 //! - Undo/redo history
 
+pub mod drag;
 pub mod history;
 pub mod page;
 pub mod selection;

@@ -50,6 +50,15 @@ pub enum OutlinerCommand {
         new_order: f64,
     },
 
+    /// A block was moved to a new parent/position via drag and drop.
+    MoveBlock {
+        block_id: String,
+        old_parent: Option<String>,
+        old_order: f64,
+        new_parent: Option<String>,
+        new_order: f64,
+    },
+
     /// A block was split at the cursor into two blocks.
     ///
     /// `first_part` + `second_part` == `full_content_before`.
@@ -90,6 +99,7 @@ impl OutlinerCommand {
             OutlinerCommand::SetContent { block_id, .. } => block_id,
             OutlinerCommand::Indent { block_id, .. } => block_id,
             OutlinerCommand::Outdent { block_id, .. } => block_id,
+            OutlinerCommand::MoveBlock { block_id, .. } => block_id,
             OutlinerCommand::SplitBlock { block_id, .. } => block_id,
             OutlinerCommand::MergeBlock { target_id, .. } => target_id,
             OutlinerCommand::AutocompleteInsert { block_id, .. } => block_id,
@@ -108,6 +118,9 @@ impl fmt::Display for OutlinerCommand {
             }
             OutlinerCommand::Outdent { block_id, .. } => {
                 write!(f, "Outdent({})", block_id)
+            }
+            OutlinerCommand::MoveBlock { block_id, .. } => {
+                write!(f, "MoveBlock({})", block_id)
             }
             OutlinerCommand::SplitBlock { block_id, .. } => {
                 write!(f, "SplitBlock({})", block_id)
@@ -284,6 +297,19 @@ pub fn invert_command(cmd: &OutlinerCommand) -> OutlinerCommand {
             new_parent: old_parent.clone(),
             new_order: *old_order,
         },
+        OutlinerCommand::MoveBlock {
+            block_id,
+            old_parent,
+            old_order,
+            new_parent,
+            new_order,
+        } => OutlinerCommand::MoveBlock {
+            block_id: block_id.clone(),
+            old_parent: new_parent.clone(),
+            old_order: *new_order,
+            new_parent: old_parent.clone(),
+            new_order: *old_order,
+        },
         OutlinerCommand::SplitBlock {
             block_id,
             new_block_id,
@@ -412,6 +438,16 @@ mod tests {
             source_id: "b2".into(),
             target_before: "Hello".into(),
             source_before: " World".into(),
+        }
+    }
+
+    fn make_move_block() -> OutlinerCommand {
+        OutlinerCommand::MoveBlock {
+            block_id: "b2".into(),
+            old_parent: Some("b1".into()),
+            old_order: 1.5,
+            new_parent: None,
+            new_order: 2.0,
         }
     }
 
@@ -842,6 +878,7 @@ mod tests {
             make_set_content(),
             make_indent(),
             make_outdent(),
+            make_move_block(),
             make_split(),
             make_merge(),
             make_autocomplete_insert(),

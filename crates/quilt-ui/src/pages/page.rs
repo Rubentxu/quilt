@@ -2,6 +2,7 @@ use crate::bridge;
 use crate::bridge::BlockDto;
 use crate::components::block::Block;
 use crate::components::loading::Loading;
+use crate::outliner::drag::DragState;
 use crate::outliner::history::OutlinerCommand;
 use crate::outliner::page::PageOutliner;
 use crate::outliner::selection::SelectionState;
@@ -37,6 +38,10 @@ pub fn PageView() -> impl IntoView {
     // Create SelectionState for keyboard-first navigation and provide as context.
     let selection_state = SelectionState::new();
     provide_context(selection_state);
+
+    // Create DragState for drag-and-drop block reordering and provide as context.
+    let drag_state = DragState::new();
+    provide_context(drag_state);
 
     // ── Journal navigation state ──
     let navigate = use_navigate();
@@ -354,6 +359,7 @@ pub fn PageView() -> impl IntoView {
                     class="outliner"
                     tabindex="0"
                     on:keydown=on_page_keydown
+                    on:dragover=move |ev| { ev.prevent_default(); }
                 >
                     <For each=move || filtered_blocks.get() key=|b| b.id.clone() let:block>
                         <Block block=Signal::derive(move || block.clone()) blocks=blocks set_blocks=set_blocks children=vec![] />

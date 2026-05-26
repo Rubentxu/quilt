@@ -218,6 +218,90 @@ pub fn merge_content(
     Ok(blocks[target_idx].clone())
 }
 
+/// Check if `descendant_id` is a direct or indirect descendant of `ancestor_id`.
+pub fn is_descendant_of(blocks: &[BlockDto], ancestor_id: &str, descendant_id: &str) -> bool {
+    if ancestor_id == descendant_id {
+        return true;
+    }
+    let mut current = descendant_id;
+    loop {
+        let block = match blocks.iter().find(|b| b.id == current) {
+            Some(b) => b,
+            None => return false,
+        };
+        match &block.parent_id {
+            Some(parent) if parent == ancestor_id => return true,
+            Some(parent) => current = parent,
+            None => return false,
+        }
+    }
+}
+
+/// The position where a block is dropped relative to a target block.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DropPosition {
+    Before,
+    After,
+    Child,
+}
+
+/// Calculate the new parent and order for a dragged block based on drop position.
+///
+/// - `Before` → same parent as target, order before target
+/// - `After` → same parent as target, order after target
+/// - `Child` → target becomes new parent, append as last child
+pub fn calculate_drop_position(
+    blocks: &[BlockDto],
+    target_id: &str,
+    source_id: &str,
+    position: DropPosition,
+) -> (Option<String>, f64) {
+    let target = blocks
+        .iter()
+        .find(|b| b.id == target_id)
+        .expect("target block must exist");
+
+    match position {
+        DropPosition::Before => {
+            let parent_id = target.parent_id.clone();
+            // Find order between previous sibling and target
+            let prev_order = blocks
+                .iter()
+                .filter(|b| b.parent_id == parent_id && b.id != source_id && b.id != target_id)
+                .filter(|b| b.order < target.order)
+                .map(|b| b.order)
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(target.order - 1.0);
+            let new_order = (prev_order + target.order) / 2.0;
+            (parent_id, new_order)
+        }
+        DropPosition::After => {
+            let parent_id = target.parent_id.clone();
+            // Find order between target and next sibling
+            let next_order = blocks
+                .iter()
+                .filter(|b| b.parent_id == parent_id && b.id != source_id && b.id != target_id)
+                .filter(|b| b.order > target.order)
+                .map(|b| b.order)
+                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(target.order + 1.0);
+            let new_order = (target.order + next_order) / 2.0;
+            (parent_id, new_order)
+        }
+        DropPosition::Child => {
+            let new_parent = Some(target_id.to_string());
+            // Append as last child
+            let max_order = blocks
+                .iter()
+                .filter(|b| b.parent_id.as_deref() == Some(target_id) && b.id != source_id)
+                .map(|b| b.order)
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0);
+            (new_parent, max_order + 1.0)
+        }
+    }
+}
+
 pub fn merge_with_next(blocks: &mut Vec<BlockDto>, block_id: &str) -> Result<BlockDto, TreeError> {
     let idx = blocks
         .iter()
@@ -313,6 +397,13 @@ pub fn apply_structural_mutation(blocks: &mut Vec<BlockDto>, cmd: &OutlinerComma
             new_order,
         }
         | OutlinerCommand::Outdent {
+            block_id,
+            old_parent: _,
+            old_order: _,
+            new_parent,
+            new_order,
+        }
+        | OutlinerCommand::MoveBlock {
             block_id,
             old_parent: _,
             old_order: _,

@@ -4,14 +4,20 @@ use crate::components::cm6_block_editor::Cm6BlockEditor;
 use crate::editor::decorations::{
     replace_property_value, DecorationManager, RenderItem,
 };
+use crate::outliner::drag::DragState;
 use crate::outliner::history::OutlinerCommand;
 use crate::outliner::page::PageOutliner;
 use crate::outliner::selection::SelectionState;
-use crate::outliner::tree::{indent, merge_with_next, outdent, split_block};
+use crate::outliner::tree::{
+    calculate_drop_position, indent, is_descendant_of, merge_with_next, outdent, split_block,
+    DropPosition,
+};
 use crate::parser::InlineParser;
 use leptos::prelude::*;
+
 use log::warn;
 use std::sync::Arc;
+use web_sys::DragEvent;
 
 #[component]
 pub fn Block(
@@ -36,6 +42,9 @@ pub fn Block(
 
     // Retrieve SelectionState for keyboard-first navigation (optional).
     let selection_state: Option<SelectionState> = use_context();
+
+    // Retrieve DragState for drag-and-drop support (optional).
+    let drag_state: Option<DragState> = use_context();
 
     // Determine if THIS block is currently selected.
     let is_selected = Signal::derive({
@@ -239,19 +248,222 @@ pub fn Block(
         on_merge_next: Arc::new(on_merge_next),
     };
 
+    // ── Drag-and-drop state ──
+    let block_id_for_drag = block.get().id.clone();
+    let is_dragging = Signal::derive({
+        let bid = block_id_for_drag.clone();
+        move || {
+            drag_state
+                .as_ref()
+                .and_then(|d| d.drag_source_id.get())
+                .is_some_and(|id| id == bid)
+        }
+    });
+
+    // Drop indicator classes derived from DragState.
+    let is_drop_target = Signal::derive({
+        let bid = block_id_for_drag.clone();
+        move || {
+            drag_state
+                .as_ref()
+                .and_then(|d| d.drop_target_id.get())
+                .is_some_and(|id| id == bid)
+        }
+    });
+    let is_drop_before = Signal::derive(move || {
+        is_drop_target.get()
+            && drag_state
+                .as_ref()
+                .and_then(|d| d.drop_position.get())
+                == Some(DropPosition::Before)
+    });
+    let is_drop_after = Signal::derive(move || {
+        is_drop_target.get()
+            && drag_state
+                .as_ref()
+                .and_then(|d| d.drop_position.get())
+                == Some(DropPosition::After)
+    });
+    let is_drop_child = Signal::derive(move || {
+        is_drop_target.get()
+            && drag_state
+                .as_ref()
+                .and_then(|d| d.drop_position.get())
+                == Some(DropPosition::Child)
+    });
+
+    // Node ref to measure block row dimensions for drop position calculation.
+    let row_ref: NodeRef<leptos::html::Div> = NodeRef::new();
+
+    // Track whether a drag just happened to suppress the bullet click handler.
+    // The browser fires click AFTER dragend, so we use a flag.
+    let was_dragging = RwSignal::new(false);
+
+    // ── Drag source: the bullet/button starts the drag ──
+    let on_drag_start = {
+        let wd = was_dragging;
+        let bid = block_id_for_drag.clone();
+        move |ev: DragEvent| {
+            wd.set(true);
+            if let Some(dt) = ev.data_transfer() {
+                let _ = dt.set_data("text/plain", &bid);
+                dt.set_effect_allowed("move");
+            }
+            if let Some(ref d) = drag_state {
+                d.start_drag(&bid);
+            }
+        }
+    };
+
+    // ── Drag end: clean up state ──
+    let on_drag_end = move |_: DragEvent| {
+        if let Some(ref d) = drag_state {
+            d.clear_drag();
+        }
+    };
+
+    // ── Dragover: determine drop position and show indicator ──
+    let on_drag_over = {
+        let bid = block_id_for_drag.clone();
+        move |ev: DragEvent| {
+            ev.prevent_default();
+            // Don't allow dropping on ourselves
+            if is_dragging.get_untracked() {
+                if let Some(ref d) = drag_state {
+                    d.clear_drop_target();
+                }
+                return;
+            }
+            if let Some(element) = row_ref.get() {
+                let rect = element.get_bounding_client_rect();
+                let y = ev.client_y() as f64 - rect.top();
+                let height = rect.height();
+                if height <= 0.0 {
+                    return;
+                }
+                let ratio = y / height;
+                let position = if ratio < 0.33 {
+                    DropPosition::Before
+                } else if ratio < 0.66 {
+                    DropPosition::Child
+                } else {
+                    DropPosition::After
+                };
+                if let Some(ref d) = drag_state {
+                    d.set_drop_target(&bid, position);
+                }
+            }
+        }
+    };
+
+    // ── Dragleave: clear drop indicator ──
+    let on_drag_leave = move |_: DragEvent| {
+        if let Some(ref d) = drag_state {
+            d.clear_drop_target();
+        }
+    };
+
+    // ── Drop: execute the move operation ──
+    let on_drop = {
+        let page_outliner = page_outliner.clone();
+        let target_id = block_id_for_drag.clone();
+        move |ev: DragEvent| {
+            ev.prevent_default();
+            ev.stop_propagation();
+
+            let d = match drag_state {
+                Some(ref d) => d,
+                None => return,
+            };
+
+            let source_id = match d.drag_source_id.get_untracked() {
+                Some(ref id) => id.clone(),
+                None => return,
+            };
+            let position = match d.drop_position.get_untracked() {
+                Some(p) => p,
+                None => return,
+            };
+
+            // Snapshot current block list
+            let blocks_list = blocks.get_untracked();
+
+            // Prevent self-drop and circular references
+            if source_id == target_id
+                || is_descendant_of(&blocks_list, &source_id, &target_id)
+            {
+                d.clear_drag();
+                return;
+            }
+
+            // Find source block state before mutation
+            let source = match blocks_list.iter().find(|b| b.id == source_id) {
+                Some(b) => b.clone(),
+                None => {
+                    d.clear_drag();
+                    return;
+                }
+            };
+            let old_parent = source.parent_id.clone();
+            let old_order = source.order;
+
+            // Calculate new position
+            let (new_parent, new_order) =
+                calculate_drop_position(&blocks_list, &target_id, &source_id, position);
+
+            // Apply the move
+            set_blocks.update(|blocks| {
+                if let Some(b) = blocks.iter_mut().find(|b| b.id == source_id) {
+                    b.parent_id = new_parent.clone();
+                    b.order = new_order;
+                }
+            });
+
+            // Record in undo history
+            if let Some(ref o) = page_outliner {
+                let cmd = OutlinerCommand::MoveBlock {
+                    block_id: source_id.clone(),
+                    old_parent,
+                    old_order,
+                    new_parent,
+                    new_order,
+                };
+                o.record_structural(cmd);
+            }
+
+            d.clear_drag();
+        }
+    };
+
     view! {
         <div class="block-group">
-            <div class="flex items-start gap-1 py-0.5 group hover:bg-surface-hover rounded-sm transition-colors"
+            <div node_ref=row_ref
+                 class="flex items-start gap-1 py-0.5 group hover:bg-surface-hover rounded-sm transition-colors"
                  class:block-selected=is_selected
+                 class:block-dragging=is_dragging
+                 class:drop-before=is_drop_before
+                 class:drop-after=is_drop_after
+                 class:drop-child=is_drop_child
                  data-block-id={move || block.get().id.clone()}
                  style=move || format!(
                      "padding-left: {}px",
                      (block.get().level.saturating_sub(1)) * 24
                  )
+                 on:dragover=on_drag_over
+                 on:dragleave=on_drag_leave
+                 on:drop=on_drop
             >
                 <button
+                    draggable="true"
                     class="w-5 h-5 flex items-center justify-center text-text-muted hover:text-text shrink-0 mt-0.5 block-bullet"
+                    on:dragstart=on_drag_start
+                    on:dragend=on_drag_end
                     on:click=move |_| {
+                        // Suppress click if a drag just completed
+                        if was_dragging.get_untracked() {
+                            was_dragging.set(false);
+                            return;
+                        }
                         if let Some(ref s) = selection_state {
                             s.select(&block.get().id);
                         }

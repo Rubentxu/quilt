@@ -308,3 +308,38 @@ body {
     background: rgba(42, 161, 152, 0.2);
     color: var(--color-accent);
 }
+
+/* ── Drag and drop visual indicators ── */
+
+/* The currently dragged block should appear faded */
+.block-dragging {
+    opacity: 0.4;
+}
+
+/* Drop indicator: before (sibling above) */
+.drop-before {
+    border-top: 2px solid var(--color-accent) !important;
+    border-radius: 0 !important;
+}
+
+/* Drop indicator: after (sibling below) */
+.drop-after {
+    border-bottom: 2px solid var(--color-accent) !important;
+    border-radius: 0 !important;
+}
+
+/* Drop indicator: child (nest under this block) */
+.drop-child {
+    border-left: 2px solid var(--color-accent) !important;
+    border-radius: 0 !important;
+    background: rgba(42, 161, 152, 0.08) !important;
+}
+
+/* Drag handle cursor */
+.block-bullet[draggable="true"] {
+    cursor: grab;
+}
+
+.block-bullet[draggable="true"]:active {
+    cursor: grabbing;
+}
