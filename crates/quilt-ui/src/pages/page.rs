@@ -6,10 +6,16 @@ use crate::outliner::history::OutlinerCommand;
 use crate::outliner::page::PageOutliner;
 use crate::outliner::selection::SelectionState;
 use crate::outliner::tree::apply_structural_mutation;
+use chrono::{Duration, Utc};
 use leptos::prelude::*;
-use leptos_router::hooks::use_params_map;
+use leptos_router::hooks::{use_navigate, use_params_map};
 use std::collections::HashSet;
+use std::sync::OnceLock;
 use web_sys::KeyboardEvent;
+
+/// Static navigator for journal navigation from keyboard handlers.
+/// Wraps `use_navigate()` to avoid capturing non-Copy types in closures.
+static NAVIGATE: OnceLock<Box<dyn Fn(&str) + Send + Sync>> = OnceLock::new();
 
 #[component]
 pub fn PageView() -> impl IntoView {
@@ -31,6 +37,14 @@ pub fn PageView() -> impl IntoView {
     // Create SelectionState for keyboard-first navigation and provide as context.
     let selection_state = SelectionState::new();
     provide_context(selection_state);
+
+    // ── Journal navigation state ──
+    let navigate = use_navigate();
+    let _ = NAVIGATE.set(Box::new(move |path: &str| {
+        navigate(path, Default::default());
+    }));
+    let g_pending = RwSignal::new(false);
+    let g_timestamp = RwSignal::new(0.0_f64);
 
     // ── Zoom state for Mod+. / Mod+, (zoom in/out) ──
     // When zoomed into a block, only that block and its descendants are shown.
@@ -227,6 +241,39 @@ pub fn PageView() -> impl IntoView {
                         return;
                     }
                     _ => {}
+                }
+            }
+
+            // ── G-prefix journal navigation shortcuts ──
+            // Only when NOT editing. g j → today, g t → tomorrow, g n → next, g p → prev
+            if !is_editing && !meta {
+                if g_pending.get_untracked() {
+                    let now = js_sys::Date::now();
+                    let elapsed = now - g_timestamp.get_untracked();
+                    g_pending.set(false);
+                    if elapsed < 1000.0 && !ev.alt_key() && !ev.shift_key() {
+                        let today = Utc::now().date_naive();
+                        let target = match ev.key().as_str() {
+                            "j" => Some(today),
+                            "t" => Some(today + Duration::days(1)),
+                            "n" => Some(today + Duration::days(1)),
+                            "p" => Some(today - Duration::days(1)),
+                            _ => None,
+                        };
+                        if let Some(d) = target {
+                            ev.prevent_default();
+                            if let Some(nav) = NAVIGATE.get() {
+                                nav(&format!("/journal/{}", d.format("%Y-%m-%d")));
+                            }
+                            return;
+                        }
+                    }
+                }
+                if !ev.alt_key() && !ev.shift_key() && ev.key() == "g" {
+                    g_pending.set(true);
+                    g_timestamp.set(js_sys::Date::now());
+                    ev.prevent_default();
+                    return;
                 }
             }
 

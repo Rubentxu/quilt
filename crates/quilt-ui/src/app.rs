@@ -8,7 +8,8 @@ use crate::pages::{
 };
 use leptos::prelude::*;
 use leptos_meta::*;
-use leptos_router::{components::*, path};
+use leptos_router::components::*;
+use leptos_router::path;
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -28,22 +29,24 @@ pub fn App() -> impl IntoView {
         <Stylesheet href="/style.css" />
         <Title text="Quilt" />
 
-        <div class="flex h-screen bg-base text-text overflow-hidden">
-            <LeftSidebar open=left_sidebar_open />
+        <Router>
+            <div class="flex h-screen bg-base text-text overflow-hidden">
+                <LeftSidebar open=left_sidebar_open />
 
-            <main class="flex-1 overflow-y-auto px-8 py-4 max-w-4xl mx-auto w-full">
-                <Routes fallback=|| view! { <NotFound /> }>
-                    <Route path=path!("/") view=JournalView />
-                    <Route path=path!("/journal") view=JournalView />
-                    <Route path=path!("/journal/:date") view=JournalView />
-                    <Route path=path!("/page/:name") view=PageView />
-                    <Route path=path!("/pages") view=PagesView />
-                    <Route path=path!("/search") view=SearchView />
-                </Routes>
-            </main>
+                <main class="flex-1 overflow-y-auto px-8 py-4 max-w-4xl mx-auto w-full">
+                    <Routes fallback=|| view! { <NotFound /> }>
+                        <Route path=path!("/") view=JournalView />
+                        <Route path=path!("/journal") view=JournalView />
+                        <Route path=path!("/journal/:date") view=JournalView />
+                        <Route path=path!("/page/:name") view=PageView />
+                        <Route path=path!("/pages") view=PagesView />
+                        <Route path=path!("/search") view=SearchView />
+                    </Routes>
+                </main>
 
-            <RightSidebar open=right_sidebar_open />
-        </div>
+                <RightSidebar open=right_sidebar_open />
+            </div>
+        </Router>
     }
 }
 
