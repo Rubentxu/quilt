@@ -1,8 +1,29 @@
 # Roadmap Técnico — Outliner Profesional
 
+> **Last updated**: 2026-05-26 — post grill-with-docs (ADR-0007, 0008, 0009)
+
 Objetivo: llevar Quilt desde el outliner actual a un **Outliner profesional** capaz de competir y superar a Logseq, preservando el modelo de dominio (**Grafo → Página → Bloque → Propiedad**) y manteniendo Quilt estrictamente **MCP-first**.
 
-## Fase 0 — Preparación y blindaje
+---
+
+## Estado global
+
+| Fase | Nombre | Estado | % |
+|------|--------|--------|---|
+| 0 | Preparación y blindaje | ✅ COMPLETO | 100% |
+| 1 | Motor serio + parser unificado | 🟡 Parser ✅, Motor ❌ | 60% |
+| 2 | Refs, tags y properties con autocomplete | 🟡 Infra ✅, datos reales ❌ | 55% |
+| 3 | Undo/Redo unificado por intención | ✅ COMPLETO | 95% |
+| 4 | Navegación completa por teclado | ❌ PENDIENTE | 10% |
+| 5 | Sidebar derecho funcional | ❌ PENDIENTE | 5% |
+| 6 | Slash commands | ❌ PENDIENTE | 5% |
+| 7 | Propiedades inline fuertes | ❌ PENDIENTE | 10% |
+| 8 | Drag & drop | ❌ PENDIENTE | 0% |
+| 9 | Journals funcionales | ❌ PENDIENTE | 5% |
+
+---
+
+## Fase 0 — Preparación y blindaje ✅ 100%
 
 ### Objetivos
 - Consolidar decisiones ya tomadas en docs y ADRs.
@@ -13,37 +34,55 @@ Objetivo: llevar Quilt desde el outliner actual a un **Outliner profesional** ca
 - `docs/adr/0006-outliner-engine-over-domain-model.md`
 - `docs/outliner-professional-baseline.md`
 
-### Riesgos
-- Empezar a implementar sin fijar fronteras entre dominio y motor.
+### Completado
+- ADR-0006 (motor por bloque sobre dominio) — ✅
+- ADR-0001 a 0005 consolidados — ✅
+- Baseline profesional definido — ✅
+- Roadmap, backlog, architecture docs — ✅
+- ADR-0007 (CodeMirror 6 como motor de edición) — ✅
+- ADR-0008 (refs bidireccionales con RefIndex) — ✅
+- ADR-0009 (formato inline Logseq-compatible) — ✅
+- Research report: bidirectional references (SQLite + FTS5) — ✅
 
-### Criterio de salida
-- Frontera dominio/motor clara.
-- Estrategia de migración definida.
+---
 
-### No hacer todavía
-- No añadir features aisladas sobre `contenteditable` si van a quedar obsoletas.
-
-## Fase 1 — Motor serio por Bloque + parser unificado
+## Fase 1 — Motor serio por Bloque + parser unificado 🟡 60%
 
 ### Objetivos
-- Sustituir `contenteditable` por un motor serio por **Bloque**.
-- Introducir parser incremental unificado para `property:: value`, `[[Página]]`, `((Bloque))`, `#tag`.
+- Sustituir `contenteditable` por CodeMirror 6 (ADR-0007).
+- Introducir parser incremental unificado para `property:: value`, `[[Página]]`, `((Bloque))`, `#tag`, `^^highlight^^` (ADR-0009).
 
 ### Dependencias
-- Fase 0
+- Fase 0 ✅
+- ADR-0007 ✅ (CodeMirror 6)
+- ADR-0009 ✅ (formato inline)
 
-### Riesgos
-- Acoplar demasiado el motor nuevo al estado textual interno.
-- Repetir la lógica semántica entre editor y outliner.
+### Completado
+- Parser incremental unificado: `parser/inline.rs`, `semantic_adapter.rs` — ✅
+- Decoraciones visuales: `editor/decorations.rs` (DecorationManager) — ✅
+- `BlockSegment` con `PageRef`, `BlockRef`, `Tag`, `Text` con `Mark` — ✅
+- Autocomplete triggers (`[[`, `((`, `#`, `/`) detectados desde el parser — ✅
+
+### Pendiente
+- ❌ Escribir bindings wasm-bindgen para CodeMirror 6 (~200-300 líneas: `EditorView`, `EditorState`, `Transaction`, `Decoration`, `keymap`)
+- ❌ Componente Leptos `CodeMirrorBlock` (`NodeRef` + `Effect` para montar CM6)
+- ❌ Sustituir `contenteditable` en `components/block_editor.rs` por CM6
+- ❌ Conectar parser → CM6 decorations (ViewPlugin que reacciona a `docChanged`)
+- ❌ Bridge undo/redo: desactivar `history()` en CM6, delegar a `HistoryStack`
+- ❌ IME composition handling (`is_composing` flag)
 
 ### Criterio de salida
-- Cada bloque se edita mediante adaptador nuevo.
+- Cada bloque se edita mediante CodeMirror 6.
 - Parser devuelve semántica estructurada sin perder sintaxis visible.
+- Decorations (refs, tags, properties, highlight) renderizadas por CM6.
 
-### No hacer todavía
-- No implementar aún slash commands complejos ni drag & drop.
+### Riesgos
+- Los bindings wasm-bindgen no son maduros — mitigado: son ~5-6 tipos, mecánicos.
+- Bundle size de CM6 — mitigado: ~60KB gzipped para config mínima, aceptable.
 
-## Fase 2 — Refs, tags y properties con autocomplete
+---
+
+## Fase 2 — Refs, tags y properties con autocomplete 🟡 55%
 
 ### Objetivos
 - `[[Página]]` con autocomplete.
@@ -52,18 +91,33 @@ Objetivo: llevar Quilt desde el outliner actual a un **Outliner profesional** ca
 - Propiedades v1 con autocomplete tipado.
 
 ### Dependencias
-- Fase 1
+- Fase 1 (parser) ✅
+- ADR-0008 ✅ (modelo de refs)
 
-### Riesgos
-- Resolver autocomplete como hack del editor en vez de intención del Outliner.
+### Completado
+- `InlineParser` extrae `[[Página]]`, `((Bloque))`, `#tag`, `property:: value` — ✅
+- `AutocompleteService` con `detect_trigger()` — ✅
+- Providers concretos: `PageRef`, `Tag`, `PropertyValue` — ✅
+- Dropdown UI con navegación de teclado — ✅
+- `BlockSegment::PageRef { target, label }` y `BlockSegment::BlockRef { target }` — ✅
+- Normalización `#tag` ↔ `tags::` al mismo modelo — ✅
+
+### Pendiente
+- ❌ Conectar autocomplete a datos reales del backend (páginas, bloques, propiedades)
+- ❌ FTS5 para búsqueda fuzzy de páginas y bloques
+- ❌ `((Bloque))` preview inline (transclusion stub)
+- ❌ Bloqueo de autocomplete durante IME composition
+- ❌ Debounce de queries async en WASM
 
 ### Criterio de salida
-- Parser + autocomplete + normalización funcionando de punta a punta.
+- `[[` abre autocomplete con páginas reales, Enter inserta `[[page-name]]`.
+- `((` abre autocomplete con bloques reales, Enter inserta `((block-uuid))`.
+- `#` normaliza a `tags::`.
+- `status::` sugiere `TODO`, `DOING`, `DONE`.
 
-### No hacer todavía
-- No meter properties secundarias ni workflows arbitrarios.
+---
 
-## Fase 3 — Undo/Redo unificado por intención
+## Fase 3 — Undo/Redo unificado por intención ✅ 95%
 
 ### Objetivos
 - Introducir historia unificada de operaciones del Outliner.
@@ -72,107 +126,156 @@ Objetivo: llevar Quilt desde el outliner actual a un **Outliner profesional** ca
 ### Dependencias
 - Fases 1 y 2
 
-### Riesgos
-- Separar historia textual y estructural.
+### Completado
+- `HistoryStack` con `OutlinerCommand` enum — ✅
+- `invert_command()` para cada operación — ✅
+- `PageOutliner::transact()` integra historia — ✅
+- `Mod+Z` y `Mod+Shift+Z` revierten intenciones — ✅
+- Operaciones estructurales con undo: `split`, `indent`, `outdent` — ✅
+- `apply_structural_mutation()` pura en `tree.rs` — ✅
+- `PageView::new_with_structural()` — ✅
+- Content changes por historial — ✅
+
+### Pendiente
+- ❌ Bridge con CodeMirror 6: desactivar `history()` de CM6, delegar al Outliner
+- ❌ Undo/redo de properties (refs, tags, status) — comandos definidos pero no wired
 
 ### Criterio de salida
-- `Mod+Z` y `Mod+Shift+Z` revierten intenciones del usuario de forma coherente.
+- `Mod+Z` y `Mod+Shift+Z` revierten intenciones del usuario de forma coherente (texto, split, indent, props).
 
-### No hacer todavía
-- No optimizar microagrupaciones avanzadas antes de tener el modelo correcto.
+---
 
-## Fase 4 — Navegación completa por teclado
+## Fase 4 — Navegación completa por teclado ❌ 10%
 
 ### Objetivos
-- Navegación entre bloques estilo Logseq.
+- Navegación entre bloques estilo Logseq (selected mode: arrow keys).
 - Atajos de edición y estructurales canónicos.
 - `Mod+Enter` para `TODO → DOING → DONE → TODO`.
+- Ver `docs/quilt-keyboard-shortcuts.md` para la tabla canónica.
 
 ### Dependencias
-- Fases 1 y 3
+- Fase 1 (motor CM6) ❌ bloquea
+- Fase 3 (undo/redo) ✅
 
-### Riesgos
-- Mezclar comportamientos del motor con operaciones del Outliner.
+### Completado
+- Tabla canónica de keyboard shortcuts documentada — ✅
+- `keyboard_handlers.rs` y `keyboard_shortcuts.rs` stubs — ✅
 
-### Criterio de salida
-- El outliner se puede usar de forma keyboard-first.
+### Pendiente
+- ❌ Selected mode: navegación con arrow keys entre bloques (no-editing)
+- ❌ `Mod+Enter` ciclo status — no conectado al marker real del dominio
+- ❌ Multi-block selection (`Alt+Up`/`Alt+Down`)
+- ❌ `Mod+A` select parent, `Mod+Shift+A` select all
+- ❌ `Mod+.` zoom in, `Mod+,` zoom out
+- ❌ `Mod+Up`/`Mod+Down` collapse/expand children
+- ❌ `Mod+Shift+Up`/`Mod+Shift+Down` move block up/down
+- ❌ Text formatting shortcuts (`Mod+B`, `Mod+I`, `Mod+Shift+H`, `Mod+Shift+S`)
+- ❌ Clean block (`Ctrl+L`), kill line (`Ctrl+U`, `Ctrl+K`)
 
-### No hacer todavía
-- No introducir todavía combinaciones marginales o avanzadas no esenciales.
+---
 
-## Fase 5 — Sidebar derecho funcional
+## Fase 5 — Sidebar derecho funcional ❌ 5%
 
 ### Objetivos
-- Backlinks reales.
-- Unlinked references.
+- Backlinks reales via `RefIndex` (ADR-0008).
+- Unlinked references via FTS5 (v2).
 - Base para paneles múltiples.
 
 ### Dependencias
-- Fase 2
+- Fase 2 (refs + autocomplete) 🟡
+- ADR-0008 ✅
 
-### Riesgos
-- Dejar las refs solo como decoración textual.
+### Completado
+- `backlinks_panel.rs` UI stub — ✅
+- `RefIndex` spec definida en ADR-0008 — ✅
 
-### Criterio de salida
-- El sidebar derecho aporta contexto estructural real.
+### Pendiente
+- ❌ Implementar `RefIndex` (dual HashMap) en `quilt-domain`
+- ❌ Implementar `RefRepository` trait + `SqliteRefRepository`
+- ❌ `RefService` que escribe refs al guardar bloque
+- ❌ Backlinks query via `RefIndex::get_backlinks()` → UI
+- ❌ Unlinked references via FTS5 (v2)
+- ❌ `Shift+Click` en ref → abre en sidebar derecho
+- ❌ `Mod+Shift+O` → open link in sidebar
+- ❌ Stacked panels en sidebar
+- ❌ `c t` close top, `Mod+C Mod+C` clear all
 
-### No hacer todavía
-- No convertirlo aún en un panel “AI” ni meter lógica ajena al dominio.
+---
 
-## Fase 6 — Slash commands
+## Fase 6 — Slash commands ❌ 5%
 
 ### Objetivos
 - Sistema `/` alineado con la semántica ya implementada.
-- Comandos sobre status, priority, fechas, refs y templates.
+- Comandos: status, priority, fechas, refs, templates, headings, ordered list.
 
 ### Dependencias
-- Fases 1 y 2
+- Fase 1 (motor CM6) ❌ bloquea
+- Fase 2 (autocomplete) 🟡
 
-### Riesgos
-- Construir un menú rico encima de semántica inestable.
+### Completado
+- `slash_command.rs` UI stub — ✅
+- Slash command trigger (`/`) detectado en parser — ✅
 
-### Criterio de salida
-- Slash commands útiles y coherentes con propiedades/refs del dominio.
+### Pendiente
+- ❌ Definir catálogo canónico de slash commands (44 en Logseq, priorizar MUST)
+- ❌ Implementar sistema de comandos registrable (`SlashCommandRegistry`)
+- ❌ Comandos core: TODO, DOING, DONE, Priority A/B/C, Deadline, Scheduled
+- ❌ Comandos de heading: H1-H6, Normal Text
+- ❌ Comandos de formato: Code Block, Quote Block, Link, Image
+- ❌ `/` dropdown con fuzzy search y navegación teclado
+- ❌ Enter ejecuta comando, Escape cancela
 
-### No hacer todavía
-- No meter comandos cosméticos por delante de comandos estructurales.
+---
 
-## Fase 7 — Propiedades inline fuertes
+## Fase 7 — Propiedades inline fuertes ❌ 10%
 
 ### Objetivos
 - Mejor visualización y edición inline de propiedades v1.
 - Validación tipada y feedback inmediato.
 
 ### Dependencias
-- Fases 2 y 6
+- Fases 2 (autocomplete) y 6 (slash)
 
-### Riesgos
-- Convertir propiedades en badges visuales sin semántica fuerte.
+### Completado
+- Propiedades v1 definidas: `status`, `priority`, `scheduled`, `deadline`, `tags`, `template`, `created_by` — ✅
+- `Property` + `PropertyDefinition` en dominio — ✅
+- `property::` parser inline — ✅
 
-### Criterio de salida
-- `status`, `priority`, `scheduled`, `deadline`, `tags`, `template`, `created_by` se editan inline con robustez.
+### Pendiente
+- ❌ Renderizado visual inline de properties (distintivo, no texto plano)
+- ❌ Edición directa: click en `status:: TODO` → dropdown de cycle
+- ❌ Validación tipada: `priority:: X` debería rechazar (solo A/B/C)
+- ❌ Date picker inline para `scheduled::` y `deadline::`
+- ❌ `Mod+Enter` ciclo status con marker visual real
+- ❌ Properties en input handler (no solo texto)
 
-### No hacer todavía
-- No abrir todavía un panel lateral de properties; se acordó inline-only.
+---
 
-## Fase 8 — Drag & drop
+## Fase 8 — Drag & drop ❌ 0%
 
 ### Objetivos
 - Reordenamiento de bloques y cambios de jerarquía con feedback visual.
+- Drop target precision: between blocks (sibling) y on bullet (child).
 
 ### Dependencias
-- Fases 1, 3 y 4
+- Fases 1 (motor CM6), 3 (undo/redo), 4 (keyboard nav)
 
-### Riesgos
-- Romper la historia de undo/redo o la integridad del árbol.
+### Completado
+- (nada)
 
-### Criterio de salida
-- Drag entre siblings y sobre bullets para hacer children.
+### Pendiente
+- ❌ Elegir library (interact.js como Logseq, o nativo HTML5 DnD)
+- ❌ `DragState` en OutlinerState
+- ❌ Drop indicator visual (línea/gap)
+- ❌ Drag un bloque y todos sus hijos
+- ❌ Drop on bullet → make child (last child)
+- ❌ Drop between blocks → insert as sibling
+- ❌ Undo/redo de operaciones de drag
+- ❌ Drag & drop de favoritos en sidebar izquierdo
 
-### No hacer todavía
-- No mezclar aún drag de bloques con features avanzadas de multi-panel.
+---
 
-## Fase 9 — Journals funcionales
+## Fase 9 — Journals funcionales ❌ 5%
 
 ### Objetivos
 - Navegación de journals fluida.
@@ -180,21 +283,36 @@ Objetivo: llevar Quilt desde el outliner actual a un **Outliner profesional** ca
 - Calendario como capa secundaria.
 
 ### Dependencias
-- Fases 1 y 4
+- Fases 1 (motor CM6) y 4 (keyboard nav)
 
-### Riesgos
-- Tratar `journal` como propiedad general de bloque en vez de semántica de página.
+### Completado
+- `journal_inbox.rs` UI stub — ✅
+- `JournalDay` value object — ✅
+- `journal` como semántica de Página (no propiedad de bloque) — ✅
 
-### Criterio de salida
-- Journals navegables y consistentes con el resto del Outliner.
+### Pendiente
+- ❌ `g j` → go to today's journal
+- ❌ `g t` → tomorrow, `g n` → next, `g p` → previous journal
+- ❌ Creación automática de journal page al navegar
+- ❌ Calendar widget en sidebar izquierdo
+- ❌ Journal page title localizado (e.g., "May 26, 2026")
+- ❌ Template de journal diario configurable
 
-### No hacer todavía
-- No mezclar journals con workflows cognitivos o paneles no esenciales.
+---
 
 ## Regla de priorización
 
 **Primero semántica, luego confianza, luego velocidad**.
 
-- Semántica: motor, parser, refs, tags, properties.
-- Confianza: undo/redo.
-- Velocidad: teclado, slash, drag & drop.
+- Semántica: motor CM6, parser, refs, tags, properties (Fases 1, 2).
+- Confianza: undo/redo, RefIndex, testing (Fases 3, 8-infra).
+- Velocidad: teclado, slash, drag & drop, journals (Fases 4-9).
+
+## Próximo hito
+
+**Hito 1 — CodeMirror 6 migration** (Fase 1 pendiente):
+1. Escribir bindings wasm-bindgen (5-6 tipos)
+2. Crear componente `CodeMirrorBlock` en Leptos
+3. Sustituir `contenteditable` en `block_editor.rs`
+4. Conectar parser → decorations
+5. Bridge undo/redo HistoryStack
