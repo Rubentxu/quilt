@@ -235,3 +235,24 @@ pub async fn get_page_backlinks(page_name: &str) -> Result<Vec<BacklinkDto>, Bri
         .map_err(|e| BridgeError::Parse(e.to_string()))?;
     Ok(backlinks)
 }
+
+/// Get all unlinked references for a page
+///
+/// Returns blocks whose content text mentions the page name but do NOT
+/// have an explicit `[[page]]` link.
+pub async fn get_page_unlinked_references(page_name: &str) -> Result<Vec<BacklinkDto>, BridgeError> {
+    let url = format!("{}/pages/{}/unlinked-references", BASE_URL, page_name);
+    let resp = Request::get(&url)
+        .send()
+        .await
+        .map_err(|e| BridgeError::Network(e.to_string()))?;
+    if !resp.ok() {
+        let msg = resp.text().await.unwrap_or_default();
+        return Err(BridgeError::Server(resp.status(), msg));
+    }
+    let refs: Vec<BacklinkDto> = resp
+        .json()
+        .await
+        .map_err(|e| BridgeError::Parse(e.to_string()))?;
+    Ok(refs)
+}

@@ -234,6 +234,21 @@ impl RefService {
         Ok(())
     }
 
+    /// Get unlinked references for a page.
+    ///
+    /// Finds blocks whose content text mentions `page_name` but do not have
+    /// an explicit `[[page_name]]` reference. Delegates to the repository
+    /// which uses FTS5 or LIKE for text search.
+    pub async fn get_page_unlinked_references(
+        &self,
+        page_name: &str,
+        page_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
+        self.repo
+            .get_unlinked_references(page_name, page_id)
+            .await
+    }
+
     /// Get a reference to the in-memory index for inspection.
     pub fn index(&self) -> &RefIndex {
         &self.index
@@ -305,6 +320,15 @@ mod tests {
         async fn rebuild_index(&self) -> Result<Vec<RefRow>, DomainError> {
             let refs = self.refs.lock().unwrap();
             Ok(refs.clone())
+        }
+
+        async fn get_unlinked_references(
+            &self,
+            _page_name: &str,
+            _page_id: Uuid,
+        ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
+            // Mock returns empty — unlinked refs require full-text search
+            Ok(Vec::new())
         }
     }
 

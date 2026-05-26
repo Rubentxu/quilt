@@ -9,6 +9,7 @@
 use crate::bridge::BacklinkDto;
 use crate::components::backlinks_panel::BacklinksPanel;
 use leptos::prelude::*;
+use leptos_router::components::A;
 
 #[component]
 pub fn RightSidebar(#[prop(into)] open: Signal<bool>) -> impl IntoView {
@@ -24,6 +25,14 @@ pub fn RightSidebar(#[prop(into)] open: Signal<bool>) -> impl IntoView {
     let backlinks_loading =
         Signal::derive(move || backlinks_loading_rw.map(|b| b.get()).unwrap_or(false));
 
+    let unlinked_rw = use_context::<RwSignal<Vec<BacklinkDto>>>();
+    let unlinked_references =
+        Signal::derive(move || unlinked_rw.map(|u| u.get()).unwrap_or_default());
+
+    let unlinked_loading_rw = use_context::<RwSignal<bool>>();
+    let unlinked_loading =
+        Signal::derive(move || unlinked_loading_rw.map(|u| u.get()).unwrap_or(false));
+
     view! {
         <Show when=move || open.get()>
             <aside class="w-80 min-w-80 border-l border-border bg-sidebar flex flex-col shrink-0 overflow-hidden">
@@ -38,6 +47,7 @@ pub fn RightSidebar(#[prop(into)] open: Signal<bool>) -> impl IntoView {
                 </div>
 
                 <div class="flex-1 overflow-y-auto p-3">
+                    // ── Linked References ──
                     <div class="mb-4">
                         <h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">
                             "Linked References"
@@ -48,11 +58,40 @@ pub fn RightSidebar(#[prop(into)] open: Signal<bool>) -> impl IntoView {
                         />
                     </div>
 
+                    // ── Unlinked References ──
                     <div class="mb-4">
                         <h3 class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-2">
                             "Unlinked References"
                         </h3>
-                        <p class="text-xs text-text-muted">"No unlinked references"</p>
+                        <Show when=move || unlinked_loading.get()>
+                            <div class="text-xs text-text-muted py-2">"Loading..."</div>
+                        </Show>
+                        <Show when=move || !unlinked_loading.get() && unlinked_references.get().is_empty()>
+                            <div class="text-xs text-text-muted py-2">"No unlinked references"</div>
+                        </Show>
+                        <Show when=move || !unlinked_loading.get() && !unlinked_references.get().is_empty()>
+                            <div class="space-y-2">
+                                <For
+                                    each=move || unlinked_references.get()
+                                    key=|u| u.source_block_id.clone()
+                                    let:u
+                                >
+                                    <div class="backlink-item border-l-2 border-dashed border-text-muted pl-3 py-1.5">
+                                        <A href=format!("/page/{}", u.source_page_name)>
+                                            <span class="text-sm text-accent hover:underline">
+                                                {u.source_page_name.clone()}
+                                            </span>
+                                        </A>
+                                        <div class="text-xs text-text-muted mt-0.5 line-clamp-2 italic">
+                                            {u.content_preview.clone()}
+                                        </div>
+                                        <span class="text-xs text-text-muted mt-0.5">
+                                            "unlinked"
+                                        </span>
+                                    </div>
+                                </For>
+                            </div>
+                        </Show>
                     </div>
                 </div>
             </aside>

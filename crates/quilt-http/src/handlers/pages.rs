@@ -288,12 +288,66 @@ pub async fn get_page_backlinks(
     Ok(Json(dtos))
 }
 
+/// GET /api/pages/{name}/unlinked-references
+///
+/// Returns all blocks whose content text mentions the page name (case-insensitive)
+/// but do NOT have an explicit `[[page]]` reference.
+/// Uses LIKE-based full-text search on block content.
+#[instrument(skip(state))]
+pub async fn get_page_unlinked_references(
+    State(state): State<Arc<HttpState>>,
+    Path(name): Path<String>,
+) -> Result<Json<Vec<BacklinkDto>>, HttpError> {
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
+
+    // Look up the page by name
+    let page = page_repo
+        .get_by_name(&name)
+        .await
+        .map_err(|e| HttpError::DatabaseError(e.to_string()))?
+        .ok_or_else(|| HttpError::NotFound(format!("Page not found: {}", name)))?;
+
+    // Query unlinked references via the ref service
+    let unlinked = {
+        let ref_service = state.ref_service.read().await;
+        ref_service
+            .get_page_unlinked_references(&name, page.id)
+            .await
+            .map_err(|e| HttpError::DatabaseError(e.to_string()))?
+    };
+
+    if unlinked.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+
+    // Enrich with source page names
+    let mut dtos = Vec::with_capacity(unlinked.len());
+    for (source_block_id, source_page_id, content_snippet) in &unlinked {
+        let source_page_name = page_repo
+            .get_by_id(*source_page_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|p| p.name)
+            .unwrap_or_else(|| "unknown".to_string());
+
+        dtos.push(BacklinkDto {
+            source_block_id: source_block_id.to_string(),
+            source_page_name,
+            content_preview: content_snippet.clone(),
+        });
+    }
+
+    Ok(Json(dtos))
+}
+
 /// Mount page routes
 pub fn routes() -> axum::Router<Arc<HttpState>> {
     axum::Router::new()
         .route("/api/pages", axum::routing::get(list_pages).post(create_page))
         .route("/api/pages/{name}", axum::routing::get(get_page))
         .route("/api/pages/{name}/backlinks", axum::routing::get(get_page_backlinks))
+        .route("/api/pages/{name}/unlinked-references", axum::routing::get(get_page_unlinked_references))
         .route("/api/journal/{date}", axum::routing::get(get_journal))
         .route("/api/pages/recent", axum::routing::get(get_recent_pages))
 }

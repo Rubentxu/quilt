@@ -135,9 +135,11 @@ pub fn PageView() -> impl IntoView {
     };
     provide_context(page_outliner);
 
-    // ── Backlinks signal from root context ──
+    // ── Backlinks and unlinked references from root context ──
     let backlinks = use_context::<RwSignal<Vec<bridge::BacklinkDto>>>();
     let backlinks_loading = use_context::<RwSignal<bool>>();
+    let unlinked_references = use_context::<RwSignal<Vec<bridge::BacklinkDto>>>();
+    let unlinked_references_loading = use_context::<RwSignal<bool>>();
 
     // ── Data loading effect ──
     Effect::new(move || {
@@ -171,6 +173,20 @@ pub fn PageView() -> impl IntoView {
                 }
                 if let Some(ref bll) = backlinks_loading {
                     bll.set(false);
+                }
+            }
+
+            // Fetch unlinked references for this page
+            if let Some(ref ul) = unlinked_references {
+                if let Some(ref ull) = unlinked_references_loading {
+                    ull.set(true);
+                }
+                match bridge::get_page_unlinked_references(&name).await {
+                    Ok(u) => ul.set(u),
+                    Err(_) => ul.set(vec![]),
+                }
+                if let Some(ref ull) = unlinked_references_loading {
+                    ull.set(false);
                 }
             }
 

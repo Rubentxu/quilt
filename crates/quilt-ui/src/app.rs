@@ -17,6 +17,8 @@ pub fn App() -> impl IntoView {
     let (right_sidebar_open, set_right_sidebar_open) = signal(false);
     let backlinks = RwSignal::new(Vec::<BacklinkDto>::new());
     let backlinks_loading = RwSignal::new(false);
+    let unlinked_references = RwSignal::new(Vec::<BacklinkDto>::new());
+    let unlinked_references_loading = RwSignal::new(false);
 
     provide_context(left_sidebar_open);
     provide_context(set_left_sidebar_open);
@@ -24,6 +26,8 @@ pub fn App() -> impl IntoView {
     provide_context(set_right_sidebar_open);
     provide_context(backlinks);
     provide_context(backlinks_loading);
+    provide_context(unlinked_references);
+    provide_context(unlinked_references_loading);
 
     view! {
         <Stylesheet href="/style.css" />

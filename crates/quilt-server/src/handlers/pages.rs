@@ -52,6 +52,74 @@ pub struct CreatePageRequest {
     pub title: Option<String>,
 }
 
+/// GET /api/v1/pages/:name/unlinked-references
+///
+/// Returns all blocks whose content text mentions the page name (case-insensitive)
+/// but do NOT have an explicit `[[page]]` reference.
+#[instrument(skip(state))]
+pub async fn get_page_unlinked_references(
+    Path(name): Path<String>,
+    Extension(state): Extension<AppState>,
+) -> Result<Json<Vec<BacklinkDto>>, AppError> {
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
+    let block_repo = quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository::new(state.pool.clone());
+
+    // Look up the page by name
+    let page = page_repo
+        .get_by_name(&name)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
+
+    // Query unlinked references via the ref service
+    let unlinked = {
+        let ref_service = state.ref_service.read().await;
+        ref_service
+            .get_page_unlinked_references(&name, page.id)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+    };
+
+    if unlinked.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+
+    // Enrich with source page names and content previews
+    let mut dtos = Vec::with_capacity(unlinked.len());
+    for (source_block_id, source_page_id, content_snippet) in &unlinked {
+        let source_page_name = page_repo
+            .get_by_id(*source_page_id)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?
+            .map(|p| p.name)
+            .unwrap_or_else(|| "unknown".to_string());
+
+        let block = block_repo
+            .get_by_id(*source_block_id)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        let content_preview = if let Some(source_block) = block {
+            let plain_text = source_block.content.as_plain_text();
+            if plain_text.len() > 100 {
+                format!("{}...", &plain_text[..100])
+            } else {
+                plain_text
+            }
+        } else {
+            content_snippet.clone()
+        };
+
+        dtos.push(BacklinkDto {
+            source_block_id: source_block_id.to_string(),
+            source_page_name,
+            content_preview,
+        });
+    }
+
+    Ok(Json(dtos))
+}
+
 /// Create router for /api/v1/pages
 pub fn routes() -> Router {
     Router::new()
@@ -60,6 +128,7 @@ pub fn routes() -> Router {
         .route("/:name", get(get_page))
         .route("/:name/blocks", get(get_page_blocks))
         .route("/:name/backlinks", get(get_page_backlinks))
+        .route("/:name/unlinked-references", get(get_page_unlinked_references))
 }
 
 /// GET /api/v1/pages

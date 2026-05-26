@@ -57,4 +57,17 @@ pub trait RefRepository: Send + Sync {
     /// Returns all reference rows. The caller (typically `RefService`)
     /// uses this to populate its in-memory `RefIndex`.
     async fn rebuild_index(&self) -> Result<Vec<RefRow>, DomainError>;
+
+    /// Get unlinked references for a page.
+    ///
+    /// Finds blocks whose raw content text mentions `page_name` (case-insensitive)
+    /// but do NOT have an explicit `[[page_name]]` reference in the refs table.
+    ///
+    /// Returns a list of `(block_id, source_page_id, content_snippet)` tuples.
+    /// Each snippet is up to ~100 characters of the block's content.
+    async fn get_unlinked_references(
+        &self,
+        page_name: &str,
+        page_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError>;
 }

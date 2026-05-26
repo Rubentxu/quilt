@@ -1061,6 +1061,63 @@ impl RefRepository for SqliteRefRepository {
             })
             .collect()
     }
+
+    async fn get_unlinked_references(
+        &self,
+        page_name: &str,
+        page_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
+        // Escape special LIKE characters in the page name
+        let escaped = page_name.replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+
+        let like_pattern = format!("%{}%", escaped);
+
+        // Search blocks whose content text contains the page name (case-insensitive),
+        // but exclude blocks that already have an explicit [[page]] ref in the refs table.
+        //
+        // NOTE: Uses LIKE for maximum compatibility. FTS5 is available in the schema
+        // (blocks_fts virtual table) and can be used for better performance on large datasets.
+        let rows = sqlx::query(
+            r#"
+            SELECT b.id, b.page_id, b.content
+            FROM blocks b
+            WHERE b.content LIKE ? ESCAPE '\'
+              AND b.id NOT IN (
+                SELECT r.source_id FROM refs r WHERE r.target_id = ?
+              )
+            ORDER BY b.updated_at DESC
+            LIMIT 50
+            "#,
+        )
+        .bind(&like_pattern)
+        .bind(uuid_to_blob(&page_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_unlinked_references: {}", e)))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let block_id: Vec<u8> = row.get("id");
+            let page_id_blob: Vec<u8> = row.get("page_id");
+            let content: String = row.get("content");
+
+            let block_id = blob_to_uuid(&block_id)?;
+            let source_page_id = blob_to_uuid(&page_id_blob)?;
+
+            // Build a ~100-char content snippet
+            let snippet = if content.len() > 100 {
+                format!("{}...", &content[..100])
+            } else {
+                content
+            };
+
+            results.push((block_id, source_page_id, snippet));
+        }
+
+        Ok(results)
+    }
 }
 
 // ── Integration Tests ────────────────────────────────────────────────
