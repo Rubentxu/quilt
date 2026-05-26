@@ -6,32 +6,58 @@
 //   destroyEditor(id)
 //   getContent(id) → string
 //   setContent(id, content)
+//   setContentAndCursor(id, content, cursorOffset)
 //   focus(id)
+//   getCursorOffset(id) → number
+//   setAutocompleteState(id, active)
+//   setDecorations(id, decorationsJson)
 //
 // `callbacks` is an object with optional function properties:
-//   onChange(text)       — called on every document change
-//   onEnter()            — Enter without modifiers
-//   onTab()              — Tab without modifiers
-//   onShiftTab()         — Shift+Tab
-//   onEscape()           — Escape (cancel editing)
-//   onBackspace()        — Backspace on empty line
-//   onCtrlBackspace()    — Ctrl+Backspace (merge with next)
-//   onUndo()             — Ctrl+Z
-//   onRedo()             — Ctrl+Shift+Z or Ctrl+Y
+//   onChange(text)             — called on every document change
+//   onEnter(offset)            — Enter without modifiers
+//   onTab()                    — Tab without modifiers
+//   onShiftTab()               — Shift+Tab
+//   onEscape()                 — Escape (cancel editing)
+//   onBackspace()              — Backspace on empty line
+//   onCtrlBackspace()          — Ctrl+Backspace (merge with next)
+//   onUndo()                   — Ctrl+Z
+//   onRedo()                   — Ctrl+Shift+Z or Ctrl+Y
+//   onAcNavigate(direction)    — ArrowUp(-1)/ArrowDown(1) in autocomplete
+//   onAcSelect()               — Enter when autocomplete dropdown is active
+//   onAcCancel()               — Escape when autocomplete dropdown is active
 //
 // Undo/redo is intentionally NOT handled by CM6's history extension.
 // The Outliner/HistoryStack on the Rust side owns undo/redo.
 // We dispatch the keyboard shortcuts to Rust callbacks instead.
 
-import { EditorView, keymap } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { EditorView, keymap, Decoration } from '@codemirror/view';
+import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { defaultKeymap } from '@codemirror/commands';
 import { indentOnInput } from '@codemirror/language';
 
 // ── Editor instance registry ──
 
 let nextId = 0;
 const editors = new Map();
+
+// ── Decoration effect + field ──
+// Allows Rust to push visual decorations (tag/page-ref/property highlighting)
+// into the editor via a StateEffect, applied reactively by a StateField.
+
+const setDecorationsEffect = StateEffect.define();
+
+const decorationField = StateField.define({
+  create() { return Decoration.none; },
+  update(decos, tr) {
+    for (let e of tr.effects) {
+      if (e.is(setDecorationsEffect)) {
+        return e.value;
+      }
+    }
+    return decos.map(tr.changes);
+  },
+  provide: f => EditorView.decorations.from(f),
+});
 
 // ── Key binding helpers ──
 
@@ -43,6 +69,8 @@ function mod(ctrl, key) {
 // Undo/redo keybindings are replaced with custom callbacks that
 // delegate to the Rust-side Outliner. All other default bindings
 // (typing, cursor movement, selection, clipboard) are preserved.
+// Autocomplete navigation keys are conditionally active only when
+// the editor's `dropdownActive` flag is true.
 function buildKeymap(cbs) {
   const bindings = [];
 
@@ -55,7 +83,51 @@ function buildKeymap(cbs) {
     bindings.push({ key: 'Mod-y', run: () => { cbs.onRedo(); return true; } });
   }
 
-  // Outliner structural operations
+  // Autocomplete navigation — only active when dropdown is visible
+  if (cbs.onAcNavigate) {
+    bindings.push({
+      key: 'ArrowDown',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.dropdownActive) { cbs.onAcNavigate(1); return true; }
+        return false;
+      },
+    });
+    bindings.push({
+      key: 'ArrowUp',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.dropdownActive) { cbs.onAcNavigate(-1); return true; }
+        return false;
+      },
+    });
+  }
+
+  if (cbs.onAcSelect) {
+    bindings.push({
+      key: 'Enter',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.dropdownActive) { cbs.onAcSelect(); return true; }
+        // Fall through to the outliner Enter handler below
+        return false;
+      },
+    });
+  }
+
+  if (cbs.onAcCancel) {
+    bindings.push({
+      key: 'Escape',
+      run: () => {
+        const entry = editors.get(currentEditingId);
+        if (entry?.dropdownActive) { cbs.onAcCancel(); return true; }
+        // Fall through to the Escape handler below
+        return false;
+      },
+    });
+  }
+
+  // Outliner structural operations (low-priority — checked after ac handlers)
   if (cbs.onEnter) {
     bindings.push({
       key: 'Enter',
@@ -120,6 +192,8 @@ const api = {
     const state = EditorState.create({
       doc: content,
       extensions: [
+        // Decoration field — allows Rust to push visual decorations
+        decorationField,
         // Syntax indent (not essential for single-line but harmless)
         indentOnInput(),
         // Default keymap (cursor, clipboard, selection) WITHOUT history
@@ -127,7 +201,7 @@ const api = {
           // Remove history-related bindings from defaultKeymap
           return b.key !== 'Mod-z' && b.key !== 'Mod-y' && b.key !== 'Mod-Shift-z';
         })),
-        // Our custom bindings (Enter, Tab, undo→outliner, etc.)
+        // Our custom bindings (Enter, Tab, undo→outliner, ac nav, etc.)
         keymap.of(buildKeymap(cbs)),
         // Update listener to fire onChange
         EditorView.updateListener.of((update) => {
@@ -149,7 +223,6 @@ const api = {
             // If the new content contains a newline, filter it out
             // Actually this is complex — let's rely on the keymap to prevent Enter
             // but still allow pasted content to flow naturally.
-            // For single-line enforcement, we can use a different approach later.
           }
           return tr;
         }),
@@ -159,13 +232,16 @@ const api = {
     const view = new EditorView({
       state,
       parent: container,
-      // Enable contenteditable-based DOM reading (CM6 default for WASM)
       dispatchTransaction(trs) {
         view.update(trs);
       },
     });
 
-    editors.set(id, { view, cachedContent: content });
+    editors.set(id, {
+      view,
+      cachedContent: content,
+      dropdownActive: false,
+    });
     currentEditingId = id;
 
     return id;
@@ -212,6 +288,25 @@ const api = {
   },
 
   /**
+   * Set content and place the cursor at a specific offset.
+   * Does NOT fire the onChange callback.
+   */
+  setContentAndCursor(id, content, cursorOffset) {
+    const entry = editors.get(id);
+    if (!entry) return;
+    const { view } = entry;
+    view.dispatch({
+      changes: {
+        from: 0,
+        to: view.state.doc.length,
+        insert: content,
+      },
+      selection: { anchor: cursorOffset },
+    });
+    entry.cachedContent = content;
+  },
+
+  /**
    * Focus the editor.
    */
   focus(id) {
@@ -230,6 +325,53 @@ const api = {
     if (!entry) return 0;
     const sel = entry.view.state.selection.main;
     return sel.anchor;
+  },
+
+  /**
+   * Enable or disable autocomplete keyboard intercept mode.
+   * When active, ArrowUp/Down/Enter/Escape are captured for
+   * autocomplete navigation instead of cursor movement.
+   */
+  setAutocompleteState(id, active) {
+    const entry = editors.get(id);
+    if (!entry) return;
+    entry.dropdownActive = !!active;
+  },
+
+  /**
+   * Apply visual decorations (tag/page-ref/property highlighting)
+   * from Rust parser output.
+   *
+   * @param {number} id - Editor ID
+   * @param {string} decorationsJson - JSON array of {from, to, class}
+   */
+  setDecorations(id, decorationsJson) {
+    const entry = editors.get(id);
+    if (!entry) return;
+    const { view } = entry;
+
+    let decoList;
+    try {
+      decoList = JSON.parse(decorationsJson);
+    } catch {
+      return;
+    }
+
+    if (!Array.isArray(decoList) || decoList.length === 0) {
+      // Clear decorations
+      view.dispatch({
+        effects: setDecorationsEffect.of(Decoration.none),
+      });
+      return;
+    }
+
+    const decos = decoList.map(d => {
+      return Decoration.mark({ class: d.class }).range(d.from, d.to);
+    });
+
+    view.dispatch({
+      effects: setDecorationsEffect.of(Decoration.set(decos)),
+    });
   },
 
   /**

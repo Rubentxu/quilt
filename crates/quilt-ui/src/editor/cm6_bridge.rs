@@ -72,6 +72,16 @@ pub struct Cm6Callbacks {
     pub on_undo: Option<js_sys::Function>,
     /// Called for Ctrl+Shift+Z / Ctrl+Y (outliner redo).
     pub on_redo: Option<js_sys::Function>,
+    // ── Autocomplete callbacks ──
+    /// Called when ArrowUp (-1) or ArrowDown (1) is pressed while
+    /// the autocomplete dropdown is active.
+    pub on_ac_navigate: Option<js_sys::Function>,
+    /// Called when Enter is pressed while the autocomplete dropdown
+    /// is active (confirm selected item).
+    pub on_ac_select: Option<js_sys::Function>,
+    /// Called when Escape is pressed while the autocomplete dropdown
+    /// is active (cancel/close dropdown).
+    pub on_ac_cancel: Option<js_sys::Function>,
 }
 
 impl Cm6Callbacks {
@@ -87,6 +97,9 @@ impl Cm6Callbacks {
             on_ctrl_backspace: None,
             on_undo: None,
             on_redo: None,
+            on_ac_navigate: None,
+            on_ac_select: None,
+            on_ac_cancel: None,
         }
     }
 
@@ -128,6 +141,18 @@ impl Cm6Callbacks {
         if let Some(ref f) = self.on_redo {
             Reflect::set(&obj, &"onRedo".into(), f)
                 .map_err(|e| Cm6BridgeError::JsError(format!("set onRedo: {:?}", e)))?;
+        }
+        if let Some(ref f) = self.on_ac_navigate {
+            Reflect::set(&obj, &"onAcNavigate".into(), f)
+                .map_err(|e| Cm6BridgeError::JsError(format!("set onAcNavigate: {:?}", e)))?;
+        }
+        if let Some(ref f) = self.on_ac_select {
+            Reflect::set(&obj, &"onAcSelect".into(), f)
+                .map_err(|e| Cm6BridgeError::JsError(format!("set onAcSelect: {:?}", e)))?;
+        }
+        if let Some(ref f) = self.on_ac_cancel {
+            Reflect::set(&obj, &"onAcCancel".into(), f)
+                .map_err(|e| Cm6BridgeError::JsError(format!("set onAcCancel: {:?}", e)))?;
         }
         Ok(obj)
     }
@@ -210,6 +235,39 @@ impl Cm6Handle {
         Ok(())
     }
 
+    /// Set content and cursor position in a single transaction.
+    /// Does NOT fire the onChange callback.
+    pub fn set_content_with_cursor(&self, content: &str, cursor_offset: u32) -> Result<()> {
+        call_api_method(
+            "setContentAndCursor",
+            &[self.id.clone(), content.into(), JsValue::from(cursor_offset)],
+        )?;
+        Ok(())
+    }
+
+    /// Tell CM6 whether the autocomplete dropdown is active.
+    /// When active, ArrowUp/Down/Enter/Escape are intercepted for
+    /// autocomplete navigation instead of cursor movement.
+    pub fn set_autocomplete_state(&self, active: bool) -> Result<()> {
+        call_api_method(
+            "setAutocompleteState",
+            &[self.id.clone(), JsValue::from(active)],
+        )?;
+        Ok(())
+    }
+
+    /// Apply visual decorations (parser-based highlighting) to the editor.
+    ///
+    /// `decorations_json` is a JSON array of `{from, to, class}` objects
+    /// describing the visual decorations to apply.
+    pub fn set_decorations(&self, decorations_json: &str) -> Result<()> {
+        call_api_method(
+            "setDecorations",
+            &[self.id.clone(), decorations_json.into()],
+        )?;
+        Ok(())
+    }
+
     /// Get the cursor offset (character position) within the document.
     /// Returns 0 if unavailable.
     pub fn cursor_offset(&self) -> Result<u32> {
@@ -283,5 +341,8 @@ mod tests {
         assert!(cbs.on_ctrl_backspace.is_none());
         assert!(cbs.on_undo.is_none());
         assert!(cbs.on_redo.is_none());
+        assert!(cbs.on_ac_navigate.is_none());
+        assert!(cbs.on_ac_select.is_none());
+        assert!(cbs.on_ac_cancel.is_none());
     }
 }
