@@ -455,4 +455,50 @@ mod tests {
         assert_eq!(backlinks[0].0, block_id);
         assert_eq!(backlinks[0].1, RefType::PageRef);
     }
+
+    #[tokio::test]
+    async fn test_e2e_write_then_read_backlinks() {
+        // Full end-to-end test proving the write→read flow without SQLite.
+        // 1. Create RefService with in-memory mock repo
+        // 2. Call on_block_saved with [[TestPage]]
+        // 3. Call get_backlinks(test_page_id)
+        // 4. Verify backlink exists with correct source and type
+        let repo = Arc::new(MockRefRepository::new());
+        let mut service = RefService::new(repo);
+
+        let block_id = Uuid::new_v4();
+        let test_page_id = Uuid::new_v4();
+        let other_page_id = Uuid::new_v4();
+
+        // Resolver that knows about our pages
+        let resolver = |name: &str| -> Option<Uuid> {
+            match name {
+                "TestPage" => Some(test_page_id),
+                "OtherPage" => Some(other_page_id),
+                _ => None,
+            }
+        };
+
+        // Write: save a block that references "TestPage"
+        let content = "This block links to [[TestPage]] and also ((some-other-uuid))".to_string();
+        service
+            .on_block_saved(block_id, &content, Some(&resolver))
+            .await
+            .unwrap();
+
+        // Verify forward refs from source
+        let forward = service.get_forward_refs(block_id);
+        assert_eq!(forward.len(), 1, "Only the resolved page ref should be in forward refs");
+        assert_eq!(forward[0], (test_page_id, RefType::PageRef));
+
+        // Read: get backlinks to TestPage
+        let backlinks = service.get_backlinks(test_page_id);
+        assert_eq!(backlinks.len(), 1, "TestPage should have exactly one backlink");
+        assert_eq!(backlinks[0].0, block_id, "Backlink source should be our block");
+        assert_eq!(backlinks[0].1, RefType::PageRef, "Backlink type should be PageRef");
+
+        // Verify OtherPage has no backlinks
+        assert!(service.get_backlinks(other_page_id).is_empty(), "OtherPage should have no backlinks");
+        assert!(service.get_backlinks(Uuid::new_v4()).is_empty(), "Unknown page should have no backlinks");
+    }
 }

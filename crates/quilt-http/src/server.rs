@@ -12,7 +12,7 @@ use anyhow::Context;
 use axum::{routing::get, middleware::from_fn_with_state, Json, Router};
 use sqlx::SqlitePool;
 use tokio::signal;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, RwLock};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -21,6 +21,8 @@ use crate::middleware::{self, rate_limit_middleware, RateLimiter};
 use crate::mcp_ws::ws_mcp_handler;
 use crate::polling::{self, FileChangeEvent, PollingConfig};
 use crate::state::HttpState;
+use quilt_application::services::ref_service::RefService;
+use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
 
 /// Health check response
 #[derive(serde::Serialize)]
@@ -87,8 +89,18 @@ pub async fn run_http_server(
     host: &str,
     port: u16,
 ) -> anyhow::Result<()> {
+    // Initialize bidirectional reference service
+    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let mut ref_service = RefService::new(ref_repo);
+    ref_service
+        .rebuild_from_repo()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to rebuild reference index: {}", e))?;
+    tracing::info!("Reference index rebuilt with {} entries", ref_service.index().len());
+    let ref_service = Arc::new(RwLock::new(ref_service));
+
     // Create HTTP state with SSE broadcaster
-    let state = Arc::new(HttpState::new(pool, vault_path.clone(), mcp_server));
+    let state = Arc::new(HttpState::new(pool, vault_path.clone(), mcp_server, ref_service));
 
     // Start polling service if vault path exists
     if vault_path.exists() {

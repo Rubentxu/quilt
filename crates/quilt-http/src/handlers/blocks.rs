@@ -7,6 +7,7 @@
 //! - PUT  /api/blocks/:id  - Update a block
 //! - DELETE /api/blocks/:id - Delete a block
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
@@ -20,6 +21,7 @@ use tracing::instrument;
 use crate::error::HttpError;
 use crate::state::HttpState;
 use quilt_application::query_service::QueryService;
+use quilt_application::services::ref_service::{parse_refs_from_content, RefService};
 use quilt_domain::entities::{Block, BlockCreate, Page};
 use quilt_domain::repositories::{BlockReader, BlockRepository, BlockWriter, PageReader, PageRepository, PageWriter, SettingsRepository};
 use quilt_domain::services::TimezoneService;
@@ -142,6 +144,47 @@ pub async fn query_blocks(
     Ok(Json(blocks))
 }
 
+/// Resolve page names from block content to UUIDs using the page repository.
+///
+/// Parses `[[page name]]` references and resolves them to page UUIDs.
+/// Pages that don't exist yet are silently skipped (they will be resolved
+/// when the page is eventually created).
+async fn resolve_page_names(
+    content: &str,
+    page_repo: &SqlitePageRepository,
+) -> HashMap<String, Uuid> {
+    let parsed = parse_refs_from_content(content);
+    let mut name_to_uuid = HashMap::new();
+    for name in &parsed.page_names {
+        if let Ok(Some(page)) = page_repo.get_by_name(name).await {
+            name_to_uuid.insert(name.clone(), page.id);
+        }
+    }
+    name_to_uuid
+}
+
+/// Update the reference index after a block save.
+///
+/// Parses the block content, resolves `[[page name]]` refs, and
+/// updates both the database refs table and the in-memory index.
+async fn update_ref_index(
+    ref_service: &std::sync::Arc<tokio::sync::RwLock<RefService>>,
+    block_id: Uuid,
+    content: &str,
+    page_repo: &SqlitePageRepository,
+) {
+    let name_to_uuid = resolve_page_names(content, page_repo).await;
+    let resolver = |name: &str| -> Option<Uuid> { name_to_uuid.get(name).copied() };
+
+    let mut svc = ref_service.write().await;
+    if let Err(e) = svc
+        .on_block_saved(block_id, content, Some(&resolver))
+        .await
+    {
+        tracing::error!(%block_id, error = %e, "Failed to update reference index");
+    }
+}
+
 /// Create a new block
 #[instrument(skip(state))]
 pub async fn create_block(
@@ -193,7 +236,7 @@ pub async fn create_block(
     let block = Block::new(
         BlockCreate {
             page_id: page.id,
-            content: req.content,
+            content: req.content.clone(),
             parent_id: parent_uuid,
             order: 1.0,
             marker: None,
@@ -205,6 +248,9 @@ pub async fn create_block(
     .map_err(|e| HttpError::ValidationError(e.to_string()))?;
 
     block_repo.insert(&block).await?;
+
+    // Update reference index for the new block
+    update_ref_index(&state.ref_service, block.id, &req.content, &page_repo).await;
 
     Ok((StatusCode::CREATED, Json(BlockDto::from(block))))
 }
@@ -278,6 +324,7 @@ pub async fn update_block(
     Json(req): Json<UpdateBlockRequest>,
 ) -> Result<Json<BlockDto>, HttpError> {
     let block_repo = SqliteBlockRepository::new(state.pool.clone());
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
     let settings_repo = SqliteSettingsRepository::new(state.pool.clone());
 
     let uuid = Uuid::parse_str(&block_id)
@@ -294,9 +341,12 @@ pub async fn update_block(
     let timezone = TimezoneService::from_tz_string(&user_settings.timezone)
         .unwrap_or_else(|_| TimezoneService::from_tz_string("UTC").unwrap());
 
+    // Track whether content changed for ref index update
+    let content_changed = req.content.is_some();
+
     // Apply updates
-    if let Some(content) = req.content {
-        block.content.content = content;
+    if let Some(ref content) = req.content {
+        block.content.content.clone_from(content);
     }
 
     if let Some(parent_id) = req.parent_id {
@@ -346,6 +396,19 @@ pub async fn update_block(
         .await
         .map_err(|e| HttpError::DatabaseError(e.to_string()))?;
 
+    // Update reference index if content changed
+    if content_changed {
+        if let Some(ref new_content) = req.content {
+            update_ref_index(
+                &state.ref_service,
+                block.id,
+                new_content,
+                &page_repo,
+            )
+            .await;
+        }
+    }
+
     Ok(Json(BlockDto::from(block)))
 }
 
@@ -370,6 +433,14 @@ pub async fn delete_block(
         .delete(uuid)
         .await
         .map_err(|e| HttpError::DatabaseError(e.to_string()))?;
+
+    // Clean up references: sync with empty list to remove all refs for this block
+    {
+        let mut svc = state.ref_service.write().await;
+        if let Err(e) = svc.on_block_saved(uuid, "", None).await {
+            tracing::error!(%uuid, error = %e, "Failed to clean up refs on block delete");
+        }
+    }
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -423,6 +494,9 @@ pub async fn create_task(
     .map_err(|e| HttpError::ValidationError(e.to_string()))?;
 
     block_repo.insert(&block).await?;
+
+    // Update reference index for the new task block
+    update_ref_index(&state.ref_service, block.id, &req.content, &page_repo).await;
 
     Ok((StatusCode::CREATED, Json(BlockDto::from(block))))
 }

@@ -5,13 +5,14 @@
 use std::path::PathBuf;
 
 use sqlx::SqlitePool;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, RwLock};
 
 use crate::handlers::events::SseBroadcaster;
+use quilt_application::services::ref_service::RefService;
 
 /// Shared application state for HTTP handlers.
 ///
-/// This struct holds the database connection pool and references to services.
+/// This struct holds the database connection pool, services, and references.
 /// It is wrapped in `Arc` and cloned for each request.
 #[derive(Clone)]
 pub struct HttpState {
@@ -26,6 +27,9 @@ pub struct HttpState {
 
     /// SSE event broadcaster for real-time updates
     pub sse_broadcaster: SseBroadcaster,
+
+    /// Bidirectional reference service for O(1) backlink queries
+    pub ref_service: std::sync::Arc<RwLock<RefService>>,
 }
 
 impl HttpState {
@@ -34,6 +38,7 @@ impl HttpState {
         pool: SqlitePool,
         vault_path: PathBuf,
         mcp_server: Option<std::sync::Arc<quilt_mcp::McpServer>>,
+        ref_service: std::sync::Arc<RwLock<RefService>>,
     ) -> Self {
         // Create SSE broadcaster with capacity for 1000 events
         let (sender, _) = broadcast::channel(1000);
@@ -44,6 +49,7 @@ impl HttpState {
             vault_path,
             mcp_server,
             sse_broadcaster,
+            ref_service,
         }
     }
 }

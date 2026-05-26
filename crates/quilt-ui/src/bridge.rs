@@ -208,3 +208,30 @@ pub async fn list_pages() -> Result<Vec<PageDto>, BridgeError> {
         .map_err(|e| BridgeError::Parse(e.to_string()))?;
     Ok(pages)
 }
+
+/// A backlink DTO returned by the page backlinks endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BacklinkDto {
+    pub source_block_id: String,
+    pub source_page_name: String,
+    pub content_preview: String,
+}
+
+/// Get all backlinks for a page (blocks that reference this page)
+pub async fn get_page_backlinks(page_name: &str) -> Result<Vec<BacklinkDto>, BridgeError> {
+    let url = format!("{}/pages/{}/backlinks", BASE_URL, page_name);
+    let resp = Request::get(&url)
+        .send()
+        .await
+        .map_err(|e| BridgeError::Network(e.to_string()))?;
+    if !resp.ok() {
+        let msg = resp.text().await.unwrap_or_default();
+        return Err(BridgeError::Server(resp.status(), msg));
+    }
+    let backlinks: Vec<BacklinkDto> = resp
+        .json()
+        .await
+        .map_err(|e| BridgeError::Parse(e.to_string()))?;
+    Ok(backlinks)
+}

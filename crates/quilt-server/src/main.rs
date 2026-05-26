@@ -10,8 +10,10 @@
 use anyhow::Result;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tokio::sync::RwLock;
 
 mod error;
 mod handlers;
@@ -20,6 +22,8 @@ mod state;
 
 use crate::handlers::metrics;
 use crate::state::AppState;
+use quilt_application::services::ref_service::RefService;
+use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -65,7 +69,17 @@ async fn main() -> Result<()> {
     let ai_client: Arc<dyn quilt_cognitive::AIClient> =
         Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
 
-    let state = AppState::new(init.pool, search_index, ai_client);
+    // Initialize bidirectional reference service
+    let ref_repo = Arc::new(SqliteRefRepository::new(init.pool.clone()));
+    let mut ref_service = RefService::new(ref_repo);
+    ref_service
+        .rebuild_from_repo()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to rebuild reference index: {}", e))?;
+    info!("Reference index rebuilt with {} entries", ref_service.index().len());
+    let ref_service = Arc::new(RwLock::new(ref_service));
+
+    let state = AppState::new(init.pool, search_index, ai_client, ref_service);
 
     // Create router
     let app = routes::create_app(state);

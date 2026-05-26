@@ -12,9 +12,12 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
+use std::collections::HashMap;
+
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_application::query_service::QueryService;
+use quilt_application::services::ref_service::{parse_refs_from_content, RefService};
 use quilt_domain::entities::{Block, BlockCreate};
 use quilt_domain::content::BlockContent;
 use quilt_domain::repositories::{BlockRepository, PageRepository, SettingsRepository};
@@ -174,6 +177,40 @@ pub async fn query_blocks(
     Ok(Json(blocks_with_names))
 }
 
+/// Resolve page names from block content to UUIDs using the page repository.
+async fn resolve_page_names(
+    content: &str,
+    page_repo: &SqlitePageRepository,
+) -> HashMap<String, Uuid> {
+    let parsed = parse_refs_from_content(content);
+    let mut name_to_uuid = HashMap::new();
+    for name in &parsed.page_names {
+        if let Ok(Some(page)) = page_repo.get_by_name(name).await {
+            name_to_uuid.insert(name.clone(), page.id);
+        }
+    }
+    name_to_uuid
+}
+
+/// Update the reference index after a block save.
+async fn update_ref_index(
+    ref_service: &std::sync::Arc<tokio::sync::RwLock<RefService>>,
+    block_id: Uuid,
+    content: &str,
+    page_repo: &SqlitePageRepository,
+) {
+    let name_to_uuid = resolve_page_names(content, page_repo).await;
+    let resolver = |name: &str| -> Option<Uuid> { name_to_uuid.get(name).copied() };
+
+    let mut svc = ref_service.write().await;
+    if let Err(e) = svc
+        .on_block_saved(block_id, content, Some(&resolver))
+        .await
+    {
+        tracing::error!(%block_id, error = %e, "Failed to update reference index");
+    }
+}
+
 /// POST /api/v1/blocks
 #[instrument(skip(state))]
 pub async fn create_block(
@@ -221,7 +258,7 @@ pub async fn create_block(
     let block = Block::new(
         BlockCreate {
             page_id: page.id,
-            content: BlockContent::from_text(payload.content),
+            content: BlockContent::from_text(payload.content.clone()),
             parent_id: parent_uuid,
             order: 1.0,
             marker: None,
@@ -236,6 +273,9 @@ pub async fn create_block(
         .insert(&block)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Update reference index for the new block
+    update_ref_index(&state.ref_service, block.id, &payload.content, &page_repo).await;
 
     Ok((StatusCode::CREATED, Json(BlockDto::from(block))))
 }
@@ -288,6 +328,14 @@ pub async fn delete_block(
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
+    // Clean up references: sync with empty list to remove all refs for this block
+    {
+        let mut svc = state.ref_service.write().await;
+        if let Err(e) = svc.on_block_saved(uuid, "", None).await {
+            tracing::error!(%uuid, error = %e, "Failed to clean up refs on block delete");
+        }
+    }
+
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -299,6 +347,7 @@ pub async fn update_block(
     Json(payload): Json<UpdateBlockRequest>,
 ) -> Result<Json<BlockDto>, AppError> {
     let block_repo = SqliteBlockRepository::new(state.pool.clone());
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
     let uuid = Uuid::parse_str(&block_id)
         .ok_or_else(|| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
 
@@ -308,9 +357,12 @@ pub async fn update_block(
         .map_err(|e| AppError::Internal(e.to_string()))?
         .ok_or_else(|| AppError::NotFound(format!("Block not found: {}", block_id)))?;
 
+    // Track whether content changed for ref index update
+    let content_changed = payload.content.is_some();
+
     // Update fields if provided
-    if let Some(content) = payload.content {
-        block.content = BlockContent::from_text(content);
+    if let Some(ref content) = payload.content {
+        block.content = BlockContent::from_text(content.clone());
     }
     if let Some(parent_id) = payload.parent_id {
         block.parent_id = Uuid::parse_str(&parent_id);
@@ -329,6 +381,13 @@ pub async fn update_block(
         .update(&block)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Update reference index if content changed
+    if content_changed {
+        if let Some(ref new_content) = payload.content {
+            update_ref_index(&state.ref_service, block.id, new_content, &page_repo).await;
+        }
+    }
 
     Ok(Json(BlockDto::from(block)))
 }

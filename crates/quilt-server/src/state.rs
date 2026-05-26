@@ -2,6 +2,7 @@
 //!
 //! Holds the database pool, MCP server, search index, and other shared resources.
 
+use quilt_application::services::ref_service::RefService;
 use quilt_cognitive::{
     ArgumentCartographer, CognitiveMirror, MorningBriefing, SerendipityEngine,
 };
@@ -86,6 +87,8 @@ pub struct AppState {
     /// ArgumentCartographer for mapping argument structures
     #[allow(dead_code)]
     pub argument_cartographer: Option<Arc<ArgumentCartographer>>,
+    /// Bidirectional reference service for O(1) backlink queries
+    pub ref_service: Arc<RwLock<RefService>>,
 }
 
 impl AppState {
@@ -97,6 +100,7 @@ impl AppState {
         pool: DbPool,
         search_index: Arc<SearchIndexManager>,
         ai_client: Arc<dyn AIClient>,
+        ref_service: Arc<RwLock<RefService>>,
     ) -> Self {
         // Create broadcast channel for navigation events
         let (navigation_tx, _) = broadcast::channel(100);
@@ -111,6 +115,7 @@ impl AppState {
             serendipity_engine: None,
             morning_briefing: None,
             argument_cartographer: None,
+            ref_service,
         }
     }
 
@@ -121,6 +126,7 @@ impl AppState {
         pool: DbPool,
         search_index: Arc<SearchIndexManager>,
         ai_client: Arc<dyn AIClient>,
+        ref_service: Arc<RwLock<RefService>>,
         cognitive_mirror: Arc<CognitiveMirror>,
         serendipity_engine: Arc<SerendipityEngine>,
         morning_briefing: Arc<MorningBriefing>,
@@ -139,6 +145,7 @@ impl AppState {
             serendipity_engine: Some(serendipity_engine),
             morning_briefing: Some(morning_briefing),
             argument_cartographer: Some(argument_cartographer),
+            ref_service,
         }
     }
 

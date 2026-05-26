@@ -20,9 +20,9 @@ use tracing::instrument;
 use crate::error::HttpError;
 use crate::state::HttpState;
 use quilt_domain::entities::{Page, PageCreate};
-use quilt_domain::repositories::{PageReader, PageRepository, PageWriter};
-use quilt_domain::value_objects::{BlockFormat, JournalDay};
-use quilt_infrastructure::database::sqlite::repositories::SqlitePageRepository;
+use quilt_domain::repositories::{BlockReader, BlockRepository, PageReader, PageRepository, PageWriter};
+use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
+use quilt_infrastructure::database::sqlite::repositories::{SqliteBlockRepository, SqlitePageRepository};
 
 /// Page response DTO
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,11 +215,85 @@ pub async fn search_pages(
     Ok(Json(dtos))
 }
 
+/// A backlink displayed to the frontend.
+///
+/// Represents a block that references the target page or block.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BacklinkDto {
+    /// UUID of the source block (the block that contains the reference)
+    pub source_block_id: String,
+    /// Name of the page that contains the source block
+    pub source_page_name: String,
+    /// Content preview of the source block (first ~100 chars)
+    pub content_preview: String,
+}
+
+/// GET /api/pages/{name}/backlinks
+///
+/// Returns all blocks that reference the given page.
+/// Uses the in-memory RefIndex for O(1) lookup, then enriches
+/// results with page names and content previews.
+#[instrument(skip(state))]
+pub async fn get_page_backlinks(
+    State(state): State<Arc<HttpState>>,
+    Path(name): Path<String>,
+) -> Result<Json<Vec<BacklinkDto>>, HttpError> {
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
+    let block_repo = SqliteBlockRepository::new(state.pool.clone());
+
+    // Look up the page by name
+    let page = page_repo
+        .get_by_name(&name)
+        .await
+        .map_err(|e| HttpError::DatabaseError(e.to_string()))?
+        .ok_or_else(|| HttpError::NotFound(format!("Page not found: {}", name)))?;
+
+    // Query the in-memory ref index for O(1) backlinks
+    let backlinks = {
+        let ref_service = state.ref_service.read().await;
+        ref_service.get_backlinks(page.id)
+    };
+
+    if backlinks.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+
+    // Enrich backlinks with source block content and page names
+    let mut dtos = Vec::with_capacity(backlinks.len());
+    for (source_id, _ref_type) in &backlinks {
+        if let Ok(Some(source_block)) = block_repo.get_by_id(*source_id).await {
+            let source_page_name = page_repo
+                .get_by_id(source_block.hierarchy.page_id)
+                .await
+                .ok()
+                .flatten()
+                .map(|p| p.name)
+                .unwrap_or_else(|| "unknown".to_string());
+
+            let content_preview = if source_block.content.content.len() > 100 {
+                format!("{}...", &source_block.content.content[..100])
+            } else {
+                source_block.content.content.clone()
+            };
+
+            dtos.push(BacklinkDto {
+                source_block_id: source_id.to_string(),
+                source_page_name,
+                content_preview,
+            });
+        }
+    }
+
+    Ok(Json(dtos))
+}
+
 /// Mount page routes
 pub fn routes() -> axum::Router<Arc<HttpState>> {
     axum::Router::new()
         .route("/api/pages", axum::routing::get(list_pages).post(create_page))
         .route("/api/pages/{name}", axum::routing::get(get_page))
+        .route("/api/pages/{name}/backlinks", axum::routing::get(get_page_backlinks))
         .route("/api/journal/{date}", axum::routing::get(get_journal))
         .route("/api/pages/recent", axum::routing::get(get_recent_pages))
 }

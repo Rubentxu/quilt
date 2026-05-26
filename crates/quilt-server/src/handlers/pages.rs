@@ -10,11 +10,13 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use tracing::instrument;
 
+use std::sync::Arc;
+
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_domain::entities::{Page, PageCreate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::value_objects::{BlockFormat, JournalDay};
+use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
 use quilt_infrastructure::database::sqlite::repositories::SqlitePageRepository;
 
 /// A page returned to the frontend
@@ -57,6 +59,7 @@ pub fn routes() -> Router {
         .route("/journal/:date", get(get_journal))
         .route("/:name", get(get_page))
         .route("/:name/blocks", get(get_page_blocks))
+        .route("/:name/backlinks", get(get_page_backlinks))
 }
 
 /// GET /api/v1/pages
@@ -146,6 +149,81 @@ pub async fn get_journal(
     };
 
     Ok(Json(PageDto::from(page)))
+}
+
+/// A backlink DTO returned by the page backlinks endpoint
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BacklinkDto {
+    /// UUID of the source block (the block that contains the reference)
+    pub source_block_id: String,
+    /// Name of the page that contains the source block
+    pub source_page_name: String,
+    /// Content preview of the source block (first ~100 chars)
+    pub content_preview: String,
+}
+
+/// GET /api/v1/pages/:name/backlinks
+///
+/// Returns all blocks that reference the given page.
+/// Uses the in-memory RefIndex for O(1) lookup.
+#[instrument(skip(state))]
+pub async fn get_page_backlinks(
+    Path(name): Path<String>,
+    Extension(state): Extension<AppState>,
+) -> Result<Json<Vec<BacklinkDto>>, AppError> {
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
+    let block_repo = quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository::new(state.pool.clone());
+
+    // Look up the page by name
+    let page = page_repo
+        .get_by_name(&name)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
+
+    // Query the in-memory ref index for O(1) backlinks
+    let backlinks = {
+        let ref_service = state.ref_service.read().await;
+        ref_service.get_backlinks(page.id)
+    };
+
+    if backlinks.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+
+    // Enrich backlinks with source block content and page names
+    let mut dtos = Vec::with_capacity(backlinks.len());
+    for (source_id, _ref_type) in &backlinks {
+        let block = block_repo
+            .get_by_id(*source_id)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        if let Some(source_block) = block {
+            let source_page_name = page_repo
+                .get_by_id(source_block.page_id)
+                .await
+                .map_err(|e| AppError::Internal(e.to_string()))?
+                .map(|p| p.name)
+                .unwrap_or_else(|| "unknown".to_string());
+
+            let plain_text = source_block.content.as_plain_text();
+            let content_preview = if plain_text.len() > 100 {
+                format!("{}...", &plain_text[..100])
+            } else {
+                plain_text
+            };
+
+            dtos.push(BacklinkDto {
+                source_block_id: source_id.to_string(),
+                source_page_name,
+                content_preview,
+            });
+        }
+    }
+
+    Ok(Json(dtos))
 }
 
 /// GET /api/v1/pages/:name/blocks
