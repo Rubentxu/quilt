@@ -1,6 +1,6 @@
 # Roadmap Técnico — Outliner Profesional
 
-> **Last updated**: 2026-05-26 — post grill-with-docs (ADR-0007, 0008, 0009)
+> **Last updated**: 2026-05-28 — all 9 phases complete, production-ready
 
 Objetivo: llevar Quilt desde el outliner actual a un **Outliner profesional** capaz de competir y superar a Logseq, preservando el modelo de dominio (**Grafo → Página → Bloque → Propiedad**) y manteniendo Quilt estrictamente **MCP-first**.
 
@@ -11,15 +11,15 @@ Objetivo: llevar Quilt desde el outliner actual a un **Outliner profesional** ca
 | Fase | Nombre | Estado | % |
 |------|--------|--------|---|
 | 0 | Preparación y blindaje | ✅ COMPLETO | 100% |
-| 1 | Motor serio + parser unificado | 🟡 Parser ✅, Motor ❌ | 60% |
-| 2 | Refs, tags y properties con autocomplete | 🟡 Infra ✅, datos reales ❌ | 55% |
-| 3 | Undo/Redo unificado por intención | ✅ COMPLETO | 95% |
-| 4 | Navegación completa por teclado | ❌ PENDIENTE | 10% |
-| 5 | Sidebar derecho funcional | ❌ PENDIENTE | 5% |
-| 6 | Slash commands | ❌ PENDIENTE | 5% |
-| 7 | Propiedades inline fuertes | ❌ PENDIENTE | 10% |
-| 8 | Drag & drop | ❌ PENDIENTE | 0% |
-| 9 | Journals funcionales | ❌ PENDIENTE | 5% |
+| 1 | Motor serio + parser unificado | ✅ COMPLETO | 100% |
+| 2 | Refs, tags y properties con autocomplete | ✅ COMPLETO | 100% |
+| 3 | Undo/Redo unificado por intención | ✅ COMPLETO | 100% |
+| 4 | Navegación completa por teclado | ✅ COMPLETO | 100% |
+| 5 | Sidebar derecho funcional | ✅ COMPLETO | 100% |
+| 6 | Slash commands | ✅ COMPLETO | 100% |
+| 7 | Propiedades inline fuertes | ✅ COMPLETO | 100% |
+| 8 | Drag & drop | ✅ COMPLETO | 100% |
+| 9 | Journals funcionales | ✅ COMPLETO | 100% |
 
 ---
 
