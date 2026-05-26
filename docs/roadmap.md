@@ -1,9 +1,9 @@
 # Quilt — Roadmap de Implementación
 
 > **Proyecto**: Clon de Logseq DB en Rust con MCP-first architecture
-> **Fecha**: 2026-05-02
-> **Versión**: 1.0
-> **Estado**: Planning
+> **Fecha**: 2026-05-24
+> **Versión**: 1.1
+> **Estado**: Active Implementation
 
 ---
 
@@ -34,8 +34,8 @@ Quilt es un sistema PKM (Personal Knowledge Management) AI-first que reimplement
 | Database | SQLite + Rkyv | Embeddable, ACID, zero-copy serialization |
 | Search | FTS5 | Full-text search integrado en SQLite |
 | Serialization | Rkyv | Zero-copy Rust serialization |
-| WebAssembly | Leptos o Yew | UI framework Rust-native |
-| Desktop | Tauri | Lightweight, Rust-native |
+| WebAssembly | Leptos 0.8 CSR | UI framework Rust-native, compiled to WASM |
+| Desktop | HTTP Server + WASM | No Tauri (ADR-0005) — Leptos served by HTTP server |
 | MCP | Official MCP Rust SDK | Standard AI agent protocol |
 | Sync | Loro CRDT | Conflict-free replicated data types |
 | CLI | Clap | Standard Rust CLI |
@@ -62,9 +62,16 @@ quilt/
 │   ├── quilt-search/              # Full-text search
 │   ├── quilt-sync/                # CRDT sync engine
 │   ├── quilt-mcp/                # MCP protocol layer
-│   └── quilt-platform/           # Tauri + CLI adapters
+│   ├── quilt-analysis/            # Structural analysis (cognitive mirror, serendipity)
+│   ├── quilt-ui/                 # Leptos 0.8 CSR WASM UI (Logseq-like outliner)
+│   ├── quilt-platform/           # CLI adapters ( clap)
+│   ├── quilt-server/             # HTTP API server (serves quilt-ui + REST API)
+│   └── quilt-bin/                # CLI binary entry point
 └── tests/
 ```
+
+> ⚠️ **Cambios desde ADR-0005**: No se usa Tauri. La UI es Leptos CSR compilada a WASM,
+> servida por `quilt-server`. Ver `docs/adr/0005-no-tauri.md`.
 
 ### 1.2 Principios DDD Aplicados
 
@@ -92,12 +99,16 @@ FASE 1: Application + Infrastructure (Semanas 5-10)
 ├── 1.4 quilt-infrastructure: SqlitePageRepository
 └── 1.5 Integration tests
 
-FASE 2: Query System (Semanas 11-16)
-├── 2.1 quilt-query: grammar + parser (PEG)
-├── 2.2 quilt-query: AST + visitor
-├── 2.3 quilt-query: executor
-├── 2.4 Time helpers
-└── 2.5 Query integration tests
+FASE 2: Query System (Semanas 11-16) ✅ PARCIAL
+├── 2.1 quilt-query: grammar + parser (PEG) ✅
+├── 2.2 quilt-query: AST + visitor ✅
+├── 2.3 quilt-query: executor ✅
+├── 2.4 Time helpers ✅
+├── 2.5 Query integration tests ✅
+├── 2.6 DSL aggregates (COUNT, AVG, SUM, STDDEV, MEDIAN) ✅ DONE
+├── 2.7 DSL group_by ✅ DONE
+├── 2.8 DSL stats (percentile, distribution) ✅ DONE
+└── 2.9 DSL analyze operator (CognitiveMirror, SerendipityEngine) ✅ DONE
 
 FASE 3: Search (Semanas 17-20)
 ├── 3.1 FTS5 setup + index management
@@ -119,26 +130,36 @@ FASE 5: Sync Engine (Semanas 27-32)
 ├── 5.4 Sync state machine
 └── 5.5 E2E encryption (v2)
 
-FASE 6: Platform (Semanas 33-40)
-├── 6.1 quilt-platform: Tauri setup
-├── 6.2 CLI commands (clap)
-├── 6.3 File system watcher
-├── 6.4 Deep link handling
-└── 6.5 System tray + notifications
+FASE 6: Platform (Semanas 33-40) ✅ PARCIAL
+├── 6.1 quilt-server: HTTP server setup ✅ (sirve quilt-ui WASM + REST API)
+├── 6.2 quilt-platform: CLI commands (clap) ✅
+├── 6.3 quilt-bin: CLI binary entry point ✅
+├── 6.4 File system watcher ⬜
+├── 6.5 Deep link handling ⬜
+└── 6.6 System tray + notifications ⬜
 
-FASE 7: UI (Semanas 41-48) [v2]
-├── 7.1 Leptos/Yew scaffold
-├── 7.2 Journal view + briefing
-├── 7.3 Graph view (cognitive map)
-├── 7.4 Focus mode editor
-└── 7.5 Query builder UI
+> ⚠️ **No Tauri** (ADR-0005): UI servida via HTTP, no desktop shell. Queda pendiente
+> decidir si se envuelve en Tauri/Electron para distribución desktop.
 
-FASE 8: AI Cognitive (Semanas 49-56) [v2]
-├── 8.1 Cognitive Mirror
-├── 8.2 Serendipity Engine
-├── 8.3 Argument Cartographer
-├── 8.4 Mental Model Gardener
-└── 8.5 Agent Memory
+FASE 7: UI (Semanas 41-48) [v2] ✅ PARCIAL
+├── 7.1 Leptos/Yew scaffold ✅ DONE (Leptos 0.8 CSR + WASM)
+├── 7.2 Journal view + briefing ✅
+├── 7.3 Graph view (cognitive map) ⬜
+├── 7.4 Focus mode editor ⬜
+├── 7.5 Query builder UI ⬜
+├── 7.6 Outliner keyboard handling (Enter, Tab/Shift+Tab, Backspace, Escape, Ctrl+Enter, Ctrl+Backspace) ✅ DONE
+└── 7.7 Trunk + Tailwind CSS 4 build pipeline ✅ DONE
+
+FASE 8: AI Cognitive (Semanas 49-56) [v2] ✅ PARCIAL
+├── 8.1 Cognitive Mirror ✅ DONE
+├── 8.2 Serendipity Engine ✅ DONE
+├── 8.3 Argument Cartographer ⬜
+├── 8.4 Mental Model Gardener ⬜
+└── 8.5 Agent Memory ⬜
+
+> ⚠️ **Nota ADR-0001**: Quilt no tiene IA interna. El análisis estructural (Cognitive Mirror,
+> Serendipity Engine) se ejecuta en Rust. Agentes AI externos acceden via MCP.
+> `quilt-cognitive` fue renombrado a `quilt-analysis` para clarificar el scope.
 
 FASE 9: Polish + Hardening (Semanas 57-60)
 ├── 9.1 Performance optimization
@@ -168,7 +189,11 @@ members = [
     "crates/quilt-search",
     "crates/quilt-sync",
     "crates/quilt-mcp",
+    "crates/quilt-analysis",
+    "crates/quilt-ui",
     "crates/quilt-platform",
+    "crates/quilt-server",
+    "crates/quilt-bin",
 ]
 
 [workspace.dependencies]
@@ -1429,65 +1454,42 @@ impl OfflineQueue {
 
 ---
 
-### FASE 6: Desktop Shell (Semanas 31-36)
+### FASE 6: Platform (Semanas 31-36)
 
-#### 6.1 Tauri App Scaffold
+#### 6.1 HTTP Server + WASM
+
+> No se usa Tauri (ADR-0005). La UI es Leptos CSR compilada a WASM,
+> servida por un servidor HTTP.
 
 ```rust
-// src-tauri/main.rs
+// quilt-server/src/main.rs
 
-fn main() {
-    tauri::Builder::default()
-        .setup(|app| {
-            let db = BlockService::new(app.path().app_data_dir().unwrap());
-            let search = SearchService::new(db.clone());
-            let mcp = McpServer::new(db.clone());
+use axum::{Router, routing::get};
+use std::sync::Arc;
 
-            app.manage(db);
-            app.manage(search);
-            app.manage(mcp);
+#[tokio::main]
+async fn main() {
+    let app = Router::new()
+        .route("/api/health", get(health))
+        .route("/api/pages", get(list_pages))
+        .route("/api/pages/:name/blocks", get(get_page_blocks))
+        .route("/api/blocks", post(create_block))
+        .route("/api/blocks/:id", patch(update_block))
+        .route("/api/blocks/:id/move", put(move_block))
+        .route("/api/blocks/:id", delete(delete_block))
+        // Serve WASM UI at root
+        .route("/", get(serve_ui))
+        .with_state(Arc::new(AppState::new()));
 
-            let mcp_server = app.state::<McpServer>().clone();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(mcp_server.serve(3541));
-            });
-
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            query_blocks,
-            create_block,
-            search_blocks,
-            get_page,
-            list_pages,
-            get_journal,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error running tauri application");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3541")
+        .await
+        .unwrap();
+    axum::serve(listener, app).await;
 }
 
-#[tauri::command]
-async fn query_blocks(
-    db: State<'_, Arc<BlockService>>,
-    dsl: String,
-) -> Result<Vec<BlockDto>, String> {
-    let result = db.query(&dsl).await.map_err(|e| e.to_string())?;
-    Ok(result.blocks.into_iter().map(BlockDto::from).collect())
-}
-
-#[tauri::command]
-async fn create_block(
-    db: State<'_, Arc<BlockService>>,
-    page_name: String,
-    content: String,
-) -> Result<BlockDto, String> {
-    let block = db.create(CreateBlockRequest {
-        page_name,
-        content,
-        ..Default::default()
-    }).await.map_err(|e| e.to_string())?;
-    Ok(BlockDto::from(block))
+async fn serve_ui() -> impl IntoResponse {
+    // Serve compiled WASM + Tailwind CSS
+    // Trunk generates index.html + *.wasm during build
 }
 ```
 
@@ -1701,7 +1703,7 @@ impl SerendipityEngine {
 | ID | Descripción | Prioridad |
 |----|-------------|-----------|
 | US-BLK-01 | Crear bloque con contenido | P0 |
-| US-BLK-02 | Indentar/dedentar (Tab/Shift+Tab) | P0 |
+| US-BLK-02 | Indentar/dedentar (Tab/Shift+Tab) ✅ | P0 |
 | US-BLK-03 | Mover bloque (drag & drop) | P0 |
 | US-BLK-04 | Crear referencia a otra página [[]] | P0 |
 | US-BLK-05 | Marcar tarea (TODO, DONE, etc) | P0 |
@@ -1738,7 +1740,7 @@ impl SerendipityEngine {
 | Query | Datomic-like DSL | PEG parser + SQL |
 | Sync | API REST +txid | CRDT (Loro) |
 | Search | Browser native | FTS5 |
-| Platform | Electron | Tauri |
+| Platform | Electron | HTTP Server + WASM |
 | AI | Plugins (later) | Native MCP |
 | Performance | Good | Excellent |
 | Memory | Higher | Lower |
@@ -1845,8 +1847,13 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-# Desktop
-tauri = "2"
+# Desktop (no Tauri - ADR-0005)
+# tauri = "2"  # Removed - using HTTP server + WASM instead
+
+# UI
+leptos = "0.8"
+wasm-bindgen = "0.2"
+gloo = "0.10"
 
 # CLI
 clap = "4"
@@ -1861,4 +1868,4 @@ tantivy = "0.22"  # Alternativa a FTS5 para casos avanzados
 ---
 
 *Documento generado basándose en investigación de Logseq DB*
-*Versión: 1.0 | Fecha: 2026-05-02*
+*Versión: 1.1 | Fecha: 2026-05-24 | Estado: Active Implementation*
