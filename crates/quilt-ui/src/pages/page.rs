@@ -20,6 +20,12 @@ pub fn PageView() -> impl IntoView {
     let (blocks, set_blocks) = signal(Vec::<crate::bridge::BlockDto>::new());
     let (loading, set_loading) = signal(true);
 
+    // Fetch page names for autocomplete (page ref suggestions).
+    let page_names = RwSignal::new(Vec::<String>::new());
+
+    // Provide page_names as context so Block → Cm6BlockEditor can use them.
+    provide_context(page_names);
+
     // Create the PageOutliner coordinator with both a content-applier callback
     // and a structural-applier callback. Both update the blocks signal.
     // This makes undo/redo work for both content and structural operations.
@@ -46,11 +52,24 @@ pub fn PageView() -> impl IntoView {
 
     Effect::new(move || {
         let name = page_name();
+        let pn = page_names;
         wasm_bindgen_futures::spawn_local(async move {
             set_loading.set(true);
+            // Fetch blocks and page list in parallel
             match bridge::get_page_blocks(&name).await {
                 Ok(b) => set_blocks.set(b),
                 Err(_) => set_blocks.set(vec![]),
+            }
+            // Fetch real page names for autocomplete
+            match bridge::list_pages().await {
+                Ok(pages) => {
+                    let names: Vec<String> = pages.into_iter().map(|p| p.name).collect();
+                    pn.set(names);
+                }
+                Err(_) => {
+                    // Graceful degradation: empty page names means no
+                    // page ref suggestions, which is the current behavior.
+                }
             }
             set_loading.set(false);
         });

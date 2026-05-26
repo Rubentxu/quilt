@@ -27,6 +27,11 @@ pub fn Block(
     // if no context is provided, e.g., in tests or future split views).
     let page_outliner: Option<PageOutliner> = use_context();
 
+    // Retrieve page names for autocomplete (populated by PageView).
+    // Falls back to empty vec if context is not provided.
+    let page_names_signal = use_context::<RwSignal<Vec<String>>>()
+        .unwrap_or_else(|| RwSignal::new(Vec::new()));
+
     // Track the content at the START of the current edit session for undo/redo.
     // Updated when the user clicks to edit; not captured at component creation time.
     // This ensures each edit session records the correct "before" state even if
@@ -181,12 +186,14 @@ pub fn Block(
                 {move || if editing.get() {
                     let os = on_save.clone();
                     let oc = on_cancel.clone();
+                    let page_names = page_names_signal.get();
                     vec![view! {
                         <Cm6BlockEditor
                             block=block
                             on_save=os
                             on_cancel=oc
                             tree_ops=tree_ops.clone()
+                            page_names=page_names
                         />
                     }.into_any()]
                 } else {

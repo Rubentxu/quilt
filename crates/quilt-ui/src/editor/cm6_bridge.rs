@@ -278,6 +278,22 @@ impl Cm6Handle {
             .ok_or_else(|| Cm6BridgeError::JsError("getCursorOffset did not return a number".into()))
     }
 
+    /// Get cursor viewport-relative coordinates.
+    ///
+    /// Returns `(top, left, bottom)` in CSS pixels relative to the viewport,
+    /// or `None` if position cannot be determined.
+    pub fn cursor_coords(&self) -> Option<(f64, f64, f64)> {
+        let result = call_api_method("getCursorCoords", &[self.id.clone()]).ok()?;
+        if result.is_null() || result.is_undefined() {
+            return None;
+        }
+        let obj = result.dyn_into::<Object>().ok()?;
+        let top = Reflect::get(&obj, &"top".into()).ok()?.as_f64()?;
+        let left = Reflect::get(&obj, &"left".into()).ok()?.as_f64()?;
+        let bottom = Reflect::get(&obj, &"bottom".into()).ok()?.as_f64()?;
+        Some((top, left, bottom))
+    }
+
     /// Access the raw JsValue ID (for FFI edge cases).
     pub fn id(&self) -> &JsValue {
         &self.id

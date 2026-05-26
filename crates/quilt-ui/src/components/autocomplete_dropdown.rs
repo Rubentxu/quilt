@@ -116,12 +116,18 @@ impl DropdownController {
 
 /// A lightweight dropdown for autocomplete suggestions.
 ///
-/// Renders as a positioned popup below the trigger point.
+/// Renders as a positioned popup near the cursor.
 /// Keyboard navigation (up/down/enter/escape) is handled by the parent
 /// via `DropdownController`.
 ///
 /// The component itself is purely visual — it renders the items with
 /// the currently selected index highlighted.
+///
+/// # Positioning
+///
+/// If `cursor_coords` is `Some((top, left))`, the dropdown is rendered with
+/// `position: fixed` at those viewport-relative coordinates (below the cursor).
+/// If `None`, the dropdown uses flow positioning (default for fallback).
 ///
 /// Note: This component uses plain Leptos nodes instead of `<For>` to
 /// avoid macro parsing edge cases with complex closures.
@@ -135,6 +141,13 @@ pub fn AutocompleteDropdown(
     on_select: impl Fn(usize) + 'static + Clone,
     /// Whether the dropdown is visible.
     visible: bool,
+    /// Optional viewport-relative position `(top, left)` in CSS pixels.
+    /// When set, the dropdown uses `position: fixed` at these coordinates.
+    /// Callers should pass `(cursor_bottom, cursor_left)` from CM6's
+    /// `coordsAtPos` to position below the cursor line.
+    /// If `None`, uses default flow positioning.
+    #[prop(optional)]
+    cursor_coords: Option<(f64, f64)>,
 ) -> leptos::prelude::AnyView {
     if !visible || items.is_empty() {
         return (view! { <div></div> }).into_any();
@@ -183,8 +196,26 @@ pub fn AutocompleteDropdown(
         item_nodes.push(node);
     }
 
+    // Build style: position:fixed at cursor coords if available
+    let container_style = if let Some((_top, left)) = cursor_coords {
+        format!(
+            "position: fixed; top: {}px; left: {}px; z-index: 9999;",
+            // Use top as-is (viewport-relative from coordsAtPos)
+            _top,
+            left,
+        )
+    } else {
+        String::new()
+    };
+
+    let wrapper_class = if cursor_coords.is_some() {
+        "autocomplete-dropdown autocomplete-dropdown-fixed"
+    } else {
+        "autocomplete-dropdown"
+    };
+
     (view! {
-        <div class="autocomplete-dropdown">
+        <div class={wrapper_class} style={container_style}>
             <div class="bg-surface border border-border rounded-lg shadow-lg py-1 max-h-48 overflow-y-auto">
                 {item_nodes}
             </div>

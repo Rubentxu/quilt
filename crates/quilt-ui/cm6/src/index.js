@@ -375,6 +375,22 @@ const api = {
   },
 
   /**
+   * Get cursor viewport-relative coordinates.
+   * Returns {top, left, bottom} or null if unavailable.
+   * Uses CM6's coordsAtPos which returns client/viewport-relative coords.
+   */
+  getCursorCoords(id) {
+    const entry = editors.get(id);
+    if (!entry) return null;
+    const { view } = entry;
+    const sel = view.state.selection.main;
+    if (!sel) return null;
+    const coords = view.coordsAtPos(sel.anchor);
+    if (!coords) return null;
+    return { top: coords.top, left: coords.left, bottom: coords.bottom };
+  },
+
+  /**
    * Check if an editor instance exists.
    */
   hasEditor(id) {

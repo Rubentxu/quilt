@@ -187,6 +187,11 @@ pub fn Cm6BlockEditor(
     // When set, an Effect pushes the content+cursor to the editor.
     let ac_result: RwSignal<Option<(String, u32)>> = RwSignal::new(None);
 
+    // Cursor viewport position for dropdown positioning.
+    // Updated on each onChange via the cm6_handle's cursor_coords() method.
+    // Tuple is (viewport_bottom, viewport_left) for fixed positioning below cursor.
+    let ac_cursor_pos: RwSignal<Option<(f64, f64)>> = RwSignal::new(None);
+
     // ── Effect: push autocomplete results (content + cursor) to CM6 ──
     Effect::new({
         let cm6_handle = cm6_handle.clone();
@@ -262,6 +267,7 @@ pub fn Cm6BlockEditor(
                 let ac_selected_inner = ac_selected_effect;
                 let ac_trigger_kind_inner = ac_trigger_kind_effect;
                 let ac_controller_inner = ac_controller_effect;
+                let ac_cursor_pos_inner = ac_cursor_pos;
 
                 Closure::wrap(Box::new(move |text: String| {
                     c.set(text.clone());
@@ -289,6 +295,15 @@ pub fn Cm6BlockEditor(
                             ac_selected_inner.set(0);
                             ac_controller_inner.set(Some(DropdownController::new(count)));
                             ac_visible_inner.set(true);
+
+                            // Query cursor viewport coords for dropdown positioning
+                            let coords = cm6_handle_inner
+                                .borrow()
+                                .as_ref()
+                                .and_then(|h| h.cursor_coords());
+                            if let Some((_top, left, bottom)) = coords {
+                                ac_cursor_pos_inner.set(Some((bottom, left)));
+                            }
                             return;
                         }
                     }
@@ -395,6 +410,7 @@ pub fn Cm6BlockEditor(
                 let ac_visible_inner = ac_visible_effect;
                 let ac_controller_inner = ac_controller_effect;
                 let ac_result_inner = ac_result_effect;
+                let ac_cursor_pos_inner = ac_cursor_pos;
                 let on_save_ac = on_save_effect.clone();
                 Closure::wrap(Box::new(move || {
                     let current = c.get_untracked();
@@ -416,11 +432,12 @@ pub fn Cm6BlockEditor(
                         let new_cursor = ir.cursor_offset;
                         c.set(new_text.clone());
 
-                        // Hide dropdown
+                        // Hide dropdown + clear position
                         ac_visible_inner.set(false);
                         ac_items_inner.set(Vec::new());
                         ac_trigger_kind_inner.set(None);
                         ac_controller_inner.set(None);
+                        ac_cursor_pos_inner.set(None);
 
                         // Signal the CM6 update to the dedicated Effect
                         ac_result_inner.set(Some((new_text.clone(), new_cursor as u32)));
@@ -435,11 +452,13 @@ pub fn Cm6BlockEditor(
                 let ac_items_inner = ac_items_effect;
                 let ac_trigger_kind_inner = ac_trigger_kind_effect;
                 let ac_controller_inner = ac_controller_effect;
+                let ac_cursor_pos_inner = ac_cursor_pos;
                 Closure::wrap(Box::new(move || {
                     ac_visible_inner.set(false);
                     ac_items_inner.set(Vec::new());
                     ac_trigger_kind_inner.set(None);
                     ac_controller_inner.set(None);
+                    ac_cursor_pos_inner.set(None);
                 }) as Box<dyn Fn()>)
             };
 
@@ -515,6 +534,7 @@ pub fn Cm6BlockEditor(
     // state to CM6's keymap.
     let on_blur_cb = move |_| {
         ac_visible.set(false);
+        ac_cursor_pos.set(None);
         on_save_blur.clone()(content.get_untracked(), None);
     };
 
@@ -529,6 +549,7 @@ pub fn Cm6BlockEditor(
         let ac_visible = ac_visible;
         let ac_controller = ac_controller;
         let ac_result = ac_result;
+        let ac_cursor_pos = ac_cursor_pos;
         let on_save = on_save;
         move |idx: usize| {
             let current = content_signal.get_untracked();
@@ -549,6 +570,7 @@ pub fn Cm6BlockEditor(
                 ac_items.set(Vec::new());
                 ac_trigger_kind.set(None);
                 ac_controller.set(None);
+                ac_cursor_pos.set(None);
                 // Signal the CM6 update via the dedicated Effect
                 ac_result.set(Some((new_text.clone(), new_cursor as u32)));
                 on_save(new_text, trigger_kind);
@@ -570,15 +592,31 @@ pub fn Cm6BlockEditor(
                     let items = ac_items.get();
                     let sel_idx = ac_selected.get();
                     let cb = handle_ac_select.clone();
+                    let cursor_pos = ac_cursor_pos.get();
                     if !items.is_empty() {
-                        (view! {
-                            <AutocompleteDropdown
-                                items=items
-                                selected_index=sel_idx
-                                on_select=cb
-                                visible=true
-                            />
-                        }).into_any()
+                        // Split rendering based on whether cursor position is available:
+                        // if set, pass cursor_coords for fixed positioning near cursor;
+                        // otherwise omit the prop for default flow positioning.
+                        if let Some((top, left)) = cursor_pos {
+                            (view! {
+                                <AutocompleteDropdown
+                                    items=items
+                                    selected_index=sel_idx
+                                    on_select=cb
+                                    visible=true
+                                    cursor_coords=(top, left)
+                                />
+                            }).into_any()
+                        } else {
+                            (view! {
+                                <AutocompleteDropdown
+                                    items=items
+                                    selected_index=sel_idx
+                                    on_select=cb
+                                    visible=true
+                                />
+                            }).into_any()
+                        }
                     } else {
                         (view! { <div></div> }).into_any()
                     }
