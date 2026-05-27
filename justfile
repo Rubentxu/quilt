@@ -93,11 +93,32 @@ setup: server-build ui-deps
     @echo "    Pages:                http://localhost:{{ UI_PORT }}/pages"
 
 # Start both backend and frontend for development
-# Runs server in background, UI in foreground (Ctrl+C stops UI)
-dev: server-start
+# Kills any existing processes, rebuilds everything, then starts fresh
+dev: stop-all
     @echo ""
-    @echo "Backend running on :{{ SERVER_PORT }}"
-    @echo "Starting frontend..."
+    @echo "=== Building everything ==="
+    @echo ""
+    @echo "Building backend..."
+    cargo build -p quilt-server
+    @echo ""
+    @echo "Building UI assets (CSS + CM6)..."
+    cd {{ ROOT }}/crates/quilt-ui && npm install
+    cd {{ ROOT }}/crates/quilt-ui/cm6 && npm install && node bundle.mjs
+    cd {{ ROOT }}/crates/quilt-ui && npx postcss style.css -o dist/style.css
+    @echo ""
+    @echo "Starting backend on :{{ SERVER_PORT }}..."
+    @mkdir -p {{ QUILT_DIR }}
+    @QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
+        RUST_LOG=quilt_server=info \
+        {{ SERVER_BINARY }} > {{ QUILT_DIR }}/server.log 2>&1 &
+    @sleep 2
+    @if curl -sf http://localhost:{{ SERVER_PORT }}/health > /dev/null 2>&1; then \
+        echo "  ✓ Backend running — http://localhost:{{ SERVER_PORT }}"; \
+    else \
+        echo "  ✗ Backend failed to start. Check logs: tail -f {{ QUILT_DIR }}/server.log"; \
+    fi
+    @echo ""
+    @echo "Starting frontend on :{{ UI_PORT }}..."
     @echo ""
     cd {{ ROOT }}/crates/quilt-ui && trunk serve --port {{ UI_PORT }} --open
 
@@ -118,7 +139,9 @@ server-dev:
     QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true RUST_LOG=quilt_server=info,tower_http=info {{ SERVER_BINARY }}
 
 # Run server in background (for use with ui-dev)
+# Kills any existing process on the port first
 server-start:
+    @-kill $$(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null
     @echo "Starting server on :{{ SERVER_PORT }}..."
     @mkdir -p {{ QUILT_DIR }}
     @QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
@@ -359,8 +382,11 @@ clean:
     @echo "✓ Cleaned"
 
 # Stop ALL dev processes (server + trunk)
-stop-all: server-stop
-    @-kill $$(lsof -ti:{{ UI_PORT }}) 2>/dev/null && echo "  UI server stopped" || echo "  UI server not running"
+stop-all:
+    @echo "Stopping all dev servers..."
+    @-kill $$(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null && echo "  ✓ Backend stopped" || echo "  Backend not running"
+    @-pkill -f "trunk serve" 2>/dev/null && echo "  ✓ Trunk stopped" || echo "  Trunk not running"
+    @-pkill -f "quilt-server" 2>/dev/null && echo "  ✓ Server process stopped" || echo "  Server process not running"
     @echo "✓ All dev servers stopped"
 
 # Show watchers for development
