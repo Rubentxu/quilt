@@ -191,10 +191,11 @@ export function BlockRow({
   // ── Content save ──────────────────────────────────────────────
   const saveToApi = useCallback(
     async (text: string) => {
-      const trimmed = text.trim()
-      if (trimmed === block.content) return
+      // Preserve the exact text the user typed. Logseq-style editors do not
+      // silently trim leading/trailing whitespace on blur.
+      if (text === block.content) return
       try {
-        const updated = await api.updateBlock(block.id, { content: trimmed })
+        const updated = await api.updateBlock(block.id, { content: text })
         onUpdate(updated)
       } catch (err) {
         toast.error('Failed to save block')
@@ -282,11 +283,11 @@ export function BlockRow({
   }, [block.content])
 
   const handleBlur = useCallback(() => {
+    const text = contentRef.current?.textContent ?? ''
     setIsEditing(false)
     setAutocomplete(null)
     setBlockAutocomplete(null)
     setSlashCommand(null)
-    const text = contentRef.current?.textContent ?? ''
     // Flush save immediately on blur
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveToApi(text)
@@ -1113,6 +1114,7 @@ export function BlockRow({
       {/* Content: edit mode shows raw contentEditable, read mode shows rendered inline */}
       {isEditing ? (
         <div
+          key="edit"
           ref={contentRef}
           className="block-content"
           contentEditable
@@ -1138,6 +1140,7 @@ export function BlockRow({
         />
       ) : (
         <div
+          key="read"
           onClick={handleStartEdit}
           className="block-content-read"
           style={{

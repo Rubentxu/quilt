@@ -46,6 +46,80 @@ interface InlineContentProps {
   openTab?: (tab: Omit<Tab, 'id'>) => string
 }
 
+// The Rust parser serializes `Segment` as an externally-tagged enum by default,
+// e.g. `{ "Bold": { "content": "x", ... } }`, while the early TS tests in
+// this repo mocked a simplified `{ type: 'bold', value: 'x' }` shape.
+//
+// Production must support BOTH:
+//   - real Rust shape (externally-tagged enum)
+//   - simplified test shape (for existing test fixtures)
+//
+// This normalizer converts either form into the canonical TS shape expected by
+// `renderSegment`. If the segment cannot be understood, it returns `null` so
+// the caller can fall back to raw text.
+function normalizeSegment(seg: any): SegmentBase | null {
+  if (!seg || typeof seg !== 'object') return null
+
+  // Already normalized (used by unit tests / hand-built fixtures)
+  if (typeof seg.type === 'string' && 'value' in seg) return seg as SegmentBase
+
+  const keys = Object.keys(seg)
+  if (keys.length !== 1) return null
+
+  const tag = keys[0]
+  const payload = seg[tag]
+  if (!payload || typeof payload !== 'object') return null
+
+  switch (tag) {
+    case 'Text':
+      return { type: 'text', value: payload.content ?? '' }
+    case 'PageRef':
+      return { type: 'pageRef', value: payload.page_name ?? '' }
+    case 'BlockRef':
+      return { type: 'blockRef', value: payload.block_uuid ?? '' }
+    case 'Tag':
+      return { type: 'tag', value: payload.name ?? '' }
+    case 'Property':
+      return {
+        type: 'property',
+        value: {
+          key: payload.key ?? '',
+          value: payload.value ?? '',
+        },
+      }
+    case 'Bold':
+      return { type: 'bold', value: payload.content ?? '' }
+    case 'Italic':
+      return { type: 'italic', value: payload.content ?? '' }
+    case 'Code':
+      return { type: 'code', value: payload.content ?? '' }
+    case 'Link':
+      return {
+        type: 'link',
+        value: {
+          text: payload.text ?? '',
+          url: payload.url ?? '',
+        },
+      }
+    case 'BoldItalic':
+      return { type: 'boldItalic', value: payload.content ?? '' }
+    case 'Strikethrough':
+      return { type: 'strikethrough', value: payload.content ?? '' }
+    case 'Highlight':
+      return { type: 'highlight', value: payload.content ?? '' }
+    case 'Header':
+      return {
+        type: 'header',
+        value: {
+          level: payload.level ?? 1,
+          text: payload.content ?? '',
+        },
+      }
+    default:
+      return null
+  }
+}
+
 // ──── Segment renderer ──────────────────────────────────────────────
 
 function renderTextWithNewlines(text: string, key: number): ReactNode {
@@ -465,6 +539,7 @@ function renderSegment(
 
 export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: InlineContentProps) {
   const { loaded, wasmParseInline } = useWasm()
+  const [inlineWasmReady, setInlineWasmReady] = useState(loaded)
 
   // ── Hover state & timers ────────────────────────────────────────
   const [hoveredRef, setHoveredRef] = useState<HoverInfo | null>(null)
@@ -523,20 +598,38 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
   // Trigger lazy WASM load on first use. The promise is cached, so
   // calling this from many components does not re-download the engine.
   useEffect(() => {
-    if (!loaded && content) {
-      void ensureWasmLoaded()
+    let cancelled = false
+    if (loaded) {
+      setInlineWasmReady(true)
+      return
+    }
+    if (!content) return
+    void ensureWasmLoaded()
+      .then(() => {
+        if (!cancelled) setInlineWasmReady(true)
+      })
+      .catch(() => {
+        if (!cancelled) setInlineWasmReady(false)
+      })
+    return () => {
+      cancelled = true
     }
   }, [loaded, content])
 
   const segments = useMemo(() => {
-    if (!loaded || !content) return null
+    if (!inlineWasmReady || !content) return null
     try {
       const result = wasmParseInline(content)
-      return result?.segments || null
+      const rawSegments = result?.segments || null
+      if (!Array.isArray(rawSegments)) return null
+      const normalized = rawSegments
+        .map(normalizeSegment)
+        .filter((s): s is SegmentBase => s !== null)
+      return normalized.length > 0 ? normalized : null
     } catch {
       return null
     }
-  }, [content, loaded, wasmParseInline])
+  }, [content, inlineWasmReady, wasmParseInline])
 
   // Fallback: if WASM not ready or parse fails, render raw content with newlines
   if (!segments || segments.length === 0) {

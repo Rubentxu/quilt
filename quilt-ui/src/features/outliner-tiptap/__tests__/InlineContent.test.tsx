@@ -71,6 +71,60 @@ describe('InlineContent', () => {
     expect(el.tagName).toBe('CODE')
   })
 
+  it('renders the real Rust serde enum shape for bold segments', () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        {
+          Bold: {
+            content: 'hello',
+            raw: '**hello**',
+            range: { start: 0, end: 9 },
+          },
+        },
+      ],
+    })
+    render(<InlineContent content="**hello**" />)
+    const el = screen.getByText('hello')
+    expect(el.tagName).toBe('STRONG')
+  })
+
+  it('renders the real Rust serde enum shape for page refs', () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        {
+          PageRef: {
+            page_name: 'MyPage',
+            raw: '[[MyPage]]',
+            range: { start: 0, end: 10 },
+          },
+        },
+      ],
+    })
+    render(<InlineContent content="[[MyPage]]" />)
+    const link = screen.getByText('MyPage')
+    expect(link.tagName).toBe('A')
+    expect(link).toHaveAttribute('href', '/page/MyPage')
+  })
+
+  it('renders the real Rust serde enum shape for headers', () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        {
+          Header: {
+            level: 1,
+            content: 'Hola',
+            raw: '# Hola',
+            range: { start: 0, end: 6 },
+          },
+        },
+      ],
+    })
+    render(<InlineContent content="# Hola" />)
+    const el = screen.getByText('Hola')
+    expect(el.tagName).toBe('SPAN')
+    expect(el).toHaveStyle({ fontWeight: '700' })
+  })
+
   it('renders status property as a pill badge (uppercase value)', () => {
     mockParseInline.mockReturnValue({
       segments: [
@@ -140,5 +194,13 @@ describe('InlineContent', () => {
     })
     render(<InlineContent content="oops" />)
     expect(screen.getByText('oops')).toBeInTheDocument()
+  })
+
+  it('falls back to raw content when the parser returns an unknown shape', () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ nope: { weird: true } }],
+    })
+    render(<InlineContent content="plain fallback" />)
+    expect(screen.getByText('plain fallback')).toBeInTheDocument()
   })
 })
