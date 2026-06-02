@@ -229,9 +229,20 @@ react-dev:
 dev-react: stop-all
     {{ ROOT }}/scripts/dev-react.sh
 
-# Build React for production
+# Build React for production AND sync into the server's wasm_assets/
+# This is what `just dev` ultimately needs when serving the SPA from
+# the Rust server (port 3737). For HMR-driven dev, use `just dev` instead
+# and let Vite serve the frontend on port 5173.
 react-build: react-wasm-release
     cd {{ REACT_DIR }} && npx tsc -b && npx vite build
+    @bash {{ ROOT }}/scripts/sync-frontend-assets.sh
+
+# Rebuild the React bundle and copy it to the server's wasm_assets/ without
+# running a full dev environment. Useful after `just dev-fast` (server-only)
+# when you want the latest UI without a full restart.
+react-rebuild:
+    cd {{ REACT_DIR }} && npx vite build
+    @bash {{ ROOT }}/scripts/sync-frontend-assets.sh
 
 # ---------------------------------------------------------------------------
 # Testing
