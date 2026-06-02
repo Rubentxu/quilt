@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState, useEffect, useRef } from 'react'
 import { Outlet, useLocation, Link, useNavigate } from '@tanstack/react-router'
 import { Toaster } from 'react-hot-toast'
-import { Menu, Sun, Moon, Settings, Link2, X, PanelRight, Plus } from 'lucide-react'
+import { Menu, Sun, Moon, Settings, Link2, X, PanelRight, Search, RefreshCw, Hash, EyeOff, Bell, HelpCircle } from 'lucide-react'
 import { Sidebar } from '@features/sidebar/Sidebar'
 import { BacklinksPanel } from '@features/references/BacklinksPanel'
 import { TabsBar } from './TabsBar'
@@ -296,6 +296,7 @@ export function AppShell() {
             transition: 'width var(--motion-slow) var(--ease-standard)',
             background: 'var(--color-surface)',
             borderRight: '1px solid var(--color-border)',
+            boxShadow: 'var(--shadow-sm)',
             overflow: 'hidden',
             flexShrink: 0,
           }}
@@ -338,6 +339,7 @@ export function AppShell() {
             position: 'sticky',
             top: 0,
             zIndex: 10,
+            boxShadow: '0 1px 0 rgba(15, 23, 42, 0.02)',
           }}
         >
           {/* Hamburger menu */}
@@ -366,12 +368,13 @@ export function AppShell() {
           <span
             data-testid="breadcrumb"
             style={{
-              fontSize: '14px',
+              fontSize: '16px',
               fontWeight: 600,
               color: 'var(--color-text-primary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              letterSpacing: '-0.01em',
             }}
           >
             {pageTitle}
@@ -379,6 +382,30 @@ export function AppShell() {
 
           {/* Spacer */}
           <div style={{ flex: 1 }} />
+
+          {/* Quick actions cluster */}
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+              {[Search, RefreshCw, Hash, EyeOff, Bell, HelpCircle].map((Icon, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  className="ghost-icon-button topbar-action"
+                  style={{
+                    width: '34px',
+                    height: '34px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                  }}
+                  aria-label="Toolbar action"
+                >
+                  <Icon size={17} />
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Backlinks toggle */}
           {isMobile ? (
@@ -469,6 +496,26 @@ export function AppShell() {
 
           {/* Connection status indicator */}
           <ConnectionStatus />
+
+          {/* User avatar */}
+          <div
+            aria-label="User avatar"
+            style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '999px',
+              background: 'linear-gradient(180deg, #4F7BFF 0%, #355CFF 100%)',
+              color: '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '14px',
+              fontWeight: 700,
+              boxShadow: '0 6px 18px rgba(79, 123, 255, 0.16)',
+            }}
+          >
+            A
+          </div>
         </header>
 
         {/* ─── Tabs ─── */}
@@ -479,12 +526,12 @@ export function AppShell() {
           style={{
             flex: 1,
             overflow: 'auto',
-            padding: 'var(--space-6) var(--space-4)',
+            padding: 'var(--space-6) var(--space-5) var(--space-10)',
           }}
         >
           <div
             style={{
-              maxWidth: 'var(--content-max-width)',
+              maxWidth: '1120px',
               margin: '0 auto',
             }}
           >

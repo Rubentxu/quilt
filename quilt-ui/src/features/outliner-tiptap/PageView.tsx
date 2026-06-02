@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Plus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
 import { DndContext, closestCenter, useDndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -43,13 +43,11 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
         // Convert common patterns to a formatted string
         displayDate = formatJournalDate(d, format)
       } else {
-        // Default to long English format
-        displayDate = d.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
+        // Match the visual reference and DESIGN.md examples: dd-mm-yyyy
+        const dd = String(d.getDate()).padStart(2, '0')
+        const mm = String(d.getMonth() + 1).padStart(2, '0')
+        const yyyy = d.getFullYear()
+        displayDate = `${dd}-${mm}-${yyyy}`
       }
     } catch {
       // fallback to raw string
@@ -71,46 +69,68 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
   }
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-3)',
-        marginBottom: 'var(--space-4)',
-      }}
-    >
-      <Calendar
-        size={24}
+      <div
         style={{
-          color: 'var(--color-primary)',
-          flexShrink: 0,
-        }}
-      />
-      <h1
-        style={{
-          fontSize: '36px',
-          fontWeight: 700,
-          color: 'var(--color-text-primary)',
-          lineHeight: 1.2,
-          letterSpacing: '-0.02em',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-4)',
+          marginBottom: 'var(--space-6)',
         }}
       >
-        {displayDate}
-      </h1>
-
-      {/* Prev / Next day navigation */}
-      <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
-        <button
-          onClick={navigateToPrevDay}
-          data-testid="nav-prev-day"
+        <Calendar
+          size={20}
           style={{
-            background: 'none',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: 'var(--space-1)',
-            cursor: 'pointer',
             color: 'var(--color-text-muted)',
-            display: 'flex',
+            flexShrink: 0,
+          }}
+        />
+        <h1
+          style={{
+            fontSize: '36px',
+            fontWeight: 700,
+            color: 'var(--color-text-primary)',
+            lineHeight: 1.2,
+            letterSpacing: '-0.02em',
+            margin: 0,
+          }}
+        >
+          {displayDate}
+        </h1>
+
+        <div style={{ flex: 1, height: '1px', background: 'var(--color-border)' }} />
+
+        <button
+          type="button"
+          style={{
+            height: '36px',
+            padding: '0 14px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
+            color: 'var(--color-text-secondary)',
+            fontSize: '14px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        >
+          Hoy
+        </button>
+
+        {/* Prev / Next day navigation */}
+        <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+          <button
+            onClick={navigateToPrevDay}
+            data-testid="nav-prev-day"
+            className="ghost-icon-button"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px',
+              cursor: 'pointer',
+              color: 'var(--color-text-muted)',
+              display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
@@ -119,35 +139,43 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
         >
           <ChevronLeft size={16} />
         </button>
-        <button
-          onClick={navigateToNextDay}
-          data-testid="nav-next-day"
-          style={{
-            background: 'none',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-sm)',
-            padding: 'var(--space-1)',
-            cursor: 'pointer',
-            color: 'var(--color-text-muted)',
-            display: 'flex',
+          <button
+            onClick={navigateToNextDay}
+            data-testid="nav-next-day"
+            className="ghost-icon-button"
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '8px',
+              cursor: 'pointer',
+              color: 'var(--color-text-muted)',
+              display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
           aria-label="Next day"
           title="Next day"
-        >
-          <ChevronRight size={16} />
-        </button>
+          >
+            <ChevronRight size={16} />
+          </button>
+          <button
+            type="button"
+            className="ghost-icon-button"
+            aria-label="More day actions"
+            style={{
+              width: '34px',
+              height: '34px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+        </div>
       </div>
-
-      <div
-        style={{
-          flex: 1,
-          height: '1px',
-          background: 'var(--color-border)',
-        }}
-      />
-    </div>
   )
 }
 

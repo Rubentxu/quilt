@@ -21,12 +21,12 @@ export function TabsBar() {
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '1px',
-        padding: '0 var(--space-2)',
-        background: 'var(--color-surface-subtle)',
+        gap: 'var(--space-2)',
+        padding: '10px var(--space-4) 0',
+        background: 'var(--color-surface)',
         borderBottom: '1px solid var(--color-border)',
         overflowX: 'auto',
-        height: '36px',
+        minHeight: '52px',
         flexShrink: 0,
       }}
     >
@@ -49,12 +49,15 @@ export function TabsBar() {
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '6px 12px',
-              background: isActive ? 'var(--color-surface)' : 'transparent',
-              borderBottom: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
-              borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
+              padding: '10px 14px',
+              background: isActive ? 'var(--color-surface)' : 'var(--color-surface-subtle)',
+              border: isActive ? '1px solid rgba(37, 99, 235, 0.24)' : '1px solid transparent',
+              borderBottom: isActive ? '2px solid var(--color-primary)' : '1px solid transparent',
+              borderRadius: '12px 12px 0 0',
+              boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
               cursor: 'pointer',
               fontSize: '13px',
+              fontWeight: isActive ? 600 : 500,
               color: isActive ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
               minWidth: '120px',
               maxWidth: '200px',
@@ -86,7 +89,8 @@ export function TabsBar() {
                 padding: '0 2px',
                 display: 'flex',
                 alignItems: 'center',
-                opacity: 0.6,
+                opacity: isActive ? 0.6 : 0,
+                transition: 'opacity var(--motion-fast) var(--ease-standard)',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.opacity = '1'

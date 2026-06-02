@@ -1,6 +1,6 @@
 import { useState, useEffect, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useLocation } from '@tanstack/react-router'
-import { Search, Calendar, FileText, Plus, Clock, LayoutList, Network, X, Bot, Star } from 'lucide-react'
+import { Search, Calendar, FileText, Plus, Clock, LayoutList, Network, X, Bot, Star, ChevronDown } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '@core/api-client'
 import type { Page } from '@shared/types/api'
@@ -90,14 +90,15 @@ function SidebarItem({ icon, label, href, active, collapsed, dataTestId }: Sideb
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--space-2)',
-        padding: '6px var(--space-2)',
+        padding: '10px var(--space-3)',
         paddingLeft: collapsed ? 'var(--space-2)' : 'calc(var(--space-2) + 3px)',
-        borderRadius: 'var(--radius-md)',
+        borderRadius: '12px',
         textDecoration: 'none',
         fontSize: '13px',
         fontWeight: active ? 600 : 400,
         color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
         background: active ? 'var(--color-primary-container)' : 'transparent',
+        minHeight: '40px',
         transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
         overflow: 'hidden',
         whiteSpace: 'nowrap',
@@ -140,8 +141,8 @@ function GroupHeader({ label, collapsed }: { label: string; collapsed?: boolean 
         textTransform: 'uppercase' as const,
         letterSpacing: '0.05em',
         color: 'var(--color-text-muted)',
-        padding: '0 var(--space-2)',
-        marginBottom: 'var(--space-1)',
+        padding: '0 var(--space-3)',
+        marginBottom: 'var(--space-2)',
       }}
     >
       {label}
@@ -262,14 +263,61 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
       {!collapsed && (
         <div
           style={{
-            padding: 'var(--space-4) var(--space-4) var(--space-2)',
-            fontSize: '14px',
-            fontWeight: 700,
-            color: 'var(--color-text-primary)',
-            letterSpacing: '-0.01em',
+            padding: 'var(--space-4) var(--space-4) var(--space-3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 'var(--space-2)',
           }}
         >
-          Quilt
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0 }}>
+            <div
+              style={{
+                width: '28px',
+                height: '28px',
+                borderRadius: '9px',
+                background: 'linear-gradient(180deg, #4F7BFF 0%, #355CFF 100%)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                fontWeight: 700,
+                boxShadow: '0 6px 18px rgba(79, 123, 255, 0.18)',
+              }}
+            >
+              Q
+            </div>
+            <div
+              style={{
+                minWidth: 0,
+                fontSize: '14px',
+                fontWeight: 700,
+                color: 'var(--color-text-primary)',
+                letterSpacing: '-0.01em',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              Quilt Workspace
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Workspace options"
+            className="ghost-icon-button"
+            style={{
+              width: '28px',
+              height: '28px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <ChevronDown size={15} />
+          </button>
         </div>
       )}
 
@@ -282,14 +330,16 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
           }}
         >
           <div
+            className="surface-input"
             style={{
               display: 'flex',
               alignItems: 'center',
               background: searchFocused ? 'var(--color-surface)' : 'var(--color-surface-subtle)',
-              border: searchFocused ? '1px solid var(--color-primary)' : '1px solid transparent',
+              border: searchFocused ? '1px solid rgba(37, 99, 235, 0.18)' : '1px solid transparent',
               borderRadius: 'var(--radius-md)',
               padding: '0 var(--space-2)',
-              transition: 'border var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
+              boxShadow: searchFocused ? '0 0 0 3px rgba(37, 99, 235, 0.08)' : 'none',
+              transition: 'border var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard)',
               cursor: 'text',
             }}
             onClick={onOpenSearch}
@@ -297,7 +347,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
             <Search size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
             <input
               type="text"
-              placeholder="Search…"
+              placeholder="Buscar"
               data-testid="sidebar-search-input"
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
@@ -329,7 +379,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
                 border: '1px solid var(--color-border)',
               }}
             >
-              {navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl+K'}
+              {navigator.platform.includes('Mac') ? '⌘ K' : 'Ctrl K'}
             </kbd>
           </div>
         </div>
@@ -349,12 +399,13 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
       >
         {/* Journals */}
         <section>
-          <GroupHeader label="Journals" collapsed={collapsed} />
+          <GroupHeader label="Diarios" collapsed={collapsed} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: collapsed ? 'var(--space-1)' : '2px' }}>
             <SidebarItem
               icon={<Calendar size={18} />}
-              label={today.label}
+              label="Diarios"
               href={`/journal/${today.url}`}
+              active={location.pathname.startsWith('/journal/')}
               collapsed={collapsed}
               dataTestId="nav-journal"
             />
@@ -367,7 +418,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: collapsed ? 'var(--space-1)' : '2px' }}>
             <SidebarItem
               icon={<LayoutList size={18} />}
-              label="All Pages"
+              label="Lista de páginas"
               href="/pages"
               active={location.pathname === '/pages'}
               collapsed={collapsed}
@@ -375,7 +426,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
             />
             <SidebarItem
               icon={<Network size={18} />}
-              label="Graph View"
+              label="Vista de Grafo"
               href="/graph"
               active={location.pathname === '/graph'}
               collapsed={collapsed}
@@ -387,7 +438,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
         {/* Favorites — DESIGN.md §4.1 */}
         {!collapsed && favoritePages.length > 0 && (
           <section>
-            <GroupHeader label="Favorites" />
+            <GroupHeader label="Favoritos" />
             <ul
               style={{
                 listStyle: 'none',
@@ -439,7 +490,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
 
         {/* Pages */}
         <section>
-          <GroupHeader label="Pages" collapsed={collapsed} />
+          <GroupHeader label="Páginas" collapsed={collapsed} />
 
           {loading ? (
             <SidebarSkeleton />
@@ -453,7 +504,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
                   fontStyle: 'italic',
                 }}
               >
-                No pages yet
+                No hay páginas todavía
               </p>
             )
           ) : (
@@ -484,7 +535,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
         {/* Recents placeholder */}
         {!collapsed && (
           <section>
-            <GroupHeader label="Recents" />
+            <GroupHeader label="Recientes" />
             <div
               style={{
                 padding: '0 var(--space-2)',
@@ -497,7 +548,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
               }}
             >
               <Clock size={14} />
-              <span>Recent pages will appear here</span>
+              <span>Las páginas recientes aparecerán aquí</span>
             </div>
           </section>
         )}
@@ -533,23 +584,24 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: collapsed ? 'center' : 'flex-start',
+            justifyContent: collapsed ? 'center' : 'center',
             gap: 'var(--space-2)',
             width: '100%',
-            padding: collapsed ? '8px 0' : '6px var(--space-2)',
+            padding: collapsed ? '10px 0' : '12px var(--space-3)',
             borderRadius: 'var(--radius-md)',
-            border: 'none',
-            background: 'none',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface)',
             cursor: 'pointer',
             fontSize: '13px',
-            fontWeight: 400,
-            color: 'var(--color-text-muted)',
-            transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
+            fontWeight: 600,
+            color: 'var(--color-primary)',
+            boxShadow: 'var(--shadow-sm)',
+            transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard)',
           }}
           className="sidebar-item"
         >
           <Plus size={18} style={{ flexShrink: 0 }} />
-          {!collapsed && (creating ? 'Creating…' : 'New page')}
+          {!collapsed && (creating ? 'Creando…' : 'Nueva página')}
         </button>
 
         {/* ADR-0003 — Agent Activity toggle */}
