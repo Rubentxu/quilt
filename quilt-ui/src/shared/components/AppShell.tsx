@@ -385,19 +385,30 @@ export function AppShell() {
 
           {/* Quick actions cluster */}
           {!isMobile && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '4px',
+                marginLeft: 'var(--space-2)',
+                background: 'var(--color-surface-subtle)',
+                borderRadius: '12px',
+              }}
+            >
               {[Search, RefreshCw, Hash, EyeOff, Bell, HelpCircle].map((Icon, idx) => (
                 <button
                   key={idx}
                   type="button"
                   className="ghost-icon-button topbar-action"
                   style={{
-                    width: '34px',
-                    height: '34px',
+                    width: '32px',
+                    height: '32px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
+                    color: 'var(--color-text-secondary)',
                   }}
                   aria-label="Toolbar action"
                 >

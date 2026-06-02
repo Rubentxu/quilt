@@ -258,11 +258,41 @@ body {
 .block-content {
   outline: none;
   min-height: 1.5em;
-  line-height: 1.5;
+  line-height: 1.65;
 }
 .block-content:empty::before {
   content: 'Type something...';
   color: var(--color-text-muted);
+}
+
+/* Bullet on block row */
+.block-row .block-bullet {
+  color: var(--color-text-disabled);
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+.block-row:hover .block-bullet {
+  color: var(--color-primary);
+}
+
+/* Page reference chip — softer pill (InlineContent) */
+.block-content a[href*="/page/"],
+a.inline-page-ref {
+  font-weight: 500;
+}
+
+/* Property chips & status/priority badges — uniform pill rhythm */
+.block-content span[style*="border-radius: 9999px"],
+.block-content span[style*="border-radius: 999px"],
+.block-content span[style*="border-radius: var(--radius-pill)"] {
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  font-feature-settings: "tnum" 1;
+}
+
+/* TODO list-style marker for tasks (Marker === 'Todo' | 'Done' | ...) */
+.block-row[data-marker] .block-content-read::before,
+.block-row[data-marker] .block-content::before {
+  content: '';
 }
 
 /* Selection */

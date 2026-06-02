@@ -336,15 +336,16 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
               alignItems: 'center',
               background: searchFocused ? 'var(--color-surface)' : 'var(--color-surface-subtle)',
               border: searchFocused ? '1px solid rgba(37, 99, 235, 0.18)' : '1px solid transparent',
-              borderRadius: 'var(--radius-md)',
-              padding: '0 var(--space-2)',
+              borderRadius: '12px',
+              padding: '0 10px',
+              height: '40px',
               boxShadow: searchFocused ? '0 0 0 3px rgba(37, 99, 235, 0.08)' : 'none',
               transition: 'border var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard)',
               cursor: 'text',
             }}
             onClick={onOpenSearch}
           >
-            <Search size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <Search size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
             <input
               type="text"
               placeholder="Buscar"
@@ -361,7 +362,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
                 flex: 1,
                 fontSize: '13px',
                 color: 'var(--color-text-primary)',
-                padding: '7px var(--space-2)',
+                padding: '0 10px',
                 minWidth: 0,
                 cursor: 'pointer',
               }}
@@ -370,10 +371,10 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
             <kbd
               style={{
                 fontSize: '10px',
-                color: 'var(--color-text-disabled)',
-                background: 'var(--color-surface-subtle)',
-                padding: '1px 5px',
-                borderRadius: 'var(--radius-sm)',
+                color: 'var(--color-text-muted)',
+                background: 'var(--color-surface)',
+                padding: '2px 6px',
+                borderRadius: '6px',
                 flexShrink: 0,
                 fontFamily: 'inherit',
                 border: '1px solid var(--color-border)',

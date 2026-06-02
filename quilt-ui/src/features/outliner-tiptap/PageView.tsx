@@ -1297,7 +1297,17 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
       {blocks.length === 0 ? (
         <EmptyState isJournal={isJournal} onNewBlock={handleNewBlockAtEnd} />
       ) : (
-        <div style={{ flex: 1, minHeight: 0 }}>
+        <div
+          className="journal-shell-card"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            padding: '12px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+          }}
+        >
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -1341,12 +1351,16 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
             display: 'flex',
             alignItems: 'center',
             gap: 'var(--space-2)',
-            padding: 'var(--space-2) var(--space-2)',
-            paddingLeft: 'var(--space-2)',
+            marginTop: 'var(--space-3)',
+            padding: '10px 12px',
             color: 'var(--color-text-muted)',
             cursor: 'pointer',
-            borderRadius: 'var(--radius-sm)',
-            transition: 'color var(--motion-fast) var(--ease-standard)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px dashed var(--color-border)',
+            background: 'transparent',
+            fontSize: '13px',
+            fontWeight: 500,
+            transition: 'color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
           }}
           className="block-row"
           onClick={handleNewBlockAtEnd}
@@ -1359,9 +1373,19 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
               handleNewBlockAtEnd()
             }
           }}
+          onMouseEnter={e => {
+            e.currentTarget.style.color = 'var(--color-primary)'
+            e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.36)'
+            e.currentTarget.style.background = 'rgba(37, 99, 235, 0.04)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.color = 'var(--color-text-muted)'
+            e.currentTarget.style.borderColor = 'var(--color-border)'
+            e.currentTarget.style.background = 'transparent'
+          }}
         >
           <Plus size={16} />
-          <span style={{ fontSize: '13px' }}>Add a block</span>
+          <span>Add a block</span>
         </div>
       )}
     </div>
