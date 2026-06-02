@@ -11,22 +11,23 @@ use anyhow::Result;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use tokio::sync::RwLock;
 
 mod error;
 mod handlers;
+mod middleware;
 mod routes;
 mod state;
 
 use crate::handlers::metrics;
 use crate::state::AppState;
 use quilt_application::services::ref_service::RefService;
-use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
-use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
 #[cfg(feature = "cognitive")]
 use quilt_cognitive::AIClient;
+use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
+use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
 
 /// Ensure the vault directory structure exists (.quilt folder and quilt.db)
 fn ensure_vault_exists(vault_path: &Path) -> Result<PathBuf, anyhow::Error> {
@@ -95,13 +96,30 @@ async fn main() -> Result<()> {
         .rebuild_from_repo()
         .await
         .map_err(|e| anyhow::anyhow!("Failed to rebuild reference index: {}", e))?;
-    info!("Reference index rebuilt with {} entries", ref_service.index().len());
+    info!(
+        "Reference index rebuilt with {} entries",
+        ref_service.index().len()
+    );
     let ref_service = Arc::new(RwLock::new(ref_service));
+
+    // Generate or load API key for Bearer token auth
+    let api_key = match std::env::var("QUILT_API_KEY") {
+        Ok(key) if !key.is_empty() => {
+            info!("Using API key from QUILT_API_KEY env var");
+            key
+        }
+        _ => {
+            use uuid::Uuid;
+            let key = Uuid::new_v4().to_string();
+            info!("Generated API key: {key} — set QUILT_API_KEY env var for a custom key");
+            key
+        }
+    };
+    middleware::auth::init(api_key);
 
     // Build state — with or without AI client depending on feature flag
     #[cfg(feature = "cognitive")]
-    let ai_client: Arc<dyn AIClient> =
-        Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
+    let ai_client: Arc<dyn AIClient> = Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
 
     let state = {
         #[cfg(feature = "cognitive")]
@@ -132,5 +150,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
-

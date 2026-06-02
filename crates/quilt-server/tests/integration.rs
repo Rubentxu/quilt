@@ -42,42 +42,42 @@ fn navigation_event_block() {
 /// Test that AppState can be created
 #[tokio::test]
 async fn app_state_creation() -> Result<()> {
-    // Create an in-memory database for testing
+    use quilt_application::services::ref_service::RefService;
+    use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+
     let pool = create_pool(":memory:").await?;
-
     let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ai_client: Arc<dyn quilt_cognitive::AIClient> =
-        Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
+    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
 
-    let state = quilt_server::state::AppState::new(pool, search_index, ai_client);
+    let state = quilt_server::state::AppState::new(pool, search_index, ref_service);
 
-    // Verify state fields are accessible
     assert!(state.navigation_tx.receiver_count() == 0);
-
     Ok(())
 }
 
 /// Test broadcast_navigation sends to subscribers
 #[tokio::test]
 async fn broadcast_navigation() -> Result<()> {
+    use quilt_application::services::ref_service::RefService;
+    use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
     use quilt_server::state::{AppState, NavigationEvent};
     use std::sync::Arc;
+    use tokio::sync::RwLock;
 
     let pool = create_pool(":memory:").await?;
     let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ai_client: Arc<dyn quilt_cognitive::AIClient> =
-        Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
+    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
 
-    let state = AppState::new(pool, search_index, ai_client);
+    let state = AppState::new(pool, search_index, ref_service);
 
-    // Create a subscriber
     let mut rx = state.navigation_tx.subscribe();
-
-    // Broadcast an event
     let event = NavigationEvent::page(None, "Test".to_string());
     state.broadcast_navigation(event)?;
 
-    // Receive the event
     let received = rx.recv().await?;
     assert_eq!(received.target.page_name, "Test");
 

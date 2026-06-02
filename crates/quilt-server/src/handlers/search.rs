@@ -11,7 +11,7 @@ use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use quilt_search::SearchService;
+use quilt_search::{SearchError, SearchService};
 
 /// Search result DTO
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,6 +42,21 @@ pub fn routes() -> Router {
     Router::new().route("/", get(search))
 }
 
+/// Map a `SearchError` to the appropriate HTTP `AppError`.
+///
+/// - `EmptyQuery` → 400 Bad Request (the input produced no FTS5 tokens)
+/// - everything else → 500 Internal (DB failure, cache lock poisoned, etc.)
+///
+/// Exposed as `pub` so other handler modules (e.g. `blocks::search_blocks`)
+/// can reuse the same mapping logic and keep error semantics consistent
+/// across endpoints.
+pub fn map_search_error(e: SearchError) -> AppError {
+    match e {
+        SearchError::EmptyQuery => AppError::BadRequest("Empty or invalid query".to_string()),
+        other => AppError::Internal(format!("Search error: {}", other)),
+    }
+}
+
 /// GET /api/v1/search?q=...&limit=...
 #[instrument(skip(state))]
 pub async fn search(
@@ -53,7 +68,7 @@ pub async fn search(
     let results = search_service
         .search(&params.q, params.limit)
         .await
-        .map_err(|e| AppError::Internal(format!("Search error: {}", e)))?;
+        .map_err(map_search_error)?;
 
     let dtos: Vec<SearchResultDto> = results
         .into_iter()

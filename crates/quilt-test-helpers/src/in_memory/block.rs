@@ -239,6 +239,28 @@ impl BlockRepository for InMemoryBlockRepo {
             "query_dsl not supported by in-memory repository".to_string(),
         ))
     }
+
+    async fn list_by_property(
+        &self,
+        key: &str,
+        value: &str,
+        limit: usize,
+    ) -> Result<Vec<Block>, DomainError> {
+        let repo = self.repo.read();
+        let mut out: Vec<Block> = repo
+            .values()
+            .filter(|b| match b.properties.get(key) {
+                Some(quilt_domain::value_objects::PropertyValue::String(s)) => s == value,
+                _ => false,
+            })
+            .cloned()
+            .collect();
+        out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        if limit > 0 {
+            out.truncate(limit);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]

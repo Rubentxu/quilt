@@ -4,12 +4,12 @@
 
 use quilt_application::services::ref_service::RefService;
 #[cfg(feature = "cognitive")]
+use quilt_cognitive::AIClient;
+#[cfg(feature = "cognitive")]
 use quilt_cognitive::{
     ai_client::MockAIClient, ArgumentCartographer, CognitiveMirror, MorningBriefing,
     SerendipityEngine,
 };
-#[cfg(feature = "cognitive")]
-use quilt_cognitive::AIClient;
 use quilt_infrastructure::database::sqlite::connection::DbPool;
 use quilt_search::SearchIndexManager;
 use std::sync::Arc;
@@ -69,6 +69,9 @@ impl NavigationEvent {
 pub struct AppState {
     /// SQLite database connection pool
     pub pool: DbPool,
+    /// Settings repository for user preferences
+    pub settings_repo:
+        quilt_infrastructure::database::sqlite::repositories::SqliteSettingsRepository,
     /// Search index manager for FTS5 index maintenance
     #[allow(dead_code)]
     pub search_index: Arc<SearchIndexManager>,
@@ -112,8 +115,14 @@ impl AppState {
         #[cfg(feature = "cognitive")]
         let ai_client: Arc<dyn AIClient> = Arc::new(MockAIClient::new());
 
+        let settings_repo =
+            quilt_infrastructure::database::sqlite::repositories::SqliteSettingsRepository::new(
+                pool.clone(),
+            );
+
         Self {
             pool,
+            settings_repo,
             search_index,
             navigation_tx,
             last_opened_graph: Arc::new(RwLock::new(None)),
@@ -143,8 +152,13 @@ impl AppState {
         ref_service: Arc<RwLock<RefService>>,
     ) -> Self {
         let (navigation_tx, _) = broadcast::channel(100);
+        let settings_repo =
+            quilt_infrastructure::database::sqlite::repositories::SqliteSettingsRepository::new(
+                pool.clone(),
+            );
         Self {
             pool,
+            settings_repo,
             search_index,
             navigation_tx,
             last_opened_graph: Arc::new(RwLock::new(None)),
@@ -172,8 +186,13 @@ impl AppState {
         argument_cartographer: Arc<ArgumentCartographer>,
     ) -> Self {
         let (navigation_tx, _) = broadcast::channel(100);
+        let settings_repo =
+            quilt_infrastructure::database::sqlite::repositories::SqliteSettingsRepository::new(
+                pool.clone(),
+            );
         Self {
             pool,
+            settings_repo,
             search_index,
             navigation_tx,
             last_opened_graph: Arc::new(RwLock::new(None)),

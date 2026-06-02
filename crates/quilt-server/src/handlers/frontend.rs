@@ -54,7 +54,19 @@ pub async fn serve_assets(axum::extract::Path(path): axum::extract::Path<String>
     // Check if the file exists and has a static asset extension
     let has_asset_extension = matches!(
         path.rsplit('.').next(),
-        Some("wasm" | "js" | "css" | "html" | "json" | "png" | "ico" | "svg" | "woff" | "woff2" | "ttf")
+        Some(
+            "wasm"
+                | "js"
+                | "css"
+                | "html"
+                | "json"
+                | "png"
+                | "ico"
+                | "svg"
+                | "woff"
+                | "woff2"
+                | "ttf"
+        )
     );
 
     if has_asset_extension {

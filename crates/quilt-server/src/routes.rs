@@ -2,7 +2,7 @@
 //!
 //! Sets up the Axum router with all routes and middleware.
 
-use axum::Router;
+use axum::{middleware, Router};
 use tower_http::cors::CorsLayer;
 
 use crate::handlers;
@@ -39,6 +39,7 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/pages", handlers::pages::routes())
         .nest("/api/v1/search", handlers::search::routes())
         .nest("/api/v1/navigate", handlers::navigate::routes())
+        .nest("/api/v1/settings", handlers::settings::routes())
         // Frontend serving (catch-all for SPA)
         .route(
             "/",
@@ -56,8 +57,16 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/cognitive", handlers::cognitive::routes());
 
     // Layers
+    // Order (outermost → innermost):
+    //   1. Extension(state)     — state available to all handlers
+    //   2. CorsLayer            — handles OPTIONS preflight before auth
+    //   3. Auth middleware       — Bearer token check for /api/*
+    //   4. TraceLayer           — HTTP tracing (closest to handler)
     router
         .layer(axum::Extension(state))
         .layer(cors)
+        .layer(middleware::from_fn(
+            crate::middleware::auth::auth_middleware,
+        ))
         .layer(tower_http::trace::TraceLayer::new_for_http())
 }

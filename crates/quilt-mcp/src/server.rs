@@ -246,14 +246,16 @@ mod tests {
 
         match response {
             McpResponse::ToolsList(result) => {
-                // Core tools: 9 total
+                // Core tools: 12 total
                 // BlockToolHandler: quilt_create_block, quilt_delete_block, quilt_link_blocks,
-                //                   quilt_get_block_tree, quilt_get_backlinks, quilt_create_task (6)
+                //                   quilt_get_block_tree, quilt_get_backlinks, quilt_create_task,
+                //                   quilt_list_blocks_by_author (7) — ADR-0003 added the last
                 // PageToolHandler: quilt_list_pages, quilt_get_page_blocks, quilt_get_journal (3)
                 // QueryToolHandler: quilt_query, quilt_search (2)
-                assert_eq!(result.tools.len(), 11);
+                assert_eq!(result.tools.len(), 12);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
+                assert!(result.tools.iter().any(|t| t.name == "quilt_list_blocks_by_author"));
             }
             _ => panic!("Expected ToolsList response"),
         }

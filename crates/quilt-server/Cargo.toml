@@ -60,3 +60,6 @@ metrics-exporter-prometheus = { workspace = true }
 tokio-test.workspace = true
 axum = { version = "0.7", features = ["macros", "ws"] }
 quilt-domain = { path = "../quilt-domain" }
+reqwest = { version = "0.12", features = ["json"] }
+tokio-tungstenite = "0.24"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
