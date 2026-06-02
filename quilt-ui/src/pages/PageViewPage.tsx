@@ -16,7 +16,11 @@ export function PageViewPage() {
       name: decoded,
       type: 'page',
       title: decoded,
-      params: { name: decoded },
+      // params intentionally empty — the tab id is derived from `name` only.
+      // Putting `name` in params would create a different identity than other
+      // openTab call sites (e.g. AppShell's Ctrl+T, InlineContent's link
+      // click) and break dedup.
+      params: {},
     })
   }, [name, openTab])
   return (
