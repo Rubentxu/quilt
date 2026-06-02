@@ -1,0 +1,573 @@
+import { lazy, Suspense, useMemo, useRef, useCallback, useState, useEffect, type ReactNode } from 'react'
+import { Calendar, Clock, User, FileText, Tag, Hash } from 'lucide-react'
+import type { Block, Page } from '@shared/types/api'
+import type { Tab } from '@shared/contexts/TabsContext'
+import { useWasm, ensureWasmLoaded } from '@core/wasm-bridge/WasmProvider'
+
+// HoverPreview is a heavy popover (it fetches and renders a sub-page).
+// We only need its bundle on the rare hover event, not for every block.
+const HoverPreview = lazy(() =>
+  import('@shared/components/HoverPreview').then(m => ({ default: m.HoverPreview })),
+)
+
+// ──── Types ──────────────────────────────────────────────────────────
+
+interface LinkValue {
+  text: string
+  url: string
+}
+
+interface HeaderValue {
+  level: number
+  text: string
+}
+
+interface PropertyValue {
+  key: string
+  value: string
+}
+
+interface SegmentBase {
+  type: string
+  value: any
+}
+
+interface HoverInfo {
+  type: 'page' | 'block'
+  target: string
+  anchorRect: DOMRect
+}
+
+interface InlineContentProps {
+  content: string
+  isEditing?: boolean
+  blocks?: Block[]
+  pageMap?: Map<string, Page>
+  openTab?: (tab: Omit<Tab, 'id'>) => string
+}
+
+// ──── Segment renderer ──────────────────────────────────────────────
+
+function renderTextWithNewlines(text: string, key: number): ReactNode {
+  if (!text.includes('\n')) {
+    return <span key={key}>{text}</span>
+  }
+  const parts: ReactNode[] = []
+  text.split('\n').forEach((line, i) => {
+    if (i > 0) parts.push(<br key={`${key}-br-${i}`} />)
+    parts.push(line)
+  })
+  return <span key={key}>{parts}</span>
+}
+
+function renderSegment(
+  seg: SegmentBase,
+  key: number,
+  isEditing?: boolean,
+  blocks?: Block[],
+  pageMap?: Map<string, Page>,
+  onHover?: (info: HoverInfo | null) => void,
+  onPageRefClick?: (target: string, e: React.MouseEvent) => void,
+): ReactNode {
+  switch (seg.type) {
+    case 'text':
+      return renderTextWithNewlines(seg.value, key)
+
+    case 'bold':
+      return <strong key={key} style={{ fontWeight: 600 }}>{seg.value}</strong>
+
+    case 'italic':
+      return <em key={key}>{seg.value}</em>
+
+    case 'boldItalic':
+      return (
+        <strong key={key}>
+          <em>{seg.value}</em>
+        </strong>
+      )
+
+    case 'code':
+      return (
+        <code
+          key={key}
+          style={{
+            background: 'var(--color-surface-subtle)',
+            padding: '1px 5px',
+            borderRadius: 'var(--radius-sm)',
+            fontSize: '0.875em',
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            color: 'var(--color-danger)',
+          }}
+        >
+          {seg.value}
+        </code>
+      )
+
+    case 'pageRef': {
+      const pageName: string = seg.value
+      const pageExists = pageMap?.has(pageName) ?? false
+      return (
+        <a
+          key={key}
+          href={`/page/${encodeURIComponent(pageName)}`}
+          onClick={(e) => onPageRefClick?.(pageName, e)}
+          style={{
+            color: pageExists ? 'var(--color-link)' : 'var(--color-text-disabled)',
+            cursor: 'pointer',
+            textDecoration: 'underline',
+            textDecorationStyle: pageExists ? 'solid' : 'dashed',
+            textDecorationColor: pageExists ? 'var(--color-link)' : 'var(--color-text-disabled)',
+            opacity: pageExists ? 1 : 0.6,
+          }}
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            onHover?.({ type: 'page', target: pageName, anchorRect: rect })
+          }}
+          onMouseLeave={() => onHover?.(null)}
+        >
+          {pageName}
+        </a>
+      )
+    }
+
+    case 'blockRef': {
+      const blockId: string = seg.value
+      const refBlock = blocks?.find(b => b.id === blockId)
+
+      if (!refBlock) {
+        return (
+          <span
+            key={key}
+            style={{
+              color: 'var(--color-text-disabled)',
+              fontStyle: 'italic',
+              fontSize: '0.9em',
+            }}
+          >
+            (missing block)
+          </span>
+        )
+      }
+
+      const content = refBlock.content
+      const preview = content.length > 80 ? content.substring(0, 80) + '…' : content
+      const sourcePageName = refBlock.pageName || refBlock.pageId
+
+      return (
+        <span
+          key={key}
+          onClick={(e) => {
+            e.stopPropagation()
+            window.location.hash = `/page/${encodeURIComponent(sourcePageName)}`
+          }}
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            onHover?.({ type: 'block', target: blockId, anchorRect: rect })
+          }}
+          onMouseLeave={() => onHover?.(null)}
+          style={{
+            display: 'inline-block',
+            padding: '2px 6px',
+            background: 'var(--color-accent-subtle)',
+            borderLeft: '2px solid var(--color-accent)',
+            borderRadius: '2px',
+            fontStyle: 'italic',
+            color: 'var(--color-text-secondary)',
+            fontSize: '0.9em',
+            cursor: 'pointer',
+            maxWidth: '300px',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            verticalAlign: 'middle',
+            marginRight: '4px',
+          }}
+          title={`Block ref: ${blockId}`}
+        >
+          <Hash size={11} style={{ display: 'inline', marginRight: '3px', verticalAlign: 'middle' }} />
+          {preview}
+        </span>
+      )
+    }
+
+    case 'tag': {
+      const tagName: string = seg.value
+      return (
+        <span
+          key={key}
+          style={{
+            background: 'var(--color-primary-container)',
+            color: 'var(--color-primary)',
+            fontSize: '12px',
+            fontWeight: 600,
+            padding: '1px 6px',
+            borderRadius: 'var(--radius-pill)',
+            marginLeft: '2px',
+            marginRight: '2px',
+          }}
+        >
+          #{tagName}
+        </span>
+      )
+    }
+
+    case 'link': {
+      const { text, url } = seg.value as LinkValue
+      return (
+        <a
+          key={key}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--color-link)', textDecoration: 'underline' }}
+        >
+          {text}
+        </a>
+      )
+    }
+
+    case 'strikethrough':
+      return <s key={key} style={{ opacity: 0.6 }}>{seg.value}</s>
+
+    case 'highlight':
+      return (
+        <mark
+          key={key}
+          style={{
+            background: 'var(--color-warning)',
+            color: '#000',
+            padding: '0 2px',
+            borderRadius: '2px',
+            opacity: 0.8,
+          }}
+        >
+          {seg.value}
+        </mark>
+      )
+
+    case 'header': {
+      const { level, text } = seg.value as HeaderValue
+      const sizes: Record<number, string> = { 1: '28px', 2: '24px', 3: '20px', 4: '18px', 5: '16px', 6: '14px' }
+      return (
+        <span key={key} style={{ fontSize: sizes[level] || '16px', fontWeight: 700 }}>
+          {text}
+        </span>
+      )
+    }
+
+    case 'property': {
+      const { key: propKey, value: propValue } = seg.value as PropertyValue
+
+      // Edit mode: render as plain monospace text
+      if (isEditing) {
+        return (
+          <span key={key} style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+            {propKey}:: {propValue}
+          </span>
+        )
+      }
+
+      // ── Status ──────────────────────────────────────────────────────
+      if (propKey === 'status') {
+        const colors: Record<string, { bg: string; fg: string }> = {
+          todo: { bg: 'var(--color-info-subtle)', fg: 'var(--color-info)' },
+          doing: { bg: 'var(--color-warning-subtle)', fg: 'var(--color-warning)' },
+          done: { bg: 'var(--color-success-subtle)', fg: 'var(--color-success)' },
+          now: { bg: 'var(--color-accent-subtle)', fg: 'var(--color-accent)' },
+          later: { bg: 'var(--color-surface-subtle)', fg: 'var(--color-text-muted)' },
+          cancelled: { bg: 'var(--color-danger-subtle)', fg: 'var(--color-danger)' },
+        }
+        const c = colors[propValue.toLowerCase()] || { bg: 'var(--color-surface-subtle)', fg: 'var(--color-text-secondary)' }
+        return (
+          <span key={key} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '1px 8px',
+            borderRadius: 'var(--radius-pill)',
+            background: c.bg,
+            color: c.fg,
+            fontSize: '11px',
+            fontWeight: 600,
+            marginRight: '4px',
+            verticalAlign: 'middle',
+          }}>
+            {propValue.toUpperCase()}
+          </span>
+        )
+      }
+
+      // ── Priority ────────────────────────────────────────────────────
+      if (propKey === 'priority') {
+        const colors: Record<string, string> = { a: 'var(--color-danger)', b: 'var(--color-warning)', c: 'var(--color-info)' }
+        const c = colors[propValue.toLowerCase()] || 'var(--color-text-secondary)'
+        return (
+          <span key={key} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            padding: '1px 6px',
+            borderRadius: 'var(--radius-sm)',
+            background: `${c}20`,
+            color: c,
+            fontSize: '11px',
+            fontWeight: 700,
+            marginRight: '4px',
+            verticalAlign: 'middle',
+            border: `1px solid ${c}40`,
+          }}>
+            P{propValue.toUpperCase()}
+          </span>
+        )
+      }
+
+      // ── Tags ────────────────────────────────────────────────────────
+      if (propKey === 'tags') {
+        const tags = propValue.split(',').map(t => t.trim()).filter(Boolean)
+        return (
+          <span key={key} style={{ display: 'inline', marginRight: '4px' }}>
+            {tags.map((tag, i) => (
+              <span key={i} style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '1px 6px',
+                borderRadius: 'var(--radius-pill)',
+                background: 'var(--color-info-subtle)',
+                color: 'var(--color-info)',
+                fontSize: '11px',
+                fontWeight: 500,
+                marginRight: '4px',
+                gap: '3px',
+              }}>
+                <Tag size={10} />
+                {tag}
+              </span>
+            ))}
+          </span>
+        )
+      }
+
+      // ── Deadline ────────────────────────────────────────────────────
+      if (propKey === 'deadline') {
+        return (
+          <span key={key} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '1px 8px',
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--color-surface-subtle)',
+            color: 'var(--color-text-secondary)',
+            fontSize: '11px',
+            fontWeight: 500,
+            marginRight: '4px',
+            verticalAlign: 'middle',
+          }}>
+            <Calendar size={12} />
+            {propValue}
+          </span>
+        )
+      }
+
+      // ── Scheduled ───────────────────────────────────────────────────
+      if (propKey === 'scheduled') {
+        return (
+          <span key={key} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '1px 8px',
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--color-surface-subtle)',
+            color: 'var(--color-text-secondary)',
+            fontSize: '11px',
+            fontWeight: 500,
+            marginRight: '4px',
+            verticalAlign: 'middle',
+          }}>
+            <Clock size={12} />
+            {propValue}
+          </span>
+        )
+      }
+
+      // ── Created_by ──────────────────────────────────────────────────
+      if (propKey === 'created_by') {
+        return (
+          <span key={key} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '1px 8px',
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--color-surface-subtle)',
+            color: 'var(--color-text-secondary)',
+            fontSize: '11px',
+            fontWeight: 500,
+            marginRight: '4px',
+            verticalAlign: 'middle',
+          }}>
+            <User size={12} />
+            {propValue}
+          </span>
+        )
+      }
+
+      // ── Template ────────────────────────────────────────────────────
+      if (propKey === 'template') {
+        return (
+          <span key={key} style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '1px 8px',
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--color-surface-subtle)',
+            color: 'var(--color-text-secondary)',
+            fontSize: '11px',
+            fontWeight: 500,
+            marginRight: '4px',
+            verticalAlign: 'middle',
+          }}>
+            <FileText size={12} />
+            {propValue}
+          </span>
+        )
+      }
+
+      // ── Generic property (fallback) ─────────────────────────────────
+      return (
+        <span key={key} style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          padding: '1px 8px',
+          borderRadius: 'var(--radius-pill)',
+          background: 'var(--color-surface-subtle)',
+          color: 'var(--color-text-secondary)',
+          fontSize: '11px',
+          fontWeight: 500,
+          marginRight: '4px',
+          verticalAlign: 'middle',
+          border: '1px solid var(--color-border)',
+        }}>
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>{propKey}</span>
+          <span>{propValue}</span>
+        </span>
+      )
+    }
+
+    default:
+      return <span key={key}>{typeof seg.value === 'string' ? seg.value : JSON.stringify(seg.value)}</span>
+  }
+}
+
+// ──── Component ─────────────────────────────────────────────────────
+
+export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: InlineContentProps) {
+  const { loaded, wasmParseInline } = useWasm()
+
+  // ── Hover state & timers ────────────────────────────────────────
+  const [hoveredRef, setHoveredRef] = useState<HoverInfo | null>(null)
+  const showTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  const handleHover = useCallback((info: HoverInfo | null) => {
+    if (info) {
+      clearTimeout(hideTimerRef.current)
+      clearTimeout(showTimerRef.current)
+      showTimerRef.current = setTimeout(() => {
+        setHoveredRef(info)
+      }, 300)
+    } else {
+      clearTimeout(showTimerRef.current)
+      hideTimerRef.current = setTimeout(() => {
+        setHoveredRef(null)
+      }, 200)
+    }
+  }, [])
+
+  const handlePopoverEnter = useCallback(() => {
+    clearTimeout(hideTimerRef.current)
+  }, [])
+
+  const handlePopoverLeave = useCallback(() => {
+    hideTimerRef.current = setTimeout(() => {
+      setHoveredRef(null)
+    }, 200)
+  }, [])
+
+  const handlePageRefClick = useCallback((target: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    if (e.shiftKey) {
+      // TODO: Open in sidebar (sidebar not yet implemented)
+      return
+    }
+    if (e.metaKey || e.ctrlKey) {
+      if (openTab) {
+        openTab({ name: target, type: 'page', title: target, params: {} })
+      }
+      return
+    }
+    // Normal navigation
+    window.location.hash = `/page/${encodeURIComponent(target)}`
+  }, [openTab])
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(showTimerRef.current)
+      clearTimeout(hideTimerRef.current)
+    }
+  }, [])
+
+  // Trigger lazy WASM load on first use. The promise is cached, so
+  // calling this from many components does not re-download the engine.
+  useEffect(() => {
+    if (!loaded && content) {
+      void ensureWasmLoaded()
+    }
+  }, [loaded, content])
+
+  const segments = useMemo(() => {
+    if (!loaded || !content) return null
+    try {
+      const result = wasmParseInline(content)
+      return result?.segments || null
+    } catch {
+      return null
+    }
+  }, [content, loaded, wasmParseInline])
+
+  // Fallback: if WASM not ready or parse fails, render raw content with newlines
+  if (!segments || segments.length === 0) {
+    if (!content.includes('\n')) {
+      return <>{content}</>
+    }
+    const parts: ReactNode[] = []
+    content.split('\n').forEach((line, i) => {
+      if (i > 0) parts.push(<br key={`fb-br-${i}`} />)
+      parts.push(line)
+    })
+    return <>{parts}</>
+  }
+
+  return (
+    <>
+      {segments.map((seg: SegmentBase, i: number) =>
+        renderSegment(seg, i, isEditing, blocks, pageMap, handleHover, handlePageRefClick)
+      )}
+      {hoveredRef && (
+        <Suspense fallback={null}>
+          <HoverPreview
+            type={hoveredRef.type}
+            target={hoveredRef.target}
+            anchorRect={hoveredRef.anchorRect}
+            onClose={() => setHoveredRef(null)}
+            onMouseEnter={handlePopoverEnter}
+            onMouseLeave={handlePopoverLeave}
+          />
+        </Suspense>
+      )}
+    </>
+  )
+}

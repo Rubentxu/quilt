@@ -1,0 +1,487 @@
+import { useState, useEffect, type KeyboardEvent } from 'react'
+import { Link, useNavigate, useLocation } from '@tanstack/react-router'
+import { Search, Calendar, FileText, Plus, Clock, LayoutList, Network, X, Bot } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { api } from '@core/api-client'
+import type { Page } from '@shared/types/api'
+import { AgentActivityPanel } from '@features/cognitive/AgentActivityPanel'
+
+interface SidebarProps {
+  collapsed: boolean
+  onOpenSearch?: () => void
+  onClose?: () => void
+}
+
+function formatToday(): { url: string; label: string } {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  const url = `${y}-${m}-${d}`
+  const label = now.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  })
+  return { url, label }
+}
+
+function SidebarSkeleton() {
+  return (
+    <div style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            height: '16px',
+            width: `${60 + Math.random() * 30}%`,
+            background: 'var(--color-surface-subtle)',
+            borderRadius: 'var(--radius-sm)',
+            animation: 'pulse 1.5s ease-in-out infinite',
+          }}
+        />
+      ))}
+    </div>
+  )
+}
+
+// ─── SidebarItem ─────────────────────────────────────────────
+// States per DESIGN.md §9.1:
+// Default: text-secondary, no background
+// Hover: bg-surface-subtle
+// Active: bg-primary-container, text-primary
+// Focus: ring-primary
+
+interface SidebarItemProps {
+  icon: React.ReactNode
+  label: string
+  href: string
+  active?: boolean
+  collapsed?: boolean
+  dataTestId?: string
+}
+
+function SidebarItem({ icon, label, href, active, collapsed, dataTestId }: SidebarItemProps) {
+  return (
+    <Link
+      to={href as any}
+      title={collapsed ? label : undefined}
+      data-testid={dataTestId}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-2)',
+        padding: '6px var(--space-2)',
+        borderRadius: 'var(--radius-md)',
+        textDecoration: 'none',
+        fontSize: '13px',
+        fontWeight: 400,
+        color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+        background: active ? 'var(--color-primary-container)' : 'transparent',
+        transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
+        overflow: 'hidden',
+        whiteSpace: 'nowrap',
+        textOverflow: 'ellipsis',
+      }}
+      className="sidebar-item"
+    >
+      <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+        {icon}
+      </span>
+      {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>}
+    </Link>
+  )
+}
+
+// ─── Group header ─────────────────────────────────────────────
+
+function GroupHeader({ label, collapsed }: { label: string; collapsed?: boolean }) {
+  if (collapsed) return null
+  return (
+    <h3
+      style={{
+        fontSize: '11px',
+        fontWeight: 600,
+        textTransform: 'uppercase' as const,
+        letterSpacing: '0.05em',
+        color: 'var(--color-text-muted)',
+        padding: '0 var(--space-2)',
+        marginBottom: 'var(--space-1)',
+      }}
+    >
+      {label}
+    </h3>
+  )
+}
+
+// ─── Sidebar ──────────────────────────────────────────────────
+
+export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
+  const [pages, setPages] = useState<Page[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [showAgentActivity, setShowAgentActivity] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const today = formatToday()
+
+  useEffect(() => {
+    let cancelled = false
+    api.listPages()
+      .then((data) => {
+        if (!cancelled) {
+          setPages(data)
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toast.error(`Failed to load pages: ${err instanceof Error ? err.message : 'Unknown error'}`)
+          setLoading(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const regularPages = pages.filter((p) => !p.journal)
+
+  async function handleNewPage() {
+    const name = window.prompt('Page name:')
+    if (!name || !name.trim()) return
+
+    setCreating(true)
+    try {
+      const page = await api.createPage({ name: name.trim().toLowerCase() })
+      setPages((prev) => [...prev, page])
+      navigate({ to: `/page/${encodeURIComponent(page.name)}` })
+    } catch (err) {
+      toast.error(`Failed to create page: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  function handleSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      onOpenSearch?.()
+    }
+  }
+
+  return (
+    <div
+      data-testid="sidebar"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+      }}
+    >
+      {/* Close button for mobile drawer */}
+      {onClose && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            padding: 'var(--space-1) var(--space-1) 0',
+          }}
+        >
+          <button
+            onClick={onClose}
+            aria-label="Close sidebar"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--color-text-secondary)',
+              padding: 'var(--space-1)',
+              borderRadius: 'var(--radius-md)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+            className="topbar-action"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
+
+      {/* Workspace selector */}
+      {!collapsed && (
+        <div
+          style={{
+            padding: 'var(--space-4) var(--space-4) var(--space-2)',
+            fontSize: '14px',
+            fontWeight: 700,
+            color: 'var(--color-text-primary)',
+            letterSpacing: '-0.01em',
+          }}
+        >
+          Quilt
+        </div>
+      )}
+
+      {/* Search input */}
+      {!collapsed && (
+        <div
+          style={{
+            padding: '0 var(--space-3) var(--space-3)',
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: searchFocused ? 'var(--color-surface)' : 'var(--color-surface-subtle)',
+              border: searchFocused ? '1px solid var(--color-primary)' : '1px solid transparent',
+              borderRadius: 'var(--radius-md)',
+              padding: '0 var(--space-2)',
+              transition: 'border var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
+              cursor: 'text',
+            }}
+            onClick={onOpenSearch}
+          >
+            <Search size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            <input
+              type="text"
+              placeholder="Search…"
+              data-testid="sidebar-search-input"
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              onKeyDown={handleSearchKeyDown}
+              onClick={e => e.stopPropagation()}
+              readOnly
+              style={{
+                background: 'none',
+                border: 'none',
+                outline: 'none',
+                flex: 1,
+                fontSize: '13px',
+                color: 'var(--color-text-primary)',
+                padding: '7px var(--space-2)',
+                minWidth: 0,
+                cursor: 'pointer',
+              }}
+              className="sidebar-search-input"
+            />
+            <kbd
+              style={{
+                fontSize: '10px',
+                color: 'var(--color-text-disabled)',
+                background: 'var(--color-surface-subtle)',
+                padding: '1px 5px',
+                borderRadius: 'var(--radius-sm)',
+                flexShrink: 0,
+                fontFamily: 'inherit',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              {navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl+K'}
+            </kbd>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <nav
+        style={{
+          flex: 1,
+          padding: collapsed ? 'var(--space-3)' : '0 var(--space-3) var(--space-3)',
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: collapsed ? 'var(--space-2)' : 'var(--space-6)',
+        }}
+        className="sidebar-scroll"
+      >
+        {/* Journals */}
+        <section>
+          <GroupHeader label="Journals" collapsed={collapsed} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: collapsed ? 'var(--space-1)' : '2px' }}>
+            <SidebarItem
+              icon={<Calendar size={18} />}
+              label={today.label}
+              href={`/journal/${today.url}`}
+              collapsed={collapsed}
+              dataTestId="nav-journal"
+            />
+          </div>
+        </section>
+
+        {/* All Pages */}
+        <section>
+          <GroupHeader label="Browse" collapsed={collapsed} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: collapsed ? 'var(--space-1)' : '2px' }}>
+            <SidebarItem
+              icon={<LayoutList size={18} />}
+              label="All Pages"
+              href="/pages"
+              active={location.pathname === '/pages'}
+              collapsed={collapsed}
+              dataTestId="nav-pages"
+            />
+            <SidebarItem
+              icon={<Network size={18} />}
+              label="Graph View"
+              href="/graph"
+              active={location.pathname === '/graph'}
+              collapsed={collapsed}
+              dataTestId="nav-graph"
+            />
+          </div>
+        </section>
+
+        {/* Pages */}
+        <section>
+          <GroupHeader label="Pages" collapsed={collapsed} />
+
+          {loading ? (
+            <SidebarSkeleton />
+          ) : regularPages.length === 0 ? (
+            !collapsed && (
+              <p
+                style={{
+                  padding: '0 var(--space-2)',
+                  fontSize: '12px',
+                  color: 'var(--color-text-disabled)',
+                  fontStyle: 'italic',
+                }}
+              >
+                No pages yet
+              </p>
+            )
+          ) : (
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: collapsed ? 'var(--space-1)' : '2px',
+              }}
+            >
+              {regularPages.map((page) => (
+                <li key={page.id}>
+                  <SidebarItem
+                    icon={<FileText size={18} />}
+                    label={page.title || page.name}
+                    href={`/page/${encodeURIComponent(page.name)}`}
+                    collapsed={collapsed}
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Recents placeholder */}
+        {!collapsed && (
+          <section>
+            <GroupHeader label="Recents" />
+            <div
+              style={{
+                padding: '0 var(--space-2)',
+                fontSize: '12px',
+                color: 'var(--color-text-disabled)',
+                fontStyle: 'italic',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+              }}
+            >
+              <Clock size={14} />
+              <span>Recent pages will appear here</span>
+            </div>
+          </section>
+        )}
+
+        {/* ADR-0003 — Agent Activity (cognitive feature, opt-in view) */}
+        {!collapsed && showAgentActivity && (
+          <section
+            style={{
+              borderTop: '1px solid var(--color-border)',
+              paddingTop: 'var(--space-2)',
+            }}
+          >
+            <AgentActivityPanel maxItems={15} />
+          </section>
+        )}
+      </nav>
+
+      {/* New page button */}
+      <div
+        style={{
+          padding: collapsed ? 'var(--space-2)' : 'var(--space-3)',
+          borderTop: '1px solid var(--color-border)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 'var(--space-1)',
+        }}
+      >
+        <button
+          onClick={handleNewPage}
+          disabled={creating}
+          aria-label="New page"
+          title={collapsed ? 'New page' : undefined}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            gap: 'var(--space-2)',
+            width: '100%',
+            padding: collapsed ? '8px 0' : '6px var(--space-2)',
+            borderRadius: 'var(--radius-md)',
+            border: 'none',
+            background: 'none',
+            cursor: 'pointer',
+            fontSize: '13px',
+            fontWeight: 400,
+            color: 'var(--color-text-muted)',
+            transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
+          }}
+          className="sidebar-item"
+        >
+          <Plus size={18} style={{ flexShrink: 0 }} />
+          {!collapsed && (creating ? 'Creating…' : 'New page')}
+        </button>
+
+        {/* ADR-0003 — Agent Activity toggle */}
+        {!collapsed && (
+          <button
+            onClick={() => setShowAgentActivity(!showAgentActivity)}
+            data-testid="agent-activity-toggle"
+            aria-pressed={showAgentActivity}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-start',
+              gap: 'var(--space-2)',
+              width: '100%',
+              padding: '6px var(--space-2)',
+              borderRadius: 'var(--radius-md)',
+              border: 'none',
+              background: showAgentActivity
+                ? 'var(--color-accent-subtle, rgba(99, 102, 241, 0.10))'
+                : 'none',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500,
+              color: showAgentActivity
+                ? 'var(--color-accent)'
+                : 'var(--color-text-muted)',
+              transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
+            }}
+            className="sidebar-item"
+          >
+            <Bot size={14} style={{ flexShrink: 0 }} />
+            {showAgentActivity ? 'Hide agent activity' : 'Show agent activity'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
