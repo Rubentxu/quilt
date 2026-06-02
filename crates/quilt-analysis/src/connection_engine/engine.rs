@@ -348,6 +348,16 @@ mod tests {
                 "query_dsl not supported in mock".to_string(),
             ))
         }
+        async fn list_by_property(
+            &self,
+            _key: &str,
+            _value: &str,
+            _limit: usize,
+        ) -> Result<Vec<Block>, DomainError> {
+            Err(DomainError::Storage(
+                "list_by_property not supported in mock".to_string(),
+            ))
+        }
     }
 
     #[test]
