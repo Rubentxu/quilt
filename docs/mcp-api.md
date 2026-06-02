@@ -42,6 +42,12 @@ This document describes the MCP tools, resources, and notifications provided by 
 
 `2024-11-05`
 
+### Tool Prefix Convention
+
+All MCP tools use the `quilt_` prefix (e.g., `quilt_query`, `quilt_create_block`).
+Resources use the `quilt://` URI scheme. This was renamed from `logseq_*` / `logseq://` in v0.2 to
+reflect the project's identity as a standalone knowledge graph, not a Logseq wrapper.
+
 ---
 
 ## 2. Tools
@@ -74,9 +80,9 @@ All tools follow the MCP tool call format:
 
 ---
 
-### 2.1 `logseq_query` — Execute DSL Query
+### 2.1 `quilt_query` — Execute DSL Query
 
-Execute a Logseq DSL query against the knowledge graph.
+Execute a Quilt DSL query against the knowledge graph.
 
 **Arguments:**
 ```json
@@ -122,7 +128,7 @@ Execute a Logseq DSL query against the knowledge graph.
 
 ---
 
-### 2.2 `logseq_create_block` — Create Block
+### 2.2 `quilt_create_block` — Create Block
 
 Create a new content block on a page (auto-creates page if needed).
 
@@ -150,7 +156,7 @@ Create a new content block on a page (auto-creates page if needed).
 
 ---
 
-### 2.3 `logseq_search` — Full-Text Search
+### 2.3 `quilt_search` — Full-Text Search
 
 Search blocks and pages using FTS5.
 
@@ -179,7 +185,7 @@ Search blocks and pages using FTS5.
 
 ---
 
-### 2.4 `logseq_get_block_tree` — Get Block with Children
+### 2.4 `quilt_get_block_tree` — Get Block with Children
 
 Get a block and all its descendants recursively.
 
@@ -215,7 +221,7 @@ Get a block and all its descendants recursively.
 
 ---
 
-### 2.5 `logseq_get_page_blocks` — Get Page Blocks
+### 2.5 `quilt_get_page_blocks` — Get Page Blocks
 
 Get all blocks on a page.
 
@@ -241,7 +247,7 @@ Get all blocks on a page.
 
 ---
 
-### 2.6 `logseq_list_pages` — List All Pages
+### 2.6 `quilt_list_pages` — List All Pages
 
 List all pages in the knowledge graph.
 
@@ -267,7 +273,7 @@ List all pages in the knowledge graph.
 
 ---
 
-### 2.7 `logseq_get_journal` — Get/Create Journal Page
+### 2.7 `quilt_get_journal` — Get/Create Journal Page
 
 Get or create a journal page for a specific date.
 
@@ -293,7 +299,7 @@ Get or create a journal page for a specific date.
 
 ---
 
-### 2.8 `logseq_create_task` — Create Task
+### 2.8 `quilt_create_task` — Create Task
 
 Create a task (block with TODO marker) on a page.
 
@@ -319,7 +325,7 @@ Create a task (block with TODO marker) on a page.
 
 ---
 
-### 2.9 `logseq_link_blocks` — Link Blocks
+### 2.9 `quilt_link_blocks` — Link Blocks
 
 Create a reference (link) from one block to another.
 
@@ -342,7 +348,7 @@ Create a reference (link) from one block to another.
 
 ---
 
-### 2.10 `logseq_get_backlinks` — Get Backlinks
+### 2.10 `quilt_get_backlinks` — Get Backlinks
 
 Get all blocks that reference a specific block.
 
@@ -364,7 +370,7 @@ Get all blocks that reference a specific block.
 
 ---
 
-### 2.11 `logseq_delete_block` — Delete Block
+### 2.11 `quilt_delete_block` — Delete Block
 
 Soft-delete a block (moves to recycle bin).
 
@@ -385,7 +391,7 @@ Soft-delete a block (moves to recycle bin).
 
 ---
 
-### 2.12 `logseq_restore_block` — Restore Block
+### 2.12 `quilt_restore_block` — Restore Block
 
 Restore a soft-deleted block from the recycle bin.
 
@@ -406,7 +412,7 @@ Restore a soft-deleted block from the recycle bin.
 
 ---
 
-### 2.13 `logseq_recycle_bin` — List Recycle Bin
+### 2.13 `quilt_recycle_bin` — List Recycle Bin
 
 List all soft-deleted blocks.
 
@@ -432,7 +438,7 @@ List all soft-deleted blocks.
 
 ---
 
-### 2.14 `logseq_orphan_pages` — List Orphan Pages
+### 2.14 `quilt_orphan_pages` — List Orphan Pages
 
 List pages with no blocks.
 
@@ -458,7 +464,7 @@ List pages with no blocks.
 
 ---
 
-### 2.15 `logseq_rebuild_index` — Rebuild Search Index
+### 2.15 `quilt_rebuild_index` — Rebuild Search Index
 
 Rebuild the full-text search index.
 
@@ -481,7 +487,7 @@ Rebuild the full-text search index.
 
 ---
 
-### 2.16 `logseq_index_health` — Check Index Health
+### 2.16 `quilt_index_health` — Check Index Health
 
 Check the health of the search index.
 
@@ -506,7 +512,7 @@ Check the health of the search index.
 
 These tools are available when cognitive engines are configured:
 
-#### `logseq_cognitive_mirror`
+#### `quilt_cognitive_mirror`
 
 Analyze a page's cognitive structure.
 
@@ -517,7 +523,7 @@ Analyze a page's cognitive structure.
 }
 ```
 
-#### `logseq_serendipity`
+#### `quilt_serendipity`
 
 Find unexpected connections between knowledge blocks.
 
@@ -530,7 +536,7 @@ Find unexpected connections between knowledge blocks.
 }
 ```
 
-#### `logseq_agent_memory`
+#### `quilt_agent_memory`
 
 Query the agent memory store.
 
@@ -543,7 +549,7 @@ Query the agent memory store.
 }
 ```
 
-#### `logseq_argument_map`
+#### `quilt_argument_map`
 
 Map argument structure in a page.
 
@@ -555,7 +561,7 @@ Map argument structure in a page.
 }
 ```
 
-#### `logseq_mental_model`
+#### `quilt_mental_model`
 
 Get the mental model for an agent from journal entries.
 
@@ -567,7 +573,7 @@ Get the mental model for an agent from journal entries.
 }
 ```
 
-#### `logseq_counterfactual`
+#### `quilt_counterfactual`
 
 Explore counterfactual scenarios and alternative branches.
 
@@ -579,7 +585,7 @@ Explore counterfactual scenarios and alternative branches.
 }
 ```
 
-#### `logseq_knowledge_evolution`
+#### `quilt_knowledge_evolution`
 
 Track how knowledge and beliefs evolve over time.
 
@@ -591,7 +597,7 @@ Track how knowledge and beliefs evolve over time.
 }
 ```
 
-#### `logseq_morning_briefing`
+#### `quilt_morning_briefing`
 
 Get a daily cognitive briefing with pulse, serendipity highlights, and decay alerts.
 
@@ -608,18 +614,18 @@ Resources provide access to graph data via the `resources/read` method.
 
 ### 3.1 URI Scheme
 
-All resources use the `logseq://` URI scheme:
+All resources use the `quilt://` URI scheme:
 
 | URI | Description |
 |-----|-------------|
-| `logseq://graph` | Full graph statistics |
-| `logseq://pages` | All pages list |
-| `logseq://journals` | Journal pages list |
-| `logseq://tags` | All tags with usage counts |
-| `logseq://cognitive/map` | Overall cognitive analysis (when cognitive mirror configured) |
-| `logseq://cognitive/serendipity` | Recent serendipity discoveries (when engine configured) |
-| `logseq://cognitive/arguments/{page}` | Argument map for a page (when cartographer configured) |
-| `logseq://cognitive/mental-models` | Mental model garden (when gardener configured) |
+| `quilt://graph` | Full graph statistics |
+| `quilt://pages` | All pages list |
+| `quilt://journals` | Journal pages list |
+| `quilt://tags` | All tags with usage counts |
+| `quilt://cognitive/map` | Overall cognitive analysis (when cognitive mirror configured) |
+| `quilt://cognitive/serendipity` | Recent serendipity discoveries (when engine configured) |
+| `quilt://cognitive/arguments/{page}` | Argument map for a page (when cartographer configured) |
+| `quilt://cognitive/mental-models` | Mental model garden (when gardener configured) |
 
 ### 3.2 Request Format
 
@@ -627,7 +633,7 @@ All resources use the `logseq://` URI scheme:
 {
   "method": "resources/read",
   "params": {
-    "uri": "logseq://pages"
+    "uri": "quilt://pages"
   }
 }
 ```
@@ -638,7 +644,7 @@ All resources use the `logseq://` URI scheme:
 {
   "contents": [
     {
-      "uri": "logseq://pages",
+      "uri": "quilt://pages",
       "mime_type": "application/json",
       "text": "[... JSON array of pages ...]"
     }
@@ -760,8 +766,8 @@ Emitted when a page is created.
 // Response (truncated)
 {
   "tools": [
-    { "name": "logseq_query", "description": "Execute a Logseq DSL query", ... },
-    { "name": "logseq_create_block", "description": "Create a new block", ... },
+    { "name": "quilt_query", "description": "Execute a Quilt DSL query", ... },
+    { "name": "quilt_create_block", "description": "Create a new block", ... },
     ...
   ]
 }
@@ -774,7 +780,7 @@ Emitted when a page is created.
 {
   "method": "tools/call",
   "params": {
-    "name": "logseq_create_task",
+    "name": "quilt_create_task",
     "arguments": {
       "page_name": "Inbox",
       "content": "Review quarterly report",
@@ -802,7 +808,7 @@ Emitted when a page is created.
 {
   "method": "tools/call",
   "params": {
-    "name": "logseq_search",
+    "name": "quilt_search",
     "arguments": {
       "query": "Rust async",
       "limit": 10
@@ -829,7 +835,7 @@ Emitted when a page is created.
 {
   "method": "tools/call",
   "params": {
-    "name": "logseq_get_block_tree",
+    "name": "quilt_get_block_tree",
     "arguments": {
       "block_id": "018d1e5c-1234-7890-abcd-ef0123456789"
     }

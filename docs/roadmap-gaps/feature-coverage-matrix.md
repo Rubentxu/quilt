@@ -1,5 +1,6 @@
 # Matriz de cobertura de features propuestas en Rust
 
+> **Updated**: 2026-06-01 — Stack migration complete (Leptos→React, CM6→TipTap). Tauri removed per ADR-0005. See [AUDIT_REPORT.md](./AUDIT_REPORT.md) for full audit.
 > Estado de referencia: mayo de 2026.
 > Fuentes principales: `docs/reversa/plan.md`, `domain.md`,
 > `quilt-mcp-agent-capabilities.md`, `quilt-ui-workflows.md`,
@@ -136,38 +137,60 @@ completo con toda la promesa arquitectónica histórica.
 
 ---
 
-## 6. UI y workflows
+## 6. UI y workflows (React/TypeScript)
 
-| Feature | Documento fuente | Estado en Rust | Evidencia | Nota |
+| Feature | Documento fuente | Estado | Evidencia | Nota |
 |---|---|---|---|---|
-| Base Leptos/WASM | `rust-reimplementation-proposal.md` | Implementada | `crates/quilt-ui/src/lib.rs` | Base existe |
-| Journal view | `quilt-ui-workflows.md` | Implementada | `crates/quilt-ui/src/pages/journal.rs` | Existe |
-| Query UI básica | `quilt-ui-workflows.md` | Parcial | `crates/quilt-ui/src/pages/query.rs` | Existe, pero no cubre toda la visión |
-| Briefing matutino UI | `quilt-ui-workflows.md` | Parcial | `crates/quilt-ui/src/pages/cognitive/dashboard.rs` | Hay wiring parcial |
-| Graph view / cognitive map | `quilt-ui-workflows.md` | Stub | UI no verificada completa | Backend relacionado existe |
-| Agent Room | `quilt-ui-workflows.md` | Stub | no verificado | No parece implementado |
-| Focus mode con AI | `quilt-ui-workflows.md` | Stub | no verificado | No parece implementado |
-| Serendipity notifications UI | `quilt-ui-workflows.md` | No encontrada | — | Backend sí, UI no |
-| Auto-organize | `quilt-ui-workflows.md` | No encontrada | — | No verificado |
-| Weekly review | `quilt-ui-workflows.md` | No encontrada | — | No verificado |
-| Decay monitor UI | `quilt-ui-workflows.md` | No encontrada | — | Backend relacionado existe |
+| Base React/TypeScript | ADR-0006 | ✅ Completa | `ui/` directorio raíz | Migrada desde Leptos|
+| Journal view | ADR-0006 | ✅ Completa | React + MCP API | Wired via MCP|
+| Query UI | ADR-0006 | ✅ Completa | React + MCP API | Query DSL via MCP|
+| Search UI | ADR-0006 | ✅ Completa | React + FTS5 | Full-text search via MCP|
+| Auth | ADR-0006 | ✅ Completa | React + JWT | JWT-based auth|
+| E2E Tests (Playwright) | ADR-0006 | ✅ Completa | `ui/e2e/` | Playwright suite para React|
+| Outliner / Block Editor | ADR-0006 | ✅ Completa | TipTap editor | Migrado de CM6|
+| Page Editor | ADR-0006 | ✅ Completa | React + MCP | Create/edit via MCP|
+| Cognitive Dashboard | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
+| Agent Room | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
+| Graph view / cognitive map | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
+| Focus mode con AI | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
+| Serendipity notifications UI | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
+| Auto-organize | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
+| Weekly review | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
+| Decay monitor UI | ADR-0001 | ❌ No implementada | — | Not in scope per ADR-0001|
 
 ### Conclusión del área
 
-La **UI es la mayor zona de brecha** entre lo propuesto y lo actualmente
-verificado en Rust.
+La **UI base está completa** con React/TypeScript + TipTap. Las features
+cognitivas de UI quedaron fuera de scope por ADR-0001. El backend cognitivo
+existe y está disponible vía MCP para clientes externos.
 
 ---
 
-## 7. Platform
+## 7. React Migration (ADR-0006)
 
-| Feature | Documento fuente | Estado en Rust | Evidencia | Nota |
+| Feature | Estado | Evidencia | Nota |
+|---|---|---|---|
+| Leptos→React migration | ✅ Completa | `ui/` directorio raíz | Todo el frontend migrado |
+| CM6→TipTap editor | ✅ Completa | `ui/` editor components | Editor de bloques funcional |
+| Real API via MCP | ✅ Completa | React → MCP client | Sin mocks |
+| Auth (JWT) | ✅ Completa | React auth module | JWT-based |
+| E2E tests (Playwright) | ✅ Completa | `ui/e2e/` | Suite de pruebas |
+| Build/deploy pipeline | ✅ Completa | CI config | React build + deploy |
+
+**Nota**: La migración a React fue una decisión arquitectónica (ADR-0006) que
+reemplazó el stack Leptos/WASM + Tauri por React/TypeScript + MCP directo.
+
+---
+
+## 8. Platform
+
+| Feature | Documento fuente | Estado | Evidencia | Nota |
 |---|---|---|---|---|
-| Tauri desktop shell | `rust-reimplementation-proposal.md` | Implementada | `crates/quilt-platform/src-tauri/` | Cubierta |
-| CLI | idem | Implementada | `crates/quilt-platform/src/cli.rs` | Cubierta |
-| Deep links | idem | Implementada | `src-tauri/src/deep_link.rs` | Cubierta |
+| Tauri desktop shell | `rust-reimplementation-proposal.md` | ❌ Removida | ADR-0005 | Eliminada por ADR-0005 |
+| CLI | idem | ✅ Implementada | `crates/quilt-platform/src/cli.rs` | Cubierta |
+| Deep links | idem | ❌ Removida | ADR-0005 | Eliminado con Tauri |
 | File watching | idem | Parcial | crates / wiring parcial | No parece cerrado |
-| WASM browser target | idem | Parcial | `crates/quilt-ui/` | Compila, pero no equivale a producto completo |
+| Web SPA (React) | ADR-0006 | ✅ Completa | `ui/` | Reemplaza a Tauri + WASM |
 
 ---
 
@@ -181,41 +204,43 @@ verificado en Rust.
 - plugins/hooks
 - gran parte del backend cognitive/AI
 - sync base
-- desktop shell / CLI / deep links
+- CLI
+
+### Claramente cubierto en frontend React
+
+- UI base (React/TypeScript + TipTap)
+- Journal view, Page List, Search, Query
+- Auth (JWT)
+- E2E tests (Playwright)
+- Outliner / Block Editor / Page Editor
 
 ### Parcial
 
-- query UI completa
 - morning briefing end-to-end
 - file watching
-- target WASM como experiencia de producto completa
-- integración visible de varias capacidades cognitivas
+- integración visible de varias capacidades cognitivas en UI
 
-### No cubierto o no verificado como completo
+### No cubierto o fuera de scope
 
 - E2EE
-- Agent Room
-- Graph View / Cognitive Map UI
-- Focus mode con panel AI completo
-- Serendipity notifications UI
-- Auto-organize
-- Weekly review
-- Decay monitor UI
+- Cognitive UI features (fuera de scope per ADR-0001)
+- Tauri desktop shell / deep links (removidos per ADR-0005)
 
 ## Conclusión
 
 Si la pregunta es:
 
-> “¿Todas las features propuestas están cubiertas en Rust?”
+> “¿Todas las features propuestas están cubiertas?”
 
 La respuesta correcta es:
 
-> **No. El backend Rust cubre mucho del núcleo y muchas capacidades avanzadas,
-> pero no todas las features propuestas están implementadas end-to-end.**
+> **El stack completo (Rust backend + React frontend) cubre el núcleo del
+> producto. La UI cognitiva quedó fuera de scope por ADR-0001. Tauri fue
+> removido por ADR-0005.**
 
 La deuda principal está en:
 
-- UI cognitiva
-- workflows de agentes
-- features visibles de producto sobre backend ya existente
+- integración de engines cognitivos en la UI React
+- workflows de agentes end-to-end
+- sync real end-to-end (transporte + UI)
 - y reconciliación entre visión documental e implementación real

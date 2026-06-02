@@ -1,9 +1,10 @@
 # Quilt — Technical Debt & Production Roadmap
 
+> **Updated**: 2026-06-01 — Stack migration complete (Leptos→React, CM6→TipTap). Tauri removed per ADR-0005. See [AUDIT_REPORT.md](./AUDIT_REPORT.md) for full audit.
 > **Document Status**: Draft for Review
 > **Created**: 2026-05-07
 > **Target**: Production Ready (MVP)
-> **Stack**: Rust 2024, SQLite, Tauri 2, Leptos, MCP
+> **Stack**: Rust 2024, SQLite, React/TypeScript, MCP
 
 ---
 
@@ -32,8 +33,8 @@
 | **Infrastructure** | ⚠️ Partial | 75% | SQLite works, event bus missing |
 | **Sync Engine** | ✅ Implemented | 85% | LWW CRDT exists, not integrated |
 | **Cognitive/AI** | ⚠️ Skeleton | 50% | Engines defined, needs AI provider |
-| **UI (Leptos)** | 🔴 Incomplete | 35% | Components exist, not wired to backend |
-| **Platform (Tauri)** | ⚠️ Basic | 50% | Shell exists, commands not complete |
+| **UI (React/TypeScript)** | ✅ Complete | 90% | TipTap editor, CM6→TipTap migration done, real API via MCP |
+| **Platform (Web)** | ✅ Complete | 90% | React SPA, Tauri removed per ADR-0005 |
 | **CLI** | ✅ Complete | 90% | Binary works |
 
 ### Target State
@@ -42,18 +43,18 @@ Production-ready local-first PKM with:
 - Full MCP integration for AI agents
 - Working query DSL with FTS5 search
 - Sync-ready architecture (CRDT in place)
-- Functional desktop UI
+- Functional web UI (React/TypeScript)
 - Cognitive AI features (with external AI provider)
 
 ### Critical Path to Production
 
 ```
 Phase 1 (Weeks 1-4)     Phase 2 (Weeks 5-8)      Phase 3 (Weeks 9-12)
-├── Fix parser cycles     ├── Event Bus impl       ├── Full UI wiring
-├── Event Bus skeleton   ├── MCP-Event integration ├── Tauri commands
-├── Clean warnings       ├── UI pages             ├── Cognitive integration
-├── File collision fix   ├── Search integration    ├── E2E testing
-└── Integration tests    └── Sync integration     └── Production hardening
+├── Fix parser cycles     ├── Event Bus impl       ├── Cognitive integration
+├── Event Bus skeleton   ├── MCP-Event integration ├── E2E testing
+├── Clean warnings       ├── Sync integration      ├── Production hardening
+├── File collision fix   └── Production polish      └── React maintenance
+└── Integration tests
 ```
 
 ---
@@ -97,20 +98,11 @@ fn parse_expr_impl(&self, input: &str, depth: u32) -> Result<QueryExpr, ParseErr
 ---
 
 #### [CRITICAL-002] Output Filename Collision
-- **Location**: `crates/quilt-bin` and `crates/quilt-platform/src-tauri`
-- **Issue**: Both produce `quilt` binary
-- **Impact**: CI/build issues
-- **Effort**: 15 minutes
-- **Status**: Unassigned
-
-**Fix**: Rename `quilt-tauri` binary to `quilt-desktop` in `Cargo.toml`:
-
-```toml
-# crates/quilt-platform/src-tauri/Cargo.toml
-[[bin]]
-name = "quilt-desktop"  # was "quilt"
-path = "src/main.rs"
-```
+- **Location**: `crates/quilt-bin` and (removed) `crates/quilt-platform`
+- **Issue**: Both produced `quilt` binary (Tauri crate removed per ADR-0005)
+- **Impact**: Resolved — Tauri crate no longer exists
+- **Effort**: Resolved by ADR-0005 (crate removal)
+- **Status**: ✅ Resolved
 
 ---
 
@@ -131,7 +123,7 @@ path = "src/main.rs"
 
 ### 2.2 HIGH Priority Issues
 
-#### [HIGH-001] Clippy Warnings (15+)
+#### [HIGH-001] Clippy Warnings (~24)
 - **Effort**: 2-3 hours
 - **Impact**: Code quality / potential bugs
 - **Breakdown**:
@@ -141,21 +133,18 @@ path = "src/main.rs"
   - 2 unused variables in `parser.rs`
   - 2 unused variables in `executor.rs`
   - 3 clippy-specific warnings (too_many_arguments, should_implement_trait)
-  - 1 unused_mut in `wasm/client.rs`
-  - 1 redundant_locals in `dashboard.rs`
+  - ~10 other warnings across the codebase
 
 **Fix**: Run `cargo clippy --fix --allow-dirty` and manual review
 
 ---
 
 #### [HIGH-002] Mock Bridge in UI
-- **Location**: `crates/quilt-ui/src/bridge.rs:71-89`
-- **Issue**: UI returns mock data instead of calling Tauri commands
-- **Impact**: UI is non-functional with real backend
-- **Effort**: 4-6 hours
-- **Status**: Unassigned
-
-**Required**: Replace mock implementations with actual `invoke` calls
+- **Location**: `crates/quilt-ui/src/bridge.rs:71-89` (Leptos, now removed)
+- **Issue**: UI returned mock data instead of calling real backend
+- **Impact**: Resolved — Leptos UI replaced by React/TypeScript with real MCP API calls
+- **Effort**: Resolved by React migration
+- **Status**: ✅ Resolved
 
 ---
 
@@ -239,21 +228,25 @@ path = "src/main.rs"
 
 ---
 
-### 3.3 UI Feature Gaps
+### 3.3 UI Feature Gaps (React/TypeScript)
+
+> **Status**: React migration complete (Leptos→React, CM6→TipTap). Real API connected via MCP.
 
 | Page/Component | Status | Notes |
 |----------------|--------|-------|
-| Journal Page | ⚠️ Basic | Shows mock data |
-| Page List | ⚠️ Basic | Shows mock data |
-| Search | ⚠️ Basic | UI exists, not wired |
-| Query | ⚠️ Basic | UI exists, not wired |
-| Cognitive Dashboard | ⚠️ Partial | Components exist, mock data |
-| Argument Map | ⚠️ Partial | Components exist, mock data |
-| Mental Model | ⚠️ Partial | Components exist, mock data |
-| Serendipity | ⚠️ Partial | Components exist, mock data |
-| Outliner Block | 🔴 Missing | Core component not implemented |
-| Block Editor | 🔴 Missing | Edit functionality missing |
-| Page Editor | 🔴 Missing | Create/edit pages missing |
+| Journal Page | ✅ Complete | Working via MCP API |
+| Page List | ✅ Complete | Working via MCP API |
+| Search | ✅ Complete | FTS5 search via MCP |
+| Query | ✅ Complete | Query DSL via MCP |
+| Cognitive Dashboard | ⚠️ Partial | Backend exists, React UI not wired |
+| Argument Map | ⚠️ Partial | Backend exists, React UI not wired |
+| Mental Model | ⚠️ Partial | Backend exists, React UI not wired |
+| Serendipity | ⚠️ Partial | Backend exists, React UI not wired |
+| Outliner Block | ✅ Complete | TipTap-based outliner working |
+| Block Editor | ✅ Complete | TipTap inline editing |
+| Page Editor | ✅ Complete | Create/edit pages via MCP |
+| Auth | ✅ Complete | JWT-based auth |
+| E2E Tests | ✅ Complete | Playwright E2E suite for React |
 
 ---
 
@@ -370,49 +363,49 @@ pub enum AppEvent {
 
 ### Phase 2: Core Feature Completion (Weeks 5-8)
 
-**Goal**: Complete UI wiring, search integration, sync basics
+**Goal**: Event bus, MCP integration, sync integration, production polish
 
-#### 2.1 Week 5: UI Backend Wiring
+#### 2.1 Week 5: Event Bus + MCP Integration
 
 | Task | Owner | Hours | Deliverable |
 |------|-------|-------|-------------|
-| Replace mock bridge with real invoke | TBD | 6 | Real data in UI |
-| Implement Journal page backend | TBD | 4 | Journals work |
-| Implement Page List backend | TBD | 4 | Page list works |
-| Implement Search backend | TBD | 4 | Search works |
+| Implement EventBus struct | TBD | 4 | Tokio broadcast channel |
+| Wire MCP to EventBus | TBD | 4 | Real-time notifications via MCP |
+| Wire MCP to repositories | TBD | 8 | Full CRUD via MCP |
+| Wire MCP to search | TBD | 4 | FTS5 working via MCP |
 
 ---
 
-#### 2.2 Week 6: Query UI + Advanced Search
+#### 2.2 Week 6: Sync Integration
 
 | Task | Owner | Hours | Deliverable |
 |------|-------|-------|-------------|
-| Query input UI component | TBD | 8 | DSL query builder |
+| Wire sync events to BlockRepo | TBD | 8 | Operations create sync changes |
+| Implement transport layer | TBD | 8 | HTTP sync client |
+| Sync status UI | TBD | 6 | Visual sync state |
+| Conflict resolution UI | TBD | 6 | Manual resolution |
+
+---
+
+#### 2.3 Week 7: Query UI + Advanced Features
+
+| Task | Owner | Hours | Deliverable |
+|------|-------|-------|-------------|
 | Query results display | TBD | 4 | Table/tree view |
 | Advanced FTS integration | TBD | 6 | Snippets, highlighting |
 | Query history/saved queries | TBD | 4 | Persistence |
-
----
-
-#### 2.3 Week 7: Outliner + Editor
-
-| Task | Owner | Hours | Deliverable |
-|------|-------|-------|-------------|
-| OutlinerBlock component | TBD | 12 | Core tree component |
-| Block editor inline | TBD | 8 | Edit-in-place |
-| Drag-and-drop reordering | TBD | 8 | Fractional index updates |
 | Keyboard navigation | TBD | 4 | vim-like bindings |
 
 ---
 
-#### 2.4 Week 8: Tauri Desktop Shell
+#### 2.4 Week 8: Production Polish
 
 | Task | Owner | Hours | Deliverable |
 |------|-------|-------|-------------|
-| Deep link handler wiring | TBD | 4 | `quilt://` URLs work |
-| Window management | TBD | 4 | Minimize, maximize, close |
-| Menu bar / system tray | TBD | 6 | Native menus |
-| File association | TBD | 4 | `.md` files open in Quilt |
+| Performance testing | TBD | 8 | P95 < 100ms queries |
+| Security audit | TBD | 8 | No vulnerabilities |
+| Documentation finalization | TBD | 4 | README, API docs |
+| MCP integration tests | TBD | 8 | 90% MCP coverage |
 
 ---
 
@@ -442,14 +435,14 @@ pub enum AppEvent {
 
 ---
 
-#### 3.3 Week 11: Sync Integration
+#### 3.3 Week 11: Cognitive UI + Agent Workflows
 
 | Task | Owner | Hours | Deliverable |
 |------|-------|-------|-------------|
-| Wire sync events to BlockRepo | TBD | 8 | Operations create sync changes |
-| Implement transport layer | TBD | 8 | HTTP sync client |
-| Sync status UI | TBD | 6 | Visual sync state |
-| Conflict resolution UI | TBD | 6 | Manual resolution |
+| Cognitive Dashboard (React) | TBD | 8 | Wire cognitive engines to UI |
+| Argument Map UI | TBD | 6 | Visual argument mapping |
+| Serendipity notifications | TBD | 4 | Real-time connection discovery |
+| Agent Room UI | TBD | 8 | Multi-agent interaction |
 
 ---
 
@@ -459,9 +452,8 @@ pub enum AppEvent {
 |------|-------|-------|-------------|
 | Performance testing | TBD | 8 | P95 < 100ms queries |
 | Security audit | TBD | 8 | No vulnerabilities |
-| E2E test suite | TBD | 8 | 95% scenario coverage |
+| E2E test coverage expansion | TBD | 8 | Additional scenarios |
 | Documentation finalization | TBD | 4 | README, API docs |
-| Release artifacts | TBD | 4 | Installers, binaries |
 
 ---
 
@@ -478,10 +470,10 @@ Phase 1: Foundation
   Week 4: Integration ████████████████
 
 Phase 2: Core Features
-  Week 5: UI Wiring  ████████████████
-  Week 6: Query+Search ████████████████
-  Week 7: Outliner    ████████████████
-  Week 8: Tauri       ████████████████
+  Week 5: Event Bus     ████████████████
+  Week 6: Sync          ████████████████
+  Week 7: Query UI      ████████████████
+  Week 8: Polish        ████████████████
 
 Phase 3: AI + Production
   Week 9: AI Provider  ████████████████
@@ -495,25 +487,25 @@ Phase 3: AI + Production
 ### Milestone Checklist
 
 #### M1: Codebase Stable (End of Week 3)
-- [ ] Zero compiler warnings
-- [ ] Zero clippy warnings
+- [ ] Zero compiler warnings (~24 pre-existing as of 2026-06-01)
+- [ ] Zero clippy warnings (~15 pre-existing as of 2026-06-01)
 - [ ] Parser handles all valid/invalid input without panic
 - [ ] Event bus functional
 - [ ] 80% test coverage
 
 #### M2: Core Functionality (End of Week 6)
-- [ ] MCP server fully wired to SQLite
-- [ ] Query DSL working end-to-end
-- [ ] FTS search working
-- [ ] UI displays real data (not mocks)
-- [ ] Journal pages functional
+- [x] MCP server fully wired to SQLite
+- [x] Query DSL working end-to-end
+- [x] FTS search working
+- [x] UI displays real data (not mocks) via MCP
+- [x] Journal pages functional
 
 #### M3: Editor Complete (End of Week 8)
-- [ ] Outliner component working
-- [ ] Block edit-in-place working
-- [ ] Drag-and-drop reordering working
-- [ ] Tauri desktop app functional
-- [ ] Deep links working
+- [x] Outliner component working
+- [x] Block edit-in-place working
+- [x] Drag-and-drop reordering working
+- [ ] React SPA fully wired to backend
+- [ ] Cognitive dashboards integrated
 
 #### M4: AI Features (End of Week 10)
 - [ ] Ollama/OpenAI integration working
@@ -538,13 +530,14 @@ Phase 3: AI + Production
 
 | Metric | Current | Target | Measurement |
 |--------|---------|--------|-------------|
-| Build Warnings | 15+ | 0 | `cargo build 2>&1` |
-| Clippy Warnings | 15+ | 0 | `cargo clippy` |
+| Build Warnings | ~24 | 0 | `cargo build 2>&1` |
+| Clippy Warnings | ~24 | 0 | `cargo clippy` |
 | Test Coverage | ~40% | 80% | `cargo tarpaulin` |
 | Parse Performance | Unknown | < 10ms | Benchmark |
 | Query Performance | Unknown | < 100ms P95 | Load test |
 | Binary Size | Unknown | < 50MB | `ls -lh` |
 | Startup Time | Unknown | < 2s | Manual |
+| React E2E Tests | ✅ Passing | — | Playwright suite |
 
 ### Definition of Done for Each Phase
 
@@ -567,9 +560,9 @@ Journal page shows today's entries
 **Phase 3 Done**:
 ```
 quilt --help  # Full CLI working
-quilt-desktop  # Opens GUI
 Cognitive tools return non-empty responses
 Sync to local file works
+Security audit passed
 ```
 
 ---
@@ -582,8 +575,8 @@ Sync to local file works
 | UI complexity underestimated | High | High | Conservative 2x estimate |
 | AI provider integration delays | Medium | Medium | Use Ollama (local) first |
 | Sync scope creep | High | Medium | Focus on local-first first |
-| Leptos learning curve | Medium | Medium | Pair programming, examples |
-| Tauri v2 API changes | Low | Medium | Pin version, monitor changelog |
+| React migration scope | Low | Low | Now complete (ADR-0006) |
+| Web app performance | Medium | Medium | Bundle size, lazy loading |
 
 ---
 
@@ -595,10 +588,9 @@ Sync to local file works
 |------|----------------|
 | `crates/quilt-query/src/parser.rs` | Fix cycles, add depth limit |
 | `crates/quilt-bin/Cargo.toml` | N/A - keep as is |
-| `crates/quilt-platform/src-tauri/Cargo.toml` | Rename binary |
 | `crates/quilt-domain/src/events/` | New module for EventBus |
 | `crates/quilt-mcp/src/server.rs` | Wire cognitive services |
-| `crates/quilt-ui/src/bridge.rs` | Replace mocks |
+| `crates/quilt-ui/` (React) | Maintain React/TypeScript frontend |
 
 ### Files to Create
 
@@ -629,7 +621,7 @@ Sync to local file works
 ### Team Requirements (1 developer)
 
 - Week 1-4: Backend focus (parser, events, tests)
-- Week 5-8: Fullstack (UI wiring, Tauri)
+- Week 5-8: Fullstack (event bus, sync, query UI)
 - Week 9-12: AI + hardening
 
 ### Team Requirements (2 developers)
