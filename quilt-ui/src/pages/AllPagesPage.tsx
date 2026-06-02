@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { FileText, Calendar, Search, Bot } from 'lucide-react'
 import { api } from '@core/api-client'
 import { ErrorBoundary } from '@shared/components/ErrorBoundary'
+import { EmptyState } from '@shared/components/EmptyState'
 import { useTabs } from '@shared/contexts/TabsContext'
 import type { Page } from '@shared/types/api'
 import toast from 'react-hot-toast'
@@ -267,14 +268,43 @@ export function AllPagesPage() {
 
           {/* Rows */}
           {filtered.length === 0 ? (
-            <div style={{
-              padding: 'var(--space-8)',
-              textAlign: 'center',
-              color: 'var(--color-text-muted)',
-              fontSize: '14px',
-            }}>
-              No pages found
-            </div>
+            <EmptyState
+              icon={<FileText size={24} aria-hidden="true" />}
+              title="No pages found"
+              description={
+                search.trim()
+                  ? `No pages match "${search.trim()}". Try a different search term.`
+                  : 'Pages you create will appear here. Start by creating one from the sidebar.'
+              }
+              action={
+                <button
+                  onClick={() => {
+                    const name = window.prompt('Page name:')
+                    if (name && name.trim()) {
+                      navigate({ to: '/page/$name', params: { name: name.trim() } })
+                    }
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-2)',
+                    padding: '8px var(--space-4)',
+                    background: 'var(--color-primary)',
+                    color: 'var(--color-on-primary)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                  className="btn-primary"
+                >
+                  <Search size={14} />
+                  Create your first page
+                </button>
+              }
+            />
           ) : (
             <>
               {regularPages.map(page => renderRow(page))}
