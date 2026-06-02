@@ -42,4 +42,10 @@ openspec/changes/archive/
 quilt-*.png
 
 # Stray artifacts
-"/"
+
+# Environment (contains secrets — NEVER commit)
+.env
+.env.local
+
+# Quilt vault data (generated at runtime)
+.quilt-dev/
