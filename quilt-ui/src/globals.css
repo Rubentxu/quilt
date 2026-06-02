@@ -75,6 +75,29 @@
 
   /* Typography */
   --font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Font size scale (DESIGN.md §8) */
+  --font-size-display-lg: 36px;  /* Big page title (journals, hero) */
+  --font-size-display-sm: 28px;  /* Page title */
+  --font-size-title-lg: 20px;    /* Section header */
+  --font-size-title-md: 16px;    /* Card title */
+  --font-size-body-lg: 15px;     /* Body (larger) */
+  --font-size-body: 14px;        /* Body (default) */
+  --font-size-body-sm: 13px;     /* Body (small, meta) */
+  --font-size-caption: 12px;     /* Captions, micro-labels */
+  --font-size-micro: 11px;       /* Micro-labels, badges */
+
+  /* Line-height */
+  --leading-tight: 1.2;          /* Headings */
+  --leading-snug: 1.4;           /* Sub-headings, compact lists */
+  --leading-normal: 1.55;        /* Body text */
+  --leading-relaxed: 1.65;       /* Reading paragraphs */
+
+  /* Letter-spacing */
+  --tracking-tight: -0.015em;    /* Large headings */
+  --tracking-normal: 0;          /* Body */
+  --tracking-wide: 0.02em;       /* Labels, chips, captions */
+  --tracking-wider: 0.06em;      /* Uppercase, micro */
 }
 
 /* ──── Dark Theme ──── */
@@ -134,6 +157,77 @@ body {
   outline-offset: 2px;
 }
 
+/* ──── Typography utility classes (DESIGN.md §8) ──── */
+
+.type-display-lg {
+  font-size: var(--font-size-display-lg);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-primary);
+}
+
+.type-display-sm {
+  font-size: var(--font-size-display-sm);
+  font-weight: 700;
+  line-height: var(--leading-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-primary);
+}
+
+.type-title-lg {
+  font-size: var(--font-size-title-lg);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text-primary);
+}
+
+.type-title-md {
+  font-size: var(--font-size-title-md);
+  font-weight: 600;
+  line-height: var(--leading-snug);
+  color: var(--color-text-primary);
+}
+
+.type-body-lg {
+  font-size: var(--font-size-body-lg);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  color: var(--color-text-primary);
+}
+
+.type-body {
+  font-size: var(--font-size-body);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  color: var(--color-text-primary);
+}
+
+.type-body-sm {
+  font-size: var(--font-size-body-sm);
+  font-weight: 400;
+  line-height: var(--leading-normal);
+  color: var(--color-text-secondary);
+}
+
+.type-caption {
+  font-size: var(--font-size-caption);
+  font-weight: 500;
+  line-height: var(--leading-snug);
+  letter-spacing: var(--tracking-wide);
+  color: var(--color-text-muted);
+}
+
+.type-micro {
+  font-size: var(--font-size-micro);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
 /* Skeleton pulse animation */
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -174,8 +268,27 @@ body {
 }
 
 /* Topbar action button: hover */
+.topbar-action {
+  transition:
+    background var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
+}
+
 .topbar-action:hover {
   background: var(--color-surface-subtle);
+  color: var(--color-text-primary);
+}
+
+.topbar-action:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.topbar-action:active {
+  background: var(--color-border);
+  transform: scale(0.97);
 }
 
 /* Block row: hover */
@@ -198,13 +311,24 @@ body {
   transition:
     background var(--motion-fast) var(--ease-standard),
     border-color var(--motion-fast) var(--ease-standard),
-    color var(--motion-fast) var(--ease-standard);
+    color var(--motion-fast) var(--ease-standard),
+    transform var(--motion-fast) var(--ease-standard);
 }
 
 .ghost-icon-button:hover {
   background: var(--color-surface-subtle);
   border-color: var(--color-border);
   color: var(--color-text-primary);
+}
+
+.ghost-icon-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.ghost-icon-button:active {
+  background: var(--color-border);
+  transform: scale(0.95);
 }
 
 .surface-input {
@@ -219,8 +343,8 @@ body {
 
 .surface-input:focus-within {
   background: var(--color-surface);
-  border-color: rgba(37, 99, 235, 0.18);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.08);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 .block-row:hover .block-bullet {
   background: var(--color-text-muted);
@@ -258,11 +382,18 @@ body {
 .block-content {
   outline: none;
   min-height: 1.5em;
-  line-height: 1.65;
+  line-height: var(--leading-relaxed);
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
 }
 .block-content:empty::before {
   content: 'Type something...';
   color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.block-content-read {
+  line-height: var(--leading-relaxed);
+  font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
 }
 
 /* Bullet on block row */

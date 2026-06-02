@@ -109,12 +109,8 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
           }}
         />
         <h1
+          className="type-display-lg"
           style={{
-            fontSize: '36px',
-            fontWeight: 700,
-            color: 'var(--color-text-primary)',
-            lineHeight: 1.2,
-            letterSpacing: '-0.02em',
             margin: 0,
           }}
         >
@@ -125,6 +121,7 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
 
         <button
           type="button"
+          className="type-body"
           style={{
             height: '36px',
             padding: '0 14px',
@@ -132,8 +129,6 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
             border: '1px solid var(--color-border)',
             background: 'var(--color-surface)',
             color: 'var(--color-text-secondary)',
-            fontSize: '14px',
-            fontWeight: 500,
             cursor: 'pointer',
             boxShadow: 'var(--shadow-sm)',
           }}
@@ -223,9 +218,8 @@ function EmptyState({ isJournal, onNewBlock, onNewReferenceBlock, onNewDocumenta
     >
       <FileTextIcon />
       <h3
+        className="type-title-md"
         style={{
-          fontSize: '16px',
-          fontWeight: 600,
           color: 'var(--color-text-secondary)',
           margin: 'var(--space-4) 0 var(--space-2)',
         }}
@@ -233,12 +227,11 @@ function EmptyState({ isJournal, onNewBlock, onNewReferenceBlock, onNewDocumenta
         {isJournal ? 'No entries yet' : 'This page is empty'}
       </h3>
       <p
+        className="type-body-sm"
         style={{
-          fontSize: '13px',
           color: 'var(--color-text-muted)',
           maxWidth: '320px',
           margin: '0 auto',
-          lineHeight: 1.5,
         }}
       >
         {isJournal
@@ -1456,12 +1449,9 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
       {/* Non-journal page title */}
       {!isJournal && (
         <h1
+          className="type-display-sm"
           style={{
-            fontSize: '28px',
-            fontWeight: 700,
-            color: 'var(--color-text-primary)',
             marginBottom: 'var(--space-6)',
-            lineHeight: 1.2,
           }}
         >
           {pageName}

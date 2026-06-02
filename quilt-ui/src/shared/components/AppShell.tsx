@@ -367,14 +367,11 @@ export function AppShell() {
           {/* Breadcrumb */}
           <span
             data-testid="breadcrumb"
+            className="type-title-md"
             style={{
-              fontSize: '16px',
-              fontWeight: 600,
-              color: 'var(--color-text-primary)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              letterSpacing: '-0.01em',
             }}
           >
             {pageTitle}
@@ -648,24 +645,26 @@ export function AppShell() {
         label="Help & keyboard shortcuts"
         panel={
           <div>
-            <h3 style={{
-              fontSize: '14px',
-              fontWeight: 600,
-              color: 'var(--color-text-primary)',
-              margin: '0 0 var(--space-3)',
-            }}>
+            <h3
+              className="type-title-md"
+              style={{
+                margin: '0 0 var(--space-3)',
+              }}
+            >
               Keyboard shortcuts
             </h3>
-            <ul style={{
-              listStyle: 'none',
-              padding: 0,
-              margin: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-2)',
-              fontSize: '12px',
-              color: 'var(--color-text-secondary)',
-            }}>
+            <ul
+              className="type-caption"
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--space-2)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
               <li style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
                 <span>Search / command palette</span>
                 <kbd style={kbdStyle}>Ctrl K</kbd>

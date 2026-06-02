@@ -1117,7 +1117,7 @@ export function BlockRow({
         <div
           key="edit"
           ref={contentRef}
-          className="block-content"
+          className="block-content type-body-lg"
           contentEditable
           suppressContentEditableWarning
           role="textbox"
@@ -1127,9 +1127,7 @@ export function BlockRow({
           style={{
             flex: 1,
             minWidth: 0,
-            fontSize: '16px',
             color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
-            lineHeight: 1.65,
             outline: 'none',
             minHeight: '1.5em',
             wordBreak: 'break-word',
@@ -1143,13 +1141,11 @@ export function BlockRow({
         <div
           key="read"
           onClick={handleStartEdit}
-          className="block-content-read"
+          className="block-content-read type-body-lg"
           style={{
             flex: 1,
             minWidth: 0,
-            fontSize: '16px',
             color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
-            lineHeight: 1.65,
             cursor: 'text',
             textDecoration: block.marker === 'Cancelled' ? 'line-through' : 'none',
             minHeight: '1.5em',
