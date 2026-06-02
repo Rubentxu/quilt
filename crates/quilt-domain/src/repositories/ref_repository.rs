@@ -58,6 +58,18 @@ pub trait RefRepository: Send + Sync {
     /// uses this to populate its in-memory `RefIndex`.
     async fn rebuild_index(&self) -> Result<Vec<RefRow>, DomainError>;
 
+    /// Insert a single reference.
+    ///
+    /// Unlike `sync_refs`, this does not replace existing refs — it adds
+    /// one ref to the set. If the ref already exists (duplicate source_id,
+    /// target_id, ref_type), it is silently ignored (idempotent).
+    async fn insert_ref(
+        &self,
+        source_id: Uuid,
+        target_id: Uuid,
+        ref_type: RefType,
+    ) -> Result<(), DomainError>;
+
     /// Get unlinked references for a page.
     ///
     /// Finds blocks whose raw content text mentions `page_name` (case-insensitive)

@@ -24,6 +24,10 @@ pub enum DomainError {
     InvalidJournalDay(String),
     /// Page is not a journal (when journal operation was expected)
     InvalidPageType(String),
+    /// Invalid timezone string
+    InvalidTimezone(String),
+    /// Invalid configuration value
+    InvalidConfiguration(String),
 
     // Operation errors
     /// Circular reference detected (moving block to own descendant)
@@ -66,6 +70,12 @@ impl fmt::Display for DomainError {
             }
             DomainError::InvalidPageType(msg) => {
                 write!(f, "Invalid page type: {}", msg)
+            }
+            DomainError::InvalidTimezone(tz) => {
+                write!(f, "Invalid timezone: {}", tz)
+            }
+            DomainError::InvalidConfiguration(msg) => {
+                write!(f, "Invalid configuration: {}", msg)
             }
             DomainError::CircularReference(id) => {
                 write!(f, "Circular reference detected for block: {}", id)

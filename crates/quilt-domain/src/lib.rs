@@ -23,6 +23,7 @@ pub mod value_objects;
 pub use entities::{Asset, Block, File, Journal, Page, Tag};
 pub use errors::DomainError;
 pub use references::{Ref, RefIndex, RefType};
+pub use services::OrderCalculator;
 pub use value_objects::{
     Align, AssetType, BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
 };

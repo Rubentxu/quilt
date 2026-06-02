@@ -6,12 +6,13 @@
 use crate::errors::DomainError;
 use crate::services::TimezoneService;
 use crate::value_objects::BlockFormat;
+use serde::Serialize;
 
 /// User settings for personalization.
 ///
 /// These settings are persisted in the database and control
 /// how the application behaves for a specific user.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct UserSettings {
     /// User's timezone (IANA format, e.g., "America/Mexico_City")
     pub timezone: String,
@@ -106,14 +107,19 @@ impl UserSettings {
     }
 
     /// Get common date formats for journal pages.
+    ///
+    /// Returns a list of (strftime_pattern, example_output) pairs.
     pub fn common_date_formats() -> Vec<(&'static str, &'static str)> {
         vec![
-            ("%Y-%m-%d", "2026-05-14 (ISO 8601)"),
-            ("%d/%m/%Y", "14/05/2026 (Day/Month/Year)"),
-            ("%m/%d/%Y", "05/14/2026 (Month/Day/Year)"),
-            ("%B %d, %Y", "May 14, 2026 (Full month name)"),
-            ("%b %d, %Y", "May 14, 2026 (Short month name)"),
-            ("%Y/%m/%d", "2026/05/14 (Year/Month/Day)"),
+            ("%Y-%m-%d",     "2026-05-14"),
+            ("%d-%m-%Y",     "14-05-2026"),
+            ("%d/%m/%Y",     "14/05/2026"),
+            ("%m/%d/%Y",     "05/14/2026"),
+            ("%Y/%m/%d",     "2026/05/14"),
+            ("%d.%m.%Y",     "14.05.2026"),
+            ("%B %d, %Y",    "May 14, 2026"),
+            ("%d %B %Y",     "14 May 2026"),
+            ("%Y年%m月%d日",   "2026年05月14日"),
         ]
     }
 }

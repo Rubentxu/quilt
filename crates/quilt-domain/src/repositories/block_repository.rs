@@ -61,6 +61,24 @@ pub trait BlockRepository: Send + Sync {
     /// Execute a DSL query and return blocks.
     /// Used by SearchUseCases to execute parsed DSL queries.
     async fn query_dsl(&self, sql: &str, params: &[String]) -> Result<Vec<Block>, DomainError>;
+
+    /// List blocks whose `properties` JSON map contains `key` mapped to
+    /// the given string `value`.
+    ///
+    /// This is the primary lookup for the `created_by` convention
+    /// (`user::name`, `agent::claude`, ...). Returns at most `limit`
+    /// blocks, ordered by `created_at DESC` so the most recent
+    /// creations show up first. `limit == 0` means "no limit".
+    ///
+    /// Match semantics: string equality on the JSON-encoded property
+    /// value. Booleans/numbers will not match a string query and
+    /// vice-versa — callers should pass the same shape they wrote.
+    async fn list_by_property(
+        &self,
+        key: &str,
+        value: &str,
+        limit: usize,
+    ) -> Result<Vec<Block>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods

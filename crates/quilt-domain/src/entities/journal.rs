@@ -20,8 +20,9 @@ impl Journal {
     pub fn new(
         day: JournalDay,
         format: crate::value_objects::BlockFormat,
+        journal_format: &str,
     ) -> Result<Self, crate::errors::DomainError> {
-        let page = Page::new_journal(day, format)?;
+        let page = Page::new_journal(day, format, journal_format)?;
         Ok(Self {
             page,
             journal_day: day,

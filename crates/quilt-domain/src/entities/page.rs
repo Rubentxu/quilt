@@ -75,14 +75,22 @@ impl Page {
     }
 
     /// Create a new journal page for a specific day
-    pub fn new_journal(day: JournalDay, format: BlockFormat) -> Result<Self, DomainError> {
+    ///
+    /// The `title` is formatted using the given `journal_format` (strftime pattern).
+    /// The `name` is always the ISO canonical form (YYYY-MM-DD) for stable lookups.
+    pub fn new_journal(
+        day: JournalDay,
+        format: BlockFormat,
+        journal_format: &str,
+    ) -> Result<Self, DomainError> {
         let now = chrono::Utc::now();
-        let name = day.to_string();
+        let name = day.to_string(); // always ISO canonical
+        let title = day.format_with(journal_format); // user-configured display format
 
         Ok(Self {
             id: Uuid::new_v4(),
-            name: name.clone(),
-            title: Some(day.to_string()),
+            name,
+            title: Some(title),
             namespace_id: None,
             journal_day: Some(day),
             format,
@@ -97,19 +105,12 @@ impl Page {
     /// Normalize a page name according to Logseq rules:
     /// - Lowercase
     /// - No special characters: / # ? : | < > * " \
+    ///
+    /// **Exception**: Page names that start with `template/` may contain `/`
+    /// (the `/` is used as a template-namespace separator). All other special
+    /// characters remain forbidden.
     pub fn normalize_name(name: &str) -> Result<String, DomainError> {
         let normalized = name.trim().to_lowercase();
-
-        // Check for invalid characters
-        let invalid_chars = ['/', '#', '?', ':', '|', '<', '>', '*', '"', '\\'];
-        for c in invalid_chars.iter() {
-            if normalized.contains(*c) {
-                return Err(DomainError::InvalidPageName(format!(
-                    "Page name cannot contain '{}'",
-                    c
-                )));
-            }
-        }
 
         // Cannot be empty or just numbers
         if normalized.is_empty() {
@@ -124,7 +125,45 @@ impl Page {
             ));
         }
 
+        // Template pages are allowed to contain `/` for namespace organization
+        // (e.g. `template/daily-note`). All other pages must not contain `/`.
+        let is_template = Self::is_template_name(&normalized);
+        let invalid_chars: &[char] = if is_template {
+            &['#', '?', ':', '|', '<', '>', '*', '"', '\\']
+        } else {
+            &['/', '#', '?', ':', '|', '<', '>', '*', '"', '\\']
+        };
+
+        for c in invalid_chars.iter() {
+            if normalized.contains(*c) {
+                return Err(DomainError::InvalidPageName(format!(
+                    "Page name cannot contain '{}'",
+                    c
+                )));
+            }
+        }
+
         Ok(normalized)
+    }
+
+    /// Returns `true` if a (possibly un-normalized) page name represents a
+    /// template page.
+    ///
+    /// A page is a template when its name starts with `template/` (case
+    /// insensitive, leading whitespace ignored). This is the detection
+    /// convention used by the `/template` slash command and the
+    /// `from-template` API endpoint.
+    ///
+    /// Detection is intentionally name-based (no `properties` field on Page)
+    /// so that the template subsystem does not require any schema changes
+    /// to the `pages` table.
+    pub fn is_template_name(name: &str) -> bool {
+        let lower = name.trim().to_lowercase();
+        // Accept both `template/foo` and a bare `template` page as templates.
+        // `templates/` is accepted as an alias for visual distinction.
+        lower == "template"
+            || lower.starts_with("template/")
+            || lower.starts_with("templates/")
     }
 
     /// Rename this page
@@ -139,6 +178,15 @@ impl Page {
     /// Check if this is a journal page
     pub fn is_journal(&self) -> bool {
         self.journal
+    }
+
+    /// Check if this is a template page.
+    ///
+    /// A page is a template when its name starts with `template/` (or is
+    /// exactly `template`). The `/template` slash command and the
+    /// `/api/v1/pages/from-template` endpoint both rely on this check.
+    pub fn is_template(&self) -> bool {
+        Self::is_template_name(&self.name)
     }
 
     /// Check if this is a namespace page
@@ -216,13 +264,78 @@ mod tests {
     }
 
     #[test]
+    fn test_template_page_names_allowed() {
+        // Template pages may contain `/` for namespace organization
+        let valid_template_names = vec![
+            "template/daily-note",
+            "template/meeting",
+            "template/project/kickoff",
+            "template",
+            "templates/legacy",
+        ];
+
+        for name in valid_template_names {
+            let create = PageCreate {
+                name: name.to_string(),
+                title: None,
+                namespace_id: None,
+                journal_day: None,
+                format: BlockFormat::Markdown,
+                file_id: None,
+            };
+
+            let page = Page::new(create)
+                .unwrap_or_else(|_| panic!("expected template name to be valid: {name}"));
+            assert!(page.is_template(), "{name} should be detected as a template");
+        }
+    }
+
+    #[test]
+    fn test_non_template_page_with_slash_rejected() {
+        // Regular pages still reject `/`
+        let create = PageCreate {
+            name: "my/nested/page".to_string(),
+            title: None,
+            namespace_id: None,
+            journal_day: None,
+            format: BlockFormat::Markdown,
+            file_id: None,
+        };
+
+        assert!(Page::new(create).is_err());
+    }
+
+    #[test]
+    fn test_is_template_name_helper() {
+        assert!(Page::is_template_name("template"));
+        assert!(Page::is_template_name("template/foo"));
+        assert!(Page::is_template_name("TEMPLATE/BAR"));
+        assert!(Page::is_template_name("templates/legacy"));
+
+        assert!(!Page::is_template_name("templated"));
+        assert!(!Page::is_template_name("not-a-template"));
+        assert!(!Page::is_template_name(""));
+    }
+
+    #[test]
     fn test_journal_page() {
         let day = JournalDay::from_ymd(2026, 5, 2).unwrap();
-        let page = Page::new_journal(day, BlockFormat::Markdown).unwrap();
+        let page = Page::new_journal(day, BlockFormat::Markdown, "%Y-%m-%d").unwrap();
 
         assert!(page.journal);
         assert!(page.journal_day.is_some());
         assert_eq!(page.name, "2026-05-02");
+        assert_eq!(page.title, Some("2026-05-02".to_string()));
+    }
+
+    #[test]
+    fn test_journal_page_custom_format() {
+        let day = JournalDay::from_ymd(2026, 5, 14).unwrap();
+        let page =
+            Page::new_journal(day, BlockFormat::Markdown, "%B %d, %Y").unwrap();
+
+        assert_eq!(page.name, "2026-05-14"); // name is always ISO
+        assert_eq!(page.title, Some("May 14, 2026".to_string()));
     }
 }
 

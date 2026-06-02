@@ -105,6 +105,14 @@ impl JournalDay {
             _ => 0,
         }
     }
+
+    /// Format the journal day using a strftime pattern.
+    /// Returns the ISO format if the pattern is invalid.
+    pub fn format_with(&self, pattern: &str) -> String {
+        self.to_naive_date()
+            .map(|d| d.format(pattern).to_string())
+            .unwrap_or_else(|| self.to_string())
+    }
 }
 
 impl fmt::Display for JournalDay {
@@ -123,29 +131,31 @@ impl FromStr for JournalDay {
     type Err = crate::errors::DomainError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Try parsing YYYY-MM-DD
-        let parts: Vec<&str> = s.split('-').collect();
-        if parts.len() == 3 {
-            let year: u16 = parts[0]
-                .parse()
-                .map_err(|_| crate::errors::DomainError::InvalidJournalDay(s.to_string()))?;
-            let month: u8 = parts[1]
-                .parse()
-                .map_err(|_| crate::errors::DomainError::InvalidJournalDay(s.to_string()))?;
-            let day: u8 = parts[2]
-                .parse()
-                .map_err(|_| crate::errors::DomainError::InvalidJournalDay(s.to_string()))?;
+        let s = s.trim();
 
-            Self::from_ymd(year, month, day)
-                .ok_or_else(|| crate::errors::DomainError::InvalidJournalDay(s.to_string()))
-        } else {
-            // Try parsing as i32 directly
-            let value: i32 = s
-                .parse()
-                .map_err(|_| crate::errors::DomainError::InvalidJournalDay(s.to_string()))?;
-            Self::from_i32(value)
-                .ok_or_else(|| crate::errors::DomainError::InvalidJournalDay(s.to_string()))
+        // Try common date formats in order of specificity
+        let formats = [
+            "%Y-%m-%d",     // ISO: 2026-05-14
+            "%d-%m-%Y",     // European: 14-05-2026
+            "%d/%m/%Y",     // European slash: 14/05/2026
+            "%m/%d/%Y",     // US: 05/14/2026
+            "%Y/%m/%d",     // Asian: 2026/05/14
+            "%d.%m.%Y",     // German: 14.05.2026
+        ];
+
+        for fmt in &formats {
+            if let Ok(d) = chrono::NaiveDate::parse_from_str(s, fmt) {
+                return Ok(Self::from_naive_date(d));
+            }
         }
+
+        // Try parsing as raw YYYYMMDD integer
+        if let Ok(value) = s.parse::<i32>() {
+            return Self::from_i32(value)
+                .ok_or_else(|| crate::errors::DomainError::InvalidJournalDay(s.to_string()));
+        }
+
+        Err(crate::errors::DomainError::InvalidJournalDay(s.to_string()))
     }
 }
 
@@ -217,5 +227,59 @@ mod tests {
         let day1 = JournalDay::from_ymd(2026, 5, 1).unwrap();
         let day2 = JournalDay::from_ymd(2026, 5, 10).unwrap();
         assert_eq!(day2 - day1, 9);
+    }
+
+    #[test]
+    fn test_format_with_iso() {
+        let day = JournalDay::from_ymd(2026, 5, 14).unwrap();
+        assert_eq!(day.format_with("%Y-%m-%d"), "2026-05-14");
+    }
+
+    #[test]
+    fn test_format_with_european() {
+        let day = JournalDay::from_ymd(2026, 5, 14).unwrap();
+        assert_eq!(day.format_with("%d-%m-%Y"), "14-05-2026");
+    }
+
+    #[test]
+    fn test_format_with_full_month() {
+        let day = JournalDay::from_ymd(2026, 5, 14).unwrap();
+        assert_eq!(day.format_with("%B %d, %Y"), "May 14, 2026");
+    }
+
+    #[test]
+    fn test_from_str_iso() {
+        let day: JournalDay = "2026-05-14".parse().unwrap();
+        assert_eq!(day.as_i32(), 20260514);
+    }
+
+    #[test]
+    fn test_from_str_european_dash() {
+        let day: JournalDay = "14-05-2026".parse().unwrap();
+        assert_eq!(day.as_i32(), 20260514);
+    }
+
+    #[test]
+    fn test_from_str_european_slash() {
+        let day: JournalDay = "14/05/2026".parse().unwrap();
+        assert_eq!(day.as_i32(), 20260514);
+    }
+
+    #[test]
+    fn test_from_str_us_slash() {
+        let day: JournalDay = "05/14/2026".parse().unwrap();
+        assert_eq!(day.as_i32(), 20260514);
+    }
+
+    #[test]
+    fn test_from_str_german_dots() {
+        let day: JournalDay = "14.05.2026".parse().unwrap();
+        assert_eq!(day.as_i32(), 20260514);
+    }
+
+    #[test]
+    fn test_from_str_raw_integer() {
+        let day: JournalDay = "20260514".parse().unwrap();
+        assert_eq!(day.as_i32(), 20260514);
     }
 }
