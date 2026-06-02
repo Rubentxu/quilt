@@ -17,7 +17,7 @@ ROOT := justfile_directory()
 SERVER_PORT := "3737"
 UI_PORT := "8090"
 UI_E2E_PORT := "8090"
-REACT_PORT := "1420"
+REACT_PORT := "5173"
 
 # React frontend paths
 REACT_DIR := ROOT / "quilt-ui"
@@ -28,6 +28,13 @@ QUILT_DIR := "$HOME/.quilt-dev"
 
 # Binary paths
 SERVER_BINARY := ROOT / "target" / "debug" / "quilt-server"
+
+# Frontend env file
+ENV_FILE := REACT_DIR / ".env"
+
+# Private: ensure API key exists, print it (calls scripts/ensure-api-key.sh)
+_api-key:
+	@bash scripts/ensure-api-key.sh
 
 # -----------------------------------------------------------------------------
 # Default recipe - show help
@@ -118,7 +125,7 @@ dev-fast: stop-all
     @echo "▶ Backend..."
     cargo build -p quilt-server
     @mkdir -p {{ QUILT_DIR }}
-    @QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
+    @QUILT_API_KEY=$$(just _api-key 2>/dev/null || true) QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
         RUST_LOG=quilt_server=info \
         {{ SERVER_BINARY }} > {{ QUILT_DIR }}/server.log 2>&1 &
     @sleep 2
@@ -145,7 +152,7 @@ server-build-release:
 
 # Run server in foreground (Ctrl+C to stop)
 server-dev:
-    QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true RUST_LOG=quilt_server=info,tower_http=info {{ SERVER_BINARY }}
+    QUILT_API_KEY=$$(just _api-key 2>/dev/null || true) QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true RUST_LOG=quilt_server=info,tower_http=info {{ SERVER_BINARY }}
 
 # Run server in background (for use with ui-dev)
 # Kills any existing process on the port first
@@ -153,7 +160,7 @@ server-start:
     @-kill $(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null
     @echo "Starting server on :{{ SERVER_PORT }}..."
     @mkdir -p {{ QUILT_DIR }}
-    @QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
+    @QUILT_API_KEY=$$(just _api-key 2>/dev/null || true) QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
         RUST_LOG=quilt_server=info \
         {{ SERVER_BINARY }} > {{ QUILT_DIR }}/server.log 2>&1 &
     @sleep 2
@@ -244,23 +251,23 @@ test-nocapture:
 
 # Run E2E smoke tests via Playwright
 test-e2e:
-    cd {{ ROOT }}/e2e && npm install && npx playwright test
+    QUILT_API_KEY=$$(just _api-key 2>/dev/null || true) npx playwright test
 
 # Run E2E with visible browser
 test-e2e-headed:
-    cd {{ ROOT }}/e2e && npx playwright test --headed
+    QUILT_API_KEY=$$(just _api-key 2>/dev/null || true) npx playwright test --headed --project=chromium
 
 # Run E2E in Playwright UI mode
 test-e2e-ui:
-    cd {{ ROOT }}/e2e && npx playwright test --ui
+    npx playwright test --ui
 
 # Run E2E with debug mode
 test-e2e-debug:
-    cd {{ ROOT }}/e2e && npx playwright test --debug
+    npx playwright test --debug
 
 # Show E2E test report
 test-e2e-report:
-    cd {{ ROOT }}/e2e && npx playwright show-report
+    npx playwright show-report
 
 # Full test suite: Rust tests + E2E
 test-all: test test-e2e
@@ -405,7 +412,7 @@ api-test:
     @curl -s http://localhost:{{ SERVER_PORT }}/health | python3 -m json.tool 2>/dev/null || curl -s http://localhost:{{ SERVER_PORT }}/health
     @echo ""
     @echo "── Pages ──"
-    @curl -s http://localhost:{{ SERVER_PORT }}/api/v1/pages | python3 -m json.tool 2>/dev/null || curl -s http://localhost:{{ SERVER_PORT }}/api/v1/pages
+    @API_KEY=$$(just _api-key 2>/dev/null || echo ""); curl -s -H "Authorization: Bearer $$API_KEY" http://localhost:{{ SERVER_PORT }}/api/v1/pages | python3 -m json.tool 2>/dev/null || curl -s -H "Authorization: Bearer $$API_KEY" http://localhost:{{ SERVER_PORT }}/api/v1/pages
 
 # Clean all build artifacts
 clean:
