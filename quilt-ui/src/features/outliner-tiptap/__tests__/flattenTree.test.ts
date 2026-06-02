@@ -172,4 +172,61 @@ describe('flattenBlockTree', () => {
     expect(result[3].depth).toBe(0) // r2
     expect(result[4].depth).toBe(1) // r2_c1
   })
+
+  // ── Additional edge cases ─────────────────────────────
+
+  it('returns empty when all blocks are comments', () => {
+    const blocks = [
+      b('c1', null, 0, {
+        properties: [{ key: 'type', value: 'comment', type: 'string' }],
+      }),
+    ]
+    const result = flattenBlockTree(blocks, null, new Set())
+    expect(result).toHaveLength(0)
+  })
+
+  it('does not recurse into children of collapsed parent that itself has no children', () => {
+    const blocks = [b('leaf', null, 0)]
+    const collapsed = new Set(['leaf'])
+    const result = flattenBlockTree(blocks, null, collapsed)
+    expect(result).toHaveLength(1) // leaf shown, no children to hide
+  })
+
+  it('collapsed root hides its subtree but sibling subtrees are shown', () => {
+    const blocks = [
+      b('a', null, 0, { collapsed: true }),
+      b('a1', 'a', 0),
+      b('b', null, 1),
+      b('b1', 'b', 0),
+    ]
+    const collapsed = new Set(['a'])
+    const result = flattenBlockTree(blocks, null, collapsed)
+    const ids = result.map(r => r.block.id)
+    expect(ids).toEqual(['a', 'b', 'b1'])
+  })
+
+  it('mixed regular and comment children', () => {
+    const blocks = [
+      b('root', null, 0),
+      b('regular', 'root', 0),
+      b('comment', 'root', 1, {
+        properties: [{ key: 'type', value: 'comment', type: 'string' }],
+      }),
+    ]
+    const result = flattenBlockTree(blocks, null, new Set())
+    // root + regular, comment filtered out
+    expect(result).toHaveLength(2)
+    expect(result[1].block.id).toBe('regular')
+  })
+
+  it('collapsed parent with only comment children shows hasChildren=false', () => {
+    const blocks = [
+      b('root', null, 0),
+      b('comment1', 'root', 0, {
+        properties: [{ key: 'type', value: 'comment', type: 'string' }],
+      }),
+    ]
+    const result = flattenBlockTree(blocks, null, new Set())
+    expect(result[0].hasChildren).toBe(false)
+  })
 })
