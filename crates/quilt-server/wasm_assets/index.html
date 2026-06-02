@@ -1,24 +1,20 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quilt</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="quilt-cm6.js"></script>
-<link rel="modulepreload" href="/quilt-ui-d0d2ec36c11ffe27.js" crossorigin="anonymous"><link rel="preload" href="/quilt-ui-d0d2ec36c11ffe27_bg.wasm" crossorigin="anonymous" as="fetch" type="application/wasm"></head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quilt</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <script type="module" crossorigin src="/assets/index-Cxu7Ky7d.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/react-vendor-3e09n0Lt.js">
+  <link rel="modulepreload" crossorigin href="/assets/vendor-misc-CGfkGleN.js">
+  <link rel="modulepreload" crossorigin href="/assets/router-vendor-2daDPK0B.js">
+  <link rel="modulepreload" crossorigin href="/assets/toast-vendor-Bgy-6C5T.js">
+  <link rel="modulepreload" crossorigin href="/assets/icons-vendor-CQchi6sn.js">
+  <link rel="stylesheet" crossorigin href="/assets/index-D2TTJeGs.css">
+</head>
 <body class="bg-base text-text">
-    <div id="app"></div>
-
-<script type="module">
-import init, * as bindings from '/quilt-ui-d0d2ec36c11ffe27.js';
-const wasm = await init({ module_or_path: '/quilt-ui-d0d2ec36c11ffe27_bg.wasm' });
-
-
-window.wasmBindings = bindings;
-
-
-dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
-
-</script></body>
+  <div id="root"></div>
+</body>
 </html>
