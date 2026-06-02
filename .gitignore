@@ -8,8 +8,14 @@ node_modules/
 crates/quilt-ui/dist/
 
 # Playwright E2E
-e2e/playwright-report/
-e2e/test-results/
+playwright-report/
+test-results/
+
+# Coverage (cargo-llvm-cov)
+coverage/
+coverage.txt
+*.profraw
+*.profdata
 
 # IDE
 .idea/
@@ -21,3 +27,19 @@ e2e/test-results/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tool caches and agent artifacts
+.atl/
+.cognicode/
+.playwright-cli/
+.quilt/
+
+# Auto-generated docs and artifacts
+docs/grill/
+openspec/changes/archive/
+
+# Screenshots from visual testing
+quilt-*.png
+
+# Stray artifacts
+"/"
