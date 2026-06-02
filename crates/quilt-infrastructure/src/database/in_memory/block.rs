@@ -148,6 +148,36 @@ impl BlockRepository for InMemoryBlockRepository {
             "query_dsl not supported by in-memory repository".to_string(),
         ))
     }
+
+    async fn list_by_property(
+        &self,
+        key: &str,
+        value: &str,
+        limit: usize,
+    ) -> Result<Vec<Block>, DomainError> {
+        // The in-memory implementation does a straight HashMap scan.
+        // Match the SQLite semantics: the property value is compared as
+        // a string (the same shape callers wrote when they set it).
+        let blocks = self.blocks.read();
+        let mut out: Vec<Block> = blocks
+            .values()
+            .filter(|b| {
+                b.properties
+                    .get(key)
+                    .map(|v| match v {
+                        quilt_domain::value_objects::PropertyValue::String(s) => s == value,
+                        _ => false,
+                    })
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+        out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        if limit > 0 {
+            out.truncate(limit);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]

@@ -335,5 +335,31 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create user_settings table (singleton)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS user_settings (
+            id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+            timezone TEXT NOT NULL DEFAULT 'UTC',
+            journal_format TEXT NOT NULL DEFAULT '%Y-%m-%d',
+            start_of_week INTEGER NOT NULL DEFAULT 1 CHECK (start_of_week BETWEEN 0 AND 6),
+            preferred_format TEXT NOT NULL DEFAULT 'markdown' CHECK (preferred_format IN ('markdown', 'org')),
+            updated_at INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Initialize with defaults if empty
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO user_settings (id, timezone, journal_format, start_of_week, preferred_format, updated_at)
+        VALUES (1, 'UTC', '%Y-%m-%d', 1, 'markdown', unixepoch('now'))
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

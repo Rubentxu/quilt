@@ -275,7 +275,7 @@ mod tests {
         let repo = InMemoryPageRepository::new();
         let day = JournalDay::from_ymd(2026, 5, 25).unwrap();
 
-        let journal = Page::new_journal(day, BlockFormat::Markdown).unwrap();
+        let journal = Page::new_journal(day, BlockFormat::Markdown, "%Y-%m-%d").unwrap();
         repo.insert(&journal).await.unwrap();
 
         let retrieved = repo.get_journal(day).await.unwrap();

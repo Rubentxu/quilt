@@ -29,11 +29,11 @@ use sqlx::Row;
 use std::collections::HashMap;
 
 use crate::database::sqlite::connection::DbPool;
-use quilt_domain::entities::{Block, Page};
+use quilt_domain::entities::{Block, Page, UserSettings};
 use quilt_domain::errors::DomainError;
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
-    BlockRepository, PageRepository, RefRepository, RefRow, TagRepository,
+    BlockRepository, PageRepository, RefRepository, RefRow, SettingsRepository, TagRepository,
 };
 use quilt_domain::value_objects::{
     BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
@@ -500,15 +500,21 @@ impl BlockRepository for SqliteBlockRepository {
     }
 
     async fn get_backlinks(&self, block_id: Uuid) -> Result<Vec<Block>, DomainError> {
-        // refs is a JSON array of UUID strings like ["uuid1","uuid2",...]
-        // Use json_each to find blocks that reference the given block_id
-        let target_uuid = block_id.to_string();
+        // Query both legacy JSON refs (blocks.refs) and the new refs table
+        let target_uuid_str = block_id.to_string();
+        let target_uuid_blob = uuid_to_blob(&block_id);
         let rows = sqlx::query(
-            r#"SELECT b.* FROM blocks b, json_each(b.refs) AS je
-            WHERE je.value = ?
+            r#"SELECT DISTINCT b.* FROM blocks b
+            WHERE EXISTS (
+                SELECT 1 FROM json_each(b.refs) AS je WHERE je.value = ?
+            )
+            OR b.id IN (
+                SELECT source_id FROM refs WHERE target_id = ?
+            )
             ORDER BY b.updated_at DESC"#,
         )
-        .bind(&target_uuid)
+        .bind(&target_uuid_str)
+        .bind(&target_uuid_blob)
         .fetch_all(&self.pool)
         .await
         .map_err(|e| DomainError::Storage(format!("get_backlinks: {}", e)))?;
@@ -578,6 +584,47 @@ impl BlockRepository for SqliteBlockRepository {
             .fetch_all(&self.pool)
             .await
             .map_err(|e| DomainError::Storage(format!("query_dsl: {}", e)))?;
+        rows.iter()
+            .map(|r| BlockRow::from_row(r).and_then(|br| br.to_block()))
+            .collect()
+    }
+
+    async fn list_by_property(
+        &self,
+        key: &str,
+        value: &str,
+        limit: usize,
+    ) -> Result<Vec<Block>, DomainError> {
+        // Use json_extract over the `properties` blob. We pass the JSON
+        // pointer as `$.<key>` and compare against the requested string
+        // value. Limit is appended as a literal — `limit` is a `usize`
+        // derived from a server-side parameter, never user input.
+        let sql = if limit == 0 {
+            "SELECT * FROM blocks \
+             WHERE json_extract(properties, ?) IS NOT NULL \
+               AND json_extract(properties, ?) = ? \
+             ORDER BY created_at DESC"
+                .to_string()
+        } else {
+            format!(
+                "SELECT * FROM blocks \
+                 WHERE json_extract(properties, ?) IS NOT NULL \
+                   AND json_extract(properties, ?) = ? \
+                 ORDER BY created_at DESC \
+                 LIMIT {}",
+                limit
+            )
+        };
+
+        let pointer = format!("$.{}", key);
+        let rows = sqlx::query(&sql)
+            .bind(&pointer)
+            .bind(&pointer)
+            .bind(value)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("list_by_property: {}", e)))?;
+
         rows.iter()
             .map(|r| BlockRow::from_row(r).and_then(|br| br.to_block()))
             .collect()
@@ -1062,6 +1109,24 @@ impl RefRepository for SqliteRefRepository {
             .collect()
     }
 
+    async fn insert_ref(
+        &self,
+        source_id: Uuid,
+        target_id: Uuid,
+        ref_type: RefType,
+    ) -> Result<(), DomainError> {
+        sqlx::query(
+            "INSERT OR IGNORE INTO refs (source_id, target_id, ref_type) VALUES (?, ?, ?)",
+        )
+        .bind(uuid_to_blob(&source_id))
+        .bind(uuid_to_blob(&target_id))
+        .bind(Self::ref_type_to_str(&ref_type))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("insert_ref: {}", e)))?;
+        Ok(())
+    }
+
     async fn get_unlinked_references(
         &self,
         page_name: &str,
@@ -1117,6 +1182,77 @@ impl RefRepository for SqliteRefRepository {
         }
 
         Ok(results)
+    }
+}
+
+// ── SqliteSettingsRepository ───────────────────────────────────────────
+
+/// SQLite-backed settings repository.
+///
+/// Uses the singleton `user_settings` table (single row with id=1).
+/// If the table doesn't exist or no row is found, returns [`UserSettings::default`].
+#[derive(Clone)]
+pub struct SqliteSettingsRepository {
+    pool: DbPool,
+}
+
+impl SqliteSettingsRepository {
+    /// Creates a new `SqliteSettingsRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl SettingsRepository for SqliteSettingsRepository {
+    async fn get_user_settings(&self) -> Result<UserSettings, DomainError> {
+        let row = sqlx::query_as::<_, (String, String, u8, String)>(
+            "SELECT timezone, journal_format, start_of_week, preferred_format \
+             FROM user_settings WHERE id = 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_user_settings: {}", e)))?;
+
+        match row {
+            Some((timezone, journal_format, start_of_week, preferred_format)) => {
+                Ok(UserSettings {
+                    timezone,
+                    journal_format,
+                    start_of_week,
+                    preferred_format: BlockFormat::parse_str(&preferred_format)
+                        .unwrap_or(BlockFormat::Markdown),
+                })
+            }
+            None => Ok(UserSettings::default()),
+        }
+    }
+
+    async fn update_user_settings(&self, settings: &UserSettings) -> Result<(), DomainError> {
+        let preferred_format = match settings.preferred_format {
+            BlockFormat::Markdown => "markdown",
+            BlockFormat::Org => "org",
+        };
+
+        sqlx::query(
+            "INSERT INTO user_settings (id, timezone, journal_format, start_of_week, preferred_format, updated_at) \
+             VALUES (1, ?, ?, ?, ?, unixepoch('now')) \
+             ON CONFLICT(id) DO UPDATE SET \
+             timezone = excluded.timezone, \
+             journal_format = excluded.journal_format, \
+             start_of_week = excluded.start_of_week, \
+             preferred_format = excluded.preferred_format, \
+             updated_at = excluded.updated_at",
+        )
+        .bind(&settings.timezone)
+        .bind(&settings.journal_format)
+        .bind(settings.start_of_week)
+        .bind(preferred_format)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("update_user_settings: {}", e)))?;
+
+        Ok(())
     }
 }
 
@@ -1357,7 +1493,7 @@ mod tests {
         let repo = SqlitePageRepository::new(pool);
 
         let day = JournalDay::from_i32(20260503).unwrap();
-        let page = Page::new_journal(day, BlockFormat::Markdown).unwrap();
+        let page = Page::new_journal(day, BlockFormat::Markdown, "%Y-%m-%d").unwrap();
         repo.insert(&page).await.unwrap();
 
         let found = repo.get_journal(day).await.unwrap();
