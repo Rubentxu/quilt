@@ -1,42 +1,29 @@
 # Quilt UI E2E Tests
 
-Playwright-based end-to-end tests for Quilt UI.
+Playwright-based end-to-end tests for Quilt UI (React frontend).
 
 ## Prerequisites
 
 1. **Node.js >= 18** and **npm >= 9**
 2. **Playwright browsers** (Chromium, Firefox, WebKit)
-3. **Trunk** (for serving the Leptos UI):
-   ```bash
-   cargo install trunk
-   ```
+3. **Backend server** running on port 3737 (required for most tests)
+4. **React dev server** on port 5173 (auto-started by Playwright)
 
 ## Quick Start
 
 ### 1. Install Dependencies
 
 ```bash
-npm install
+cd quilt-ui && npm install
 npx playwright install --with-deps
 ```
 
-Or via just:
-```bash
-just e2e-install
-```
+### 2. Start Backend
 
-### 2. Start Dev Server
-
-In one terminal, start the Trunk dev server:
+In one terminal, start the Rust backend:
 
 ```bash
-cd crates/quilt-ui && trunk serve --port 1420
-```
-
-Or via just (runs server in background):
-```bash
-cd crates/quilt-ui && trunk serve --port 1420 &
-sleep 3
+cargo run -p quilt-server
 ```
 
 ### 3. Run Tests
@@ -45,6 +32,13 @@ sleep 3
 # Run all tests
 npx playwright test
 
+# Run a specific test file
+npx playwright test smoke
+npx playwright test outliner
+npx playwright test journal
+npx playwright test accessibility
+npx playwright test visual-regression
+
 # Run in headed mode (see browser)
 npx playwright test --headed
 
@@ -52,129 +46,174 @@ npx playwright test --headed
 npx playwright test --list
 ```
 
-Or via just:
-```bash
-just e2e-test        # Run all tests
-just e2e-test-headed # Run with browser visible
-just e2e-list        # List tests
-just e2e-ui          # Open Playwright UI
-```
-
 ## Test Structure
 
 ```
 tests/e2e/
-├── pom/                    # Page Object Model
-│   ├── base.page.ts        # Base page object with common methods
-│   ├── sidebar.component.ts # Sidebar navigation component
-│   ├── search.page.ts      # Search page object
+├── pom/                          # Page Object Model
+│   ├── base.page.ts              # Base page object with common methods
+│   ├── sidebar.component.ts      # Sidebar navigation component
+│   ├── search.page.ts            # Search page object
 │   ├── theme-toggle.component.ts # Theme toggle component
-│   ├── right-sidebar.component.ts # Right sidebar component
-│   └── index.ts           # Export all POM objects
-├── spec/                   # Test specifications
-│   ├── navigation.spec.ts  # Sidebar, mobile menu, deep linking, browser nav
-│   ├── search.spec.ts      # Search input, results, keyboard nav, empty states
-│   ├── theme.spec.ts       # Light/dark theme toggle and persistence
-│   ├── right-sidebar.spec.ts # Right sidebar open/close, tab switching
-│   └── error-handling.spec.ts # Offline, timeouts, empty states, 404
-├── quilt.spec.ts           # P0 baseline tests
-└── graph-view.spec.ts      # Graph view specific tests
+│   ├── right-sidebar.component.ts# Right sidebar component
+│   └── index.ts                  # Export all POM objects
+├── spec/                         # Test specifications
+│   ├── navigation.spec.ts        # Sidebar, mobile menu, deep linking, browser nav
+│   ├── search.spec.ts            # Search input, results, keyboard nav, empty states
+│   ├── theme.spec.ts             # Light/dark theme toggle and persistence
+│   ├── right-sidebar.spec.ts     # Right sidebar open/close, tab switching
+│   ├── error-handling.spec.ts    # Offline, timeouts, empty states, 404
+│   ├── smoke.spec.ts             # App shell, sidebar, theme toggle (React)
+│   ├── outliner.spec.ts          # Block create, edit, Enter split, Backspace merge (React)
+│   ├── journal.spec.ts           # Journal date header, prev/next day nav (React)
+│   ├── inline.spec.ts            # Inline markdown rendering (**bold**, *italic*) (React)
+│   ├── markers.spec.ts           # Block bullets, task markers (TODO/DONE) (React)
+│   └── page-editing.spec.ts      # Page editing, content persistence (React)
+├── graph-view.spec.ts            # P0 graph view tests
+└── quilt.spec.ts                 # P0 baseline tests
 ```
 
-### Test Categories
+### Test Run Modes
 
-- **Navigation** - Mobile sidebar, active route highlighting, deep linking, back/forward
-- **Search** - Search input, full-text search, keyboard navigation, empty states
-- **Theme** - Light/dark toggle, persistence across navigation and reload
-- **Right Sidebar** - Open/close, tab switching (Properties, Backlinks, Annotations)
-- **Error Handling** - Offline handling, API timeouts, empty states, 404 pages
-- **Query** - DSL query input, execution, result/error handling
-- **Cognitive Dashboard** - Dashboard load, refresh action
-- **Pages View** - Page list render, content/empty states
-- **Graph View** - Canvas-based force-directed graph visualization
+- **No backend**: Basic smoke, DOM structure, theme toggle tests pass
+- **With backend**: All tests execute including block editing, journal nav, inline rendering
+
+Environment variable `API_BASE_URL` (default: `http://localhost:3737`) controls which backend the tests target.
 
 ## Selectors
 
-Tests use stable `data-testid` attributes:
+Tests use stable `data-testid` attributes.
+
+### App Shell
+| Element | Selector |
+|---------|----------|
+| App container | `[data-testid="app-shell"]` |
+| Breadcrumb | `[data-testid="breadcrumb"]` |
+| Theme toggle | `[data-testid="theme-toggle"]` |
+| Mobile menu button | `[data-testid="mobile-menu-button"]` |
 
 ### Navigation
 | Element | Selector |
 |---------|----------|
+| Sidebar | `[data-testid="sidebar"]` |
 | Sidebar Journal link | `[data-testid="nav-journal"]` |
 | Sidebar Pages link | `[data-testid="nav-pages"]` |
-| Sidebar Search link | `[data-testid="nav-search"]` |
-| Sidebar Query link | `[data-testid="nav-query"]` |
 | Sidebar Graph link | `[data-testid="nav-graph"]` |
-| Sidebar Cognitive link | `[data-testid="nav-cognitive"]` |
-| Mobile menu button | `[data-testid="mobile-menu-button"]` |
+
+### Outliner / Blocks
+| Element | Selector |
+|---------|----------|
+| Block row | `.block-row` / `[data-testid^="block-row-"]` |
+| Bullet/collapse button | `.block-bullet` |
+| Content (read mode) | `.block-content-read` |
+| Content (edit mode) | `.block-content[contenteditable]` |
+
+### Journal
+| Element | Selector |
+|---------|----------|
+| Prev day button | `[data-testid="nav-prev-day"]` |
+| Next day button | `[data-testid="nav-next-day"]` |
 
 ### Search
 | Element | Selector |
 |---------|----------|
-| Search input | `[data-testid="search-input"]` |
+| Search input | `[data-testid="search-input"]` (modal) |
+| Sidebar search | `[data-testid="sidebar-search-input"]` |
 
 ### Theme
 | Element | Selector |
 |---------|----------|
 | Theme toggle button | `[data-testid="theme-toggle"]` |
 
-### Right Sidebar
-| Element | Selector |
-|---------|----------|
-| Tab - Properties | `[data-testid="tab-properties"]` |
-| Tab - Backlinks | `[data-testid="tab-backlinks"]` |
-| Tab - Annotations | `[data-testid="tab-annotations"]` |
-
-### Query
-| Element | Selector |
-|---------|----------|
-| Query input | `[data-testid="query-input"]` |
-| Run Query button | `[data-testid="run-query-button"]` |
-| Query chip (task todo) | `[data-testid="query-chip-task-todo"]` |
-| Query chip (priority a) | `[data-testid="query-chip-priority-a"]` |
-
-### Cognitive Dashboard
-| Element | Selector |
-|---------|----------|
-| Refresh button | `[data-testid="refresh-button"]` |
-
-### Graph View
-| Element | Selector |
-|---------|----------|
-| Graph view container | `[data-testid="graph-view"]` |
-| Force graph canvas | `[data-testid="force-graph"]` |
-| Graph canvas | `[data-testid="graph-canvas"]` |
-| Graph controls | `[data-testid="graph-controls"]` |
-| Graph legend | `[data-testid="graph-legend"]` |
-| Zoom in button | `[data-testid="zoom-in"]` |
-| Zoom reset button | `[data-testid="zoom-reset"]` |
-| Zoom out button | `[data-testid="zoom-out"]` |
-| Graph filter (pages) | `[data-testid="graph-filter-pages"]` |
-| Graph filter (journals) | `[data-testid="graph-filter-journals"]` |
-| Graph error state | `[data-testid="graph-error"]` |
-| Graph empty state | `[data-testid="graph-empty"]` |
-| Graph retry button | `[data-testid="graph-retry-button"]` |
-| Graph error message | `[data-testid="graph-error-message"]` |
-
 ## CI Mode
 
 ```bash
 # Run in CI mode (retries, line reporter, JUnit output)
-just e2e-test-ci
+BASE_URL=http://localhost:5173 npx playwright test --reporter=line,junit
 ```
+
+## Accessibility Tests
+
+Automated WCAG 2.1 AA scans via `@axe-core/playwright`. Each test page
+is scanned with `wcag2a`, `wcag2aa`, `wcag21a`, and `wcag21aa` rule tags.
+Tests fail on **serious** or **critical** violations; lower-severity
+issues are reported but do not break the build.
+
+```bash
+npx playwright test accessibility
+```
+
+The suite covers:
+- Home page axe scan (no serious/critical violations)
+- Main landmark presence
+- Keyboard accessibility (Tab focus lands on a visible element)
+- Image `alt` text
+- Form input labels (for/id, aria-label, placeholder, or ancestor `<label>`)
+- Color contrast (WCAG AA)
+- Heading hierarchy (no skipped levels, starts at h1)
+- `aria-expanded` toggles
+
+## Visual Regression Tests
+
+Screenshot-based regression detection. Baselines are stored alongside
+each spec in `tests/e2e/spec/*.spec.ts-snapshots/`.
+
+```bash
+# First run — create baselines (commit the snapshot files)
+npx playwright test visual-regression --update-snapshots
+
+# Subsequent runs — diff against baselines
+npx playwright test visual-regression
+```
+
+CI runs visual regression but does **not** fail on first runs (baselines
+get created and reviewed in a follow-up PR). Globals live in
+`playwright.config.ts` under `expect.toHaveScreenshot`:
+
+```ts
+expect: {
+  toHaveScreenshot: {
+    maxDiffPixels: 100,
+    threshold: 0.2,
+    animations: 'disabled',
+    caret: 'hide',
+    scale: 'css',
+  },
+},
+```
+
+The suite covers:
+- Home page layout (full page)
+- Sidebar layout
+- Journal page (today's date)
+- Block row default state
+- Dark mode
+- Mobile viewport (375×667)
 
 ## Troubleshooting
 
-### "Dev server must be running on port 1420"
+### "Dev server must be running on port 5173"
 
-Start the Trunk dev server first:
+The Playwright config auto-starts the Vite dev server. If it fails:
+
 ```bash
-cd crates/quilt-ui && trunk serve --port 1420
+cd quilt-ui && npm run dev
 ```
+
+### Backend not running
+
+Some tests require the backend on port 3737:
+
+```bash
+cargo run -p quilt-server
+```
+
+Tests that depend on the backend will skip gracefully with `test.skip` if unreachable.
 
 ### Browser not found
 
 Reinstall Playwright browsers:
+
 ```bash
 npx playwright install --with-deps
 ```
@@ -182,6 +221,7 @@ npx playwright install --with-deps
 ### Tests timeout
 
 Increase timeout in `playwright.config.ts` or run with:
+
 ```bash
 npx playwright test --timeout=60000
 ```
@@ -189,7 +229,8 @@ npx playwright test --timeout=60000
 ## Architecture
 
 These tests are **external E2E tests** that:
-- Run against the compiled WASM UI served by Trunk
+- Run against the React/Vite dev server served by Vite
 - Use Playwright's cross-browser capabilities
-- Target the Leptos SPA at `http://localhost:1420`
-- Avoid fragile CSS selectors in favor of `data-testid`
+- Target the React UI at `http://localhost:5173`
+- Prefer `data-testid` selectors over fragile CSS
+- Use REST API calls for test data setup/teardown
