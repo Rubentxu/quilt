@@ -461,11 +461,6 @@ test-container-build:
     podman build -t quilt:test -f Containerfile.test .
     @echo "✓ Test container built: quilt:test"
 
-# Build the production container image
-container-build:
-    podman build -t quilt:latest -f Containerfile .
-    @echo "✓ Production container built: quilt:latest"
-
 # Run Rust unit + integration tests inside container
 test-container-rust:
     podman run --rm -v .:/src:Z quilt:test cargo test
@@ -507,7 +502,7 @@ test-container-quick:
 QUADLET_DIR := "{{ env_var('HOME') }}/.config/containers/systemd"
 
 # Install quadlet for local test execution (auto-starts on login if enabled)
-quadlet-install:
+quadlet-install-test:
     @mkdir -p {{ QUADLET_DIR }}
     cp quadlets/quilt-test.container {{ QUADLET_DIR }}/
     systemctl --user daemon-reload
@@ -534,7 +529,7 @@ quadlet-install-prod:
     @echo "✓ Production quadlet installed"
 
 # Remove all quadlets
-quadlet-remove:
+quadlet-remove-all:
     -rm -f {{ QUADLET_DIR }}/quilt.container {{ QUADLET_DIR }}/quilt-test.container
     -systemctl --user stop quilt quilt-test 2>/dev/null || true
     systemctl --user daemon-reload
@@ -559,3 +554,80 @@ quadlet-test:
 # Build + install + run tests via quadlet
 quadlet-test-full: container-build test-container-build quadlet-install quadlet-test
     @echo "✓ Full quadlet test pipeline started"
+
+# =============================================================================
+# Integration Testing (requires running server)
+# =============================================================================
+# These recipes use podman to spin up a Quilt server container,
+# run integration tests (WebSocket, navigate, API), then tear down.
+#
+# Quick start:
+#   just test-integration    Build image + run all integration tests
+
+INTEG_PORT := "3737"
+
+# Build the server image for integration testing
+test-integration-build:
+    podman build -t quilt:server -f Containerfile --target runtime .
+    @echo "✓ Server image built: quilt:server"
+
+# Start test server in background container
+test-integration-start:
+    @-podman rm -f quilt-test-server 2>/dev/null || true
+    podman run -d --name quilt-test-server \
+        -p {{ INTEG_PORT }}:{{ INTEG_PORT }} \
+        -v quilt-test-data:/home/appuser/.quilt-data \
+        -e RUST_LOG=info \
+        quilt:server
+    @echo "Waiting for server..."
+    @for i in 1 2 3 4 5 6 7 8 9 10; do \
+        if curl -sf http://localhost:{{ INTEG_PORT }}/health > /dev/null 2>&1; then \
+            echo "✓ Server ready — http://localhost:{{ INTEG_PORT }}"; \
+            break; \
+        fi; \
+        sleep 1; \
+    done
+
+# Stop and remove test server container
+test-integration-stop:
+    -podman stop quilt-test-server 2>/dev/null
+    -podman rm quilt-test-server 2>/dev/null
+    @echo "✓ Test server stopped"
+
+# Show test server logs
+test-integration-logs:
+    podman logs --tail 50 quilt-test-server
+
+# Run WebSocket integration tests (requires server running)
+test-ws:
+    cargo test -p quilt-server --test ws_integration_tests -- --nocapture
+
+# Run navigate integration tests (requires server running)
+test-navigate:
+    cargo test -p quilt-server --test navigate_integration_tests -- --nocapture
+
+# Full integration test pipeline: build → start → test → stop
+test-integration: test-integration-build test-integration-start
+    @echo ""
+    @echo "═══ Running integration tests ═══"
+    -cargo test -p quilt-server --test ws_integration_tests -- --nocapture
+    -cargo test -p quilt-server --test navigate_integration_tests -- --nocapture
+    @echo ""
+    @just test-integration-stop
+    @echo "✓ Integration tests complete"
+
+# Run integration tests without rebuilding the image
+test-integration-quick: test-integration-start
+    -cargo test -p quilt-server --test ws_integration_tests -- --nocapture
+    -cargo test -p quilt-server --test navigate_integration_tests -- --nocapture
+    @just test-integration-stop
+
+# Install test server quadlet (for integration tests)
+quadlet-install-test-server:
+    @mkdir -p {{ QUADLET_DIR }}
+    cp quadlets/quilt-test-server.container {{ QUADLET_DIR }}/
+    systemctl --user daemon-reload
+    @echo "✓ Test server quadlet installed"
+    @echo "  Start:  systemctl --user start quilt-test-server"
+    @echo "  Stop:   systemctl --user stop quilt-test-server"
+    @echo "  Status: systemctl --user status quilt-test-server"

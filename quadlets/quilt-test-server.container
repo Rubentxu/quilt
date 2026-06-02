@@ -1,0 +1,16 @@
+# =============================================================================
+# Quadlet for Quilt test server (integration tests)
+# Install: just quadlet-install-test
+# Start:   systemctl --user start quilt-test-server
+# =============================================================================
+
+[Container]
+Image=quilt:server
+ContainerName=quilt-test-server
+PublishPort=3737:3737
+Volume=quilt-test-data:/home/appuser/.quilt-data
+Environment=RUST_LOG=info
+HealthInterval=30s
+
+[Service]
+Restart=no
