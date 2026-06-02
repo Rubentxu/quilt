@@ -48,6 +48,19 @@ pub trait BlockUseCases: Send + Sync {
 
     /// Get all blocks that link back to this block.
     async fn get_backlinks(&self, block_id: Uuid) -> Result<Vec<Block>, ApplicationError>;
+
+    /// List blocks whose `properties` map contains the given `key` mapped
+    /// to the given string `value`.
+    ///
+    /// This is the primary lookup for the `created_by` convention
+    /// (`user::name`, `agent::claude`, ...). Returns at most `limit`
+    /// blocks, ordered newest first. `limit == 0` means "no limit".
+    async fn list_by_property(
+        &self,
+        key: &str,
+        value: &str,
+        limit: usize,
+    ) -> Result<Vec<Block>, ApplicationError>;
 }
 
 /// Block tree structure returned by [`BlockUseCases::get_tree`].
@@ -191,8 +204,14 @@ impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
         })
         .map_err(ApplicationError::Domain)?;
 
-        // Update with priority if set
+        // Always insert the block first
         let mut block = block;
+        self.block_repo
+            .insert(&block)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        // Update with priority if set
         if let Some(pri) = priority_value {
             block
                 .update(BlockUpdate {
@@ -203,12 +222,6 @@ impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
 
             self.block_repo
                 .update(&block)
-                .await
-                .map_err(ApplicationError::Domain)?;
-        } else {
-            // Insert the block
-            self.block_repo
-                .insert(&block)
                 .await
                 .map_err(ApplicationError::Domain)?;
         }
@@ -279,6 +292,19 @@ impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
     async fn get_backlinks(&self, block_id: Uuid) -> Result<Vec<Block>, ApplicationError> {
         self.block_repo
             .get_backlinks(block_id)
+            .await
+            .map_err(ApplicationError::Domain)
+    }
+
+    #[instrument(skip(self))]
+    async fn list_by_property(
+        &self,
+        key: &str,
+        value: &str,
+        limit: usize,
+    ) -> Result<Vec<Block>, ApplicationError> {
+        self.block_repo
+            .list_by_property(key, value, limit)
             .await
             .map_err(ApplicationError::Domain)
     }

@@ -223,21 +223,18 @@ async fn test_create_task_defaults_to_todo_marker() {
     assert_eq!(task.marker, Some(TaskMarker::Todo));
 }
 
-// BUG: create_task with priority fails because update is called
-// before insert (block not yet in repo). This regression test
-// documents the current broken behavior.
+// BUG FIXED (2026-06-02): create_task now always inserts before update.
 #[tokio::test]
-async fn test_create_task_with_priority_known_bug() {
+async fn test_create_task_with_priority() {
     let use_cases = setup();
 
-    // Currently this fails with Domain(BlockNotFound(...))
-    // because create_task skips insert() when priority is set,
-    // calling update() on a non-existent block.
-    let result = use_cases
+    let task = use_cases
         .create_task("tasks", "Urgent", None, Some("A"))
-        .await;
+        .await
+        .unwrap();
 
-    assert!(result.is_err(), "KNOWN BUG: create_task with priority should succeed but currently fails");
+    assert_eq!(task.priority, Some(quilt_domain::value_objects::Priority::A));
+    assert_eq!(task.marker, Some(TaskMarker::Todo));
 }
 
 // ── Page auto-creation ──────────────────────────────────────
