@@ -490,6 +490,16 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
   // Container ref for detecting clicks on empty space
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // Set of page names we've already auto-created the first block on. This
+  // prevents a reload from creating duplicate empty blocks and survives
+  // StrictMode's double-invocation of effects.
+  const autoCreatedRef = useRef<Set<string>>(new Set())
+
+  // A ref-mirrored copy of `handleNewBlockAtEnd` so the load effect can
+  // call it without re-running every time the underlying callback changes
+  // (we don't want the load effect to retrigger on every keystroke).
+  const handleNewBlockAtEndRef = useRef<(() => void) | null>(null)
+
   // ── Load blocks ───────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
@@ -526,6 +536,23 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
 
         setBlocks(fetchedBlocks)
         setLoading(false)
+
+        // Auto-create first block on a new journal page. A daily journal
+        // is the user's primary "scratch pad" — dropping them into an
+        // empty state on first visit is friction. We only fire this once
+        // per page (guarded by autoCreatedRef) and only for journals, so
+        // regular pages still show the EmptyState until the user is ready
+        // to write.
+        if (isJournal && fetchedBlocks.length === 0 && !autoCreatedRef.current.has(pageName)) {
+          autoCreatedRef.current.add(pageName)
+          // Defer the creation so it doesn't race with the initial render
+          // and so Virtuoso has time to mount (we need its scroll
+          // primitives to focus the new block).
+          requestAnimationFrame(() => {
+            if (cancelled) return
+            handleNewBlockAtEndRef.current?.()
+          })
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Unknown error')
@@ -566,13 +593,38 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
         })
       }
 
-      // Focus the contentEditable inside the block row
+      // Focus the contentEditable inside the block row. If the block is
+      // still in read mode (e.g. just-created block, where isEditing is
+      // false), the contentEditable doesn't exist yet. In that case we
+      // click the read-mode div to enter edit mode and then focus the
+      // contentEditable on the next frame.
       const wrapper = blockRefs.get(blockId)
       if (!wrapper) return
-      const contentEditable = wrapper.querySelector<HTMLDivElement>('[contenteditable="true"]')
-      if (contentEditable) {
-        contentEditable.focus()
-        setCursorAt(contentEditable, cursorPos)
+
+      const tryFocus = () => {
+        const ce = wrapper.querySelector<HTMLDivElement>('[contenteditable="true"]')
+        if (ce) {
+          ce.focus()
+          setCursorAt(ce, cursorPos)
+          return true
+        }
+        return false
+      }
+
+      if (tryFocus()) return
+
+      // Block is in read mode — click it to enter edit mode, then focus
+      // the contentEditable once React has rendered it.
+      const readMode = wrapper.querySelector<HTMLDivElement>('.block-content-read')
+      if (readMode) {
+        readMode.click()
+        requestAnimationFrame(() => {
+          // Fall back to one more frame if React hasn't yet rendered the
+          // contentEditable (very fast click→focus race).
+          if (!tryFocus()) {
+            requestAnimationFrame(tryFocus)
+          }
+        })
       }
     },
     [blockRefs],
@@ -833,6 +885,12 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
       handleCreateBlock('', '', null)
     }
   }, [blocks, handleCreateBlock])
+
+  // Mirror the latest callback into a ref so the auto-create effect can
+  // call it without re-running on every blocks change.
+  useEffect(() => {
+    handleNewBlockAtEndRef.current = handleNewBlockAtEnd
+  }, [handleNewBlockAtEnd])
 
   // ── Comment handlers ─────────────────────────────────────────────
   // Comments are regular blocks with `type: "comment"` and
