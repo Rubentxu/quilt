@@ -14,7 +14,7 @@ description = "Quilt HTTP server with Axum — REST API, WebSocket, and embedded
 [dependencies]
 # Web framework
 axum = { version = "0.7", features = ["macros", "ws"] }
-tower = "0.4"
+tower = { version = "0.4", features = ["util"] }
 tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
 
 # Async runtime
@@ -39,9 +39,9 @@ quilt-domain = { path = "../quilt-domain" }
 quilt-application = { path = "../quilt-application" }
 quilt-infrastructure = { path = "../quilt-infrastructure" }
 quilt-mcp = { path = "../quilt-mcp" }
-quilt-cognitive = { path = "../quilt-cognitive", optional = true }
 quilt-search = { path = "../quilt-search" }
 quilt-platform = { path = "../quilt-platform" }
+quilt-query = { path = "../quilt-query" }
 
 # UUID
 uuid.workspace = true
@@ -56,9 +56,7 @@ bytes = "1"
 metrics = { workspace = true }
 metrics-exporter-prometheus = { workspace = true }
 
-[features]
-default = []
-cognitive = ["quilt-cognitive"]
-
 [dev-dependencies]
 tokio-test.workspace = true
+axum = { version = "0.7", features = ["macros", "ws"] }
+quilt-domain = { path = "../quilt-domain" }

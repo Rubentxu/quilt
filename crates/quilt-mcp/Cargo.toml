@@ -20,6 +20,7 @@ async-trait.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+quilt-domain = { path = "../quilt-domain" }
 quilt-infrastructure = { path = "../quilt-infrastructure" }
 quilt-search = { path = "../quilt-search" }
 quilt-test-helpers = { path = "../quilt-test-helpers" }

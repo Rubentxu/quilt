@@ -22,3 +22,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true
+proptest.workspace = true
+quilt-test-helpers = { path = "../quilt-test-helpers" }
+tokio.workspace = true
