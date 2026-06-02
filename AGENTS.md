@@ -113,30 +113,82 @@ src/
 
 ---
 
-## Commands
+## Dev workflow (single command, full hot reload)
 
-### Rust
+**The only command you need:** `just dev`
+
+This single command orchestrates the full development loop with no stale-bundle
+surprises. It runs `scripts/dev-react.sh` which supervises:
+
+| Component | Port | What it does | Hot reload source |
+|-----------|------|--------------|-------------------|
+| Rust server | 3737 | API + WebSocket + serves SPA from `wasm_assets/` | `cargo build` on startup |
+| Vite dev | **5173** | React SPA with HMR | Live edits to `quilt-ui/src/**` |
+| WASM watcher | — | Rebuilds `quilt-core` WASM | Edits to `crates/quilt-core/src/**` |
+| Node asset watcher | — | Rebuilds production bundle + syncs to `wasm_assets/` | Same as Vite (debounced 500ms) |
+
+### Which URL to open?
+
+- **`http://localhost:5173`** — DEV mode. React HMR, instant feedback. Use this for iterating.
+- **`http://localhost:3737`** — production-style bundle. Stays in sync via the Node watcher.
+
+Both URLs serve the **same backend API** and the **same auth key** (read from
+`quilt-ui/.env`, auto-generated on first run).
+
+### What you never have to do manually
+
+- Manually `vite build` then copy to `wasm_assets/` — the Node watcher does it.
+- Manually `wasm-pack build` after editing Rust — `cargo watch` does it.
+- Manually copy the API key between server and frontend — `scripts/dev-react.sh`
+  generates it once into `quilt-ui/.env` and exports `QUILT_API_KEY` to the server.
+- Manually restart on frontend change — Vite HMR (5173) is automatic; the Node
+  watcher (3737 bundle) rebuilds + syncs in the background.
+
+### Browser caching
+
+If you ever see "stale UI" symptoms:
+- On `5173`: hard refresh (Ctrl+Shift+R / Cmd+Shift+R). Vite HMR should be enough.
+- On `3737`: hard refresh too. The Node watcher rebuilds within ~500ms of a save.
+
+### Stopping
+
+`Ctrl+C` kills all child processes (server, Vite, both watchers) cleanly via
+the `cleanup` trap in `scripts/dev-react.sh`.
+
+---
+
+## Other commands
+
+### Justfile
 | Command | Purpose |
 |---------|---------|
-| `cargo build` | Compile workspace |
-| `cargo test` | Run all Rust tests |
+| `just dev` | **Run this.** Full hot-reload dev environment. |
+| `just dev-fast` | Backend only (no Vite, no watchers) — for API-only work. |
+| `just react-rebuild` | Manual `vite build` + sync to `wasm_assets/`. |
+| `just check` | Fast `cargo check` across the workspace. |
+| `just ci` | Format + clippy + tests (CI parity). |
+| `just test-e2e` | Playwright E2E suite. |
+
+### Rust (rarely needed directly)
+| Command | Purpose |
+|---------|---------|
+| `cargo test` | All Rust tests |
 | `cargo test -p <crate>` | One crate |
 | `cargo fmt` | Format |
 | `cargo clippy` | Lint |
-| `cargo run -p quilt-server` | Start server (prints API key!) |
 
-### Frontend
-| `cd quilt-ui && npm run dev` | Vite (5173) |
-| `cd quilt-ui && npm run build` | Production → wasm_assets/ |
+### Frontend (rarely needed directly — Vite handles it in `just dev`)
+| Command | Purpose |
+|---------|---------|
 | `cd quilt-ui && npx vitest run` | Component tests |
+| `cd quilt-ui && npx vite build` | One-off production build (without dev environment) |
 
 ### E2E
-| `QUILT_API_KEY=<key> npx playwright test` | All E2E |
-| `npx playwright test --headed --project=chromium` | Debug |
+| Command | Purpose |
+|---------|---------|
+| `QUILT_API_KEY=$(grep VITE_QUILT_API_KEY quilt-ui/.env \| cut -d= -f2) npx playwright test` | Run E2E (auth already configured by `just dev`) |
+| `npx playwright test --headed --project=chromium` | Debug visually |
 | `npx playwright test --grep @smoke` | Smoke only |
-
-### Justfile
-| `just check` | Fast compile check |
 | `just ci` | Format + clippy + tests |
 | `just test-e2e` | E2E with proper setup |
 
