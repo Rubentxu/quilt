@@ -5,7 +5,7 @@ target/
 node_modules/
 
 # Trunk / Tailwind output
-crates/quilt-ui/dist/
+quilt-ui/dist/
 
 # Playwright E2E
 playwright-report/
@@ -36,7 +36,9 @@ Thumbs.db
 
 # Auto-generated docs and artifacts
 docs/grill/
-openspec/changes/archive/
+
+# SDD workflow — generated specs and reports are local-only
+openspec/
 
 # Screenshots from visual testing
 quilt-*.png
