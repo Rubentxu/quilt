@@ -9,6 +9,7 @@ import { useTabs } from '@shared/contexts/TabsContext'
 import { InlineContent } from './InlineContent'
 import { BlockAutocomplete } from '@features/search/BlockAutocomplete'
 import { CommentRow } from '@features/comments/CommentRow'
+import { BlockContextMenu } from './BlockContextMenu'
 import { buildCommentTree } from '@shared/utils/blockProperties'
 // Type-only import — keeps the type for handleSlashSelect without
 // pulling the (large) SlashCommandMenu module into the eager bundle.
@@ -137,6 +138,8 @@ export function BlockRow({
   const [isEditing, setIsEditing] = useState(false)
   const [localContent, setLocalContent] = useState(block.content)
   const [showProperties, setShowProperties] = useState(false)
+  const [showContextMenu, setShowContextMenu] = useState(false)
+  const contextMenuAnchorRef = useRef<HTMLButtonElement>(null)
   const [pageMap, setPageMap] = useState<Map<string, Page>>(new Map())
   const [autocomplete, setAutocomplete] = useState<{
     query: string
@@ -846,6 +849,28 @@ export function BlockRow({
     onCreateBlock(block.id, '', block.id)
   }, [block.id, onCreateBlock])
 
+  // ── Block context menu actions (DESIGN.md §11.3) ──────────────
+  // Convert this block to a TODO task: sets blockType to 'todo' and
+  // marker to 'Todo', then persists. No-op if it's already a todo.
+  const handleConvertToTask = useCallback(() => {
+    if (block.blockType === 'todo') return
+    const next: Block = { ...block, blockType: 'todo' as BlockType, marker: 'Todo' as TaskMarker }
+    onUpdate(next)
+    api.updateBlock(block.id, { blockType: 'todo', marker: 'Todo' })
+      .catch(() => toast.error('Failed to convert to task'))
+  }, [block, onUpdate])
+
+  // Copy a deep link to this block to the clipboard.
+  // Format: <origin>/page/<page-name>?block=<id>
+  // When hash routing is added, the id can move to a #fragment.
+  const handleCopyBlockLink = useCallback(() => {
+    const url = `${window.location.origin}/page/${encodeURIComponent(pageName)}?block=${encodeURIComponent(block.id)}`
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success('Block link copied'))
+      .catch(() => toast.error('Failed to copy link'))
+  }, [block.id, pageName])
+
   // ── Insert Template (ADR-0003) ────────────────────────────────────
   //
   // The slash command's "Insert Template" action invokes this. The flow is:
@@ -1230,10 +1255,15 @@ export function BlockRow({
           <Plus size={14} />
         </button>
         <button
+          ref={contextMenuAnchorRef}
+          onClick={() => setShowContextMenu((v) => !v)}
           aria-label="More actions"
+          aria-haspopup="menu"
+          aria-expanded={showContextMenu}
           title="More actions"
+          data-testid="block-context-menu-trigger"
           style={{
-            background: 'none',
+            background: showContextMenu ? 'var(--color-surface-subtle)' : 'none',
             border: 'none',
             cursor: 'pointer',
             color: 'var(--color-text-muted)',
@@ -1333,6 +1363,21 @@ export function BlockRow({
           indent={indent}
         />
       )}
+
+      {/* Block context menu — DESIGN.md §11.3 */}
+      <BlockContextMenu
+        open={showContextMenu}
+        anchorEl={contextMenuAnchorRef.current}
+        onClose={() => setShowContextMenu(false)}
+        actions={{
+          onAddChild: handleAddChild,
+          onMoveUp: () => onMoveBlockUp(block.id),
+          onMoveDown: () => onMoveBlockDown(block.id),
+          onConvertToTask: handleConvertToTask,
+          onCopyLink: handleCopyBlockLink,
+          onDelete: () => onDeleteBlock(block.id),
+        }}
+      />
     </div>
   )
 }
