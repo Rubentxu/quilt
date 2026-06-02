@@ -1,5 +1,8 @@
 # Quilt — AI-first Knowledge Graph
 
+[![CI](https://github.com/rubentxu74/quilt/actions/workflows/ci.yml/badge.svg)](https://github.com/rubentxu74/quilt/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/rubentxu74/quilt/branch/main/graph/badge.svg)](https://codecov.io/gh/rubentxu74/quilt)
+
 > **Status:** Production Ready MVP — Week 12 Complete
 >
 > Rust reimplementation of the Logseq DB graph model with MCP-first architecture.

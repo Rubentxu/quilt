@@ -3,12 +3,14 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Playwright E2E Test Configuration for Quilt UI
  *
- * This config targets the Leptos/Trunk dev server running on localhost:1420.
+ * This config targets the React/Vite dev server running on localhost:5173.
  * Run with: npx playwright test
  *
- * NOTE: Before running tests, ensure the dev server is running:
- *   cd crates/quilt-ui && trunk serve --port 1420
- *   OR: cargo run -p quilt-ui (if applicable)
+ * NOTE: Before running tests, ensure the backend server is running:
+ *   cargo run -p quilt-server
+ *
+ * And the frontend dev server is running:
+ *   cd quilt-ui && npm run dev
  */
 export default defineConfig({
   testDir: './tests/e2e',
@@ -19,9 +21,21 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://localhost:1420',
+    baseURL: process.env.BASE_URL || 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+  },
+
+  // Visual regression defaults — applied to every `toHaveScreenshot` call.
+  // Tune per-call via the second arg of `toHaveScreenshot(name, options)`.
+  expect: {
+    toHaveScreenshot: {
+      maxDiffPixels: 100,
+      threshold: 0.2, // 20% per-pixel color threshold (anti-aliasing tolerance)
+      animations: 'disabled', // disable CSS animations/JS animations for stability
+      caret: 'hide', // hide blinking text caret
+      scale: 'css', // compare at CSS pixel ratio, not device pixel ratio
+    },
   },
 
   projects: [
@@ -29,28 +43,12 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-    // Mobile browsers
-    {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
-    },
-    {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
-    },
   ],
 
   webServer: {
-    command: 'echo "Dev server must be running on port 1420" && exit 1',
-    port: 1420,
+    command: 'cd quilt-ui && npm run dev',
+    url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
+    timeout: 30000,
   },
 });

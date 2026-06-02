@@ -8,7 +8,7 @@ members = [
     "crates/quilt-mcp",
     "crates/quilt-platform",
     "crates/quilt-bin",
-    "crates/quilt-ui",
+    "crates/quilt-core",
     "crates/quilt-analysis",
     "crates/quilt-test-helpers",
     "crates/quilt-server",
@@ -39,6 +39,7 @@ serde_json = "1"
 
 # Date/Time
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.9"
 
 # Error handling
 thiserror = "1"
@@ -68,7 +69,10 @@ parking_lot = "0.12"
 uuid = { version = "1", features = ["v4", "serde"] }
 
 # File watching
-notify = { version = "6", default-features = false, features = ["macos_kqueue"] }
+# Use default features so the crate pulls in all platform backends:
+#   - macos_fsevent (modern macOS), inotify (Linux), ReadDirectoryChangesW (Windows).
+# `macos_kqueue` is the older macOS API and is not strictly needed.
+notify = "6"
 
 # For testing
 tempfile = "3"
@@ -79,6 +83,9 @@ genpdf = "0.2"
 
 # Markdown parsing
 pulldown-cmark = "0.13"
+
+# Property-based testing
+proptest = "1.4"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

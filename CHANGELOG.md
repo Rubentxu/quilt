@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased] — 2026-06-01
+
+### Changed
+- **UI stack migration**: Leptos 0.8 → React 19 + TypeScript (ADR-0005 updated)
+- **Editor engine**: CodeMirror 6 → TipTap (ProseMirror-based) (ADR-0007 updated)
+- **MCP tool prefix**: `logseq_*` → `quilt_*` per ADR-0001
+
+### Added
+- Bearer token authentication on all `/api/v1/*` endpoints
+- Multi-block selection with Alt+Up/Down
+- Tabs system with Ctrl+T/Ctrl+W
+- Graph view, search modal, backlinks, properties, autocomplete, slash commands
+
 ## [0.1.0] - 2026-05-21
 
 ### Added

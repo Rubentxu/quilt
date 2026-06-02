@@ -18,6 +18,7 @@
     "codegen": "playwright codegen http://localhost:1420"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.42.0"
   },
   "keywords": [
