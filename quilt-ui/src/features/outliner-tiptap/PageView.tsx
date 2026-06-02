@@ -5,7 +5,6 @@ import toast from 'react-hot-toast'
 import { DndContext, closestCenter, useDndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { useWasm, ensureWasmLoaded } from '@core/wasm-bridge/WasmProvider'
 import { api, QuiltApiError } from '@core/api-client'
 import { PageSkeleton } from '@shared/components/Skeleton'
@@ -546,8 +545,8 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
         if (isJournal && fetchedBlocks.length === 0 && !autoCreatedRef.current.has(pageName)) {
           autoCreatedRef.current.add(pageName)
           // Defer the creation so it doesn't race with the initial render
-          // and so Virtuoso has time to mount (we need its scroll
-          // primitives to focus the new block).
+          // and so the block row exists in the DOM when we attempt to
+          // focus it.
           requestAnimationFrame(() => {
             if (cancelled) return
             handleNewBlockAtEndRef.current?.()
@@ -578,21 +577,9 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
     [flatBlocks],
   )
 
-  const virtuosoRef = useRef<VirtuosoHandle>(null)
-
   // ── Focus management ──────────────────────────────────────────
   const onFocusBlock = useCallback(
     (blockId: string, cursorPos: 'start' | 'end') => {
-      // Scroll the block into view via Virtuoso
-      const flatIndex = flatBlocksRef.current.findIndex(fb => fb.block.id === blockId)
-      if (flatIndex >= 0 && virtuosoRef.current) {
-        virtuosoRef.current.scrollIntoView({
-          index: flatIndex,
-          behavior: 'smooth',
-          align: 'center',
-        })
-      }
-
       // Focus the contentEditable inside the block row. If the block is
       // still in read mode (e.g. just-created block, where isEditing is
       // false), the contentEditable doesn't exist yet. In that case we
@@ -600,6 +587,10 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
       // contentEditable on the next frame.
       const wrapper = blockRefs.get(blockId)
       if (!wrapper) return
+
+      // Native scrollIntoView is enough here and avoids the layout issues
+      // we were seeing with Virtuoso in auto-height containers.
+      wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
       const tryFocus = () => {
         const ce = wrapper.querySelector<HTMLDivElement>('[contenteditable="true"]')
@@ -1281,12 +1272,10 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
         <div style={{ flex: 1, minHeight: 0 }}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
             <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-              <Virtuoso
-                ref={virtuosoRef}
-                data={flatBlocks}
-                computeItemKey={(_index, item) => item.block.id}
-                itemContent={(_index, flatBlock) => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {flatBlocks.map((flatBlock) => (
                   <SortableBlockRowFlat
+                    key={flatBlock.block.id}
                     flatBlock={flatBlock}
                     allBlocks={blocks}
                     pageName={pageName}
@@ -1310,12 +1299,8 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
                     onReplyComment={handleReplyComment}
                     onDeleteComment={handleDeleteComment}
                   />
-                )}
-                followOutput="smooth"
-                defaultItemHeight={40}
-                overscan={200}
-                style={{ height: '100%' }}
-              />
+                ))}
+              </div>
             </SortableContext>
           </DndContext>
         </div>
