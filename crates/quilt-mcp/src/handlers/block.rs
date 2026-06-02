@@ -144,6 +144,18 @@ impl ToolHandler for BlockToolHandler {
                     "required": ["page_name", "content"]
                 }),
             },
+            Tool {
+                name: "quilt_list_blocks_by_author".to_string(),
+                description: "List blocks created by a specific author (e.g. 'agent::claude' or 'user::alice'). Powers the /created-by filter and the agent-activity panel.".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "author": { "type": "string", "description": "Author identifier (e.g. 'agent::claude', 'user::alice')" },
+                        "limit": { "type": "integer", "description": "Max blocks to return (default 50)" }
+                    },
+                    "required": ["author"]
+                }),
+            },
         ]
     }
 
@@ -268,6 +280,48 @@ impl ToolHandler for BlockToolHandler {
                     "page_name": page_name,
                     "content": content,
                     "marker": "TODO",
+                }))
+                .unwrap_or_else(|e| e.to_string()))
+            }
+
+            "quilt_list_blocks_by_author" => {
+                let author = args
+                    .get("author")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'author'")?;
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize)
+                    .unwrap_or(50);
+
+                let blocks = self
+                    .block_use_cases
+                    .list_by_property("created_by", author, limit)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let result: Vec<serde_json::Value> = blocks
+                    .iter()
+                    .map(|b| {
+                        serde_json::json!({
+                            "id": b.id.to_string(),
+                            "page_id": b.page_id.to_string(),
+                            "content": b.content,
+                            "marker": b.marker.as_ref().map(|m| format!("{:?}", m)),
+                            "properties": b.properties.iter()
+                                .map(|(k, v)| (k.clone(), v.to_json()))
+                                .collect::<serde_json::Map<_, _>>(),
+                            "created_at": b.created_at.to_rfc3339(),
+                            "updated_at": b.updated_at.to_rfc3339(),
+                        })
+                    })
+                    .collect();
+
+                Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "author": author,
+                    "count": result.len(),
+                    "blocks": result,
                 }))
                 .unwrap_or_else(|e| e.to_string()))
             }

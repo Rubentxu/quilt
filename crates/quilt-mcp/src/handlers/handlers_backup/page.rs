@@ -103,7 +103,7 @@ impl PageHandlerTrait for DefaultPageHandler {
             None => {
                 // Create journal page
                 let page =
-                    Page::new_journal(day, BlockFormat::Markdown).map_err(|e| e.to_string())?;
+                    Page::new_journal(day, BlockFormat::Markdown, "%Y-%m-%d").map_err(|e| e.to_string())?;
                 self.page_repo
                     .insert(&page)
                     .await
