@@ -221,3 +221,14 @@ html, body, #root {
   background: var(--color-primary-container);
   color: var(--color-primary);
 }
+
+/* ──── Sidebar favorites — show remove button on row hover (§4.1) ──── */
+.sidebar-item:hover ~ .favorite-remove-btn,
+li:hover .favorite-remove-btn {
+  opacity: 1 !important;
+}
+
+/* Hide native focus outline on mouse, keep on keyboard (a11y) */
+:focus:not(:focus-visible) {
+  outline: none;
+}

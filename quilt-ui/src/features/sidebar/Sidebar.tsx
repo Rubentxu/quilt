@@ -1,10 +1,23 @@
 import { useState, useEffect, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useLocation } from '@tanstack/react-router'
-import { Search, Calendar, FileText, Plus, Clock, LayoutList, Network, X, Bot } from 'lucide-react'
+import { Search, Calendar, FileText, Plus, Clock, LayoutList, Network, X, Bot, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '@core/api-client'
 import type { Page } from '@shared/types/api'
 import { AgentActivityPanel } from '@features/cognitive/AgentActivityPanel'
+
+const FAVORITES_KEY = 'quilt-favorites'
+
+function readFavorites(): string[] {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
 
 interface SidebarProps {
   collapsed: boolean
@@ -49,8 +62,9 @@ function SidebarSkeleton() {
 // States per DESIGN.md §9.1:
 // Default: text-secondary, no background
 // Hover: bg-surface-subtle
-// Active: bg-primary-container, text-primary
+// Active: bg-primary-container, text-primary, **left border** (NOT color-only)
 // Focus: ring-primary
+// §9.1 explicitly requires active state to be evident WITHOUT color alone.
 
 interface SidebarItemProps {
   icon: React.ReactNode
@@ -62,20 +76,26 @@ interface SidebarItemProps {
 }
 
 function SidebarItem({ icon, label, href, active, collapsed, dataTestId }: SidebarItemProps) {
+  // Layout note: the left border is rendered as a 3px-wide absolutely-positioned
+  // element so it doesn't shift the rest of the row's padding when active.
   return (
     <Link
       to={href as any}
       title={collapsed ? label : undefined}
       data-testid={dataTestId}
+      data-active={active ? 'true' : undefined}
+      aria-current={active ? 'page' : undefined}
       style={{
+        position: 'relative',
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--space-2)',
         padding: '6px var(--space-2)',
+        paddingLeft: collapsed ? 'var(--space-2)' : 'calc(var(--space-2) + 3px)',
         borderRadius: 'var(--radius-md)',
         textDecoration: 'none',
         fontSize: '13px',
-        fontWeight: 400,
+        fontWeight: active ? 600 : 400,
         color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
         background: active ? 'var(--color-primary-container)' : 'transparent',
         transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
@@ -85,6 +105,21 @@ function SidebarItem({ icon, label, href, active, collapsed, dataTestId }: Sideb
       }}
       className="sidebar-item"
     >
+      {/* Active indicator — visible border on the left edge (§9.1: must not depend on color only) */}
+      {active && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: '4px',
+            bottom: '4px',
+            width: '3px',
+            borderRadius: 'var(--radius-pill)',
+            background: 'var(--color-primary)',
+          }}
+        />
+      )}
       <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
         {icon}
       </span>
@@ -122,9 +157,24 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
   const [creating, setCreating] = useState(false)
   const [searchFocused, setSearchFocused] = useState(false)
   const [showAgentActivity, setShowAgentActivity] = useState(false)
+  const [favorites, setFavorites] = useState<string[]>(() => readFavorites())
   const navigate = useNavigate()
   const location = useLocation()
   const today = formatToday()
+
+  function toggleFavorite(name: string) {
+    setFavorites((prev) => {
+      const next = prev.includes(name)
+        ? prev.filter((n) => n !== name)
+        : [...prev, name]
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next))
+      return next
+    })
+  }
+
+  const favoritePages = pages.filter(
+    (p) => !p.journal && favorites.includes(p.name)
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -333,6 +383,59 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
             />
           </div>
         </section>
+
+        {/* Favorites — DESIGN.md §4.1 */}
+        {!collapsed && favoritePages.length > 0 && (
+          <section>
+            <GroupHeader label="Favorites" />
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px',
+              }}
+            >
+              {favoritePages.map((page) => (
+                <li key={page.id} style={{ position: 'relative' }}>
+                  <SidebarItem
+                    icon={<Star size={18} style={{ color: 'var(--color-warning)' }} fill="currentColor" />}
+                    label={page.title || page.name}
+                    href={`/page/${encodeURIComponent(page.name)}`}
+                    collapsed={collapsed}
+                  />
+                  <button
+                    onClick={() => toggleFavorite(page.name)}
+                    aria-label={`Remove ${page.name} from favorites`}
+                    title="Remove from favorites"
+                    style={{
+                      position: 'absolute',
+                      right: 'var(--space-2)',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--color-text-disabled)',
+                      padding: '2px 4px',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '11px',
+                      opacity: 0,
+                      transition: 'opacity var(--motion-fast) var(--ease-standard)',
+                    }}
+                    className="favorite-remove-btn"
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0' }}
+                  >
+                    <X size={12} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Pages */}
         <section>
