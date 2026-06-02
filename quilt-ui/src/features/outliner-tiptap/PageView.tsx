@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
+import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal, FileText, Link } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
 import { DndContext, closestCenter, useDndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -8,7 +8,10 @@ import { CSS } from '@dnd-kit/utilities'
 import { useWasm, ensureWasmLoaded } from '@core/wasm-bridge/WasmProvider'
 import { api, QuiltApiError } from '@core/api-client'
 import { PageSkeleton } from '@shared/components/Skeleton'
+import { ReferenceCard } from '@shared/components/ReferenceCard'
+import { ContentCard } from '@shared/components/ContentCard'
 import { BlockRow } from './BlockRow'
+import type { BlockProperty } from '@shared/types/api'
 import { setCursorAt } from '@shared/hooks/useCursor'
 import { useBlockHistory } from '@shared/hooks/useBlockHistory'
 import { useSSE } from '@shared/hooks/useSSE'
@@ -22,6 +25,27 @@ interface PageViewProps {
   pageName: string
   isJournal?: boolean
   journalFormat?: string
+}
+
+// ──── Helpers for card-wrapped blocks (DESIGN.md §9.7-9.8) ──────────
+
+/** Returns the card type if this block should be rendered as a card. */
+export function getBlockType(block: { properties?: BlockProperty[] }): 'reference' | 'documentacion' | null {
+  const prop = block.properties?.find(p => p.key === 'type')
+  if (!prop || typeof prop.value !== 'string') return null
+  if (prop.value === 'reference') return 'reference'
+  if (prop.value === 'documentacion') return 'documentacion'
+  return null
+}
+
+/**
+ * Returns all block properties EXCEPT `type` (the discriminator),
+ * formatted as metas for ReferenceCard.
+ */
+export function getBlockMetas(block: { properties?: BlockProperty[] }): { key: string; value: string }[] {
+  return (block.properties ?? [])
+    .filter(p => p.key !== 'type')
+    .map(p => ({ key: p.key, value: String(p.value ?? '') }))
 }
 
 // ──── JournalDateHeader (DESIGN.md §9.4) ────────────────────────────
@@ -181,7 +205,14 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
 
 // ──── Empty state (DESIGN.md §15) ───────────────────────────────────
 
-function EmptyState({ isJournal, onNewBlock }: { isJournal?: boolean; onNewBlock: () => void }) {
+interface EmptyStateProps {
+  isJournal?: boolean
+  onNewBlock: () => void
+  onNewReferenceBlock?: () => void
+  onNewDocumentacionBlock?: () => void
+}
+
+function EmptyState({ isJournal, onNewBlock, onNewReferenceBlock, onNewDocumentacionBlock }: EmptyStateProps) {
   return (
     <div
       style={{
@@ -214,22 +245,57 @@ function EmptyState({ isJournal, onNewBlock }: { isJournal?: boolean; onNewBlock
           ? 'Start writing your daily notes below.'
           : 'No blocks yet. Start typing...'}
       </p>
-      <button
-        onClick={onNewBlock}
-        style={{
-          marginTop: 'var(--space-4)',
-          padding: '8px 20px',
-          fontSize: '14px',
-          fontWeight: 500,
-          background: 'var(--color-primary)',
-          color: 'var(--color-on-primary, #fff)',
-          border: 'none',
-          borderRadius: 'var(--radius-md)',
-          cursor: 'pointer',
-        }}
-      >
-        Add first block
-      </button>
+      <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center', marginTop: 'var(--space-4)', flexWrap: 'wrap' }}>
+        <button
+          onClick={onNewBlock}
+          style={{
+            padding: '8px 20px',
+            fontSize: '14px',
+            fontWeight: 500,
+            background: 'var(--color-primary)',
+            color: 'var(--color-on-primary, #fff)',
+            border: 'none',
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+          }}
+        >
+          Add first block
+        </button>
+        {onNewReferenceBlock && (
+          <button
+            onClick={onNewReferenceBlock}
+            style={{
+              padding: '8px 20px',
+              fontSize: '14px',
+              fontWeight: 500,
+              background: 'transparent',
+              color: 'var(--color-primary)',
+              border: '1px solid var(--color-primary)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+            }}
+          >
+            + Reference
+          </button>
+        )}
+        {onNewDocumentacionBlock && (
+          <button
+            onClick={onNewDocumentacionBlock}
+            style={{
+              padding: '8px 20px',
+              fontSize: '14px',
+              fontWeight: 500,
+              background: 'transparent',
+              color: 'var(--color-accent)',
+              border: '1px solid var(--color-accent)',
+              borderRadius: 'var(--radius-md)',
+              cursor: 'pointer',
+            }}
+          >
+            + Documentation
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -403,32 +469,110 @@ function SortableBlockRowFlat({
           else blockRefs.delete(flatBlock.block.id)
         }}
       >
-        <BlockRow
-          block={flatBlock.block}
-          allBlocks={allBlocks}
-          pageName={pageName}
-          hasChildren={flatBlock.hasChildren}
-          isCollapsed={collapsedIds.has(flatBlock.block.id)}
-          onToggleCollapse={onToggleCollapse}
-          onUpdate={onUpdate}
-          onCreateBlock={onCreateBlock}
-          onDeleteBlock={onDeleteBlock}
-           onFocusBlock={onFocusBlock}
-           onMoveBlockUp={onMoveBlockUp}
-           onMoveBlockDown={onMoveBlockDown}
-           onUndo={onUndo}
-           onRedo={onRedo}
-           selected={selected}
-           onMultiSelect={onMultiSelect}
-           onSelectAll={onSelectAll}
-           onSelectParent={onSelectParent}
-           indent={flatBlock.depth}
-          onAddComment={onAddComment}
-          onResolveComment={onResolveComment}
-          onReplyComment={onReplyComment}
-          onDeleteComment={onDeleteComment}
-          dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
-        />
+        {(() => {
+          const blockType = getBlockType(flatBlock.block)
+          const metas = getBlockMetas(flatBlock.block)
+          const cardTitle = flatBlock.block.content || (blockType === 'reference' ? 'Reference' : 'Documentación')
+
+          if (blockType === 'reference') {
+            return (
+              <ReferenceCard
+                title={cardTitle}
+                metas={metas}
+                href={`/page/${flatBlock.block.pageName ?? ''}`}
+              >
+                <BlockRow
+                  block={flatBlock.block}
+                  allBlocks={allBlocks}
+                  pageName={pageName}
+                  hasChildren={flatBlock.hasChildren}
+                  isCollapsed={collapsedIds.has(flatBlock.block.id)}
+                  onToggleCollapse={onToggleCollapse}
+                  onUpdate={onUpdate}
+                  onCreateBlock={onCreateBlock}
+                  onDeleteBlock={onDeleteBlock}
+                  onFocusBlock={onFocusBlock}
+                  onMoveBlockUp={onMoveBlockUp}
+                  onMoveBlockDown={onMoveBlockDown}
+                  onUndo={onUndo}
+                  onRedo={onRedo}
+                  selected={selected}
+                  onMultiSelect={onMultiSelect}
+                  onSelectAll={onSelectAll}
+                  onSelectParent={onSelectParent}
+                  indent={flatBlock.depth}
+                  onAddComment={onAddComment}
+                  onResolveComment={onResolveComment}
+                  onReplyComment={onReplyComment}
+                  onDeleteComment={onDeleteComment}
+                  dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
+                />
+              </ReferenceCard>
+            )
+          }
+
+          if (blockType === 'documentacion') {
+            return (
+              <ContentCard title={cardTitle}>
+                <BlockRow
+                  block={flatBlock.block}
+                  allBlocks={allBlocks}
+                  pageName={pageName}
+                  hasChildren={flatBlock.hasChildren}
+                  isCollapsed={collapsedIds.has(flatBlock.block.id)}
+                  onToggleCollapse={onToggleCollapse}
+                  onUpdate={onUpdate}
+                  onCreateBlock={onCreateBlock}
+                  onDeleteBlock={onDeleteBlock}
+                  onFocusBlock={onFocusBlock}
+                  onMoveBlockUp={onMoveBlockUp}
+                  onMoveBlockDown={onMoveBlockDown}
+                  onUndo={onUndo}
+                  onRedo={onRedo}
+                  selected={selected}
+                  onMultiSelect={onMultiSelect}
+                  onSelectAll={onSelectAll}
+                  onSelectParent={onSelectParent}
+                  indent={flatBlock.depth}
+                  onAddComment={onAddComment}
+                  onResolveComment={onResolveComment}
+                  onReplyComment={onReplyComment}
+                  onDeleteComment={onDeleteComment}
+                  dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
+                />
+              </ContentCard>
+            )
+          }
+
+          return (
+            <BlockRow
+              block={flatBlock.block}
+              allBlocks={allBlocks}
+              pageName={pageName}
+              hasChildren={flatBlock.hasChildren}
+              isCollapsed={collapsedIds.has(flatBlock.block.id)}
+              onToggleCollapse={onToggleCollapse}
+              onUpdate={onUpdate}
+              onCreateBlock={onCreateBlock}
+              onDeleteBlock={onDeleteBlock}
+              onFocusBlock={onFocusBlock}
+              onMoveBlockUp={onMoveBlockUp}
+              onMoveBlockDown={onMoveBlockDown}
+              onUndo={onUndo}
+              onRedo={onRedo}
+              selected={selected}
+              onMultiSelect={onMultiSelect}
+              onSelectAll={onSelectAll}
+              onSelectParent={onSelectParent}
+              indent={flatBlock.depth}
+              onAddComment={onAddComment}
+              onResolveComment={onResolveComment}
+              onReplyComment={onReplyComment}
+              onDeleteComment={onDeleteComment}
+              dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
+            />
+          )
+        })()}
       </div>
     </div>
   )
@@ -687,7 +831,12 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
   }, [])
 
   const handleCreateBlock = useCallback(
-    async (afterBlockId: string, content: string, parentId: string | null) => {
+    async (
+      afterBlockId: string,
+      content: string,
+      parentId: string | null,
+      properties?: Record<string, unknown>,
+    ) => {
       // Create is not in the WASM history yet (no `Create` variant in
       // `OutlinerCommand`). The new block is appended to local state
       // optimistically and replaced with the server's response below.
@@ -715,6 +864,13 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
         collapsed: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
+        properties: properties
+          ? Object.entries(properties).map(([key, value]) => ({
+              key,
+              value: value as string | number | boolean | null,
+              type: 'string' as const,
+            }))
+          : undefined,
       }
 
       setBlocks(prev => {
@@ -731,6 +887,7 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
           parentId,
           // Pass precedingBlockId when inserting after a specific block
           ...(afterBlockId ? { precedingBlockId: afterBlockId } : {}),
+          properties,
         })
         realCreatedId = created.id
         // Replace temp ID with real block
@@ -751,6 +908,24 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
     },
     [blocks, pageName, onFocusBlock],
   )
+
+  // ── Reference / Documentation block creators ─────────────────────
+
+  const handleNewReferenceBlock = useCallback(() => {
+    const topLevelBlocks = blocks.filter(b => !b.parentId)
+    const lastBlock = topLevelBlocks.length > 0
+      ? topLevelBlocks.reduce((max, b) => (b.order > max.order ? b : max))
+      : null
+    handleCreateBlock(lastBlock?.id ?? '', 'Reference', null, { type: 'reference' })
+  }, [blocks, handleCreateBlock])
+
+  const handleNewDocumentacionBlock = useCallback(() => {
+    const topLevelBlocks = blocks.filter(b => !b.parentId)
+    const lastBlock = topLevelBlocks.length > 0
+      ? topLevelBlocks.reduce((max, b) => (b.order > max.order ? b : max))
+      : null
+    handleCreateBlock(lastBlock?.id ?? '', 'Documentación', null, { type: 'documentacion' })
+  }, [blocks, handleCreateBlock])
 
   // ── DnD sensors ──────────────────────────────────────────────
   const sensors = useSensors(
@@ -1295,7 +1470,12 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
 
       {/* Block list (virtualized) or empty state */}
       {blocks.length === 0 ? (
-        <EmptyState isJournal={isJournal} onNewBlock={handleNewBlockAtEnd} />
+        <EmptyState
+          isJournal={isJournal}
+          onNewBlock={handleNewBlockAtEnd}
+          onNewReferenceBlock={handleNewReferenceBlock}
+          onNewDocumentacionBlock={handleNewDocumentacionBlock}
+        />
       ) : (
         <div
           className="journal-shell-card"
@@ -1346,46 +1526,131 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
 
       {/* New block button at the bottom */}
       {blocks.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            marginTop: 'var(--space-3)',
-            padding: '10px 12px',
-            color: 'var(--color-text-muted)',
-            cursor: 'pointer',
-            borderRadius: 'var(--radius-md)',
-            border: '1px dashed var(--color-border)',
-            background: 'transparent',
-            fontSize: '13px',
-            fontWeight: 500,
-            transition: 'color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
-          }}
-          className="block-row"
-          onClick={handleNewBlockAtEnd}
-          role="button"
-          tabIndex={0}
-          aria-label="Add new block"
-          onKeyDown={e => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              handleNewBlockAtEnd()
-            }
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.color = 'var(--color-primary)'
-            e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.36)'
-            e.currentTarget.style.background = 'rgba(37, 99, 235, 0.04)'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.color = 'var(--color-text-muted)'
-            e.currentTarget.style.borderColor = 'var(--color-border)'
-            e.currentTarget.style.background = 'transparent'
-          }}
-        >
-          <Plus size={16} />
-          <span>Add a block</span>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              padding: '8px 14px',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              borderRadius: 'var(--radius-md)',
+              border: '1px dashed var(--color-border)',
+              background: 'transparent',
+              fontSize: '13px',
+              fontWeight: 500,
+              transition: 'color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
+            }}
+            className="block-row"
+            onClick={handleNewBlockAtEnd}
+            role="button"
+            tabIndex={0}
+            aria-label="Add new block"
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                handleNewBlockAtEnd()
+              }
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--color-primary)'
+              e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.36)'
+              e.currentTarget.style.background = 'rgba(37, 99, 235, 0.04)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--color-text-muted)'
+              e.currentTarget.style.borderColor = 'var(--color-border)'
+              e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            <Plus size={16} />
+            <span>Add a block</span>
+          </div>
+
+          {/* Quick-add reference */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              padding: '8px 14px',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              borderRadius: 'var(--radius-md)',
+              border: '1px dashed var(--color-border)',
+              background: 'transparent',
+              fontSize: '13px',
+              fontWeight: 500,
+              transition: 'color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
+            }}
+            className="block-row"
+            onClick={handleNewReferenceBlock}
+            role="button"
+            tabIndex={0}
+            aria-label="Add reference"
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                handleNewReferenceBlock()
+              }
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--color-primary)'
+              e.currentTarget.style.borderColor = 'rgba(37, 99, 235, 0.36)'
+              e.currentTarget.style.background = 'rgba(37, 99, 235, 0.04)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--color-text-muted)'
+              e.currentTarget.style.borderColor = 'var(--color-border)'
+              e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            <Link size={14} />
+            <span>Reference</span>
+          </div>
+
+          {/* Quick-add documentation */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--space-2)',
+              padding: '8px 14px',
+              color: 'var(--color-text-muted)',
+              cursor: 'pointer',
+              borderRadius: 'var(--radius-md)',
+              border: '1px dashed var(--color-border)',
+              background: 'transparent',
+              fontSize: '13px',
+              fontWeight: 500,
+              transition: 'color var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
+            }}
+            className="block-row"
+            onClick={handleNewDocumentacionBlock}
+            role="button"
+            tabIndex={0}
+            aria-label="Add documentation"
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                handleNewDocumentacionBlock()
+              }
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.color = 'var(--color-accent)'
+              e.currentTarget.style.borderColor = 'rgba(14, 122, 90, 0.36)'
+              e.currentTarget.style.background = 'rgba(14, 122, 90, 0.04)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.color = 'var(--color-text-muted)'
+              e.currentTarget.style.borderColor = 'var(--color-border)'
+              e.currentTarget.style.background = 'transparent'
+            }}
+          >
+            <FileText size={14} />
+            <span>Documentation</span>
+          </div>
         </div>
       )}
     </div>

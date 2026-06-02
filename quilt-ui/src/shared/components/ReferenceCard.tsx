@@ -26,6 +26,8 @@ interface ReferenceCardProps {
   href?: string
   icon?: ReactNode
   onOpen?: () => void
+  /** Contenido editable envuelto dentro de la card (tipicamente un BlockRow). */
+  children?: ReactNode
 }
 
 export function ReferenceCard({
@@ -34,6 +36,7 @@ export function ReferenceCard({
   href,
   icon,
   onOpen,
+  children,
 }: ReferenceCardProps) {
   const [hover, setHover] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -69,6 +72,7 @@ export function ReferenceCard({
 
   return (
     <div
+      data-testid="reference-card"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => {
         setHover(false)
@@ -156,6 +160,10 @@ export function ReferenceCard({
               </div>
             ))}
           </div>
+        )}
+
+        {children && (
+          <div style={{ marginTop: 'var(--space-3)' }}>{children}</div>
         )}
       </div>
 

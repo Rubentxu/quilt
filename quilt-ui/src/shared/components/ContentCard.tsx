@@ -27,6 +27,7 @@ export function ContentCard({
 
   return (
     <div
+      data-testid="content-card"
       style={{
         background: 'var(--color-surface)',
         border: '1px solid var(--color-border)',
