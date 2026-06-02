@@ -993,10 +993,10 @@ export function BlockRow({
       style={{
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 'var(--space-2)',
-        padding: 'var(--space-1) var(--space-2)',
-        paddingLeft: `calc(var(--space-2) + ${indent * 24}px)`,
-        borderRadius: 'var(--radius-sm)',
+        gap: '10px',
+        padding: '6px 10px',
+        paddingLeft: `calc(10px + ${indent * 24}px)`,
+        borderRadius: '10px',
         transition: 'background var(--motion-fast) var(--ease-standard), border-left var(--motion-fast) var(--ease-standard)',
         position: 'relative',
         background: selected
@@ -1038,7 +1038,7 @@ export function BlockRow({
         aria-label={hasChildren ? (isCollapsed ? 'Expand block' : 'Collapse block') : 'Bullet'}
         title={hasChildren ? (isCollapsed ? 'Expand block' : 'Collapse block') : undefined}
         style={{
-          marginTop: hasChildren ? '4px' : '6px',
+          marginTop: hasChildren ? '5px' : '7px',
           flexShrink: 0,
           background: 'none',
           border: 'none',
@@ -1067,6 +1067,7 @@ export function BlockRow({
               height: '8px',
               borderRadius: 'var(--radius-pill)',
               background: 'currentColor',
+              opacity: 0.65,
             }}
           />
         )}
@@ -1128,7 +1129,7 @@ export function BlockRow({
             minWidth: 0,
             fontSize: '16px',
             color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
-            lineHeight: 1.5,
+            lineHeight: 1.65,
             outline: 'none',
             minHeight: '1.5em',
             wordBreak: 'break-word',
@@ -1148,7 +1149,7 @@ export function BlockRow({
             minWidth: 0,
             fontSize: '16px',
             color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
-            lineHeight: 1.5,
+            lineHeight: 1.65,
             cursor: 'text',
             textDecoration: block.marker === 'Cancelled' ? 'line-through' : 'none',
             minHeight: '1.5em',

@@ -188,16 +188,23 @@ function renderSegment(
           style={{
             color: pageExists ? 'var(--color-link)' : 'var(--color-text-disabled)',
             cursor: 'pointer',
-            textDecoration: 'underline',
-            textDecorationStyle: pageExists ? 'solid' : 'dashed',
-            textDecorationColor: pageExists ? 'var(--color-link)' : 'var(--color-text-disabled)',
+            textDecoration: 'none',
             opacity: pageExists ? 1 : 0.6,
+            fontWeight: 500,
+            borderRadius: 'var(--radius-pill)',
+            padding: pageExists ? '2px 8px' : '0',
+            background: pageExists ? 'rgba(37, 99, 235, 0.06)' : 'transparent',
+            transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
           }}
           onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect()
             onHover?.({ type: 'page', target: pageName, anchorRect: rect })
+            if (pageExists) e.currentTarget.style.background = 'rgba(37, 99, 235, 0.10)'
           }}
-          onMouseLeave={() => onHover?.(null)}
+          onMouseLeave={(e) => {
+            onHover?.(null)
+            if (pageExists) e.currentTarget.style.background = 'rgba(37, 99, 235, 0.06)'
+          }}
         >
           {pageName}
         </a>
@@ -241,13 +248,12 @@ function renderSegment(
           onMouseLeave={() => onHover?.(null)}
           style={{
             display: 'inline-block',
-            padding: '2px 6px',
-            background: 'var(--color-accent-subtle)',
-            borderLeft: '2px solid var(--color-accent)',
-            borderRadius: '2px',
-            fontStyle: 'italic',
+            padding: '3px 8px',
+            background: 'var(--color-surface-subtle)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
             color: 'var(--color-text-secondary)',
-            fontSize: '0.9em',
+            fontSize: '12px',
             cursor: 'pointer',
             maxWidth: '300px',
             overflow: 'hidden',
@@ -255,6 +261,7 @@ function renderSegment(
             whiteSpace: 'nowrap',
             verticalAlign: 'middle',
             marginRight: '4px',
+            boxShadow: 'var(--shadow-sm)',
           }}
           title={`Block ref: ${blockId}`}
         >

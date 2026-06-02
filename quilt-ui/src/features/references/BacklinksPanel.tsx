@@ -100,7 +100,8 @@ export function BacklinksPanel({ pageName, isOpen }: BacklinksPanelProps) {
         background: 'var(--color-surface)',
         overflow: 'auto',
         flexShrink: 0,
-        padding: 'var(--space-4)',
+        padding: 'var(--space-5)',
+        boxShadow: 'var(--shadow-sm)',
       }}
     >
       {/* Header */}
@@ -264,16 +265,16 @@ export function BacklinksPanel({ pageName, isOpen }: BacklinksPanelProps) {
                 <div
                   onClick={() => toggleCollapse(sourcePage)}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 'var(--space-1)',
-                    padding: 'var(--space-2) var(--space-3)',
-                    cursor: 'pointer',
-                    background: 'var(--color-surface-subtle)',
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    color: 'var(--color-text-primary)',
-                    userSelect: 'none',
+                     display: 'flex',
+                     alignItems: 'center',
+                     gap: 'var(--space-2)',
+                     padding: 'var(--space-3) var(--space-4)',
+                     cursor: 'pointer',
+                     background: 'var(--color-surface-subtle)',
+                     fontSize: '13px',
+                     fontWeight: 600,
+                     color: 'var(--color-text-primary)',
+                     userSelect: 'none',
                   }}
                 >
                   {isCollapsed ? (
@@ -330,11 +331,11 @@ export function BacklinksPanel({ pageName, isOpen }: BacklinksPanelProps) {
                         })
                       }
                       style={{
-                        padding: 'var(--space-2) var(--space-4)',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        color: 'var(--color-text-secondary)',
-                        borderTop: '1px solid var(--color-border)',
+                         padding: 'var(--space-3) var(--space-4)',
+                         cursor: 'pointer',
+                         fontSize: '13px',
+                         color: 'var(--color-text-secondary)',
+                         borderTop: '1px solid var(--color-border)',
                         transition:
                           'background var(--motion-fast) var(--ease-standard)',
                       }}
