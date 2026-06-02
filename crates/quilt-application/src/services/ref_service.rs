@@ -170,7 +170,7 @@ impl RefService {
         &mut self,
         block_id: Uuid,
         content: &str,
-        page_resolver: Option<&dyn Fn(&str) -> Option<Uuid>>,
+        page_resolver: Option<&(dyn Fn(&str) -> Option<Uuid> + Sync)>,
     ) -> Result<(), DomainError> {
         // Parse content for references
         let parsed = parse_refs_from_content(content);
@@ -249,6 +249,23 @@ impl RefService {
             .await
     }
 
+    /// Create an explicit block-to-block link.
+    ///
+    /// This inserts a `block_ref` into the `refs` table and updates the
+    /// in-memory index. Unlike `on_block_saved`, this does not parse content
+    /// or replace existing refs — it adds one link atomically.
+    ///
+    /// If the link already exists, this is a no-op (idempotent).
+    #[instrument(skip(self))]
+    pub async fn create_link(&mut self, source_id: Uuid, target_id: Uuid) -> Result<(), DomainError> {
+        self.repo
+            .insert_ref(source_id, target_id, RefType::BlockRef)
+            .await?;
+        self.index
+            .add_ref(source_id, target_id, RefType::BlockRef);
+        Ok(())
+    }
+
     /// Get a reference to the in-memory index for inspection.
     pub fn index(&self) -> &RefIndex {
         &self.index
@@ -320,6 +337,24 @@ mod tests {
         async fn rebuild_index(&self) -> Result<Vec<RefRow>, DomainError> {
             let refs = self.refs.lock().unwrap();
             Ok(refs.clone())
+        }
+
+        async fn insert_ref(
+            &self,
+            source_id: Uuid,
+            target_id: Uuid,
+            ref_type: RefType,
+        ) -> Result<(), DomainError> {
+            let mut stored = self.refs.lock().unwrap();
+            // Avoid duplicates (same behavior as INSERT OR IGNORE)
+            if !stored.iter().any(|r| r.source_id == source_id && r.target_id == target_id && r.ref_type == ref_type) {
+                stored.push(RefRow {
+                    source_id,
+                    target_id,
+                    ref_type,
+                });
+            }
+            Ok(())
         }
 
         async fn get_unlinked_references(

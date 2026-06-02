@@ -450,7 +450,7 @@ impl<R: PageRepository> PageCommand<R> {
     #[instrument(skip(self))]
     pub async fn create_journal(&self, day: JournalDay) -> Result<Page, ApplicationError> {
         let page =
-            Page::new_journal(day, BlockFormat::Markdown).map_err(ApplicationError::Domain)?;
+            Page::new_journal(day, BlockFormat::Markdown, "%Y-%m-%d").map_err(ApplicationError::Domain)?;
 
         self.repository
             .insert(&page)

@@ -132,7 +132,7 @@ impl<PR: PageRepository + 'static, BR: BlockRepository + 'static> PageUseCases
 
         // Create new journal page
         let page =
-            Page::new_journal(day, BlockFormat::Markdown).map_err(ApplicationError::Domain)?;
+            Page::new_journal(day, BlockFormat::Markdown, "%Y-%m-%d").map_err(ApplicationError::Domain)?;
 
         self.page_repo
             .insert(&page)
