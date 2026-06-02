@@ -1,6 +1,6 @@
 import { useTabs } from '@shared/contexts/TabsContext'
 import { useNavigate } from '@tanstack/react-router'
-import { X, FileText, Calendar, Network, Hash, Settings as SettingsIcon } from 'lucide-react'
+import { X, FileText, Calendar, Network, Hash, Settings as SettingsIcon, Plus } from 'lucide-react'
 
 const TAB_ICONS: Record<string, React.ReactNode> = {
   page: <FileText size={14} />,
@@ -11,7 +11,7 @@ const TAB_ICONS: Record<string, React.ReactNode> = {
 }
 
 export function TabsBar() {
-  const { tabs, activeTabId, switchTab, closeTab } = useTabs()
+  const { tabs, activeTabId, switchTab, closeTab, openTab } = useTabs()
   const navigate = useNavigate()
 
   if (tabs.length === 0) return null
@@ -101,6 +101,43 @@ export function TabsBar() {
           </div>
         )
       })}
+
+      {/* New tab button — DESIGN.md §4.2: "Botón de nueva pestaña" */}
+      <button
+        onClick={() => {
+          const name = window.prompt('Page name:')
+          if (!name || !name.trim()) return
+          const trimmed = name.trim()
+          openTab({ name: trimmed, type: 'page', title: trimmed, params: {} })
+          navigate({ to: '/page/$name', params: { name: trimmed } })
+        }}
+        aria-label="Open new tab"
+        title="Open new tab (Ctrl+T)"
+        data-testid="new-tab-button"
+        style={{
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--color-text-muted)',
+          padding: '6px',
+          borderRadius: 'var(--radius-sm)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          marginLeft: 'var(--space-1)',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--color-surface)'
+          e.currentTarget.style.color = 'var(--color-text-primary)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = 'var(--color-text-muted)'
+        }}
+      >
+        <Plus size={14} aria-hidden="true" />
+      </button>
     </div>
   )
 }
