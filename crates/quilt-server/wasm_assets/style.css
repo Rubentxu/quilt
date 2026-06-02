@@ -1,0 +1,543 @@
+@import "tailwindcss";
+
+/*
+ * Quilt Theme — Logseq-inspired dark theme
+ * Uses Tailwind CSS 4 custom properties
+ */
+
+@theme {
+    --color-base: #002b36;
+    --color-surface: #073642;
+    --color-surface-hover: #0a4050;
+    --color-sidebar: #073642;
+    --color-border: #0a5060;
+    --color-text: #c9d1d9;
+    --color-text-muted: #8b949e;
+    --color-accent: #2aa198;
+    --color-accent-hover: #3bb8ae;
+    --color-warning: #e3a008;
+    --color-danger: #da3633;
+    --color-success: #3fb950;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+}
+
+::selection {
+    background-color: var(--color-accent);
+    color: var(--color-base);
+}
+
+:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+}
+
+[contenteditable] {
+    outline: none;
+}
+
+[contenteditable]:empty::before {
+    content: "Type something...";
+    color: var(--color-text-muted);
+    pointer-events: none;
+}
+
+.sidebar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+}
+
+/* ── Semantic decorations for inline content ── */
+
+/* Page references [[Page Name]] */
+.decoration-page-ref {
+    color: var(--color-accent);
+    cursor: pointer;
+    border-bottom: 1px dashed var(--color-accent);
+    padding: 0 1px;
+}
+
+.decoration-page-ref:hover {
+    background: var(--color-accent);
+    color: var(--color-base);
+    border-radius: 2px;
+}
+
+/* Block references ((uuid)) */
+.decoration-block-ref {
+    color: var(--color-warning);
+    cursor: pointer;
+    border-bottom: 1px dashed var(--color-warning);
+    padding: 0 1px;
+}
+
+.decoration-block-ref:hover {
+    background: var(--color-warning);
+    color: var(--color-base);
+    border-radius: 2px;
+}
+
+/* Tags #tagname */
+.decoration-tag {
+    color: var(--color-success);
+    padding: 0 2px;
+}
+
+/* Properties key:: value */
+.decoration-property {
+    color: var(--color-text-muted);
+    font-style: italic;
+}
+
+/* Search matches */
+.decoration-search {
+    background: rgba(227, 160, 8, 0.3);
+    border-radius: 2px;
+}
+
+/* Autocomplete active region (transient) */
+.decoration-autocomplete {
+    background: rgba(42, 161, 152, 0.2);
+    border-radius: 2px;
+}
+
+/* ── Markdown inline formatting ── */
+
+/* Bold **text** */
+.md-bold {
+    font-weight: 600;
+    color: inherit;
+}
+
+/* Bold+Italic ***text*** */
+.md-bold-italic {
+    font-weight: 600;
+    font-style: italic;
+    color: inherit;
+}
+
+/* Italic *text* */
+.md-italic {
+    font-style: italic;
+    color: inherit;
+}
+
+/* Inline code `code` */
+.md-code {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9em;
+    background: rgba(127, 127, 127, 0.15);
+    padding: 0.1em 0.3em;
+    border-radius: 3px;
+    color: var(--color-accent);
+}
+
+/* Links [text](url) */
+.md-link {
+    color: var(--color-accent);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    cursor: pointer;
+}
+
+.md-link:hover {
+    border-bottom-color: var(--color-accent);
+}
+
+/* Strikethrough ~~text~~ */
+.md-strike {
+    text-decoration: line-through;
+    opacity: 0.7;
+}
+
+/* Highlight ^^text^^ */
+.md-highlight {
+    background-color: rgba(251, 191, 36, 0.3);
+    padding: 0 0.1em;
+    border-radius: 2px;
+}
+
+/* Headers # ## ### ... */
+.md-h1 { font-size: 1.8em; font-weight: 700; line-height: 1.3; }
+.md-h2 { font-size: 1.5em; font-weight: 600; line-height: 1.3; }
+.md-h3 { font-size: 1.3em; font-weight: 600; line-height: 1.3; }
+.md-h4 { font-size: 1.15em; font-weight: 600; }
+.md-h5 { font-size: 1.0em; font-weight: 600; }
+.md-h6 { font-size: 0.9em; font-weight: 600; color: var(--text-muted); }
+
+/* ── Marker styling (TODO/DOING/DONE) ── */
+.marker-todo { color: #f59e0b; }           /* amber */
+.marker-doing { color: #3b82f6; }          /* blue */
+.marker-done {
+    color: #22c55e;                         /* green */
+    text-decoration: line-through;
+}
+.marker-later { color: #6b7280; }          /* gray */
+.marker-now { color: #ef4444; }            /* red */
+
+/* ── CodeMirror 6 cursor & selection (dark theme) ── */
+
+/* Cursor — visible on dark background */
+.cm-cursor {
+    border-left-color: var(--color-accent, #2aa198) !important;
+    border-left-width: 2px !important;
+    border-left-style: solid !important;
+}
+
+/* Selection within CM6 editor */
+.cm-editor .cm-selectionBackground,
+.cm-editor.cm-focused .cm-selectionBackground {
+    background-color: rgba(42, 161, 152, 0.25) !important;
+}
+
+/* Focused editor outline — subtle */
+.cm-editor.cm-focused {
+    outline: none !important;
+}
+
+/* ── CM6 editor: constrain width to match display mode ── */
+.cm-editor .cm-content {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}
+
+/* Constrain the editor container */
+.cm6-editor-container {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Editor should not overflow its container */
+.cm-editor {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* ── Block selection indicator (keyboard-first navigation) ── */
+
+/* Selected block: blue/teal left border */
+.block-selected {
+    border-left: 3px solid var(--color-accent);
+    padding-left: calc(0.25rem - 3px); /* compensate for border width */
+    background: rgba(42, 161, 152, 0.05);
+    border-radius: 0 4px 4px 0;
+}
+
+.block-editing {
+    border-left: 3px solid var(--color-accent);
+    padding-left: calc(0.25rem - 3px);
+    background: rgba(42, 161, 152, 0.08);
+    border-radius: 0 4px 4px 0;
+}
+
+/* ── Logseq-style bullet button ── */
+
+.block-bullet-btn {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+    cursor: pointer;
+    user-select: none;
+    border: none;
+    background: transparent;
+    border-radius: 4px;
+    transition: background-color 0.1s ease;
+    padding: 0;
+}
+
+.block-bullet-btn:hover {
+    background: rgba(127, 127, 127, 0.12);
+}
+
+/* The actual circle / triangle drawn via CSS */
+.bullet-inner {
+    display: block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--color-text-muted, #999);
+    transition: background-color 0.12s ease, transform 0.12s ease;
+}
+
+/* Default (no children): small circle — Logseq style */
+.block-bullet-btn .bullet-inner {
+    border-radius: 50%;
+}
+
+/* Has children, expanded: triangle pointing down */
+.block-bullet-expanded .bullet-inner {
+    border-radius: 0;
+    width: 0;
+    height: 0;
+    background: transparent;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--color-text-muted, #999);
+}
+
+/* Has children, collapsed: filled triangle pointing right */
+.block-bullet-collapsed .bullet-inner {
+    border-radius: 0;
+    width: 0;
+    height: 0;
+    background: transparent;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 6px solid var(--color-text-muted, #999);
+}
+
+/* Selected state */
+.block-bullet-active .bullet-inner {
+    background: var(--color-accent, #2aa198);
+}
+.block-bullet-expanded.block-bullet-active .bullet-inner {
+    border-top-color: var(--color-accent, #2aa198);
+}
+.block-bullet-collapsed.block-bullet-active .bullet-inner {
+    border-left-color: var(--color-accent, #2aa198);
+}
+
+/* Editing state — solid accent circle/triangle */
+.block-bullet-editing .bullet-inner {
+    background: var(--color-accent, #2aa198);
+    transform: scale(1.2);
+}
+.block-bullet-expanded.block-bullet-editing .bullet-inner {
+    border-top-color: var(--color-accent, #2aa198);
+}
+.block-bullet-collapsed.block-bullet-editing .bullet-inner {
+    border-left-color: var(--color-accent, #2aa198);
+}
+
+/* Outliner container must be focusable for keyboard events */
+.outliner:focus {
+    outline: none;
+}
+
+/* ── Property visuals for non-editing view ── */
+
+/* Property key text — muted italic for all properties */
+.prop-key {
+    color: var(--color-text-muted);
+    font-style: italic;
+    font-size: 0.875em;
+}
+
+/* Generic property value */
+.prop-value {
+    color: var(--color-text);
+}
+
+/* Status badges — inline-flex with circle + text */
+.prop-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0 6px 0 2px;
+    transition: background 0.15s;
+}
+
+.prop-status:hover {
+    background: var(--color-surface-hover);
+}
+
+.prop-status-circle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.prop-status-todo {
+    color: var(--color-text-muted);
+}
+
+.prop-status-doing {
+    color: var(--color-accent);
+}
+
+.prop-status-done {
+    color: var(--color-success);
+}
+
+.prop-status-invalid {
+    color: var(--color-danger);
+    border-bottom: 2px solid var(--color-danger);
+}
+
+/* Priority pills — small colored badge with letter */
+.prop-priority {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 0 6px;
+    font-size: 0.75em;
+    font-weight: 700;
+    line-height: 1.4;
+    min-width: 18px;
+    text-align: center;
+    transition: opacity 0.15s;
+}
+
+.prop-priority:hover {
+    opacity: 0.8;
+}
+
+.prop-priority-A {
+    background: var(--color-danger);
+    color: white;
+}
+
+.prop-priority-B {
+    background: var(--color-warning);
+    color: var(--color-base);
+}
+
+.prop-priority-C {
+    background: #58a6ff;
+    color: white;
+}
+
+.prop-priority-invalid {
+    background: transparent;
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
+}
+
+/* Date properties — calendar/clock icon + text */
+.prop-date {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    cursor: default;
+}
+
+.prop-date-icon {
+    font-size: 0.85em;
+    line-height: 1;
+}
+
+.prop-date-text {
+    color: var(--color-text-muted);
+    font-size: 0.875em;
+}
+
+.prop-date-scheduled .prop-date-text {
+    color: var(--color-accent);
+}
+
+.prop-date-deadline .prop-date-text {
+    color: var(--color-warning);
+}
+
+/* Tag pills — small rounded badges */
+.prop-tags {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.prop-tag-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+    font-size: 0.75em;
+    line-height: 1.5;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.prop-tag-blue {
+    background: rgba(88, 166, 255, 0.2);
+    color: #58a6ff;
+}
+
+.prop-tag-green {
+    background: rgba(63, 185, 80, 0.2);
+    color: var(--color-success);
+}
+
+.prop-tag-orange {
+    background: rgba(227, 160, 8, 0.2);
+    color: var(--color-warning);
+}
+
+.prop-tag-purple {
+    background: rgba(191, 132, 255, 0.2);
+    color: #bf84ff;
+}
+
+.prop-tag-teal {
+    background: rgba(42, 161, 152, 0.2);
+    color: var(--color-accent);
+}
+
+/* ── Drag and drop visual indicators ── */
+
+/* The currently dragged block should appear faded */
+.block-dragging {
+    opacity: 0.4;
+}
+
+/* Drop indicator: before (sibling above) */
+.drop-before {
+    border-top: 2px solid var(--color-accent) !important;
+    border-radius: 0 !important;
+}
+
+/* Drop indicator: after (sibling below) */
+.drop-after {
+    border-bottom: 2px solid var(--color-accent) !important;
+    border-radius: 0 !important;
+}
+
+/* Drop indicator: child (nest under this block) */
+.drop-child {
+    border-left: 2px solid var(--color-accent) !important;
+    border-radius: 0 !important;
+    background: rgba(42, 161, 152, 0.08) !important;
+}
+
+/* Drag handle cursor */
+.block-bullet[draggable="true"] {
+    cursor: grab;
+}
+
+.block-bullet[draggable="true"]:active {
+    cursor: grabbing;
+}

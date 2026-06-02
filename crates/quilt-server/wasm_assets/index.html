@@ -1,17 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quilt — AI-first Knowledge Graph</title>
-    <link rel="stylesheet" href="/style-7d0ad761a8313d5d.css" integrity="sha384-tZ88fqB0D1YPvn45+qZnCCN5cQBPISRpl7hyyJUi03PcF1gawfF5zb6ZHoEtRwmS"/>
-<link rel="modulepreload" href="/quilt-ui-9a8f7d96e7d8b09b.js" crossorigin="anonymous" integrity="sha384-b0OmlhZBxXveO9hPxLzgTmPYm8LulOkUmdT11eNaQ39HxU/FCIJiHU4cywmY8ZAc"><link rel="preload" href="/quilt-ui-9a8f7d96e7d8b09b_bg.wasm" crossorigin="anonymous" integrity="sha384-uOj2zILtwbQu9JjbvEKt2vn5NWvI2az/2wN72HMoYXhlqdpq49qKsC+y78nXT2uF" as="fetch" type="application/wasm"></head>
-<body>
+    <title>Quilt</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="quilt-cm6.js"></script>
+<link rel="modulepreload" href="/quilt-ui-d0d2ec36c11ffe27.js" crossorigin="anonymous"><link rel="preload" href="/quilt-ui-d0d2ec36c11ffe27_bg.wasm" crossorigin="anonymous" as="fetch" type="application/wasm"></head>
+<body class="bg-base text-text">
     <div id="app"></div>
 
 <script type="module">
-import init, * as bindings from '/quilt-ui-9a8f7d96e7d8b09b.js';
-const wasm = await init({ module_or_path: '/quilt-ui-9a8f7d96e7d8b09b_bg.wasm' });
+import init, * as bindings from '/quilt-ui-d0d2ec36c11ffe27.js';
+const wasm = await init({ module_or_path: '/quilt-ui-d0d2ec36c11ffe27_bg.wasm' });
 
 
 window.wasmBindings = bindings;
