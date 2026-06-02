@@ -17,6 +17,11 @@ ROOT := justfile_directory()
 SERVER_PORT := "3737"
 UI_PORT := "8090"
 UI_E2E_PORT := "8090"
+REACT_PORT := "1420"
+
+# React frontend paths
+REACT_DIR := ROOT / "quilt-ui"
+WASM_PKG_DIR := REACT_DIR / "src" / "core" / "wasm-bridge" / "pkg"
 
 # Working data directory (overridable via QUILT_GRAPH_DIR)
 QUILT_DIR := "$HOME/.quilt-dev"
@@ -33,7 +38,9 @@ default:
     @echo ""
     @echo "=== QUICK START ==="
     @echo "  just setup               Install ALL deps (one-time)"
-    @echo "  just dev                 Start backend + frontend in parallel"
+    @echo "  just dev                 Rebuild ALL + start servers (React + WASM watch)"
+    @echo "  just dev-fast            Start servers without rebuilding (faster)"
+    @echo "  just dev-react           Rebuild ALL + start servers (React + WASM watch)"
     @echo ""
     @echo "=== BACKEND (quilt-server) ==="
     @echo "  just server-build        Build the server"
@@ -43,9 +50,13 @@ default:
     @echo "  just server-logs         Show server logs"
     @echo "  just server-status       Check if server is running"
     @echo ""
-    @echo "=== FRONTEND (quilt-ui) ==="
-    @echo "  just ui-deps             Install UI npm deps"
-    @echo "  just ui-css              Build Tailwind CSS"
+    @echo "=== FRONTEND (React + Vite) ==="
+    @echo "  just react-deps          Install React dependencies"
+    @echo "  just react-wasm          Build WASM package once"
+    @echo "  just react-wasm-watch    Watch Rust changes, rebuild WASM"
+    @echo "  just react-dev           Vite only (assumes backend running)"
+    @echo "  just dev-react           Build + start all (backend + WASM watch + Vite)"
+    @echo "  just react-build         Production build"
     @echo "  just ui-cm6              Build CodeMirror 6 bundle"
     @echo "  just ui-dev              Run UI dev server (hot reload)"
     @echo "  just ui-build            Build UI for production"
@@ -69,6 +80,15 @@ default:
     @echo "  just check               Check compilation (fast)"
     @echo "  just clippy             Run clippy lints"
     @echo "  just ci                  Full CI pipeline (fmt + clippy + test)"
+    @echo "  just coverage            Generate HTML + LCOV coverage report"
+    @echo "  just coverage-ci         Generate LCOV + summary (CI mode)"
+    @echo "  just coverage-clean      Remove coverage artefacts"
+    @echo ""
+    @echo "=== HOT RELOAD NOTES ==="
+    @echo "  Rust changes:   Auto-detected by Trunk (rebuilds WASM + CSS + CM6)"
+    @echo "  CSS changes:    just dev starts a CSS watcher (or run: just ui-css)"
+    @echo "  CM6 JS changes: Run 'just ui-cm6' manually (NOT watched by Trunk)"
+    @echo "  Full rebuild:   just dev  (rebuilds everything from scratch)"
     @echo ""
     @echo "=== FULL LIST ==="
     @echo "  just --list             Show all recipes"
@@ -78,7 +98,7 @@ default:
 # =============================================================================
 
 # Install ALL dependencies (one-time setup)
-setup: server-build ui-deps
+setup: server-build react-deps
     @echo ""
     @echo "✅ Setup complete!"
     @echo ""
@@ -88,39 +108,28 @@ setup: server-build ui-deps
     @echo "    Health check:         http://localhost:{{ SERVER_PORT }}/health"
     @echo "    API:                  http://localhost:{{ SERVER_PORT }}/api/v1"
     @echo ""
-    @echo "  Terminal 2 (frontend): http://localhost:{{ UI_PORT }}"
-    @echo "    Journal (today):      http://localhost:{{ UI_PORT }}/journal"
-    @echo "    Pages:                http://localhost:{{ UI_PORT }}/pages"
+    @echo "  Terminal 2 (frontend): http://localhost:{{ REACT_PORT }}"
 
-# Start both backend and frontend for development
-# Kills any existing processes, rebuilds everything, then starts fresh
-dev: stop-all
+# Start backend without rebuilding frontend assets (faster)
+dev-fast: stop-all
     @echo ""
-    @echo "=== Building everything ==="
+    @echo "═══ Starting servers (fast mode) ═══"
     @echo ""
-    @echo "Building backend..."
+    @echo "▶ Backend..."
     cargo build -p quilt-server
-    @echo ""
-    @echo "Building UI assets (CSS + CM6)..."
-    cd {{ ROOT }}/crates/quilt-ui && npm install
-    cd {{ ROOT }}/crates/quilt-ui/cm6 && npm install && node bundle.mjs
-    cd {{ ROOT }}/crates/quilt-ui && npx postcss style.css -o dist/style.css
-    @echo ""
-    @echo "Starting backend on :{{ SERVER_PORT }}..."
     @mkdir -p {{ QUILT_DIR }}
     @QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
         RUST_LOG=quilt_server=info \
         {{ SERVER_BINARY }} > {{ QUILT_DIR }}/server.log 2>&1 &
     @sleep 2
-    @if curl -sf http://localhost:{{ SERVER_PORT }}/health > /dev/null 2>&1; then \
-        echo "  ✓ Backend running — http://localhost:{{ SERVER_PORT }}"; \
-    else \
-        echo "  ✗ Backend failed to start. Check logs: tail -f {{ QUILT_DIR }}/server.log"; \
-    fi
+    @curl -sf http://localhost:{{ SERVER_PORT }}/health > /dev/null 2>&1 && echo "  ✓ Backend — http://localhost:{{ SERVER_PORT }}" || (echo "  ✗ Backend failed" && exit 1)
     @echo ""
-    @echo "Starting frontend on :{{ UI_PORT }}..."
-    @echo ""
-    cd {{ ROOT }}/crates/quilt-ui && trunk serve --port {{ UI_PORT }} --open
+    @echo "  ▶ Backend running. Start frontend with: just react-dev"
+    @echo "  ▶ Or use: just dev-react (full rebuild + start)"
+
+# Start both backend and frontend for development
+# Kills any existing processes, rebuilds everything, then starts fresh
+dev: dev-react
 
 # ---------------------------------------------------------------------------
 # Backend (quilt-server)
@@ -141,7 +150,7 @@ server-dev:
 # Run server in background (for use with ui-dev)
 # Kills any existing process on the port first
 server-start:
-    @-kill $$(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null
+    @-kill $(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null
     @echo "Starting server on :{{ SERVER_PORT }}..."
     @mkdir -p {{ QUILT_DIR }}
     @QUILT_GRAPH_DIR={{ QUILT_DIR }} QUILT_CORS=true \
@@ -156,13 +165,13 @@ server-start:
 
 # Stop background server
 server-stop:
-    @-kill $$(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null && echo "  Server stopped" || echo "  Server not running"
+    @-kill $(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null && echo "  Server stopped" || echo "  Server not running"
 
 # Check if server is running
 server-status:
     @if curl -sf http://localhost:{{ SERVER_PORT }}/health > /dev/null 2>&1; then \
         echo "✓ Server running — http://localhost:{{ SERVER_PORT }}"; \
-        echo "  Health: $$(curl -s http://localhost:{{ SERVER_PORT }}/health)"; \
+        echo "  Health: $(curl -s http://localhost:{{ SERVER_PORT }}/health)"; \
     else \
         echo "✗ Server not running"; \
     fi
@@ -176,40 +185,46 @@ server-logs-follow:
     tail -f {{ QUILT_DIR }}/server.log 2>/dev/null || echo "No server logs found"
 
 # ---------------------------------------------------------------------------
-# Frontend (quilt-ui)
+# React Frontend (quilt-ui)
 # ---------------------------------------------------------------------------
 
-# Install UI dependencies (npm + CM6 bundle)
-ui-deps:
-    cd {{ ROOT }}/crates/quilt-ui && npm install
-    cd {{ ROOT }}/crates/quilt-ui/cm6 && npm install
+# Install React dependencies
+react-deps:
+    cd {{ REACT_DIR }} && npm install
 
-# Build Tailwind CSS (via PostCSS)
-ui-css:
-    cd {{ ROOT }}/crates/quilt-ui && npx postcss style.css -o dist/style.css
+# Build quilt-core WASM package for React
+react-wasm:
+    wasm-pack build {{ ROOT }}/crates/quilt-core --target web --out-dir {{ WASM_PKG_DIR }} --dev
 
-# Build CodeMirror 6 editor bundle
-ui-cm6:
-    cd {{ ROOT }}/crates/quilt-ui/cm6 && npm install && node bundle.mjs
+# Build quilt-core WASM package for production
+react-wasm-release:
+    wasm-pack build {{ ROOT }}/crates/quilt-core --target web --out-dir {{ WASM_PKG_DIR }} --release
 
-# Watch Tailwind CSS (rebuild on style.css changes)
-ui-css-watch:
-    cd {{ ROOT }}/crates/quilt-ui && npx postcss style.css -o dist/style.css --watch
+# Watch Rust changes and rebuild WASM automatically (runs in foreground)
+react-wasm-watch:
+    @echo "👀 Watching quilt-core/ for WASM rebuilds..."
+    cargo watch \
+        --watch crates/quilt-core/src \
+        --watch crates/quilt-core/Cargo.toml \
+        --shell "wasm-pack build crates/quilt-core --target web --out-dir '{{ WASM_PKG_DIR }}' --dev && echo '✅ WASM rebuilt' || echo '❌ Build failed'"
 
-# Build all UI assets (CSS + CM6 bundle)
-ui-assets: ui-css ui-cm6
+# Run React dev server only (assumes backend + WASM already built)
+react-dev:
+    cd {{ REACT_DIR }} && npx vite --port {{ REACT_PORT }}
 
-# Run UI dev server (hot reload, requires backend running)
-ui-dev: ui-assets
-    cd {{ ROOT }}/crates/quilt-ui && trunk serve --port {{ UI_PORT }} --open
+# Full React development environment:
+# 1. Builds backend server
+# 2. Builds WASM package
+# 3. Starts backend (background)
+# 4. Starts WASM watcher (background)
+# 5. Starts Vite dev server (foreground)
+# Ctrl+C stops everything cleanly.
+dev-react: stop-all
+    {{ ROOT }}/scripts/dev-react.sh
 
-# Build UI for production deployment
-ui-build: ui-assets
-    cd {{ ROOT }}/crates/quilt-ui && trunk build
-
-# Check UI compilation (WASM target, fast)
-ui-check:
-    cargo build -p quilt-ui --target wasm32-unknown-unknown
+# Build React for production
+react-build: react-wasm-release
+    cd {{ REACT_DIR }} && npx tsc -b && npx vite build
 
 # ---------------------------------------------------------------------------
 # Testing
@@ -284,6 +299,24 @@ ci:
     cargo fmt --check
     cargo clippy
     cargo test
+
+# ---------------------------------------------------------------------------
+# Coverage (cargo-llvm-cov)
+# ---------------------------------------------------------------------------
+
+# Generate the full coverage report (HTML + LCOV + text + summary)
+coverage:
+    bash scripts/coverage.sh
+
+# Generate only the artefacts CI needs (LCOV + summary)
+coverage-ci:
+    cargo llvm-cov --workspace --lcov --output-path coverage/lcov.info --ignore-run-fail
+    cargo llvm-cov --workspace --summary-only --ignore-run-fail
+
+# Clean coverage artefacts
+coverage-clean:
+    rm -rf coverage coverage.txt
+    @echo "✓ Coverage artefacts removed"
 
 # ---------------------------------------------------------------------------
 # Container (Podman)
@@ -361,10 +394,10 @@ quadlet-remove:
 
 # Open the Quilt Studio UI in browser
 studio:
-    @echo "Opening Quilt at http://localhost:{{ UI_PORT }}"
-    @which xdg-open > /dev/null && xdg-open http://localhost:{{ UI_PORT }} || \
-    which open > /dev/null && open http://localhost:{{ UI_PORT }} || \
-    echo "Open http://localhost:{{ UI_PORT }} manually"
+    @echo "Opening Quilt at http://localhost:{{ REACT_PORT }}"
+    @which xdg-open > /dev/null && xdg-open http://localhost:{{ REACT_PORT }} || \
+    which open > /dev/null && open http://localhost:{{ REACT_PORT }} || \
+    echo "Open http://localhost:{{ REACT_PORT }} manually"
 
 # Test API directly via curl
 api-test:
@@ -377,24 +410,23 @@ api-test:
 # Clean all build artifacts
 clean:
     cargo clean
-    rm -rf {{ ROOT }}/crates/quilt-ui/dist
-    rm -rf {{ ROOT }}/crates/quilt-ui/cm6/dist
     @echo "✓ Cleaned"
 
-# Stop ALL dev processes (server + trunk)
+# Stop ALL dev processes
 stop-all:
     @echo "Stopping all dev servers..."
-    @-kill $$(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null && echo "  ✓ Backend stopped" || echo "  Backend not running"
-    @-pkill -f "trunk serve" 2>/dev/null && echo "  ✓ Trunk stopped" || echo "  Trunk not running"
+    @-kill $(lsof -ti:{{ SERVER_PORT }}) 2>/dev/null && echo "  ✓ Backend stopped" || echo "  Backend not running"
     @-pkill -f "quilt-server" 2>/dev/null && echo "  ✓ Server process stopped" || echo "  Server process not running"
+    @-kill $(lsof -ti:{{ REACT_PORT }}) 2>/dev/null && echo "  ✓ Vite stopped" || echo "  Vite not running"
+    @-pkill -f "cargo watch.*quilt-core" 2>/dev/null && echo "  ✓ WASM watcher stopped" || echo "  WASM watcher not running"
+    @-pkill -f "cargo-watch" 2>/dev/null
     @echo "✓ All dev servers stopped"
 
 # Show watchers for development
-dev-watch: ui-css ui-cm6
+dev-watch:
     @echo "Starting watch mode..."
     @echo "  Backend: cargo watch -x 'build -p quilt-server'"
-    @echo "  Frontend: cd crates/quilt-ui && trunk watch --port {{ UI_PORT }}"
-    cd {{ ROOT }}/crates/quilt-ui && trunk watch --port {{ UI_PORT }}
+    @echo "  Frontend: use: just react-wasm-watch + just react-dev"
 
 # Show development status
 dev-status:
@@ -402,20 +434,128 @@ dev-status:
     @echo ""
     @echo "Backend (port {{ SERVER_PORT }}):"
     @-curl -sf http://localhost:{{ SERVER_PORT }}/health > /dev/null && \
-        echo "  ✓ Running — $$(curl -s http://localhost:{{ SERVER_PORT }}/health)" || \
+        echo "  ✓ Running — $(curl -s http://localhost:{{ SERVER_PORT }}/health)" || \
         echo "  ✗ Not running"
     @echo ""
-    @echo "Frontend (port {{ UI_PORT }}):"
-    @-curl -sf http://localhost:{{ UI_PORT }} > /dev/null && \
+    @echo "Frontend (port {{ REACT_PORT }}):"
+    @-curl -sf http://localhost:{{ REACT_PORT }} > /dev/null && \
         echo "  ✓ Running" || \
         echo "  ✗ Not running"
     @echo ""
     @echo "Processes:"
-    @-ps aux | grep -E "(quilt-server|trunk)" | grep -v grep || echo "  No processes"
+    @-ps aux | grep -E "(quilt-server|vite)" | grep -v grep || echo "  No processes"
     @echo ""
     @echo "Ports:"
-    @-ss -tlnp | grep -E "{{ SERVER_PORT }}|{{ UI_PORT }}" || echo "  No ports in use"
+    @-ss -tlnp | grep -E "{{ SERVER_PORT }}|{{ REACT_PORT }}" || echo "  No ports in use"
 
 # Show all recipes (alias)
 help:
     @just --list
+
+# =============================================================================
+# Containerized Testing (Podman)
+# =============================================================================
+
+# Build the test container image (all test layers: Rust + Vitest + Playwright)
+test-container-build:
+    podman build -t quilt:test -f Containerfile.test .
+    @echo "✓ Test container built: quilt:test"
+
+# Build the production container image
+container-build:
+    podman build -t quilt:latest -f Containerfile .
+    @echo "✓ Production container built: quilt:latest"
+
+# Run Rust unit + integration tests inside container
+test-container-rust:
+    podman run --rm -v .:/src:Z quilt:test cargo test
+
+# Run Rust tests for a specific crate inside container
+test-container-crate crate:
+    podman run --rm -v .:/src:Z quilt:test cargo test -p {{ crate }}
+
+# Run frontend component tests (vitest) inside container
+test-container-vitest:
+    podman run --rm -v .:/src:Z -w /src/quilt-ui quilt:test npx vitest run
+
+# Run E2E Playwright tests inside container
+test-container-e2e:
+    podman run --rm -v .:/src:Z --network host quilt:test npx playwright test
+
+# Run E2E smoke tests inside container
+test-container-e2e-smoke:
+    podman run --rm -v .:/src:Z --network host quilt:test npx playwright test --grep @smoke
+
+# Run ALL tests inside container (Rust + Vitest + E2E)
+test-container-all:
+    podman run --rm -v .:/src:Z --network host quilt:test bash -c \
+        "cargo test && cd quilt-ui && npx vitest run && cd .. && npx playwright test --grep @smoke"
+    @echo "✓ All containerized tests passed"
+
+# Open an interactive shell in the test container
+test-container-shell:
+    podman run --rm -it -v .:/src:Z quilt:test bash
+
+# Run the full test suite without building the container first
+test-container-quick:
+    podman run --rm -v .:/src:Z --network host quilt:test cargo test
+
+# =============================================================================
+# Quadlet Management
+# =============================================================================
+
+QUADLET_DIR := "{{ env_var('HOME') }}/.config/containers/systemd"
+
+# Install quadlet for local test execution (auto-starts on login if enabled)
+quadlet-install:
+    @mkdir -p {{ QUADLET_DIR }}
+    cp quadlets/quilt-test.container {{ QUADLET_DIR }}/
+    systemctl --user daemon-reload
+    @echo "✓ Quadlet installed"
+    @echo "  Enable auto-start:  systemctl --user enable --now quilt-test"
+    @echo "  Run once:           systemctl --user start quilt-test"
+    @echo "  Check status:       systemctl --user status quilt-test"
+    @echo "  View logs:          journalctl --user -u quilt-test -f"
+
+# Install production quadlet
+quadlet-install-prod:
+    @mkdir -p {{ QUADLET_DIR }}
+    @echo "[Container]" > {{ QUADLET_DIR }}/quilt.container
+    @echo "Image=quilt:latest" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "PublishPort=3737:3737" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "Volume=quilt-data:/home/appuser/.quilt-data" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "Environment=RUST_LOG=info" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "HealthInterval=30s" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "AutoUpdate=registry" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "[Service]" >> {{ QUADLET_DIR }}/quilt.container
+    @echo "Restart=always" >> {{ QUADLET_DIR }}/quilt.container
+    systemctl --user daemon-reload
+    @echo "✓ Production quadlet installed"
+
+# Remove all quadlets
+quadlet-remove:
+    -rm -f {{ QUADLET_DIR }}/quilt.container {{ QUADLET_DIR }}/quilt-test.container
+    -systemctl --user stop quilt quilt-test 2>/dev/null || true
+    systemctl --user daemon-reload
+    @echo "✓ Quadlets removed"
+
+# Show quadlet status
+quadlet-status:
+    @echo "=== Quadlet Containers ==="
+    @-systemctl --user status quilt-test --no-pager 2>/dev/null || echo "  quilt-test: not running"
+    @echo ""
+    @-systemctl --user status quilt --no-pager 2>/dev/null || echo "  quilt: not running"
+    @echo ""
+    @echo "=== Installed Quadlets ==="
+    @-ls {{ QUADLET_DIR }}/quilt*.container 2>/dev/null || echo "  None installed"
+
+# Run tests via quadlet (one-shot, container auto-removes)
+quadlet-test:
+    systemctl --user start quilt-test
+    @echo "✓ Test started. Check: systemctl --user status quilt-test"
+    @echo "  Logs: journalctl --user -u quilt-test -f"
+
+# Build + install + run tests via quadlet
+quadlet-test-full: container-build test-container-build quadlet-install quadlet-test
+    @echo "✓ Full quadlet test pipeline started"

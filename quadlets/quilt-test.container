@@ -1,0 +1,18 @@
+# =============================================================================
+# Quadlet for Quilt test runner
+# Install: just quadlet-install
+# Enable:  systemctl --user enable --now quilt-test
+# =============================================================================
+
+[Container]
+Image=quilt:test
+ContainerName=quilt-test
+Volume=./:/src:Z
+WorkingDir=/src
+Network=host
+# Run all tests on start
+Exec=cargo test && cd quilt-ui && npx vitest run
+
+[Service]
+Restart=no
+# Quadlet auto-removes container after exit

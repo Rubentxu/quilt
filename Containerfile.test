@@ -1,0 +1,52 @@
+# =============================================================================
+# Quilt — Test-only container image
+# Build: podman build -t quilt:test -f Containerfile.test .
+# Run:   podman run --rm quilt:test just test-all
+# =============================================================================
+
+FROM docker.io/library/rust:1.89-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    pkg-config libssl-dev libsqlite3-dev \
+    nodejs npm curl \
+    libnss3 libnspr4 libatk-bridge2.0-0 libdrm2 libxkbcommon0 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+    libgbm1 libpango-1.0-0 libcairo2 libasound2t64 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sSL https://github.com/casey/just/releases/download/1.42.0/just-1.42.0-x86_64-unknown-linux-musl.tar.gz \
+    | tar xz -C /usr/local/bin just
+
+WORKDIR /src
+
+# Cache deps
+COPY Cargo.toml Cargo.lock ./
+COPY crates/quilt-domain/Cargo.toml crates/quilt-domain/
+COPY crates/quilt-application/Cargo.toml crates/quilt-application/
+COPY crates/quilt-infrastructure/Cargo.toml crates/quilt-infrastructure/
+COPY crates/quilt-mcp/Cargo.toml crates/quilt-mcp/
+COPY crates/quilt-server/Cargo.toml crates/quilt-server/
+COPY crates/quilt-platform/Cargo.toml crates/quilt-platform/
+COPY crates/quilt-core/Cargo.toml crates/quilt-core/
+COPY crates/quilt-query/Cargo.toml crates/quilt-query/
+COPY crates/quilt-search/Cargo.toml crates/quilt-search/
+COPY crates/quilt-analysis/Cargo.toml crates/quilt-analysis/
+COPY crates/quilt-test-helpers/Cargo.toml crates/quilt-test-helpers/
+COPY crates/quilt-bin/Cargo.toml crates/quilt-bin/
+
+RUN for crate in quilt-domain quilt-application quilt-infrastructure quilt-mcp \
+    quilt-server quilt-platform quilt-core quilt-query quilt-search \
+    quilt-analysis quilt-test-helpers quilt-bin; do \
+    mkdir -p crates/$crate/src && echo 'fn main() {}' > crates/$crate/src/lib.rs; \
+    done \
+    && cargo build --tests 2>/dev/null || true \
+    && rm -rf crates/*/src
+
+COPY package.json package-lock.json playwright.config.ts justfile ./
+COPY quilt-ui/package.json quilt-ui/package-lock.json quilt-ui/
+RUN cd quilt-ui && npm ci && cd .. && npm ci
+RUN npx playwright install chromium --with-deps
+
+COPY . .
+
+CMD ["bash", "-c", "echo 'Quilt test container ready'; echo '  just test-all      — All tests'; echo '  just test-rust     — Rust tests'; echo '  just test-vitest   — Frontend tests'; echo '  just test-e2e      — E2E tests'"]
