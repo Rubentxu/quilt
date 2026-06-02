@@ -1,10 +1,11 @@
 import { lazy, Suspense, useState, useEffect, useRef } from 'react'
 import { Outlet, useLocation, Link, useNavigate } from '@tanstack/react-router'
 import { Toaster } from 'react-hot-toast'
-import { Menu, Sun, Moon, Settings, Link2, X, PanelRight } from 'lucide-react'
+import { Menu, Sun, Moon, Settings, Link2, X, PanelRight, Plus } from 'lucide-react'
 import { Sidebar } from '@features/sidebar/Sidebar'
 import { BacklinksPanel } from '@features/references/BacklinksPanel'
 import { TabsBar } from './TabsBar'
+import { FloatingHelpButton } from './FloatingHelpButton'
 import { useTabs } from '@shared/contexts/TabsContext'
 import { useResponsive } from '@shared/hooks/useResponsive'
 import { useConnection } from '@shared/contexts/ConnectionContext'
@@ -583,6 +584,69 @@ export function AppShell() {
           <span style={{ margin: '0 8px' }}>then...</span>
         </div>
       )}
+
+      {/* ─── Floating help button — DESIGN.md §9.10 ─── */}
+      <FloatingHelpButton
+        label="Help & keyboard shortcuts"
+        panel={
+          <div>
+            <h3 style={{
+              fontSize: '14px',
+              fontWeight: 600,
+              color: 'var(--color-text-primary)',
+              margin: '0 0 var(--space-3)',
+            }}>
+              Keyboard shortcuts
+            </h3>
+            <ul style={{
+              listStyle: 'none',
+              padding: 0,
+              margin: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-2)',
+              fontSize: '12px',
+              color: 'var(--color-text-secondary)',
+            }}>
+              <li style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+                <span>Search / command palette</span>
+                <kbd style={kbdStyle}>Ctrl K</kbd>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+                <span>New tab</span>
+                <kbd style={kbdStyle}>Ctrl T</kbd>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+                <span>Close tab</span>
+                <kbd style={kbdStyle}>Ctrl W</kbd>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+                <span>Today&apos;s journal</span>
+                <kbd style={kbdStyle}>g d</kbd>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+                <span>Graph</span>
+                <kbd style={kbdStyle}>g g</kbd>
+              </li>
+              <li style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+                <span>All pages</span>
+                <kbd style={kbdStyle}>g p</kbd>
+              </li>
+            </ul>
+          </div>
+        }
+      />
     </div>
   )
+}
+
+const kbdStyle: React.CSSProperties = {
+  fontSize: '10px',
+  fontFamily: 'inherit',
+  padding: '2px 6px',
+  background: 'var(--color-surface-subtle)',
+  border: '1px solid var(--color-border)',
+  borderRadius: 'var(--radius-sm)',
+  color: 'var(--color-text-secondary)',
+  whiteSpace: 'nowrap',
 }
