@@ -1,0 +1,335 @@
+//! Integration tests for the `created_by` convention (ADR-0003).
+//!
+//! These tests verify:
+//! 1. The `created_by` field in `CreateBlockRequest` is correctly stored
+//!    as a property on the block.
+//! 2. An explicit `properties["created_by"]` wins over the convenience
+//!    `created_by` field (no silent override).
+//! 3. The new `GET /api/v1/blocks/by-author` endpoint returns only blocks
+//!    whose `created_by` property matches the requested author.
+//! 4. Whitespace and empty values are handled gracefully.
+
+use anyhow::Result;
+use axum::body::Body;
+use axum::http::{header, Method, Request, StatusCode};
+use axum::Router;
+use serde_json::{json, Value};
+use std::sync::Arc;
+use std::sync::Once;
+use tokio::sync::RwLock;
+use tower::ServiceExt;
+
+use quilt_application::services::ref_service::RefService;
+use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
+use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
+use quilt_search::SearchIndexManager;
+
+const TEST_API_KEY: &str = "test-api-key-for-integration-tests";
+static INIT_AUTH: Once = Once::new();
+
+fn init_auth() {
+    INIT_AUTH.call_once(|| {
+        quilt_server::middleware::auth::init(TEST_API_KEY.to_string());
+    });
+}
+
+async fn create_test_app() -> Result<Router> {
+    init_auth();
+
+    let pool = create_pool(":memory:").await?;
+    run_migrations(&pool).await?;
+
+    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
+
+    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let mut ref_service = RefService::new(ref_repo);
+    ref_service.rebuild_from_repo().await?;
+    let ref_service = Arc::new(RwLock::new(ref_service));
+
+    let state = quilt_server::state::AppState::new(pool, search_index, ref_service);
+    let app = quilt_server::routes::create_app(state);
+
+    Ok(app)
+}
+
+async fn req(
+    app: Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json");
+
+    builder = builder.header(header::AUTHORIZATION, format!("Bearer {}", TEST_API_KEY));
+
+    let request = if let Some(body_value) = body {
+        builder.body(Body::from(body_value.to_string())).unwrap()
+    } else {
+        builder.body(Body::empty()).unwrap()
+    };
+
+    let response = app.oneshot(request).await.unwrap();
+    let status = response.status();
+    let body_bytes = axum::body::to_bytes(response.into_body(), 10_000_000)
+        .await
+        .unwrap();
+
+    let json: Value = if body_bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&body_bytes).unwrap_or(Value::Null)
+    };
+
+    (status, json)
+}
+
+async fn post(app: Router, uri: &str, body: Value) -> (StatusCode, Value) {
+    req(app, Method::POST, uri, Some(body)).await
+}
+
+async fn get(app: Router, uri: &str) -> (StatusCode, Value) {
+    req(app, Method::GET, uri, None).await
+}
+
+async fn create_page(app: &Router, name: &str) -> String {
+    let (status, body) = post(app.clone(), "/api/v1/pages", json!({"name": name})).await;
+    assert_eq!(status, StatusCode::CREATED, "create page failed: {body}");
+    body["name"].as_str().unwrap().to_string()
+}
+
+// ═══════════════════════════════════════════════════════════
+// created_by
+// ═══════════════════════════════════════════════════════════
+
+/// Setting `created_by` on the create request must persist it as a
+/// `created_by` property on the block. The convention is opaque to the
+/// server — it just stores the string.
+#[tokio::test]
+async fn create_block_with_created_by() -> Result<()> {
+    let app = create_test_app().await?;
+    let page = create_page(&app, "Authored Page").await;
+
+    let (status, block) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": page,
+            "content": "Drafted by Alice",
+            "createdBy": "user::alice"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "create failed: {block}");
+
+    let props = block["properties"].as_object().expect("properties object");
+    assert_eq!(
+        props.get("created_by").and_then(|v| v.as_str()),
+        Some("user::alice"),
+        "created_by should be persisted as a property"
+    );
+
+    Ok(())
+}
+
+/// An agent author (`agent::*`) should round-trip the same way. The
+/// convention distinguishes `user::` and `agent::` at the call site —
+/// the server stores whatever it gets.
+#[tokio::test]
+async fn create_block_with_agent_author() -> Result<()> {
+    let app = create_test_app().await?;
+    let page = create_page(&app, "Agent Page").await;
+
+    let (status, block) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": page,
+            "content": "Auto-generated by Claude",
+            "createdBy": "agent::claude"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let props = block["properties"].as_object().unwrap();
+    assert_eq!(
+        props.get("created_by").and_then(|v| v.as_str()),
+        Some("agent::claude")
+    );
+
+    Ok(())
+}
+
+/// If the caller already set `properties["created_by"]` explicitly, the
+/// `createdBy` convenience field must NOT override it. This keeps
+/// the call site safe for clients that already use the lower-level
+/// `properties` channel.
+#[tokio::test]
+async fn created_by_does_not_override_explicit_property() -> Result<()> {
+    let app = create_test_app().await?;
+    let page = create_page(&app, "Explicit Page").await;
+
+    let (status, block) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": page,
+            "content": "Custom author",
+            "createdBy": "user::default",
+            "properties": {
+                "created_by": "agent::real-author"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let props = block["properties"].as_object().unwrap();
+    // Explicit property wins
+    assert_eq!(
+        props.get("created_by").and_then(|v| v.as_str()),
+        Some("agent::real-author")
+    );
+
+    Ok(())
+}
+
+/// Whitespace and empty `createdBy` should be treated as "not set",
+/// so the property is not stored. We don't want stray empty strings
+/// polluting the property map.
+#[tokio::test]
+async fn empty_or_whitespace_created_by_is_ignored() -> Result<()> {
+    let app = create_test_app().await?;
+    let page = create_page(&app, "Empty Author").await;
+
+    let (status, block) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": page,
+            "content": "No author",
+            "createdBy": "   "
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let props = block["properties"].as_object().unwrap();
+    assert!(
+        !props.contains_key("created_by"),
+        "whitespace-only created_by should not persist"
+    );
+
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════
+// /api/v1/blocks/by-author
+// ═══════════════════════════════════════════════════════════
+
+/// Listing by author should return only blocks whose `created_by`
+/// property matches the requested author — regardless of whether the
+/// author is a user or an agent.
+#[tokio::test]
+async fn list_blocks_by_author_filters_correctly() -> Result<()> {
+    let app = create_test_app().await?;
+    let page = create_page(&app, "Filter Page").await;
+
+    // 2 alice blocks, 1 bob block, 1 claude block
+    for content in ["alice 1", "alice 2"] {
+        let (status, _) = post(
+            app.clone(),
+            "/api/v1/blocks",
+            json!({"pageName": page, "content": content, "createdBy": "user::alice"}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+    let (status, _) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({"pageName": page, "content": "bob 1", "createdBy": "user::bob"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({"pageName": page, "content": "claude 1", "createdBy": "agent::claude"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    // Query alice
+    let (status, alice_blocks) = get(
+        app.clone(),
+        "/api/v1/blocks/by-author?author=user%3A%3Aalice",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let arr = alice_blocks.as_array().expect("array");
+    assert_eq!(arr.len(), 2, "alice should have 2 blocks, got {alice_blocks}");
+    for b in arr {
+        let author = b["properties"]["created_by"].as_str().unwrap_or("");
+        assert_eq!(author, "user::alice");
+    }
+
+    // Query claude
+    let (status, claude_blocks) = get(
+        app.clone(),
+        "/api/v1/blocks/by-author?author=agent%3A%3Aclaude",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let arr = claude_blocks.as_array().unwrap();
+    assert_eq!(arr.len(), 1, "claude should have 1 block");
+    assert_eq!(
+        arr[0]["properties"]["created_by"].as_str(),
+        Some("agent::claude")
+    );
+
+    // Query unknown — empty array
+    let (status, none_blocks) = get(
+        app,
+        "/api/v1/blocks/by-author?author=user%3A%3Ano-one",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(none_blocks.as_array().unwrap().len(), 0);
+
+    Ok(())
+}
+
+/// The limit parameter should cap the number of returned blocks.
+#[tokio::test]
+async fn list_blocks_by_author_respects_limit() -> Result<()> {
+    let app = create_test_app().await?;
+    let page = create_page(&app, "Limit Page").await;
+
+    for i in 0..5 {
+        let (status, _) = post(
+            app.clone(),
+            "/api/v1/blocks",
+            json!({
+                "pageName": page,
+                "content": format!("block {i}"),
+                "createdBy": "user::carol"
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+    }
+
+    let (status, limited) = get(
+        app,
+        "/api/v1/blocks/by-author?author=user%3A%3Acarol&limit=2",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(limited.as_array().unwrap().len(), 2);
+
+    Ok(())
+}
