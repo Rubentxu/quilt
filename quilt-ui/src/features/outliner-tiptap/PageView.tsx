@@ -11,6 +11,7 @@ import { PageSkeleton } from '@shared/components/Skeleton'
 import { BlockRow } from './BlockRow'
 import { CardRenderer, type BlockCard } from './CardRenderer'
 import { getBlockCard, getCardMetas, buildTemplateIndex } from './blockCard'
+import { TemplatePicker } from './TemplatePicker'
 import type { BlockProperty } from '@shared/types/api'
 import { setCursorAt } from '@shared/hooks/useCursor'
 import { useBlockHistory } from '@shared/hooks/useBlockHistory'
@@ -222,16 +223,21 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
   )
 }
 
-// ──── Empty state (DESIGN.md §15) ───────────────────────────────────
+// ──── Empty state (DESIGN.md §15, ADR-0007) ──────────────────────────
 
 interface EmptyStateProps {
   isJournal?: boolean
-  onNewBlock: () => void
-  onNewReferenceBlock?: () => void
-  onNewDocumentacionBlock?: () => void
+  /**
+   * ADR-0007: the EmptyState now delegates to a TemplatePicker
+   * that fetches the real list of `template/*` pages. The single
+   * callback receives `templateName` (or null for a plain block)
+   * and the title entered by the user. The hardcoded
+   * "+ Reference" / "+ Documentation" buttons are gone.
+   */
+  onCreateBlock: (templateName: string | null, title: string) => void
 }
 
-function EmptyState({ isJournal, onNewBlock, onNewReferenceBlock, onNewDocumentacionBlock }: EmptyStateProps) {
+function EmptyState({ isJournal, onCreateBlock }: EmptyStateProps) {
   return (
     <div
       style={{
@@ -255,64 +261,14 @@ function EmptyState({ isJournal, onNewBlock, onNewReferenceBlock, onNewDocumenta
         style={{
           color: 'var(--color-text-muted)',
           maxWidth: '320px',
-          margin: '0 auto',
+          margin: '0 auto var(--space-4)',
         }}
       >
         {isJournal
-          ? 'Start writing your daily notes below.'
-          : 'No blocks yet. Start typing...'}
+          ? 'Start writing your daily notes below, or pick a template to begin.'
+          : 'No blocks yet. Pick a template to begin, or add a plain block.'}
       </p>
-      <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'center', marginTop: 'var(--space-4)', flexWrap: 'wrap' }}>
-        <button
-          onClick={onNewBlock}
-          style={{
-            padding: '8px 20px',
-            fontSize: '14px',
-            fontWeight: 500,
-            background: 'var(--color-primary)',
-            color: 'var(--color-on-primary, #fff)',
-            border: 'none',
-            borderRadius: 'var(--radius-md)',
-            cursor: 'pointer',
-          }}
-        >
-          Add first block
-        </button>
-        {onNewReferenceBlock && (
-          <button
-            onClick={onNewReferenceBlock}
-            style={{
-              padding: '8px 20px',
-              fontSize: '14px',
-              fontWeight: 500,
-              background: 'transparent',
-              color: 'var(--color-primary)',
-              border: '1px solid var(--color-primary)',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-            }}
-          >
-            + Reference
-          </button>
-        )}
-        {onNewDocumentacionBlock && (
-          <button
-            onClick={onNewDocumentacionBlock}
-            style={{
-              padding: '8px 20px',
-              fontSize: '14px',
-              fontWeight: 500,
-              background: 'transparent',
-              color: 'var(--color-accent)',
-              border: '1px solid var(--color-accent)',
-              borderRadius: 'var(--radius-md)',
-              cursor: 'pointer',
-            }}
-          >
-            + Documentation
-          </button>
-        )}
-      </div>
+      <TemplatePicker onCreateBlock={onCreateBlock} isJournal={isJournal} />
     </div>
   )
 }
@@ -966,7 +922,7 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
   // the card's meta properties.
 
   const handleNewCardBlock = useCallback(
-    (templateName: 'reference' | 'documentation', title: string) => {
+    (templateName: string, title: string) => {
       const topLevelBlocks = blocks.filter(b => !b.parentId)
       const lastBlock = topLevelBlocks.length > 0
         ? topLevelBlocks.reduce((max, b) => (b.order > max.order ? b : max))
@@ -974,15 +930,28 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
       // `template:: <name>` activates the card. The template page
       // (e.g., `template/reference`) declares the actual card-shape
       // (reference / content / inline), icon, and CSS class.
-      handleCreateBlock(lastBlock?.id ?? '', title, null, { template: templateName })
+      const properties: Record<string, unknown> = templateName
+        ? { template: templateName }
+        : {}
+      handleCreateBlock(lastBlock?.id ?? '', title, null, properties)
     },
     [blocks, handleCreateBlock],
   )
 
-  // Thin wrappers for the EmptyState's two non-default buttons
-  // ("+ Reference" and "+ Documentation"). Kept as separate handlers
-  // to preserve the existing call sites without changing the
-  // EmptyState's prop signature.
+  // Adapter for the TemplatePicker (ADR-0007). Receives
+  // `(templateName, title)` from the picker — templateName is the
+  // short name (e.g., "reference") of a `template/<name>` page,
+  // or null for a plain block with no template.
+  const handleCreateFromTemplatePicker = useCallback(
+    (templateName: string | null, title: string) => {
+      handleNewCardBlock(templateName ?? '', title)
+    },
+    [handleNewCardBlock],
+  )
+
+  // Thin wrappers for the quick-add buttons at the bottom of pages
+  // with content. These keep the existing call sites (which
+  // expected a no-arg handler) working.
   const handleNewReferenceBlock = useCallback(
     () => handleNewCardBlock('reference', 'Reference'),
     [handleNewCardBlock],
@@ -1534,9 +1503,7 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
       {blocks.length === 0 ? (
         <EmptyState
           isJournal={isJournal}
-          onNewBlock={handleNewBlockAtEnd}
-          onNewReferenceBlock={handleNewReferenceBlock}
-          onNewDocumentacionBlock={handleNewDocumentacionBlock}
+          onCreateBlock={handleCreateFromTemplatePicker}
         />
       ) : (
         <div
