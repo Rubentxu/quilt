@@ -47,3 +47,24 @@ class MockResizeObserver {
   disconnect = vi.fn()
 }
 globalThis.ResizeObserver = MockResizeObserver as any
+
+// ── Range / DOMRect ──────────────────────────────────────────────
+// jsdom does not implement `Range.prototype.getBoundingClientRect`.
+// BlockRow (and other editors) call it on every keystroke to position
+// autocomplete dropdowns. Returning a zero-rect at the origin keeps
+// dropdowns visible in tests without measuring real layout.
+if (typeof Range !== 'undefined' && !Range.prototype.getBoundingClientRect) {
+  Range.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    return {
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0,
+      width: 0,
+      height: 0,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    } as DOMRect
+  }
+}

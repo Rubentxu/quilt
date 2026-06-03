@@ -3,6 +3,36 @@ import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { BlockRow } from '../BlockRow'
 
+// Place the caret at character offset `offset` inside a contentEditable.
+// BlockRow's `handleInput` reads `window.getSelection()` to compute the
+// text-before-cursor; in jsdom the selection is undefined after a plain
+// `textContent` write, so we set it explicitly.
+function setCaretPosition(el: HTMLElement, offset: number) {
+  el.focus()
+  const range = document.createRange()
+  const textNode = el.firstChild
+  if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+    const safe = Math.min(offset, textNode.textContent?.length ?? 0)
+    range.setStart(textNode, safe)
+    range.collapse(true)
+  } else {
+    range.selectNodeContents(el)
+    range.collapse(false)
+  }
+  const sel = window.getSelection()
+  sel?.removeAllRanges()
+  sel?.addRange(range)
+}
+
+// Click the read-mode div to enter edit mode. Using `getByText` is
+// unreliable when the block content is empty (matches every empty
+// text node in the tree); the read mode has class `block-content-read`.
+function clickToEdit() {
+  const read = document.querySelector('.block-content-read') as HTMLElement | null
+  expect(read).not.toBeNull()
+  fireEvent.click(read!)
+}
+
 const mockUpdateBlock = vi.fn()
 const mockListPages = vi.fn().mockResolvedValue([])
 const mockWriteText = vi.fn().mockResolvedValue(undefined)
@@ -74,7 +104,10 @@ function renderRow(content = '') {
         onToggleCollapse={vi.fn()}
         onUpdate={(updated) => {
           onUpdateSpy(updated)
-          setBlock(updated as any)
+          // Guard against an undefined payload from an unmocked
+          // api.updateBlock — that would re-render BlockRow with
+          // `block === undefined` and crash on the next state read.
+          if (updated) setBlock(updated as any)
         }}
         onCreateBlock={vi.fn()}
         onDeleteBlock={vi.fn()}
@@ -160,5 +193,92 @@ describe('BlockRow editing behavior', () => {
     expect(rendered.tagName).toBe('STRONG')
     expect(screen.queryByText('**hello**')).not.toBeInTheDocument()
     expect(screen.getAllByText('hello')).toHaveLength(1)
+  })
+
+  // ──── # tag autocomplete (G4 from wikilinks audit) ─────────────
+
+  it('opens the tag autocomplete when the user types "#t"', async () => {
+    renderRow('')
+    clickToEdit()
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = '#t'
+    // Position the caret at the end of the content so handleInput
+    // sees the trailing `#t` as the text before the cursor.
+    setCaretPosition(editor, 2)
+    fireEvent.input(editor)
+
+    // The dropdown renders a listbox with tag options.
+    const listbox = await screen.findByRole('listbox', { name: 'Tag suggestions' })
+    expect(listbox).toBeInTheDocument()
+    // The query "#t" matches the default "todo" tag.
+    await screen.findByTestId('tag-option-todo')
+  })
+
+  it('filters the tag list by the prefix the user types', async () => {
+    renderRow('')
+    clickToEdit()
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = '#ur'
+    setCaretPosition(editor, 3)
+    fireEvent.input(editor)
+
+    // Only "urgent" matches the prefix "ur".
+    await screen.findByTestId('tag-option-urgent')
+    expect(screen.queryByTestId('tag-option-todo')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('tag-option-bug')).not.toBeInTheDocument()
+  })
+
+  it('selecting a tag replaces the partial #partial with #tagname', async () => {
+    renderRow('')
+    clickToEdit()
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = '#urg'
+    setCaretPosition(editor, 4)
+    fireEvent.input(editor)
+
+    // Wait for the dropdown to populate, then click the suggestion.
+    const option = await screen.findByTestId('tag-option-urgent')
+    fireEvent.click(option)
+
+    // The editor should now contain the full `#urgent` tag.
+    expect(editor.textContent).toBe('#urgent')
+    // Dropdown should be gone after selection.
+    expect(screen.queryByRole('listbox', { name: 'Tag suggestions' })).not.toBeInTheDocument()
+  })
+
+  it('does not open the tag autocomplete for markdown "## Heading"', async () => {
+    renderRow('')
+    clickToEdit()
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = '## Heading'
+    setCaretPosition(editor, 10)
+    fireEvent.input(editor)
+
+    // The negative lookbehind keeps the second `#` from triggering.
+    expect(screen.queryByRole('listbox', { name: 'Tag suggestions' })).not.toBeInTheDocument()
+  })
+
+  it('closes the tag dropdown on Escape', async () => {
+    renderRow('')
+    clickToEdit()
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = '#todo'
+    setCaretPosition(editor, 5)
+    fireEvent.input(editor)
+
+    // Dropdown is open with the matching tag visible.
+    await screen.findByTestId('tag-option-todo')
+
+    // The editor handles Escape itself in handleKeyDown; in this
+    // integration test we dispatch the keydown event on the editor.
+    fireEvent.keyDown(editor, { key: 'Escape' })
+
+    // Dropdown should be closed.
+    expect(screen.queryByRole('listbox', { name: 'Tag suggestions' })).not.toBeInTheDocument()
   })
 })

@@ -290,4 +290,83 @@ describe('InlineContent', () => {
       expect(mockCreatePage).toHaveBeenCalledWith({ name: 'RacePage' })
     })
   })
+
+  // ──── G1: [[Page|alias]] rendering ─────────────────────────────────
+  //
+  // The alias is the display text only; the href and the page lookup
+  // must always point at the page name. These tests pin down that
+  // contract for both the simplified and the real Rust serde shapes.
+
+  it('renders the alias text and href still points at the page name', () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        { type: 'pageRef', value: { pageName: 'MyPage', alias: 'My Alias' } },
+      ],
+    })
+    render(<InlineContent content="[[MyPage|My Alias]]" />)
+
+    // The visible link text is the alias, not the page name.
+    const link = screen.getByText('My Alias')
+    expect(link.tagName).toBe('A')
+    // …and the page name is NOT rendered as a separate text node.
+    expect(screen.queryByText('MyPage')).not.toBeInTheDocument()
+    // The href still points at the page name (URL-encoded).
+    expect(link).toHaveAttribute('href', '/page/MyPage')
+  })
+
+  it('renders the page name when no alias is present (backward compat)', () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        { type: 'pageRef', value: { pageName: 'MyPage', alias: null } },
+      ],
+    })
+    render(<InlineContent content="[[MyPage]]" />)
+
+    const link = screen.getByText('MyPage')
+    expect(link.tagName).toBe('A')
+    expect(link).toHaveAttribute('href', '/page/MyPage')
+  })
+
+  it('renders the alias using the real Rust serde enum shape', () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        {
+          PageRef: {
+            page_name: 'Real Page',
+            alias: 'display alias',
+            raw: '[[Real Page|display alias]]',
+            range: { start: 0, end: 28 },
+          },
+        },
+      ],
+    })
+    render(<InlineContent content="[[Real Page|display alias]]" />)
+
+    // Display text is the alias…
+    const link = screen.getByText('display alias')
+    expect(link.tagName).toBe('A')
+    // …and the href points to the actual page name (URL-encoded).
+    expect(link).toHaveAttribute('href', '/page/Real%20Page')
+    // The page name itself is not visible.
+    expect(screen.queryByText('Real Page')).not.toBeInTheDocument()
+  })
+
+  it('uses the page name (not the alias) for create-on-click', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        { type: 'pageRef', value: { pageName: 'Target', alias: 'pretty' } },
+      ],
+    })
+    // Empty pageMap → Target does not exist; click should create it.
+    render(
+      <InlineContent content="[[Target|pretty]]" pageMap={new Map()} />,
+    )
+    const link = screen.getByText('pretty')
+    fireEvent.click(link)
+
+    // The API call must use the PAGE NAME, not the display alias.
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'Target' })
+    })
+  })
 })
