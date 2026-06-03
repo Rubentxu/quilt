@@ -5,6 +5,47 @@ export type Priority = "A" | "B" | "C";
 export type BlockType = "paragraph" | "heading1" | "heading2" | "heading3" | "bullet" | "numbered" | "todo" | "quote" | "code" | "divider" | "image";
 export type AppErrorCode = "NOT_FOUND" | "BAD_REQUEST" | "INTERNAL_ERROR";
 
+// ──── Templates (ADR-0007) ───────────────────────────────────
+
+/** Card shape declared by a template page via `card-shape::`. */
+export type CardShape = "reference" | "content" | "inline";
+
+/** Summary of one template page — returned by GET /api/v1/templates. */
+export interface TemplateSummary {
+  /** Short name (e.g., "reference" for `template/reference`). */
+  name: string;
+  /** Full page name including the `template/` prefix. */
+  full_name: string;
+  /** Total blocks on the template page. */
+  block_count: number;
+  /** The card-shape value, defaulting to "inline" if missing. */
+  card_shape: CardShape | string;
+  /** The `icon::` value, if declared. */
+  icon?: string | null;
+  /** The `cssclass::` value, if declared. */
+  cssclass?: string | null;
+}
+
+/** Schema of one template — returned by GET /api/v1/templates/:name/schema. */
+export interface TemplateSchema {
+  name: string;
+  full_name: string;
+  card_shape: CardShape | string;
+  icon?: string | null;
+  cssclass?: string | null;
+  block_count: number;
+  /** Union of all properties declared across the template's blocks. */
+  properties: TemplateProperty[];
+}
+
+/** One property of a template's contract. */
+export interface TemplateProperty {
+  key: string;
+  value: string;
+  /** JSON-ish type: "string" | "boolean" | "integer" | "float" | "date" | "ref" | "array" */
+  type: string;
+}
+
 // ──── Shared ────────────────────────────────────────────────────
 
 export interface ApiError {

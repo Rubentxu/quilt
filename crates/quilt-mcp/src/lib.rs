@@ -16,7 +16,7 @@
 //!
 //! # Available Tools
 //!
-//! Core tools (9 total):
+//! Core tools (14 total):
 //! - `quilt_query`: Execute a Quilt DSL query
 //! - `quilt_search`: Full-text search across blocks
 //! - `quilt_create_block`: Create a new content block
@@ -28,7 +28,8 @@
 //! - `quilt_get_page_blocks`: Get all blocks on a page
 //! - `quilt_get_journal`: Get journal page for a date
 //! - `quilt_create_task`: Create a task (block with marker)
-//!
+//! - `quilt_list_templates`: List all template pages (ADR-0007)
+//! - `quilt_get_template_schema`: Get the full schema of one template (ADR-0007)
 //! # Resources
 //!
 //! - `quilt://graph`: Full graph statistics

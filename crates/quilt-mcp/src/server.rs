@@ -155,11 +155,11 @@ mod tests {
     use super::*;
     use crate::handlers::{
         block::BlockToolHandler, page::PageToolHandler, query::QueryToolHandler,
-        resource::GraphResourceProvider,
+        resource::GraphResourceProvider, template::TemplateToolHandler,
     };
     use quilt_application::use_cases::{
         BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
-        ResourceUseCasesImpl, SearchUseCasesImpl,
+        ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
     };
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
@@ -191,6 +191,10 @@ mod tests {
             page_repo.clone(),
             tag_repo.clone(),
         ));
+        let template_use_cases: Arc<dyn TemplateUseCases> = Arc::new(TemplateUseCasesImpl::new(
+            page_repo.clone(),
+            block_repo.clone(),
+        ));
 
         let block_handler = BlockToolHandler::new(block_use_cases.clone());
         let page_handler = PageToolHandler::new(page_use_cases.clone());
@@ -198,6 +202,7 @@ mod tests {
             quilt_application::use_cases::SearchUseCasesImpl::new()
                 .with_search_service(Arc::new(SearchService::new(Arc::new(pool.clone())))),
         ));
+        let template_handler = TemplateToolHandler::new(template_use_cases.clone());
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -205,6 +210,7 @@ mod tests {
                 Box::new(block_handler),
                 Box::new(page_handler),
                 Box::new(query_handler),
+                Box::new(template_handler),
             ],
             vec![Box::new(resource_provider)],
         );
@@ -246,16 +252,19 @@ mod tests {
 
         match response {
             McpResponse::ToolsList(result) => {
-                // Core tools: 12 total
+                // Core tools: 14 total
                 // BlockToolHandler: quilt_create_block, quilt_delete_block, quilt_link_blocks,
                 //                   quilt_get_block_tree, quilt_get_backlinks, quilt_create_task,
                 //                   quilt_list_blocks_by_author (7) — ADR-0003 added the last
                 // PageToolHandler: quilt_list_pages, quilt_get_page_blocks, quilt_get_journal (3)
                 // QueryToolHandler: quilt_query, quilt_search (2)
-                assert_eq!(result.tools.len(), 12);
+                // TemplateToolHandler: quilt_list_templates, quilt_get_template_schema (2) — ADR-0007
+                assert_eq!(result.tools.len(), 14);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_list_blocks_by_author"));
+                assert!(result.tools.iter().any(|t| t.name == "quilt_list_templates"));
+                assert!(result.tools.iter().any(|t| t.name == "quilt_get_template_schema"));
             }
             _ => panic!("Expected ToolsList response"),
         }
@@ -295,6 +304,83 @@ mod tests {
                 assert!(!result.is_error.unwrap());
                 let v: serde_json::Value = serde_json::from_str(&result.content[0].text()).unwrap();
                 assert_eq!(v["count"], 0);
+            }
+            _ => panic!("Expected ToolsCall response"),
+        }
+    }
+
+    // ADR-0007: quilt_list_templates returns the empty set when
+    // there are no template pages. Full template discovery is
+    // covered in crates/quilt-application/tests/template_use_cases_tests.rs.
+    #[tokio::test]
+    async fn test_handle_call_tool_list_templates_empty() {
+        let (server, _pool) = setup_server().await;
+
+        let response = server
+            .handle_request(McpRequest::CallTool {
+                params: CallToolParams {
+                    name: "quilt_list_templates".to_string(),
+                    arguments: serde_json::json!({}),
+                },
+            })
+            .await;
+
+        match response {
+            McpResponse::ToolsCall(result) => {
+                assert!(!result.is_error.unwrap());
+                let v: serde_json::Value = serde_json::from_str(&result.content[0].text()).unwrap();
+                assert_eq!(v["count"], 0);
+                assert!(v["templates"].as_array().unwrap().is_empty());
+            }
+            _ => panic!("Expected ToolsCall response"),
+        }
+    }
+
+    // ADR-0007: quilt_get_template_schema returns template_not_found
+    // (not an error) when the requested template does not exist.
+    #[tokio::test]
+    async fn test_handle_call_tool_get_template_schema_not_found() {
+        let (server, _pool) = setup_server().await;
+
+        let response = server
+            .handle_request(McpRequest::CallTool {
+                params: CallToolParams {
+                    name: "quilt_get_template_schema".to_string(),
+                    arguments: serde_json::json!({ "name": "does-not-exist" }),
+                },
+            })
+            .await;
+
+        match response {
+            McpResponse::ToolsCall(result) => {
+                assert!(!result.is_error.unwrap());
+                let v: serde_json::Value = serde_json::from_str(&result.content[0].text()).unwrap();
+                assert_eq!(v["error"], "template_not_found");
+                assert_eq!(v["name"], "does-not-exist");
+            }
+            _ => panic!("Expected ToolsCall response"),
+        }
+    }
+
+    // ADR-0007: missing 'name' parameter returns a clear error.
+    #[tokio::test]
+    async fn test_handle_call_tool_get_template_schema_missing_name() {
+        let (server, _pool) = setup_server().await;
+
+        let response = server
+            .handle_request(McpRequest::CallTool {
+                params: CallToolParams {
+                    name: "quilt_get_template_schema".to_string(),
+                    arguments: serde_json::json!({}),
+                },
+            })
+            .await;
+
+        match response {
+            McpResponse::ToolsCall(result) => {
+                assert!(result.is_error.unwrap());
+                // Errors are returned as plain text strings, not JSON.
+                assert_eq!(result.content[0].text(), "Missing 'name'");
             }
             _ => panic!("Expected ToolsCall response"),
         }

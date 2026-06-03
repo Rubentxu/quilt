@@ -14,4 +14,5 @@ pub mod navigate;
 pub mod pages;
 pub mod search;
 pub mod settings;
+pub mod templates;
 pub mod websocket;

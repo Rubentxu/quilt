@@ -18,6 +18,7 @@ pub mod block;
 pub mod page;
 pub mod resource;
 pub mod search;
+pub mod template;
 
 // Re-exports for convenience
 pub use block::{BlockTree, BlockUseCases, BlockUseCasesImpl};
@@ -26,3 +27,4 @@ pub use resource::{
     GraphSnapshot, JournalSummary, PageSummary, ResourceUseCases, ResourceUseCasesImpl, TagSummary,
 };
 pub use search::{QueryPlan, SearchResult, SearchUseCases, SearchUseCasesImpl};
+pub use template::{TemplateSummary, TemplateSchema, TemplateUseCases, TemplateUseCasesImpl};

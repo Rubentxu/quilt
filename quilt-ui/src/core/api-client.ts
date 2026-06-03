@@ -12,6 +12,8 @@ import type {
   DateFormatOption,
   Backlink,
   SearchResult,
+  TemplateSummary,
+  TemplateSchema,
 } from '@shared/types/api';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
 
@@ -209,4 +211,16 @@ export const api = {
     fetchJson<void>(`/blocks/${blockId}/properties/${encodeURIComponent(key)}`, {
       method: 'DELETE',
     }),
+
+  // Templates (ADR-0007)
+  //
+  // Lists `template/*` pages with their card metadata (card-shape,
+  // icon, cssclass). Powers the EmptyState's template picker so the
+  // user can create blocks with `template:: <name>` from a real list
+  // of available templates.
+  listTemplates: () =>
+    fetchJson<TemplateSummary[]>(`/templates`),
+
+  getTemplateSchema: (name: string) =>
+    fetchJson<TemplateSchema>(`/templates/${encodeURIComponent(name)}/schema`),
 };
