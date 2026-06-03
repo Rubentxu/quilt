@@ -72,8 +72,9 @@ enum InputMode {
 | `Mod+Shift+Up` / `Alt+Shift+Up` | Move block up | `MoveUp` | ❌ |
 | `Mod+Shift+Down` / `Alt+Shift+Down` | Move block down | `MoveDown` | ❌ |
 | `Mod+Shift+M` | Move selected blocks | `MoveSelected` | ❌ |
-| `Mod+O` | Follow link under cursor | `FollowLink` | ❌ |
-| `Mod+Shift+O` | Open link in sidebar | `OpenInSidebar` | ❌ |
+| `Mod+Enter` | Follow link under cursor (nearest `[[Page]]`, `((block))`, `#tag`, URL) | `FollowLink` | ✅ (Quilt) |
+| `Mod+Shift+Enter` | Open link in sidebar | `OpenInSidebar` | ❌ |
+| `Mod+O` | Alternative follow link (Logseq alias, unconfirmed) | `FollowLink` | ❌ |
 
 ### 2.3 Text Formatting (inside editing block)
 

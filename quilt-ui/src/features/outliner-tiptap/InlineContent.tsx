@@ -220,9 +220,9 @@ function renderSegment(
             textDecoration: 'none',
             opacity: pageExists ? 1 : 0.6,
             fontWeight: 500,
-            borderRadius: 'var(--radius-sm)',
-            padding: pageExists ? '1px 6px' : '0',
-            margin: pageExists ? '0 2px' : '0',
+            borderRadius: '2px',
+            padding: pageExists ? '1px 10px' : '0',
+            margin: pageExists ? '0 3px' : '0',
             background: pageExists ? 'rgba(37, 99, 235, 0.06)' : 'transparent',
             transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
           }}
