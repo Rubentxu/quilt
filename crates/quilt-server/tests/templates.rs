@@ -650,3 +650,213 @@ fn substitute_ignores_empty_variable_keys() {
     let out = substitute_placeholders("Hello {{title}}", Some(&vars), "demo");
     assert_eq!(out, "Hello demo");
 }
+
+// ═══════════════════════════════════════════════════════════
+//  GET /api/v1/templates — ADR-0007
+// ═══════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn list_templates_returns_empty_when_no_template_pages() -> Result<()> {
+    let app = create_test_app().await?;
+
+    let (status, body) = get(app, "/api/v1/templates").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.as_array().unwrap().is_empty(), "expected empty array, got {body}");
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_templates_returns_card_metadata() -> Result<()> {
+    let app = create_test_app().await?;
+
+    // Create a template page with card-shape metadata
+    let (status, _) = post(
+        app.clone(),
+        "/api/v1/pages",
+        json!({"name": "template/reference"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": "template/reference",
+            "content": "",
+            "properties": {
+                "card-shape": "reference",
+                "icon": "🔗",
+            },
+        }),
+    )
+    .await;
+
+    let (status, body) = get(app, "/api/v1/templates").await;
+    assert_eq!(status, StatusCode::OK);
+    let templates = body.as_array().unwrap();
+    assert_eq!(templates.len(), 1, "expected one template, got {body}");
+
+    let t = &templates[0];
+    assert_eq!(t["name"], "reference");
+    assert_eq!(t["full_name"], "template/reference");
+    assert_eq!(t["block_count"], 1);
+    assert_eq!(t["card_shape"], "reference");
+    assert_eq!(t["icon"], "🔗");
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_templates_filters_only_template_pages() -> Result<()> {
+    let app = create_test_app().await?;
+
+    // Mix of regular and template pages
+    post(app.clone(), "/api/v1/pages", json!({"name": "regular"})).await;
+    post(app.clone(), "/api/v1/pages", json!({"name": "template/meeting-notes"})).await;
+    post(app.clone(), "/api/v1/pages", json!({"name": "templated"})).await; // not a template
+    post(app.clone(), "/api/v1/pages", json!({"name": "template/bare"})).await;
+
+    let (status, body) = get(app, "/api/v1/templates").await;
+    assert_eq!(status, StatusCode::OK);
+    let templates = body.as_array().unwrap();
+    assert_eq!(templates.len(), 2, "expected only the two template/ pages, got {body}");
+
+    let names: Vec<&str> = templates.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"meeting-notes"));
+    assert!(names.contains(&"bare"));
+    assert!(!names.contains(&"regular"));
+    assert!(!names.contains(&"templated"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_templates_defaults_to_inline_shape_when_no_card_shape() -> Result<()> {
+    let app = create_test_app().await?;
+
+    let (_status, _) = post(app.clone(), "/api/v1/pages", json!({"name": "template/loose"})).await;
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": "template/loose",
+            "content": "no metadata here",
+        }),
+    )
+    .await;
+
+    let (status, body) = get(app, "/api/v1/templates").await;
+    assert_eq!(status, StatusCode::OK);
+    let t = &body.as_array().unwrap()[0];
+    assert_eq!(t["name"], "loose");
+    assert_eq!(t["card_shape"], "inline", "missing card-shape should default to inline");
+    assert!(t["icon"].is_null());
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GET /api/v1/templates/:name/schema — ADR-0007
+// ═══════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn get_template_schema_not_found() -> Result<()> {
+    let app = create_test_app().await?;
+
+    let (status, body) = get(app, "/api/v1/templates/does-not-exist/schema").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "NOT_FOUND");
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_template_schema_returns_full_metadata() -> Result<()> {
+    let app = create_test_app().await?;
+
+    // Create template page with metadata and a user-facing block
+    let (_status, _) = post(app.clone(), "/api/v1/pages", json!({"name": "template/contact"})).await;
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": "template/contact",
+            "content": "",
+            "properties": {
+                "card-shape": "reference",
+                "icon": "👤",
+            },
+        }),
+    )
+    .await;
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": "template/contact",
+            "content": "Alice Doe",
+            "properties": {
+                "name": "Alice Doe",
+                "email": "alice@example.com",
+                "priority": 1,
+            },
+        }),
+    )
+    .await;
+
+    let (status, body) = get(app, "/api/v1/templates/contact/schema").await;
+    assert_eq!(status, StatusCode::OK, "expected 200, got {status}: {body}");
+
+    assert_eq!(body["name"], "contact");
+    assert_eq!(body["card_shape"], "reference");
+    assert_eq!(body["icon"], "👤");
+    assert_eq!(body["block_count"], 2);
+
+    // Properties exclude reserved keys (card-shape, icon, cssclass)
+    let properties = body["properties"].as_array().unwrap();
+    let keys: Vec<&str> = properties.iter().map(|p| p["key"].as_str().unwrap()).collect();
+    assert!(keys.contains(&"name"));
+    assert!(keys.contains(&"email"));
+    assert!(keys.contains(&"priority"));
+    assert!(!keys.contains(&"card-shape"));
+    assert!(!keys.contains(&"icon"));
+
+    // Type hints are preserved
+    let name_prop = properties.iter().find(|p| p["key"] == "name").unwrap();
+    assert_eq!(name_prop["type"], "string");
+    assert_eq!(name_prop["value"], "Alice Doe");
+
+    let priority_prop = properties.iter().find(|p| p["key"] == "priority").unwrap();
+    assert_eq!(priority_prop["type"], "integer");
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_template_schema_reserves_block_level_keys() -> Result<()> {
+    let app = create_test_app().await?;
+
+    let (_status, _) = post(app.clone(), "/api/v1/pages", json!({"name": "template/clean"})).await;
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/blocks",
+        json!({
+            "pageName": "template/clean",
+            "content": "test",
+            "properties": {
+                "template": "other",
+                "type": "reference",
+                "collapsed": true,
+                "author": "claude",
+            },
+        }),
+    )
+    .await;
+
+    let (status, body) = get(app, "/api/v1/templates/clean/schema").await;
+    assert_eq!(status, StatusCode::OK);
+
+    let properties = body["properties"].as_array().unwrap();
+    let keys: Vec<&str> = properties.iter().map(|p| p["key"].as_str().unwrap()).collect();
+    assert!(!keys.contains(&"template"), "reserved key 'template' should be excluded");
+    assert!(!keys.contains(&"type"), "reserved key 'type' should be excluded");
+    assert!(!keys.contains(&"collapsed"), "reserved key 'collapsed' should be excluded");
+    assert!(keys.contains(&"author"));
+    Ok(())
+}
