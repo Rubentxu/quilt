@@ -411,6 +411,38 @@ a.inline-page-ref {
   font-weight: 500;
 }
 
+/* ─── Template-driven block cards (ADR-0007) ──────────────────────
+ *
+ * The user can define their own cards by creating a template page
+ * (e.g., `template/meeting-notes`) and declaring `cssclass::` on it.
+ * The class is applied to the CardRenderer's wrapper element.
+ *
+ * Below are sane defaults for the two built-in templates — `reference`
+ * and `documentation`. They are intentionally minimal so the user can
+ * override them with a custom `cssclass::` value on their own
+ * template pages.
+ */
+
+/* `template/reference` — flat reference card */
+.card-renderer[data-shape="reference"] {
+  /* Default: matches the existing ReferenceCard look (DESIGN.md §9.7). */
+  /* The CardRenderer already paints the surface + shadow inline, so this
+     hook is for the USER's customisations only. */
+}
+
+/* `template/documentation` — collapsible content card */
+.card-renderer[data-shape="content"] {
+  /* Default: matches the existing ContentCard look (DESIGN.md §9.8). */
+}
+
+/* `template/<anything>` — the user can set a custom cssclass.
+   Example for a user-defined "task" template:
+     cssclass:: card-task card-urgent
+   And in globals.css or a user stylesheet:
+     .card-task { border-left: 3px solid var(--color-warning); }
+     .card-urgent { animation: pulse 2s infinite; }
+*/
+
 /* Property chips & status/priority badges — uniform pill rhythm */
 .block-content span[style*="border-radius: 9999px"],
 .block-content span[style*="border-radius: 999px"],

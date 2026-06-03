@@ -8,9 +8,9 @@ import { CSS } from '@dnd-kit/utilities'
 import { useWasm, ensureWasmLoaded } from '@core/wasm-bridge/WasmProvider'
 import { api, QuiltApiError } from '@core/api-client'
 import { PageSkeleton } from '@shared/components/Skeleton'
-import { ReferenceCard } from '@shared/components/ReferenceCard'
-import { ContentCard } from '@shared/components/ContentCard'
 import { BlockRow } from './BlockRow'
+import { CardRenderer, type BlockCard } from './CardRenderer'
+import { getBlockCard, getCardMetas, buildTemplateIndex } from './blockCard'
 import type { BlockProperty } from '@shared/types/api'
 import { setCursorAt } from '@shared/hooks/useCursor'
 import { useBlockHistory } from '@shared/hooks/useBlockHistory'
@@ -27,25 +27,49 @@ interface PageViewProps {
   journalFormat?: string
 }
 
-// ──── Helpers for card-wrapped blocks (DESIGN.md §9.7-9.8) ──────────
-
-/** Returns the card type if this block should be rendered as a card. */
-export function getBlockType(block: { properties?: BlockProperty[] }): 'reference' | 'documentacion' | null {
-  const prop = block.properties?.find(p => p.key === 'type')
-  if (!prop || typeof prop.value !== 'string') return null
-  if (prop.value === 'reference') return 'reference'
-  if (prop.value === 'documentacion') return 'documentacion'
-  return null
-}
+// ──── Helpers for card-wrapped blocks (ADR-0007) ─────────────────────
+//
+// `getBlockType` and `getBlockMetas` were replaced by `getBlockCard` and
+// `getCardMetas` in `blockCard.ts`. They live there now because the
+// implementation depends on the `allTemplates` index (which holds the
+// card-shape/icon/cssclass per template page), and the index is built
+// per-render by PageView and passed to `getBlockCard`.
 
 /**
- * Returns all block properties EXCEPT `type` (the discriminator),
- * formatted as metas for ReferenceCard.
+ * V1 default: infer a `BlockCard` from a template's short name when
+ * we don't yet have the page-level properties available. The defaults
+ * below are the two built-in templates documented in
+ * `docs/templates/default-templates.md`. Any other template falls
+ * back to the `inline` shape (the user can later attach card-shape::
+ * via the MCP tool or by editing the template page).
+ *
+ * This is intentionally a placeholder — once `quilt_list_templates`
+ * returns page properties, the buildTemplateIndex() call in
+ * blockCard.ts will read the actual `card-shape::` from the template
+ * page and this fallback will be unused.
  */
-export function getBlockMetas(block: { properties?: BlockProperty[] }): { key: string; value: string }[] {
-  return (block.properties ?? [])
-    .filter(p => p.key !== 'type')
-    .map(p => ({ key: p.key, value: String(p.value ?? '') }))
+function inferDefaultCardForTemplate(shortName: string): BlockCard {
+  const name = shortName.toLowerCase()
+  if (name === 'reference') {
+    return {
+      shape: 'reference',
+      icon: '🔗',
+      templateName: 'reference',
+    }
+  }
+  if (name === 'documentation' || name === 'documentacion') {
+    return {
+      shape: 'content',
+      icon: '📄',
+      templateName: 'documentation',
+    }
+  }
+  // Unknown template — let the user style it via the template page
+  // properties once we read them. For now render as inline (no card).
+  return {
+    shape: 'inline',
+    templateName: shortName,
+  }
 }
 
 // ──── JournalDateHeader (DESIGN.md §9.4) ────────────────────────────
@@ -339,6 +363,8 @@ interface SortableBlockRowFlatProps {
   pageName: string
   collapsedIds: Set<string>
   blockRefs: Map<string, HTMLDivElement>
+  /** ADR-0007: index of template pages → their card definition. */
+  templateIndex: Map<string, BlockCard>
   onToggleCollapse: (blockId: string) => void
   onUpdate: (block: Block) => void
   onCreateBlock: (afterBlockId: string, content: string, parentId: string | null) => void
@@ -364,6 +390,7 @@ function SortableBlockRowFlat({
   pageName,
   collapsedIds,
   blockRefs,
+  templateIndex,
   onToggleCollapse,
   onUpdate,
   onCreateBlock,
@@ -463,107 +490,77 @@ function SortableBlockRowFlat({
         }}
       >
         {(() => {
-          const blockType = getBlockType(flatBlock.block)
-          const metas = getBlockMetas(flatBlock.block)
-          const cardTitle = flatBlock.block.content || (blockType === 'reference' ? 'Reference' : 'Documentación')
-
-          if (blockType === 'reference') {
+          // ADR-0007: data-driven card via `template::` lookup
+          // (replaces the hardcoded `getBlockType` switch on `type::`).
+          const card = getBlockCard(flatBlock.block, templateIndex)
+          if (!card) {
+            // No template activation — render the block row directly.
             return (
-              <ReferenceCard
-                title={cardTitle}
-                metas={metas}
-                href={`/page/${flatBlock.block.pageName ?? ''}`}
-              >
-                <BlockRow
-                  block={flatBlock.block}
-                  allBlocks={allBlocks}
-                  pageName={pageName}
-                  hasChildren={flatBlock.hasChildren}
-                  isCollapsed={collapsedIds.has(flatBlock.block.id)}
-                  onToggleCollapse={onToggleCollapse}
-                  onUpdate={onUpdate}
-                  onCreateBlock={onCreateBlock}
-                  onDeleteBlock={onDeleteBlock}
-                  onFocusBlock={onFocusBlock}
-                  onMoveBlockUp={onMoveBlockUp}
-                  onMoveBlockDown={onMoveBlockDown}
-                  onUndo={onUndo}
-                  onRedo={onRedo}
-                  selected={selected}
-                  onMultiSelect={onMultiSelect}
-                  onSelectAll={onSelectAll}
-                  onSelectParent={onSelectParent}
-                  indent={flatBlock.depth}
-                  onAddComment={onAddComment}
-                  onResolveComment={onResolveComment}
-                  onReplyComment={onReplyComment}
-                  onDeleteComment={onDeleteComment}
-                  dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
-                />
-              </ReferenceCard>
+              <BlockRow
+                block={flatBlock.block}
+                allBlocks={allBlocks}
+                pageName={pageName}
+                hasChildren={flatBlock.hasChildren}
+                isCollapsed={collapsedIds.has(flatBlock.block.id)}
+                onToggleCollapse={onToggleCollapse}
+                onUpdate={onUpdate}
+                onCreateBlock={onCreateBlock}
+                onDeleteBlock={onDeleteBlock}
+                onFocusBlock={onFocusBlock}
+                onMoveBlockUp={onMoveBlockUp}
+                onMoveBlockDown={onMoveBlockDown}
+                onUndo={onUndo}
+                onRedo={onRedo}
+                selected={selected}
+                onMultiSelect={onMultiSelect}
+                onSelectAll={onSelectAll}
+                onSelectParent={onSelectParent}
+                indent={flatBlock.depth}
+                onAddComment={onAddComment}
+                onResolveComment={onResolveComment}
+                onReplyComment={onReplyComment}
+                onDeleteComment={onDeleteComment}
+                dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
+              />
             )
           }
 
-          if (blockType === 'documentacion') {
-            return (
-              <ContentCard title={cardTitle}>
-                <BlockRow
-                  block={flatBlock.block}
-                  allBlocks={allBlocks}
-                  pageName={pageName}
-                  hasChildren={flatBlock.hasChildren}
-                  isCollapsed={collapsedIds.has(flatBlock.block.id)}
-                  onToggleCollapse={onToggleCollapse}
-                  onUpdate={onUpdate}
-                  onCreateBlock={onCreateBlock}
-                  onDeleteBlock={onDeleteBlock}
-                  onFocusBlock={onFocusBlock}
-                  onMoveBlockUp={onMoveBlockUp}
-                  onMoveBlockDown={onMoveBlockDown}
-                  onUndo={onUndo}
-                  onRedo={onRedo}
-                  selected={selected}
-                  onMultiSelect={onMultiSelect}
-                  onSelectAll={onSelectAll}
-                  onSelectParent={onSelectParent}
-                  indent={flatBlock.depth}
-                  onAddComment={onAddComment}
-                  onResolveComment={onResolveComment}
-                  onReplyComment={onReplyComment}
-                  onDeleteComment={onDeleteComment}
-                  dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
-                />
-              </ContentCard>
-            )
-          }
+          // Block has a card activation — wrap it.
+          const metas = getCardMetas(flatBlock.block)
+          const cardTitle = flatBlock.block.content || card.templateName
+          const href = card.shape === 'reference'
+            ? `/page/${flatBlock.block.pageName ?? ''}`
+            : undefined
 
           return (
-            <BlockRow
-              block={flatBlock.block}
-              allBlocks={allBlocks}
-              pageName={pageName}
-              hasChildren={flatBlock.hasChildren}
-              isCollapsed={collapsedIds.has(flatBlock.block.id)}
-              onToggleCollapse={onToggleCollapse}
-              onUpdate={onUpdate}
-              onCreateBlock={onCreateBlock}
-              onDeleteBlock={onDeleteBlock}
-              onFocusBlock={onFocusBlock}
-              onMoveBlockUp={onMoveBlockUp}
-              onMoveBlockDown={onMoveBlockDown}
-              onUndo={onUndo}
-              onRedo={onRedo}
-              selected={selected}
-              onMultiSelect={onMultiSelect}
-              onSelectAll={onSelectAll}
-              onSelectParent={onSelectParent}
-              indent={flatBlock.depth}
-              onAddComment={onAddComment}
-              onResolveComment={onResolveComment}
-              onReplyComment={onReplyComment}
-              onDeleteComment={onDeleteComment}
-              dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
-            />
+            <CardRenderer card={card} title={cardTitle} metas={metas} href={href}>
+              <BlockRow
+                block={flatBlock.block}
+                allBlocks={allBlocks}
+                pageName={pageName}
+                hasChildren={flatBlock.hasChildren}
+                isCollapsed={collapsedIds.has(flatBlock.block.id)}
+                onToggleCollapse={onToggleCollapse}
+                onUpdate={onUpdate}
+                onCreateBlock={onCreateBlock}
+                onDeleteBlock={onDeleteBlock}
+                onFocusBlock={onFocusBlock}
+                onMoveBlockUp={onMoveBlockUp}
+                onMoveBlockDown={onMoveBlockDown}
+                onUndo={onUndo}
+                onRedo={onRedo}
+                selected={selected}
+                onMultiSelect={onMultiSelect}
+                onSelectAll={onSelectAll}
+                onSelectParent={onSelectParent}
+                indent={flatBlock.depth}
+                onAddComment={onAddComment}
+                onResolveComment={onResolveComment}
+                onReplyComment={onReplyComment}
+                onDeleteComment={onDeleteComment}
+                dragHandleProps={{ ref: setActivatorNodeRef, ...attributes, ...listeners }}
+              />
+            </CardRenderer>
           )
         })()}
       </div>
@@ -581,6 +578,44 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null)
+
+  // ADR-0007: index of `template/*` pages → their card definition. Built
+  // once per page render and passed to `getBlockCard` for each block.
+  // Default is an empty index — the buttons in EmptyState still work,
+  // they just create blocks with `template:: <name>` even if the
+  // template page doesn't exist yet (warns at render time).
+  const [templateIndex, setTemplateIndex] = useState<Map<string, BlockCard>>(new Map())
+  useEffect(() => {
+    let cancelled = false
+    api.listPages()
+      .then(pages => {
+        if (cancelled) return
+        // For now we don't have page-level property fetching wired
+        // through `api.listPages()`. The pages we get don't include
+        // their `card-shape::` etc. — those would need a follow-up
+        // `getPage(name)` call per template page. For V1 we use the
+        // template's short name (e.g., "reference") as the
+        // templateName and let the user add `card-shape::` via CSS
+        // snippets if they want customization.
+        //
+        // The mapping `template/reference` → `shape: 'reference'` is
+        // hardcoded as a V1 default — see the section below. Once
+        // MCP `quilt_list_templates` lands, this becomes data-driven.
+        const index = new Map<string, BlockCard>()
+        for (const page of pages) {
+          if (!page.name.startsWith('template/')) continue
+          const shortName = page.name.replace(/^template\//, '')
+          index.set(shortName, inferDefaultCardForTemplate(shortName))
+        }
+        setTemplateIndex(index)
+      })
+      .catch(() => {
+        // Non-fatal — render with empty index. Blocks with `template::`
+        // will fall back to inline (no card) but their data is preserved.
+        if (!cancelled) setTemplateIndex(new Map())
+      })
+    return () => { cancelled = true }
+  }, [])
 
   // Undo/redo history — backed by the Rust `HistoryStack` via WASM.
   // The hook re-initialises the WASM stack whenever `pageName` changes
@@ -918,23 +953,44 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
     [blocks, pageName, onFocusBlock],
   )
 
-  // ── Reference / Documentation block creators ─────────────────────
+  // ── Card block creators (ADR-0007) ──────────────────────────────
+  //
+  // These two handlers exist for the EmptyState and the quick-add
+  // buttons at the bottom of pages with content. They create blocks
+  // with the new `template::` property pointing at the corresponding
+  // template page. The CardRenderer looks up the template's
+  // card-shape and renders accordingly.
+  //
+  // The block content (`'Reference'` / `'Documentation'`) is the
+  // initial title — the user typically replaces it as they fill
+  // the card's meta properties.
 
-  const handleNewReferenceBlock = useCallback(() => {
-    const topLevelBlocks = blocks.filter(b => !b.parentId)
-    const lastBlock = topLevelBlocks.length > 0
-      ? topLevelBlocks.reduce((max, b) => (b.order > max.order ? b : max))
-      : null
-    handleCreateBlock(lastBlock?.id ?? '', 'Reference', null, { type: 'reference' })
-  }, [blocks, handleCreateBlock])
+  const handleNewCardBlock = useCallback(
+    (templateName: 'reference' | 'documentation', title: string) => {
+      const topLevelBlocks = blocks.filter(b => !b.parentId)
+      const lastBlock = topLevelBlocks.length > 0
+        ? topLevelBlocks.reduce((max, b) => (b.order > max.order ? b : max))
+        : null
+      // `template:: <name>` activates the card. The template page
+      // (e.g., `template/reference`) declares the actual card-shape
+      // (reference / content / inline), icon, and CSS class.
+      handleCreateBlock(lastBlock?.id ?? '', title, null, { template: templateName })
+    },
+    [blocks, handleCreateBlock],
+  )
 
-  const handleNewDocumentacionBlock = useCallback(() => {
-    const topLevelBlocks = blocks.filter(b => !b.parentId)
-    const lastBlock = topLevelBlocks.length > 0
-      ? topLevelBlocks.reduce((max, b) => (b.order > max.order ? b : max))
-      : null
-    handleCreateBlock(lastBlock?.id ?? '', 'Documentación', null, { type: 'documentacion' })
-  }, [blocks, handleCreateBlock])
+  // Thin wrappers for the EmptyState's two non-default buttons
+  // ("+ Reference" and "+ Documentation"). Kept as separate handlers
+  // to preserve the existing call sites without changing the
+  // EmptyState's prop signature.
+  const handleNewReferenceBlock = useCallback(
+    () => handleNewCardBlock('reference', 'Reference'),
+    [handleNewCardBlock],
+  )
+  const handleNewDocumentacionBlock = useCallback(
+    () => handleNewCardBlock('documentation', 'Documentation'),
+    [handleNewCardBlock],
+  )
 
   // ── DnD sensors ──────────────────────────────────────────────
   const sensors = useSensors(
@@ -1505,6 +1561,7 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
                     pageName={pageName}
                     collapsedIds={collapsedIds}
                     blockRefs={blockRefs}
+                    templateIndex={templateIndex}
                     onToggleCollapse={handleToggleCollapse}
                     onUpdate={handleBlockUpdate}
                     onCreateBlock={handleCreateBlock}
