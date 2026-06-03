@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { BlockRow } from '../BlockRow'
+import { BlockRow, findNearestLink } from '../BlockRow'
 
 // Place the caret at character offset `offset` inside a contentEditable.
 // BlockRow's `handleInput` reads `window.getSelection()` to compute the
@@ -280,5 +280,54 @@ describe('BlockRow editing behavior', () => {
 
     // Dropdown should be closed.
     expect(screen.queryByRole('listbox', { name: 'Tag suggestions' })).not.toBeInTheDocument()
+  })
+})
+
+// ─── findNearestLink helper (Cmd/Ctrl+Enter target selection) ───────
+
+describe('findNearestLink', () => {
+  it('returns the page ref when cursor is inside [[Page]]', () => {
+    expect(findNearestLink('hello [[MyPage]] world', 9)).toEqual({
+      type: 'page',
+      target: 'MyPage',
+    })
+  })
+
+  it('strips the alias and returns the page name', () => {
+    expect(findNearestLink('see [[MyPage|the pretty one]] please', 15)).toEqual({
+      type: 'page',
+      target: 'MyPage',
+    })
+  })
+
+  it('returns the nearest link when cursor is between two links', () => {
+    // [[A]]cursor[[B]]  — cursor at index 5 (after the closing ]] of A)
+    const text = '[[A]]x[[B]]'
+    expect(findNearestLink(text, 5)).toEqual({ type: 'page', target: 'A' })
+    // At index 6, closer to B
+    expect(findNearestLink(text, 6)).toEqual({ type: 'page', target: 'B' })
+  })
+
+  it('returns the block ref when cursor is inside ((block-id))', () => {
+    expect(findNearestLink('ref ((abc-123)) end', 9)).toEqual({
+      type: 'block',
+      target: 'abc-123',
+    })
+  })
+
+  it('returns the tag when cursor is on #tag', () => {
+    expect(findNearestLink('idea #todo for tomorrow', 8)).toEqual({
+      type: 'tag',
+      target: 'todo',
+    })
+  })
+
+  it('does not match # in the middle of a word', () => {
+    // # inside an email-like token should not be picked up
+    expect(findNearestLink('user#foo', 5)).toBeNull()
+  })
+
+  it('returns null when there is no link near the cursor', () => {
+    expect(findNearestLink('just plain text with no links', 5)).toBeNull()
   })
 })

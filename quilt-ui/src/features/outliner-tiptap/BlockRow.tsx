@@ -107,6 +107,76 @@ function findParentBlock(block: Block, allBlocks: Block[]): Block | null {
   return allBlocks.find(b => b.id === block.parentId) ?? null
 }
 
+// ──── Inline link search (Logseq parity) ──────────────────────────────
+//
+// When the user is in edit mode, the rendered wikilinks/tags/block-refs
+// are just plain text ([[Page]], #tag, ((block-id))). Pressing
+// Cmd/Ctrl+Enter should follow the link nearest to the cursor — that's
+// what Logseq does (`follow-link-under-cursor!` in
+// frontend.handler.editor).
+
+type NearestLink =
+  | { type: 'page'; target: string }
+  | { type: 'block'; target: string }
+  | { type: 'tag'; target: string }
+  | null
+
+/**
+ * Find the link nearest to `cursorPos` in `text`.
+ * Mirrors Logseq's `extract-nearest-link-from-text`: page-refs and
+ * block-refs first, then tags. When the cursor sits inside a link
+ * that link wins; otherwise we pick the closest one by absolute
+ * distance to the cursor.
+ */
+export function findNearestLink(text: string, cursorPos: number): NearestLink {
+  const candidates: Array<{ start: number; end: number; link: NearestLink }> = []
+
+  // [[Page]] or [[Page|alias]]  — strip optional |alias
+  const pageRe = /\[\[([^\]\|]+)(?:\|[^\]]*)?\]\]/g
+  let m: RegExpExecArray | null
+  while ((m = pageRe.exec(text)) !== null) {
+    candidates.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      link: { type: 'page', target: m[1].trim() },
+    })
+  }
+
+  // ((block-uuid))  — block reference
+  const blockRe = /\(\(([^\)]+)\)\)/g
+  while ((m = blockRe.exec(text)) !== null) {
+    candidates.push({
+      start: m.index,
+      end: m.index + m[0].length,
+      link: { type: 'block', target: m[1].trim() },
+    })
+  }
+
+  // #tag  — preceded by start, whitespace, or punctuation so #1.5 isn't a tag
+  const tagRe = /(?:^|[\s\(\[])#([A-Za-z0-9_\-]+)/g
+  while ((m = tagRe.exec(text)) !== null) {
+    // Adjust start: the match includes the leading boundary char.
+    const matchStart = m.index + m[0].indexOf('#')
+    candidates.push({
+      start: matchStart,
+      end: matchStart + (m[1].length + 1),
+      link: { type: 'tag', target: m[1] },
+    })
+  }
+
+  if (candidates.length === 0) return null
+
+  // Prefer links that contain the cursor; otherwise pick the one with
+  // the smallest distance to the cursor.
+  const containing = candidates.find(c => cursorPos >= c.start && cursorPos <= c.end)
+  if (containing) return containing.link
+
+  const closest = candidates
+    .map(c => ({ c, dist: Math.min(Math.abs(cursorPos - c.start), Math.abs(cursorPos - c.end)) }))
+    .sort((a, b) => a.dist - b.dist)[0]
+  return closest.c.link
+}
+
 // ──── Component ──────────────────────────────────────────────────────
 
 export function BlockRow({
@@ -593,6 +663,44 @@ export function BlockRow({
           contentRef.current.blur()
         }
         return
+      }
+
+      // ── Cmd/Ctrl+Enter: follow link under cursor (Logseq parity) ──
+      // While editing, the rendered [[Page]] / ((block)) / #tag is just
+      // plain text. Logseq's behavior: Cmd+Enter on a wikilink follows
+      // it; on a tag navigates; on a missing page, creates it on the
+      // fly (same as clicking the rendered link in read mode).
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+        const text = localContent || el.textContent || ''
+        const cursorPos = getCursorPosition(el)
+        const link = findNearestLink(text, cursorPos)
+        if (link) {
+          e.preventDefault()
+          // Save current edits first so navigation doesn't lose them
+          saveToApi(text)
+          if (link.type === 'page' || link.type === 'tag') {
+            // Tags are pages too (Logseq parity)
+            const target = link.target
+            const exists = pageMap.has(target)
+            if (!exists) {
+              api.createPage({ name: target }).catch(() => {
+                // Race / network blip — navigate anyway, the page exists
+                // server-side.
+              })
+            }
+            navigate({ to: '/page/$name', params: { name: target } })
+          } else {
+            // block-ref — resolve UUID to its page and navigate
+            const refBlock = allBlocks.find(b => b.id === link.target)
+            const targetPage = refBlock?.pageName || (refBlock?.pageId ?? null)
+            if (targetPage) {
+              navigate({ to: '/page/$name', params: { name: targetPage } })
+            }
+          }
+          return
+        }
+        // No link near cursor — let the default Enter handler run
+        // (creates a new block, etc.)
       }
 
       // ── Ctrl+Z: Undo ──
