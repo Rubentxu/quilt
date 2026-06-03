@@ -51,3 +51,4 @@ quilt-*.png
 
 # Quilt vault data (generated at runtime)
 .quilt-dev/
+crates/quilt-ui/
