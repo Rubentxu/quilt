@@ -369,4 +369,36 @@ describe('InlineContent', () => {
       expect(mockCreatePage).toHaveBeenCalledWith({ name: 'Target' })
     })
   })
+
+  // Regression: clicking a [[wikilink]] must NOT bubble up to the parent
+  // (BlockRow's onClick={handleStartEdit}), which would put the block in
+  // edit mode instead of navigating to / creating the linked page.
+  it('stops click propagation so BlockRow does not enter edit mode', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        { type: 'pageRef', value: { pageName: 'LinkedPage', alias: null } },
+      ],
+    })
+
+    // Simulate BlockRow: an outer div with onClick that mimics
+    // handleStartEdit. If propagation is correctly stopped, this
+    // handler must NOT fire when the wikilink is clicked.
+    const onParentClick = vi.fn()
+    render(
+      <div onClick={onParentClick} data-testid="block-row">
+        <InlineContent content="[[LinkedPage]]" pageMap={new Map()} />
+      </div>,
+    )
+
+    const link = screen.getByText('LinkedPage')
+    fireEvent.click(link)
+
+    // The wikilink's own handler should have run (page was missing →
+    // createPage is called)…
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'LinkedPage' })
+    })
+    // …but the parent (BlockRow) must NOT have received the click.
+    expect(onParentClick).not.toHaveBeenCalled()
+  })
 })

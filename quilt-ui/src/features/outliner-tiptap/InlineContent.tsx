@@ -207,7 +207,13 @@ function renderSegment(
         <a
           key={key}
           href={`/page/${encodeURIComponent(pageName)}`}
-          onClick={(e) => onPageRefClick?.(pageName, e)}
+          onClick={(e) => {
+            // CRITICAL: stop propagation so the click doesn't bubble up
+            // to BlockRow's onClick and put the block in edit mode
+            // (user wants to navigate to the linked page, not edit it).
+            e.stopPropagation()
+            onPageRefClick?.(pageName, e)
+          }}
           style={{
             color: pageExists ? 'var(--color-link)' : 'var(--color-text-disabled)',
             cursor: 'pointer',
