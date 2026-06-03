@@ -83,7 +83,7 @@ export function ReferenceCard({
         gap: 'var(--space-3)',
         padding: 'var(--space-4)',
         background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
+        border: 'none',
         borderRadius: 'var(--radius-lg)',
         boxShadow: hover
           ? '0 12px 32px rgba(15, 23, 42, 0.06)'

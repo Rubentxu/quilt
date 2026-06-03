@@ -30,7 +30,7 @@ export function ContentCard({
       data-testid="content-card"
       style={{
         background: 'var(--color-surface)',
-        border: '1px solid var(--color-border)',
+        border: 'none',
         borderRadius: 'var(--radius-lg)',
         boxShadow: 'var(--shadow-sm)',
         padding: '0',
