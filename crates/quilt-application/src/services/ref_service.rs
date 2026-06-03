@@ -91,11 +91,20 @@ pub fn parse_refs_from_content(content: &str) -> ParsedContentRefs {
                     let inner: String = chars[start..i].iter().collect();
                     let trimmed = inner.trim();
                     if !trimmed.is_empty() {
-                        // Try UUID first (possible [[uuid]] style), then page name
-                        if let Ok(uuid) = uuid::Uuid::parse_str(trimmed) {
-                            resolved.push((Uuid::from(uuid), RefType::PageRef));
-                        } else {
-                            page_names.push(trimmed.to_string());
+                        // G1: split on the FIRST `|` to drop the alias
+                        // portion. The page lookup uses the part before
+                        // `|`; the alias is display-only.
+                        let name_part = trimmed
+                            .find('|')
+                            .map(|idx| trimmed[..idx].trim())
+                            .unwrap_or(trimmed);
+                        if !name_part.is_empty() {
+                            // Try UUID first (possible [[uuid]] style), then page name
+                            if let Ok(uuid) = uuid::Uuid::parse_str(name_part) {
+                                resolved.push((Uuid::from(uuid), RefType::PageRef));
+                            } else {
+                                page_names.push(name_part.to_string());
+                            }
                         }
                     }
                     i += 2;
@@ -507,6 +516,65 @@ mod tests {
         assert_eq!(backlinks.len(), 1);
         assert_eq!(backlinks[0].0, block_id);
         assert_eq!(backlinks[0].1, RefType::PageRef);
+    }
+
+    // ── G1: alias split in `[[Page|alias]]` ───────────────────────────
+    //
+    // The ref service must use the part BEFORE `|` for page resolution.
+    // The alias is display-only and must not influence the lookup.
+
+    #[tokio::test]
+    async fn test_page_ref_with_alias_resolves_to_page_name() {
+        let repo = Arc::new(MockRefRepository::new());
+        let mut service = RefService::new(repo);
+        let block_id = Uuid::new_v4();
+        let page_id = Uuid::new_v4();
+
+        // The alias text must NOT match the resolver; only the page name
+        // part is passed to it. If the alias leaked into the lookup, the
+        // resolver would return None and the backlink would not be created.
+        let resolver = |name: &str| -> Option<Uuid> {
+            match name {
+                "My Page" => Some(page_id),
+                _ => None,
+            }
+        };
+
+        let content = "Check [[My Page|display alias]]".to_string();
+        service
+            .on_block_saved(block_id, &content, Some(&resolver))
+            .await
+            .unwrap();
+
+        let backlinks = service.get_backlinks(page_id);
+        assert_eq!(
+            backlinks.len(),
+            1,
+            "[[Page|alias]] must resolve the page name and create a backlink"
+        );
+        assert_eq!(backlinks[0].0, block_id);
+        assert_eq!(backlinks[0].1, RefType::PageRef);
+    }
+
+    #[tokio::test]
+    async fn test_page_ref_with_empty_alias_resolves() {
+        // `[[Page|]]` is treated as no alias; resolution still works.
+        let repo = Arc::new(MockRefRepository::new());
+        let mut service = RefService::new(repo);
+        let block_id = Uuid::new_v4();
+        let page_id = Uuid::new_v4();
+
+        let resolver = |name: &str| -> Option<Uuid> {
+            (name == "Page").then_some(page_id)
+        };
+
+        let content = "Check [[Page|]]".to_string();
+        service
+            .on_block_saved(block_id, &content, Some(&resolver))
+            .await
+            .unwrap();
+
+        assert_eq!(service.get_backlinks(page_id).len(), 1);
     }
 
     #[tokio::test]

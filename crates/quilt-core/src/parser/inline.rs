@@ -60,9 +60,14 @@ impl Range {
 pub enum Segment {
     /// Plain text content
     Text { content: String, range: Range },
-    /// Page reference `[[Page Name]]`
+    /// Page reference `[[Page Name]]` or `[[Page Name|alias]]`
+    ///
+    /// `page_name` is the target used for resolution and the `href`.
+    /// `alias` is the optional display text after the first `|` — the
+    /// page itself is identified by `page_name` only.
     PageRef {
         page_name: String,
+        alias: Option<String>,
         raw: String,
         range: Range,
     },
@@ -380,9 +385,28 @@ impl InlineParser {
             let raw_len = raw.len();
             let range = Range::new(pos, pos + raw_len);
 
+            // Split on the FIRST `|` to extract an optional alias.
+            // `[[` shouldn't be nested in our case, so a plain `find('|')`
+            // is sufficient. `[[Page|]]` (empty alias) is treated as no
+            // alias — there's no meaningful display text.
+            let (page_name, alias) = match inner.find('|') {
+                Some(idx) => {
+                    let name = inner[..idx].to_string();
+                    let rest = inner[idx + 1..].to_string();
+                    let trimmed = rest.trim();
+                    if trimmed.is_empty() {
+                        (name, None)
+                    } else {
+                        (name, Some(trimmed.to_string()))
+                    }
+                }
+                None => (inner.to_string(), None),
+            };
+
             return Some((
                 Segment::PageRef {
-                    page_name: inner.to_string(),
+                    page_name,
+                    alias,
                     raw,
                     range,
                 },
@@ -1073,6 +1097,95 @@ mod tests {
 
         assert_eq!(normalized.page_refs.len(), 1);
         assert_eq!(normalized.page_refs[0], "My Page");
+    }
+
+    // ── G1: [[Page|alias]] support ────────────────────────────────────
+    //
+    // The wikilink syntax `[[Page|alias]]` should split on the first
+    // `|`, using the part before for the page lookup and the part
+    // after for display. The full raw text is preserved for round-trip.
+
+    #[test]
+    fn test_page_ref_with_alias_splits_on_pipe() {
+        let parser = InlineParser::default();
+        let result = parser.parse("[[Real Page|alias]]");
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            Segment::PageRef {
+                page_name,
+                alias,
+                raw,
+                ..
+            } => {
+                assert_eq!(page_name, "Real Page");
+                assert_eq!(alias.as_deref(), Some("alias"));
+                assert_eq!(raw, "[[Real Page|alias]]");
+            }
+            _ => panic!("Expected PageRef"),
+        }
+    }
+
+    #[test]
+    fn test_page_ref_alias_can_contain_spaces() {
+        let parser = InlineParser::default();
+        let result = parser.parse("[[Page|multi word alias]]");
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            Segment::PageRef {
+                page_name, alias, ..
+            } => {
+                assert_eq!(page_name, "Page");
+                assert_eq!(alias.as_deref(), Some("multi word alias"));
+            }
+            _ => panic!("Expected PageRef"),
+        }
+    }
+
+    #[test]
+    fn test_page_ref_without_alias_keeps_no_alias() {
+        let parser = InlineParser::default();
+        let result = parser.parse("[[Page]]");
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            Segment::PageRef {
+                page_name, alias, ..
+            } => {
+                assert_eq!(page_name, "Page");
+                assert!(alias.is_none(), "no pipe → alias must be None");
+            }
+            _ => panic!("Expected PageRef"),
+        }
+    }
+
+    #[test]
+    fn test_page_ref_empty_alias_is_treated_as_no_alias() {
+        let parser = InlineParser::default();
+        let result = parser.parse("[[Page|]]");
+        assert_eq!(result.segments.len(), 1);
+        match &result.segments[0] {
+            Segment::PageRef {
+                page_name, alias, ..
+            } => {
+                assert_eq!(page_name, "Page");
+                assert!(alias.is_none(), "[[Page|]] → alias must be None");
+            }
+            _ => panic!("Expected PageRef"),
+        }
+    }
+
+    #[test]
+    fn test_page_ref_alias_normalization_uses_page_name() {
+        // Normalize must yield the page name (not the alias) so the
+        // ref service can resolve the correct target.
+        let parser = InlineParser::default();
+        let result = parser.parse("See [[My Page|My Display]] for details");
+        let normalized = parser.normalize(&result);
+
+        assert_eq!(normalized.page_refs.len(), 1);
+        assert_eq!(
+            normalized.page_refs[0], "My Page",
+            "normalized page_refs must use the page name, not the alias"
+        );
     }
 
     #[test]
