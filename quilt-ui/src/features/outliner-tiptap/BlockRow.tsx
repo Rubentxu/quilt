@@ -513,12 +513,28 @@ export function BlockRow({
         return // Let other keys through (typing continues to filter)
       }
 
-      // ── Escape: Close page autocomplete or exit editing mode ──
+      // ── Page autocomplete is open: intercept keys so the menu handles them ──
+      // The page autocomplete ([[..) handles keyboard nav via its own document
+      // listener (PageAutocomplete.tsx), but we MUST prevent the editor from
+      // also handling Enter (which would create a new block) and ArrowUp/Down
+      // (which would move the cursor).
+      if (autocomplete) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setAutocomplete(null)
+          return
+        }
+        if (['Enter', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+          e.preventDefault()
+          return
+        }
+        return // Let other keys through (typing continues to filter)
+      }
+
+      // ── Escape: exit editing mode (autocomplete menus are handled above) ──
       if (e.key === 'Escape') {
         e.preventDefault()
-        if (autocomplete) {
-          setAutocomplete(null)
-        } else if (contentRef.current) {
+        if (contentRef.current) {
           contentRef.current.blur()
         }
         return

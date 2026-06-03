@@ -110,4 +110,74 @@ describe('PageAutocomplete', () => {
     fireEvent.mouseDown(screen.getByTestId('outside'))
     expect(onClose).toHaveBeenCalled()
   })
+
+  // ──── Keyboard navigation (Logseq parity) ──────────────────────
+
+  it('ArrowDown moves the selection to the next page', async () => {
+    render(
+      <PageAutocomplete
+        position={{ top: 0, left: 0 }}
+        query=""
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => screen.getByText('Foo Page'))
+    // The listbox is now visible with 3 pages.
+    // First item is selected by default; press ArrowDown → second item.
+    fireEvent.keyDown(document, { key: 'ArrowDown' })
+    // The first option should still be in the document, but its
+    // aria-selected is now false and the second is true.
+    const options = screen.getAllByRole('option')
+    expect(options[0]).toHaveAttribute('aria-selected', 'false')
+    expect(options[1]).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('ArrowUp wraps from the first item to the last', async () => {
+    render(
+      <PageAutocomplete
+        position={{ top: 0, left: 0 }}
+        query=""
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => screen.getByText('Foo Page'))
+    // Default selection is index 0. ArrowUp should wrap to the last.
+    fireEvent.keyDown(document, { key: 'ArrowUp' })
+    const options = screen.getAllByRole('option')
+    expect(options[options.length - 1]).toHaveAttribute('aria-selected', 'true')
+    expect(options[0]).toHaveAttribute('aria-selected', 'false')
+  })
+
+  it('Enter selects the currently highlighted page', async () => {
+    const onSelect = vi.fn()
+    render(
+      <PageAutocomplete
+        position={{ top: 0, left: 0 }}
+        query=""
+        onSelect={onSelect}
+        onClose={vi.fn()}
+      />,
+    )
+    await waitFor(() => screen.getByText('Foo Page'))
+    // Default selection is index 0 → "Foo Page" (name "Foo").
+    fireEvent.keyDown(document, { key: 'Enter' })
+    expect(onSelect).toHaveBeenCalledWith('Foo')
+  })
+
+  it('Escape calls onClose', async () => {
+    const onClose = vi.fn()
+    render(
+      <PageAutocomplete
+        position={{ top: 0, left: 0 }}
+        query=""
+        onSelect={vi.fn()}
+        onClose={onClose}
+      />,
+    )
+    await waitFor(() => screen.getByText('Foo Page'))
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalled()
+  })
 })

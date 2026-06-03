@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { InlineContent } from '../InlineContent'
 
@@ -29,8 +29,26 @@ vi.mock('@core/wasm-bridge/WasmProvider', () => ({
   ensureWasmLoaded: vi.fn().mockResolvedValue(undefined),
 }))
 
+// ──── API client mock ──────────────────────────────────────────────
+//
+// `handlePageRefClick` calls `api.createPage` when the target page
+// doesn't exist in the pageMap. We mock that call so the test
+// verifies the create-on-click behavior without hitting the network.
+
+const mockCreatePage = vi.fn().mockResolvedValue({ id: 'new', name: 'NewPage' })
+const mockListPages = vi.fn().mockResolvedValue([])
+
+vi.mock('@core/api-client', () => ({
+  api: {
+    createPage: (...args: unknown[]) => mockCreatePage(...args),
+    listPages: (...args: unknown[]) => mockListPages(...args),
+  },
+}))
+
 beforeEach(() => {
   mockParseInline.mockReset()
+  mockCreatePage.mockClear()
+  mockListPages.mockClear()
 })
 
 describe('InlineContent', () => {
@@ -202,5 +220,74 @@ describe('InlineContent', () => {
     })
     render(<InlineContent content="plain fallback" />)
     expect(screen.getByText('plain fallback')).toBeInTheDocument()
+  })
+
+  // ──── Create-on-click (Logseq parity) ──────────────────────────
+  //
+  // G2 from the wikilinks audit: clicking a [[Page]] link for a
+  // page that doesn't exist should create the page on the fly
+  // (rather than navigating to a 404).
+
+  it('creates the page on click when target is not in pageMap', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'NewPage' }],
+    })
+    // Empty pageMap → page does NOT exist
+    render(
+      <InlineContent
+        content="[[NewPage]]"
+        pageMap={new Map()}
+      />,
+    )
+    const link = screen.getByText('NewPage')
+    fireEvent.click(link)
+
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'NewPage' })
+    })
+  })
+
+  it('does NOT create the page when target already exists in pageMap', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'ExistingPage' }],
+    })
+    const pageMap = new Map([
+      ['ExistingPage', { id: '1', name: 'ExistingPage', title: null } as any],
+    ])
+    render(
+      <InlineContent
+        content="[[ExistingPage]]"
+        pageMap={pageMap}
+      />,
+    )
+    const link = screen.getByText('ExistingPage')
+    fireEvent.click(link)
+
+    // Wait a tick for any spurious async call
+    await new Promise(r => setTimeout(r, 10))
+    expect(mockCreatePage).not.toHaveBeenCalled()
+  })
+
+  it('still navigates even when createPage throws (concurrent create, etc.)', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'RacePage' }],
+    })
+    mockCreatePage.mockRejectedValueOnce(new Error('UNIQUE constraint failed'))
+
+    render(
+      <InlineContent
+        content="[[RacePage]]"
+        pageMap={new Map()}
+      />,
+    )
+    const link = screen.getByText('RacePage')
+
+    // Should not throw — the click handler catches the rejection so the
+    // user doesn't see a broken UI; navigation still happens.
+    expect(() => fireEvent.click(link)).not.toThrow()
+
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'RacePage' })
+    })
   })
 })

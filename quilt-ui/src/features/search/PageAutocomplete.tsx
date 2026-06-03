@@ -48,11 +48,44 @@ export function PageAutocomplete({ position, query, onSelect, onClose }: PageAut
     }
   }, [position, onClose])
 
+  // Keyboard navigation — ArrowUp/Down to move, Enter to select, Esc to close.
+  // Logseq parity: typing `[[foo` + Enter selects the first match.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!position) return
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault()
+          setSelectedIndex(i => (i + 1) % Math.max(pages.length, 1))
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          setSelectedIndex(i => (i - 1 + pages.length) % Math.max(pages.length, 1))
+          break
+        case 'Enter':
+          e.preventDefault()
+          if (pages[selectedIndex]) {
+            onSelect(pages[selectedIndex].name)
+          }
+          break
+        case 'Escape':
+          e.preventDefault()
+          onClose()
+          break
+      }
+    }
+    if (position) {
+      document.addEventListener('keydown', handleKeyDown)
+      return () => document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [position, pages, selectedIndex, onSelect, onClose])
+
   if (!position || pages.length === 0) return null
 
   return (
     <div
       ref={ref}
+      role="listbox"
       style={{
         position: 'fixed',
         top: position.top,
@@ -70,6 +103,8 @@ export function PageAutocomplete({ position, query, onSelect, onClose }: PageAut
       {pages.map((page, i) => (
         <div
           key={page.id}
+          role="option"
+          aria-selected={i === selectedIndex}
           onClick={() => onSelect(page.name)}
           onMouseEnter={() => setSelectedIndex(i)}
           style={{

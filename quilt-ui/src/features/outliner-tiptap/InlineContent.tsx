@@ -3,6 +3,7 @@ import { Calendar, Clock, User, FileText, Tag, Hash } from 'lucide-react'
 import type { Block, Page } from '@shared/types/api'
 import type { Tab } from '@shared/contexts/TabsContext'
 import { useWasm, ensureWasmLoaded } from '@core/wasm-bridge/WasmProvider'
+import { api } from '@core/api-client'
 
 // HoverPreview is a heavy popover (it fetches and renders a sub-page).
 // We only need its bundle on the rare hover event, not for every block.
@@ -578,12 +579,28 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     }, 200)
   }, [])
 
-  const handlePageRefClick = useCallback((target: string, e: React.MouseEvent) => {
+  const handlePageRefClick = useCallback(async (target: string, e: React.MouseEvent) => {
     e.preventDefault()
     if (e.shiftKey) {
       // TODO: Open in sidebar (sidebar not yet implemented)
       return
     }
+
+    // Logseq behavior: if the page doesn't exist, create it on the fly
+    // when the user clicks the link. The client-side `pageMap` is the
+    // source of truth for "does it exist"; if it's stale (e.g. the
+    // page was created in another tab), the server's UNIQUE constraint
+    // will reject the duplicate insert and we just navigate anyway.
+    const pageExists = pageMap?.has(target) ?? false
+    if (!pageExists) {
+      try {
+        await api.createPage({ name: target })
+      } catch {
+        // Concurrent creation or network blip — the navigation below
+        // will still work because the page does exist on the server.
+      }
+    }
+
     if (e.metaKey || e.ctrlKey) {
       if (openTab) {
         openTab({ name: target, type: 'page', title: target, params: {} })
@@ -592,7 +609,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     }
     // Normal navigation
     window.location.hash = `/page/${encodeURIComponent(target)}`
-  }, [openTab])
+  }, [openTab, pageMap])
 
   // Cleanup timers on unmount
   useEffect(() => {
