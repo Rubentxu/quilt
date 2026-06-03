@@ -1,122 +1,114 @@
 /**
- * Cards E2E Tests
+ * Cards E2E Tests (updated for ADR-0007)
  *
- * Tests for ReferenceCard and ContentCard rendering when a block
- * has the `type:: reference` or `type:: documentacion` property.
- *
- * Prerequisites:
- *   - Server running on localhost:3737
- *   - Frontend running on localhost:5173
- *   - QUILT_API_KEY env var set
+ * Tests for card rendering via the data-driven CardRenderer.
+ * Pre-ADR-0007, this spec tested the hardcoded ReferenceCard and
+ * ContentCard components; those were replaced by the single
+ * CardRenderer which reads `template::` from the block and
+ * resolves to a card-shape from the template page.
  *
  * Run with: QUILT_API_KEY=<key> npx playwright test cards
  */
 
-import { test, expect, type Page } from '@playwright/test';
-import { getAuthHeaders } from '../auth-state';
+import { test, expect, type Page } from '@playwright/test'
+import { getAuthHeaders } from '../auth-state'
 
-const API_URL = process.env.API_BASE_URL || 'http://localhost:3737';
-const FRONTEND_URL = process.env.BASE_URL || 'http://localhost:5173';
+const API_URL = process.env.API_BASE_URL || 'http://localhost:3737'
+const FRONTEND_URL = process.env.BASE_URL || 'http://localhost:5173'
 
-/** Create a block via REST API (with auth). */
+// ── Helpers ─────────────────────────────────────────────────────
+
 async function createBlock(
   page: Page,
   pageName: string,
   content: string,
-  properties?: Record<string, unknown>
+  properties?: Record<string, unknown>,
 ): Promise<string> {
-  const headers = getAuthHeaders();
+  const headers = getAuthHeaders()
   const resp = await page.request.post(`${API_URL}/api/v1/blocks`, {
     data: { pageName, content, properties },
     headers,
-  });
+  })
   if (!resp.ok()) {
-    const body = await resp.text();
-    throw new Error(`createBlock failed with ${resp.status()}: ${body}`);
+    const body = await resp.text()
+    throw new Error(`createBlock failed with ${resp.status()}: ${body}`)
   }
-  const json = (await resp.json()) as { id: string };
-  return json.id;
+  const json = (await resp.json()) as { id: string }
+  return json.id
 }
 
-test.describe('Card-wrapped blocks', () => {
-  const testPage = `cards-e2e-test-${Date.now()}`;
+async function goToPage(page: Page, pageName: string): Promise<void> {
+  await page.goto(`${FRONTEND_URL}/page/${encodeURIComponent(pageName)}`)
+  const main = page.locator('main')
+  await expect(main).toBeVisible({ timeout: 15000 })
+}
 
-  test('type:: reference block renders ReferenceCard', async ({ page }) => {
-    // Create a reference block directly via API
-    await createBlock(
-      page,
-      testPage,
-      'DDA Huella v1.0.0',
-      { type: 'reference', 'dda-relacionada': 'DDA Huella' }
-    );
+function suffix(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+}
 
-    // Navigate to the page
-    await page.goto(`${FRONTEND_URL}/page/${encodeURIComponent(testPage)}`);
+test.describe('Card-wrapped blocks (ADR-0007)', () => {
+  // ── type:: reference → legacy fallback ─────────────────────
 
-    // Wait for page to load
-    const main = page.locator('main');
-    await expect(main).toBeVisible({ timeout: 15000 });
+  test('type:: reference block renders a card via legacy fallback', async ({ page }) => {
+    const pageName = `cards-ref-${suffix()}`
 
-    // The ReferenceCard should be visible with the title
-    const card = page.locator('[data-testid="reference-card"]').first();
-    await expect(card).toBeVisible({ timeout: 10000 });
+    await createBlock(page, pageName, 'DDA Huella v1.0.0', {
+      'type': 'reference',
+      'dda-relacionada': 'DDA Huella',
+    })
 
-    // The title should be the block content
-    await expect(page.getByText('DDA Huella v1.0.0').first()).toBeVisible();
+    await goToPage(page, pageName)
+    const card = page.locator('[data-testid="card-renderer"]').first()
+    await expect(card).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('DDA Huella v1.0.0').first()).toBeVisible()
+    await expect(page.getByText('DDA Huella').first()).toBeVisible()
+  })
 
-    // The meta should be visible
-    await expect(page.getByText('DDA Huella').first()).toBeVisible();
-  });
+  // ── type:: documentacion → legacy fallback ─────────────────
 
-  test('type:: documentacion block renders ContentCard', async ({ page }) => {
-    await createBlock(
-      page,
-      testPage,
-      'Documentación Pipelines Correos',
-      { type: 'documentacion' }
-    );
+  test('type:: documentacion block renders a collapsible card', async ({ page }) => {
+    const pageName = `cards-doc-${suffix()}`
 
-    await page.goto(`${FRONTEND_URL}/page/${encodeURIComponent(testPage)}`);
-    const main = page.locator('main');
-    await expect(main).toBeVisible({ timeout: 15000 });
+    await createBlock(page, pageName, 'Documentación Pipelines', {
+      'type': 'documentacion',
+    })
 
-    // ContentCard has a collapse toggle
-    const contentCard = page.locator('[data-testid="content-card"]').first();
-    await expect(contentCard).toBeVisible({ timeout: 10000 });
+    await goToPage(page, pageName)
+    const card = page.locator('[data-testid="card-renderer"][data-shape="content"]').first()
+    await expect(card).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Documentación Pipelines').first()).toBeVisible()
+  })
 
-    // Title should be visible
-    await expect(page.getByText('Documentación Pipelines Correos').first()).toBeVisible();
-  });
+  // ── "+ Reference" quick-add button ──────────────────────────
 
-  test('+ Reference button creates a reference block', async ({ page }) => {
-    // Navigate to the test page (will be empty)
-    await page.goto(`${FRONTEND_URL}/page/${encodeURIComponent(testPage)}`);
+  test('+ Reference quick-add button creates a block with template:: reference', async ({ page }) => {
+    const pageName = `cards-qref-${suffix()}`
 
-    const main = page.locator('main');
-    await expect(main).toBeVisible({ timeout: 15000 });
+    await goToPage(page, pageName)
+    const main = page.locator('main')
+    await expect(main).toBeVisible({ timeout: 15000 })
 
-    // Click "+ Reference" in the add-block area
-    const refButton = page.getByRole('button', { name: 'Add reference' });
+    const refButton = page.getByRole('button', { name: 'Add reference' })
     if (await refButton.isVisible()) {
-      await refButton.click();
-
-      // A new block should appear with type:: reference
-      // The block content should contain "Reference" (placeholder)
-      await expect(page.getByText('Reference').first()).toBeVisible({ timeout: 5000 });
+      await refButton.click()
+      await expect(page.getByText('Reference').first()).toBeVisible({ timeout: 5000 })
     }
-  });
+  })
 
-  test('+ Documentation button creates a documentacion block', async ({ page }) => {
-    await page.goto(`${FRONTEND_URL}/page/${encodeURIComponent(testPage)}`);
+  // ── "+ Documentation" quick-add button ──────────────────────
 
-    const main = page.locator('main');
-    await expect(main).toBeVisible({ timeout: 15000 });
+  test('+ Documentation quick-add button creates a block with template:: documentation', async ({ page }) => {
+    const pageName = `cards-qdoc-${suffix()}`
 
-    const docButton = page.getByRole('button', { name: 'Add documentation' });
+    await goToPage(page, pageName)
+    const main = page.locator('main')
+    await expect(main).toBeVisible({ timeout: 15000 })
+
+    const docButton = page.getByRole('button', { name: 'Add documentation' })
     if (await docButton.isVisible()) {
-      await docButton.click();
-
-      await expect(page.getByText('Documentación').first()).toBeVisible({ timeout: 5000 });
+      await docButton.click()
+      await expect(page.getByText('Documentation').first()).toBeVisible({ timeout: 5000 })
     }
-  });
-});
+  })
+})
