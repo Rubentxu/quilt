@@ -45,10 +45,25 @@ vi.mock('@core/api-client', () => ({
   },
 }))
 
+// ──── TanStack Router mock ─────────────────────────────────────────
+//
+// InlineContent uses `useNavigate` to navigate when the user clicks
+// a [[Page]] or #tag link. The previous implementation relied on
+// `window.location.hash`, which silently failed with the browser
+// history used by TanStack Router — see the bug this commit fixes.
+// We mock `useNavigate` so tests can assert the navigation call.
+
+const mockNavigate = vi.fn()
+
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => mockNavigate,
+}))
+
 beforeEach(() => {
   mockParseInline.mockReset()
   mockCreatePage.mockClear()
   mockListPages.mockClear()
+  mockNavigate.mockClear()
 })
 
 describe('InlineContent', () => {
@@ -399,6 +414,182 @@ describe('InlineContent', () => {
       expect(mockCreatePage).toHaveBeenCalledWith({ name: 'LinkedPage' })
     })
     // …but the parent (BlockRow) must NOT have received the click.
+    expect(onParentClick).not.toHaveBeenCalled()
+  })
+
+  // ──── Navigation: click on [[Page]] calls useNavigate ─────────────
+  //
+  // Regression: the old implementation did `window.location.hash = ...`,
+  // which silently failed because TanStack Router uses
+  // `createBrowserHistory` and never reads the URL hash. Pinning this
+  // down with a test so the bug can't reappear.
+
+  it('navigates via useNavigate when [[Page]] is clicked', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'SomePage' }],
+    })
+    const pageMap = new Map([
+      ['SomePage', { id: '1', name: 'SomePage', title: null } as any],
+    ])
+    render(<InlineContent content="[[SomePage]]" pageMap={pageMap} />)
+
+    fireEvent.click(screen.getByText('SomePage'))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'SomePage' },
+      })
+    })
+  })
+
+  it('URL-encodes the page name when navigating to [[Page With Spaces]]', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'Page With Spaces' }],
+    })
+    const pageMap = new Map([
+      ['Page With Spaces', { id: '1', name: 'Page With Spaces', title: null } as any],
+    ])
+    render(<InlineContent content="[[Page With Spaces]]" pageMap={pageMap} />)
+
+    fireEvent.click(screen.getByText('Page With Spaces'))
+
+    await waitFor(() => {
+      // navigate is called with the raw name; the router URL-encodes
+      // internally. We just verify the params shape.
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'Page With Spaces' },
+      })
+    })
+  })
+
+  it('navigates even when createPage throws (concurrent create case)', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'RacePage' }],
+    })
+    mockCreatePage.mockRejectedValueOnce(new Error('UNIQUE constraint failed'))
+
+    render(<InlineContent content="[[RacePage]]" pageMap={new Map()} />)
+
+    expect(() => fireEvent.click(screen.getByText('RacePage'))).not.toThrow()
+
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'RacePage' })
+    })
+    // And navigation must STILL happen, even though the create threw.
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'RacePage' },
+      })
+    })
+  })
+
+  // ──── Navigation: #tag click ─────────────────────────────────────
+
+  it('navigates to the tag page on #tag click (Logseq parity)', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'tag', value: 'project' }],
+    })
+    render(<InlineContent content="#project" pageMap={new Map()} />)
+
+    fireEvent.click(screen.getByText('#project'))
+
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'project' })
+    })
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'project' },
+      })
+    })
+  })
+
+  it('does NOT create the tag page when it already exists in pageMap', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'tag', value: 'project' }],
+    })
+    const pageMap = new Map([
+      ['project', { id: '1', name: 'project', title: null } as any],
+    ])
+    render(<InlineContent content="#project" pageMap={pageMap} />)
+
+    fireEvent.click(screen.getByText('#project'))
+
+    // No async create
+    await new Promise(r => setTimeout(r, 10))
+    expect(mockCreatePage).not.toHaveBeenCalled()
+    // But navigation still happens
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'project' },
+      })
+    })
+  })
+
+  it('stops click propagation on #tag so BlockRow does not enter edit mode', () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'tag', value: 'topic' }],
+    })
+    const onParentClick = vi.fn()
+    render(
+      <div onClick={onParentClick}>
+        <InlineContent content="#topic" pageMap={new Map()} />
+      </div>,
+    )
+
+    fireEvent.click(screen.getByText('#topic'))
+    expect(onParentClick).not.toHaveBeenCalled()
+  })
+
+  // ──── Navigation: ((block-id)) click ─────────────────────────────
+
+  it('navigates to the parent page on ((block-id)) click', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [
+        { type: 'blockRef', value: 'block-uuid-abc' },
+      ],
+    })
+    const blocks = [
+      {
+        id: 'block-uuid-abc',
+        content: 'some block text',
+        pageName: 'BlockOwnerPage',
+        pageId: 'p1',
+      } as any,
+    ]
+    render(<InlineContent content="((block-uuid-abc))" blocks={blocks} />)
+
+    fireEvent.click(screen.getByText('some block text'))
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'BlockOwnerPage' },
+      })
+    })
+  })
+
+  it('does nothing when ((block-id)) is unresolved (no matching block)', () => {
+    // blockId is in the segment but no block with that id exists in
+    // `blocks`. The renderer should show the "(missing block)" placeholder
+    // and clicking it must not navigate or throw.
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'blockRef', value: 'missing-id' }],
+    })
+    const onParentClick = vi.fn()
+    render(
+      <div onClick={onParentClick}>
+        <InlineContent content="((missing-id))" blocks={[]} />
+      </div>,
+    )
+
+    expect(screen.getByText('(missing block)')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('(missing block)'))
+    expect(mockNavigate).not.toHaveBeenCalled()
     expect(onParentClick).not.toHaveBeenCalled()
   })
 })

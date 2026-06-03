@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useRef, useCallback, useState, useEffect, type ReactNode } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { Calendar, Clock, User, FileText, Tag, Hash } from 'lucide-react'
 import type { Block, Page } from '@shared/types/api'
 import type { Tab } from '@shared/contexts/TabsContext'
@@ -153,6 +154,8 @@ function renderSegment(
   pageMap?: Map<string, Page>,
   onHover?: (info: HoverInfo | null) => void,
   onPageRefClick?: (target: string, e: React.MouseEvent) => void,
+  onBlockRefClick?: (pageName: string, blockId: string, e: React.MouseEvent) => void,
+  onTagClick?: (tagName: string, e: React.MouseEvent) => void,
 ): ReactNode {
   switch (seg.type) {
     case 'text':
@@ -246,13 +249,21 @@ function renderSegment(
       const refBlock = blocks?.find(b => b.id === blockId)
 
       if (!refBlock) {
+        // The block reference points to a block that doesn't exist in
+        // the current pageMap. Render a non-interactive placeholder and
+        // explicitly stop click propagation so the user doesn't get
+        // bounced into edit mode by a click on dead text. Without this
+        // guard the click bubbles to BlockRow, which interprets it as
+        // "start editing".
         return (
           <span
             key={key}
+            onClick={(e) => e.stopPropagation()}
             style={{
               color: 'var(--color-text-disabled)',
               fontStyle: 'italic',
               fontSize: '0.9em',
+              cursor: 'not-allowed',
             }}
           >
             (missing block)
@@ -269,7 +280,7 @@ function renderSegment(
           key={key}
           onClick={(e) => {
             e.stopPropagation()
-            window.location.hash = `/page/${encodeURIComponent(sourcePageName)}`
+            onBlockRefClick?.(sourcePageName, blockId, e)
           }}
           onMouseEnter={(e) => {
             const rect = e.currentTarget.getBoundingClientRect()
@@ -306,6 +317,15 @@ function renderSegment(
       return (
         <span
           key={key}
+          onClick={(e) => {
+            e.stopPropagation()
+            onTagClick?.(tagName, e)
+          }}
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect()
+            onHover?.({ type: 'page', target: tagName, anchorRect: rect })
+          }}
+          onMouseLeave={() => onHover?.(null)}
           style={{
             background: 'var(--color-primary-container)',
             color: 'var(--color-primary)',
@@ -315,6 +335,8 @@ function renderSegment(
             borderRadius: 'var(--radius-pill)',
             marginLeft: '2px',
             marginRight: '2px',
+            cursor: 'pointer',
+            transition: 'opacity var(--motion-fast) var(--ease-standard)',
           }}
         >
           #{tagName}
@@ -577,6 +599,7 @@ function renderSegment(
 export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: InlineContentProps) {
   const { loaded, wasmParseInline } = useWasm()
   const [inlineWasmReady, setInlineWasmReady] = useState(loaded)
+  const navigate = useNavigate()
 
   // ── Hover state & timers ────────────────────────────────────────
   const [hoveredRef, setHoveredRef] = useState<HoverInfo | null>(null)
@@ -611,7 +634,8 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
   const handlePageRefClick = useCallback(async (target: string, e: React.MouseEvent) => {
     e.preventDefault()
     if (e.shiftKey) {
-      // TODO: Open in sidebar (sidebar not yet implemented)
+      // TODO: Open in sidebar (sidebar not yet implemented in Quilt).
+      // Logseq opens the linked page/block in a sidebar panel here.
       return
     }
 
@@ -636,9 +660,53 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
       }
       return
     }
-    // Normal navigation
-    window.location.hash = `/page/${encodeURIComponent(target)}`
-  }, [openTab, pageMap])
+    // Normal navigation — use TanStack Router (path-based). The
+    // earlier `window.location.hash` assignment was a bug: TanStack
+    // uses `createBrowserHistory` and never reads the URL hash, so
+    // the link silently failed to navigate.
+    navigate({ to: '/page/$name', params: { name: target } })
+  }, [navigate, openTab, pageMap])
+
+  // Block-ref click. Logseq opens the block in the sidebar (not the
+  // main content area) — see handler/editor.cljs open-block-in-sidebar!.
+  // Quilt has no sidebar yet, so we navigate to the block's parent
+  // page. TODO: once a sidebar exists, add `e.shiftKey` to open there.
+  const handleBlockRefClick = useCallback((pageName: string, _blockId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (e.metaKey || e.ctrlKey) {
+      if (openTab) {
+        openTab({ name: pageName, type: 'page', title: pageName, params: {} })
+      }
+      return
+    }
+    navigate({ to: '/page/$name', params: { name: pageName } })
+  }, [navigate, openTab])
+
+  // #tag click. Logseq treats tags as pages (#tag → navigate to that
+  // page; creates the page if it doesn't exist).
+  const handleTagClick = useCallback(async (tagName: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (e.shiftKey) {
+      // TODO: Open in sidebar
+      return
+    }
+    const pageExists = pageMap?.has(tagName) ?? false
+    if (!pageExists) {
+      try {
+        await api.createPage({ name: tagName })
+      } catch {
+        // Concurrent create — page may already exist on the server.
+      }
+    }
+    if (e.metaKey || e.ctrlKey) {
+      if (openTab) {
+        openTab({ name: tagName, type: 'page', title: tagName, params: {} })
+      }
+      return
+    }
+    navigate({ to: '/page/$name', params: { name: tagName } })
+  }, [navigate, openTab, pageMap])
 
   // Cleanup timers on unmount
   useEffect(() => {
@@ -700,7 +768,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
   return (
     <>
       {segments.map((seg: SegmentBase, i: number) =>
-        renderSegment(seg, i, isEditing, blocks, pageMap, handleHover, handlePageRefClick)
+        renderSegment(seg, i, isEditing, blocks, pageMap, handleHover, handlePageRefClick, handleBlockRefClick, handleTagClick)
       )}
       {hoveredRef && (
         <Suspense fallback={null}>
