@@ -87,12 +87,14 @@ describe('InlineContent', () => {
 
   it('renders page ref as link with /page/ href', () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'MyPage' }],
+      segments: [{ type: 'pageRef', value: 'mypage' }],
     })
-    render(<InlineContent content="[[MyPage]]" />)
-    const link = screen.getByText('MyPage')
+    render(<InlineContent content="[[mypage]]" />)
+    const link = screen.getByText('mypage')
     expect(link.tagName).toBe('A')
-    expect(link).toHaveAttribute('href', '/page/MyPage')
+    // href is the canonical (lowercase) form so Cmd/Ctrl-click opens
+    // the same URL the JS click would navigate to.
+    expect(link).toHaveAttribute('href', '/page/mypage')
   })
 
   it('renders code segment as <code>', () => {
@@ -126,17 +128,18 @@ describe('InlineContent', () => {
       segments: [
         {
           PageRef: {
-            page_name: 'MyPage',
-            raw: '[[MyPage]]',
+            page_name: 'mypage',
+            raw: '[[mypage]]',
             range: { start: 0, end: 10 },
           },
         },
       ],
     })
-    render(<InlineContent content="[[MyPage]]" />)
-    const link = screen.getByText('MyPage')
+    render(<InlineContent content="[[mypage]]" />)
+    const link = screen.getByText('mypage')
     expect(link.tagName).toBe('A')
-    expect(link).toHaveAttribute('href', '/page/MyPage')
+    // href is the canonical form regardless of the page_name case.
+    expect(link).toHaveAttribute('href', '/page/mypage')
   })
 
   it('renders the real Rust serde enum shape for headers', () => {
@@ -193,11 +196,11 @@ describe('InlineContent', () => {
 
   it('renders an existing page ref at full opacity', () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'Foo' }],
+      segments: [{ type: 'pageRef', value: 'foo' }],
     })
-    const pageMap = new Map([['Foo', { id: '1', name: 'Foo', title: null } as any]])
-    render(<InlineContent content="[[Foo]]" pageMap={pageMap} />)
-    const link = screen.getByText('Foo')
+    const pageMap = new Map([['foo', { id: '1', name: 'foo', title: null } as any]])
+    render(<InlineContent content="[[foo]]" pageMap={pageMap} />)
+    const link = screen.getByText('foo')
     expect(link).toHaveStyle({ opacity: '1' })
   })
 
@@ -245,37 +248,40 @@ describe('InlineContent', () => {
 
   it('creates the page on click when target is not in pageMap', async () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'NewPage' }],
+      segments: [{ type: 'pageRef', value: 'newpage' }],
     })
     // Empty pageMap → page does NOT exist
     render(
       <InlineContent
-        content="[[NewPage]]"
+        content="[[newpage]]"
         pageMap={new Map()}
       />,
     )
-    const link = screen.getByText('NewPage')
+    const link = screen.getByText('newpage')
     fireEvent.click(link)
 
     await waitFor(() => {
-      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'NewPage' })
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'newpage' })
     })
   })
 
   it('does NOT create the page when target already exists in pageMap', async () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'ExistingPage' }],
+      segments: [{ type: 'pageRef', value: 'existingpage' }],
     })
+    // The pageMap keys are always lowercase (the server's canonical
+    // form — see Page::normalize_name). The user-typed reference is
+    // also lowercased before the lookup.
     const pageMap = new Map([
-      ['ExistingPage', { id: '1', name: 'ExistingPage', title: null } as any],
+      ['existingpage', { id: '1', name: 'existingpage', title: null } as any],
     ])
     render(
       <InlineContent
-        content="[[ExistingPage]]"
+        content="[[existingpage]]"
         pageMap={pageMap}
       />,
     )
-    const link = screen.getByText('ExistingPage')
+    const link = screen.getByText('existingpage')
     fireEvent.click(link)
 
     // Wait a tick for any spurious async call
@@ -285,24 +291,24 @@ describe('InlineContent', () => {
 
   it('still navigates even when createPage throws (concurrent create, etc.)', async () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'RacePage' }],
+      segments: [{ type: 'pageRef', value: 'racepage' }],
     })
     mockCreatePage.mockRejectedValueOnce(new Error('UNIQUE constraint failed'))
 
     render(
       <InlineContent
-        content="[[RacePage]]"
+        content="[[racepage]]"
         pageMap={new Map()}
       />,
     )
-    const link = screen.getByText('RacePage')
+    const link = screen.getByText('racepage')
 
     // Should not throw — the click handler catches the rejection so the
     // user doesn't see a broken UI; navigation still happens.
     expect(() => fireEvent.click(link)).not.toThrow()
 
     await waitFor(() => {
-      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'RacePage' })
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'racepage' })
     })
   })
 
@@ -315,31 +321,31 @@ describe('InlineContent', () => {
   it('renders the alias text and href still points at the page name', () => {
     mockParseInline.mockReturnValue({
       segments: [
-        { type: 'pageRef', value: { pageName: 'MyPage', alias: 'My Alias' } },
+        { type: 'pageRef', value: { pageName: 'mypage', alias: 'My Alias' } },
       ],
     })
-    render(<InlineContent content="[[MyPage|My Alias]]" />)
+    render(<InlineContent content="[[mypage|My Alias]]" />)
 
     // The visible link text is the alias, not the page name.
     const link = screen.getByText('My Alias')
     expect(link.tagName).toBe('A')
     // …and the page name is NOT rendered as a separate text node.
-    expect(screen.queryByText('MyPage')).not.toBeInTheDocument()
-    // The href still points at the page name (URL-encoded).
-    expect(link).toHaveAttribute('href', '/page/MyPage')
+    expect(screen.queryByText('mypage')).not.toBeInTheDocument()
+    // The href points at the canonical (lowercase) form.
+    expect(link).toHaveAttribute('href', '/page/mypage')
   })
 
   it('renders the page name when no alias is present (backward compat)', () => {
     mockParseInline.mockReturnValue({
       segments: [
-        { type: 'pageRef', value: { pageName: 'MyPage', alias: null } },
+        { type: 'pageRef', value: { pageName: 'mypage', alias: null } },
       ],
     })
-    render(<InlineContent content="[[MyPage]]" />)
+    render(<InlineContent content="[[mypage]]" />)
 
-    const link = screen.getByText('MyPage')
+    const link = screen.getByText('mypage')
     expect(link.tagName).toBe('A')
-    expect(link).toHaveAttribute('href', '/page/MyPage')
+    expect(link).toHaveAttribute('href', '/page/mypage')
   })
 
   it('renders the alias using the real Rust serde enum shape', () => {
@@ -347,41 +353,41 @@ describe('InlineContent', () => {
       segments: [
         {
           PageRef: {
-            page_name: 'Real Page',
+            page_name: 'real page',
             alias: 'display alias',
-            raw: '[[Real Page|display alias]]',
+            raw: '[[real page|display alias]]',
             range: { start: 0, end: 28 },
           },
         },
       ],
     })
-    render(<InlineContent content="[[Real Page|display alias]]" />)
+    render(<InlineContent content="[[real page|display alias]]" />)
 
     // Display text is the alias…
     const link = screen.getByText('display alias')
     expect(link.tagName).toBe('A')
-    // …and the href points to the actual page name (URL-encoded).
-    expect(link).toHaveAttribute('href', '/page/Real%20Page')
+    // …and the href points to the canonical page name (URL-encoded).
+    expect(link).toHaveAttribute('href', '/page/real%20page')
     // The page name itself is not visible.
-    expect(screen.queryByText('Real Page')).not.toBeInTheDocument()
+    expect(screen.queryByText('real page')).not.toBeInTheDocument()
   })
 
   it('uses the page name (not the alias) for create-on-click', async () => {
     mockParseInline.mockReturnValue({
       segments: [
-        { type: 'pageRef', value: { pageName: 'Target', alias: 'pretty' } },
+        { type: 'pageRef', value: { pageName: 'target', alias: 'pretty' } },
       ],
     })
-    // Empty pageMap → Target does not exist; click should create it.
+    // Empty pageMap → target does not exist; click should create it.
     render(
-      <InlineContent content="[[Target|pretty]]" pageMap={new Map()} />,
+      <InlineContent content="[[target|pretty]]" pageMap={new Map()} />,
     )
     const link = screen.getByText('pretty')
     fireEvent.click(link)
 
-    // The API call must use the PAGE NAME, not the display alias.
+    // The API call must use the canonical PAGE NAME, not the display alias.
     await waitFor(() => {
-      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'Target' })
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'target' })
     })
   })
 
@@ -391,7 +397,7 @@ describe('InlineContent', () => {
   it('stops click propagation so BlockRow does not enter edit mode', async () => {
     mockParseInline.mockReturnValue({
       segments: [
-        { type: 'pageRef', value: { pageName: 'LinkedPage', alias: null } },
+        { type: 'pageRef', value: { pageName: 'linkedpage', alias: null } },
       ],
     })
 
@@ -401,17 +407,17 @@ describe('InlineContent', () => {
     const onParentClick = vi.fn()
     render(
       <div onClick={onParentClick} data-testid="block-row">
-        <InlineContent content="[[LinkedPage]]" pageMap={new Map()} />
+        <InlineContent content="[[linkedpage]]" pageMap={new Map()} />
       </div>,
     )
 
-    const link = screen.getByText('LinkedPage')
+    const link = screen.getByText('linkedpage')
     fireEvent.click(link)
 
     // The wikilink's own handler should have run (page was missing →
     // createPage is called)…
     await waitFor(() => {
-      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'LinkedPage' })
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'linkedpage' })
     })
     // …but the parent (BlockRow) must NOT have received the click.
     expect(onParentClick).not.toHaveBeenCalled()
@@ -426,62 +432,62 @@ describe('InlineContent', () => {
 
   it('navigates via useNavigate when [[Page]] is clicked', async () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'SomePage' }],
+      segments: [{ type: 'pageRef', value: 'somepage' }],
     })
     const pageMap = new Map([
-      ['SomePage', { id: '1', name: 'SomePage', title: null } as any],
+      ['somepage', { id: '1', name: 'somepage', title: null } as any],
     ])
-    render(<InlineContent content="[[SomePage]]" pageMap={pageMap} />)
+    render(<InlineContent content="[[somepage]]" pageMap={pageMap} />)
 
-    fireEvent.click(screen.getByText('SomePage'))
+    fireEvent.click(screen.getByText('somepage'))
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith({
         to: '/page/$name',
-        params: { name: 'SomePage' },
+        params: { name: 'somepage' },
       })
     })
   })
 
   it('URL-encodes the page name when navigating to [[Page With Spaces]]', async () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'Page With Spaces' }],
+      segments: [{ type: 'pageRef', value: 'page with spaces' }],
     })
     const pageMap = new Map([
-      ['Page With Spaces', { id: '1', name: 'Page With Spaces', title: null } as any],
+      ['page with spaces', { id: '1', name: 'page with spaces', title: null } as any],
     ])
-    render(<InlineContent content="[[Page With Spaces]]" pageMap={pageMap} />)
+    render(<InlineContent content="[[page with spaces]]" pageMap={pageMap} />)
 
-    fireEvent.click(screen.getByText('Page With Spaces'))
+    fireEvent.click(screen.getByText('page with spaces'))
 
     await waitFor(() => {
-      // navigate is called with the raw name; the router URL-encodes
-      // internally. We just verify the params shape.
+      // navigate is called with the canonical (lowercase) name; the
+      // router URL-encodes internally. We just verify the params shape.
       expect(mockNavigate).toHaveBeenCalledWith({
         to: '/page/$name',
-        params: { name: 'Page With Spaces' },
+        params: { name: 'page with spaces' },
       })
     })
   })
 
   it('navigates even when createPage throws (concurrent create case)', async () => {
     mockParseInline.mockReturnValue({
-      segments: [{ type: 'pageRef', value: 'RacePage' }],
+      segments: [{ type: 'pageRef', value: 'racepage' }],
     })
     mockCreatePage.mockRejectedValueOnce(new Error('UNIQUE constraint failed'))
 
-    render(<InlineContent content="[[RacePage]]" pageMap={new Map()} />)
+    render(<InlineContent content="[[racepage]]" pageMap={new Map()} />)
 
-    expect(() => fireEvent.click(screen.getByText('RacePage'))).not.toThrow()
+    expect(() => fireEvent.click(screen.getByText('racepage'))).not.toThrow()
 
     await waitFor(() => {
-      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'RacePage' })
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'racepage' })
     })
     // And navigation must STILL happen, even though the create threw.
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith({
         to: '/page/$name',
-        params: { name: 'RacePage' },
+        params: { name: 'racepage' },
       })
     })
   })
@@ -557,7 +563,7 @@ describe('InlineContent', () => {
       {
         id: 'block-uuid-abc',
         content: 'some block text',
-        pageName: 'BlockOwnerPage',
+        pageName: 'blockownerpage',
         pageId: 'p1',
       } as any,
     ]
@@ -568,7 +574,7 @@ describe('InlineContent', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith({
         to: '/page/$name',
-        params: { name: 'BlockOwnerPage' },
+        params: { name: 'blockownerpage' },
       })
     })
   })
@@ -591,5 +597,135 @@ describe('InlineContent', () => {
     fireEvent.click(screen.getByText('(missing block)'))
     expect(mockNavigate).not.toHaveBeenCalled()
     expect(onParentClick).not.toHaveBeenCalled()
+  })
+
+  // ──── Case insensitivity (Logseq + server convention) ─────────────
+  //
+  // The server normalises page names to lowercase on insert (see
+  // Page::normalize_name in crates/quilt-domain/src/entities/page.rs).
+  // If the frontend used the user-typed case for the pageMap lookup, the
+  // createPage call, and the navigate URL, then a user-typed
+  // `[[My Notes]]` would create `mynotes` on the server but navigate
+  // to `/page/My Notes` which the server 404s.
+  //
+  // These tests pin the fix: every site that reads a page name from
+  // block content normalises it before any I/O.
+
+  it('lowercases the user-typed [[Page]] before the pageMap lookup', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'MyNotes' }],
+    })
+    // The pageMap is populated by the server (which always returns
+    // lowercase). The user-typed 'MyNotes' must match 'mynotes'.
+    const pageMap = new Map([
+      ['mynotes', { id: '1', name: 'mynotes', title: null } as any],
+    ])
+    render(<InlineContent content="[[MyNotes]]" pageMap={pageMap} />)
+
+    fireEvent.click(screen.getByText('MyNotes'))
+
+    // No createPage call because the canonical form exists in pageMap.
+    await new Promise(r => setTimeout(r, 10))
+    expect(mockCreatePage).not.toHaveBeenCalled()
+    // And the navigation target is the canonical (lowercase) form.
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'mynotes' },
+      })
+    })
+  })
+
+  it('creates the page using the canonical (lowercase) name on click', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'BrandNewPage' }],
+    })
+    render(<InlineContent content="[[BrandNewPage]]" pageMap={new Map()} />)
+
+    fireEvent.click(screen.getByText('BrandNewPage'))
+
+    // The createPage call uses the canonical form. If the frontend
+    // sent 'BrandNewPage' instead, the server would store 'brandnewpage'
+    // and the subsequent navigate to /page/BrandNewPage would 404.
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'brandnewpage' })
+    })
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'brandnewpage' },
+      })
+    })
+  })
+
+  it('sets the href to the canonical (lowercase) form', () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: 'MixedCasePage' }],
+    })
+    render(<InlineContent content="[[MixedCasePage]]" pageMap={new Map()} />)
+
+    const link = screen.getByText('MixedCasePage')
+    // Cmd/Ctrl-click opens in a new tab using the href. The href must
+    // already be the canonical form or the new tab 404s.
+    expect(link).toHaveAttribute('href', '/page/mixedcasepage')
+  })
+
+  it('trims surrounding whitespace before lookups and navigation', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'pageRef', value: '  spaced  ' }],
+    })
+    render(<InlineContent content="[[  spaced  ]]" pageMap={new Map()} />)
+
+    fireEvent.click(screen.getByText('spaced'))
+
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'spaced' })
+    })
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'spaced' },
+      })
+    })
+  })
+
+  it('lowercases #tag clicks the same way', async () => {
+    mockParseInline.mockReturnValue({
+      segments: [{ type: 'tag', value: 'ProjectX' }],
+    })
+    render(<InlineContent content="#ProjectX" pageMap={new Map()} />)
+
+    fireEvent.click(screen.getByText('#ProjectX'))
+
+    await waitFor(() => {
+      expect(mockCreatePage).toHaveBeenCalledWith({ name: 'projectx' })
+    })
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith({
+        to: '/page/$name',
+        params: { name: 'projectx' },
+      })
+    })
+  })
+
+  it('does not navigate when the user-typed name is empty/whitespace only', () => {
+    mockParseInline.mockReturnValue({
+      // Hypothetical — parser would normally not emit this, but we
+      // guard the handler anyway. The display text is the raw '   '
+      // the parser emitted, but the handler's normalised name is ''
+      // and the early return kicks in.
+      segments: [{ type: 'pageRef', value: '   ' }],
+    })
+    render(<InlineContent content="[[   ]]" pageMap={new Map()} />)
+
+    // Find the rendered <a> by its empty href (the canonical form
+    // collapses to '' so the href is '/page/' with nothing after).
+    // Clicking it must not throw, must not call createPage, and must
+    // not navigate.
+    const link = document.querySelector('a[href="/page/"]') as HTMLElement
+    expect(link).not.toBeNull()
+    expect(() => fireEvent.click(link)).not.toThrow()
+    expect(mockCreatePage).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
   })
 })

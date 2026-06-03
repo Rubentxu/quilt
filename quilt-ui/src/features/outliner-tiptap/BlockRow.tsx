@@ -12,6 +12,7 @@ import { TagAutocomplete } from '@features/search/TagAutocomplete'
 import { CommentRow } from '@features/comments/CommentRow'
 import { BlockContextMenu } from './BlockContextMenu'
 import { buildCommentTree } from '@shared/utils/blockProperties'
+import { normalizePageName } from '@shared/utils/pageName'
 // Type-only import — keeps the type for handleSlashSelect without
 // pulling the (large) SlashCommandMenu module into the eager bundle.
 import type { SlashMenuItem } from './SlashCommandMenu'
@@ -256,7 +257,13 @@ export function BlockRow({
   useEffect(() => {
     api.listPages().then(pages => {
       const map = new Map<string, Page>()
-      pages.forEach(p => map.set(p.name, p))
+      pages.forEach(p => {
+        // The server already returns canonical (lowercase) names, but
+        // we normalise again so any drift (e.g. a test fixture, a
+        // pre-existing DB row, or a future server change) doesn't
+        // silently break the wikilink existence check.
+        map.set(normalizePageName(p.name), p)
+      })
       setPageMap(map)
     }).catch(() => {
       // Non-critical; refs gracefully fall back
@@ -679,22 +686,31 @@ export function BlockRow({
           // Save current edits first so navigation doesn't lose them
           saveToApi(text)
           if (link.type === 'page' || link.type === 'tag') {
-            // Tags are pages too (Logseq parity)
-            const target = link.target
-            const exists = pageMap.has(target)
+            // Tags are pages too (Logseq parity). The server stores
+            // page names in canonical form (lowercase + trimmed), so
+            // we normalise before the existence check, the createPage
+            // call, and the navigate URL — otherwise a user-typed
+            // `[[My Notes]]` creates `mynotes` on the server but
+            // navigates to `/page/My Notes` which 404s.
+            const canonical = normalizePageName(link.target)
+            if (!canonical) return
+            const exists = pageMap.has(canonical)
             if (!exists) {
-              api.createPage({ name: target }).catch(() => {
+              api.createPage({ name: canonical }).catch(() => {
                 // Race / network blip — navigate anyway, the page exists
                 // server-side.
               })
             }
-            navigate({ to: '/page/$name', params: { name: target } })
+            navigate({ to: '/page/$name', params: { name: canonical } })
           } else {
-            // block-ref — resolve UUID to its page and navigate
+            // block-ref — resolve UUID to its page and navigate. The
+            // page name returned by the server is already canonical, so
+            // we just normalise defensively in case a stale cache
+            // surfaces an old mixed-case name.
             const refBlock = allBlocks.find(b => b.id === link.target)
             const targetPage = refBlock?.pageName || (refBlock?.pageId ?? null)
             if (targetPage) {
-              navigate({ to: '/page/$name', params: { name: targetPage } })
+              navigate({ to: '/page/$name', params: { name: normalizePageName(targetPage) } })
             }
           }
           return

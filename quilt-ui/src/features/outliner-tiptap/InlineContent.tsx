@@ -5,6 +5,7 @@ import type { Block, Page } from '@shared/types/api'
 import type { Tab } from '@shared/contexts/TabsContext'
 import { useWasm, ensureWasmLoaded } from '@core/wasm-bridge/WasmProvider'
 import { api } from '@core/api-client'
+import { normalizePageName } from '@shared/utils/pageName'
 
 // HoverPreview is a heavy popover (it fetches and renders a sub-page).
 // We only need its bundle on the rare hover event, not for every block.
@@ -205,17 +206,23 @@ function renderSegment(
               alias: (rawValue as { alias: string | null }).alias ?? null,
             }
       const displayText = alias ?? pageName
-      const pageExists = pageMap?.has(pageName) ?? false
+      // The server stores page names in canonical form (lowercase +
+      // trimmed). The user-typed `pageName` may be in any case, so we
+      // normalise before looking it up in the pageMap. The href and the
+      // click handler also receive the canonical form so that "open in
+      // new tab" (Cmd/Ctrl+Click) and the JS-driven navigation agree.
+      const canonical = normalizePageName(pageName)
+      const pageExists = pageMap?.has(canonical) ?? false
       return (
         <a
           key={key}
-          href={`/page/${encodeURIComponent(pageName)}`}
+          href={`/page/${encodeURIComponent(canonical)}`}
           onClick={(e) => {
             // CRITICAL: stop propagation so the click doesn't bubble up
             // to BlockRow's onClick and put the block in edit mode
             // (user wants to navigate to the linked page, not edit it).
             e.stopPropagation()
-            onPageRefClick?.(pageName, e)
+            onPageRefClick?.(canonical, e)
           }}
           style={{
             color: pageExists ? 'var(--color-link)' : 'var(--color-text-disabled)',
@@ -639,15 +646,29 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
       return
     }
 
+    // The server normalises page names to lowercase + trimmed (see
+    // Page::normalize_name in crates/quilt-domain/src/entities/page.rs).
+    // Without this, a user-typed `[[My Notes]]` would:
+    //   1. miss the existing `mynotes` in the pageMap (case-sensitive
+    //      Map.has),
+    //   2. call createPage and the server would store `mynotes`,
+    //   3. navigate to `/page/My Notes` which 404s because the server
+    //      only knows `mynotes`.
+    // Normalising here makes the user-typed case a no-op: the pageMap
+    // lookup, the createPage call, and the navigate URL all see the
+    // same canonical name.
+    const canonical = normalizePageName(target)
+    if (!canonical) return
+
     // Logseq behavior: if the page doesn't exist, create it on the fly
     // when the user clicks the link. The client-side `pageMap` is the
     // source of truth for "does it exist"; if it's stale (e.g. the
     // page was created in another tab), the server's UNIQUE constraint
     // will reject the duplicate insert and we just navigate anyway.
-    const pageExists = pageMap?.has(target) ?? false
+    const pageExists = pageMap?.has(canonical) ?? false
     if (!pageExists) {
       try {
-        await api.createPage({ name: target })
+        await api.createPage({ name: canonical })
       } catch {
         // Concurrent creation or network blip — the navigation below
         // will still work because the page does exist on the server.
@@ -656,7 +677,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
 
     if (e.metaKey || e.ctrlKey) {
       if (openTab) {
-        openTab({ name: target, type: 'page', title: target, params: {} })
+        openTab({ name: canonical, type: 'page', title: canonical, params: {} })
       }
       return
     }
@@ -664,7 +685,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     // earlier `window.location.hash` assignment was a bug: TanStack
     // uses `createBrowserHistory` and never reads the URL hash, so
     // the link silently failed to navigate.
-    navigate({ to: '/page/$name', params: { name: target } })
+    navigate({ to: '/page/$name', params: { name: canonical } })
   }, [navigate, openTab, pageMap])
 
   // Block-ref click. Logseq opens the block in the sidebar (not the
@@ -673,13 +694,15 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
   // page. TODO: once a sidebar exists, add `e.shiftKey` to open there.
   const handleBlockRefClick = useCallback((pageName: string, _blockId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    const canonical = normalizePageName(pageName)
+    if (!canonical) return
     if (e.metaKey || e.ctrlKey) {
       if (openTab) {
-        openTab({ name: pageName, type: 'page', title: pageName, params: {} })
+        openTab({ name: canonical, type: 'page', title: canonical, params: {} })
       }
       return
     }
-    navigate({ to: '/page/$name', params: { name: pageName } })
+    navigate({ to: '/page/$name', params: { name: canonical } })
   }, [navigate, openTab])
 
   // #tag click. Logseq treats tags as pages (#tag → navigate to that
@@ -691,21 +714,23 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
       // TODO: Open in sidebar
       return
     }
-    const pageExists = pageMap?.has(tagName) ?? false
+    const canonical = normalizePageName(tagName)
+    if (!canonical) return
+    const pageExists = pageMap?.has(canonical) ?? false
     if (!pageExists) {
       try {
-        await api.createPage({ name: tagName })
+        await api.createPage({ name: canonical })
       } catch {
         // Concurrent create — page may already exist on the server.
       }
     }
     if (e.metaKey || e.ctrlKey) {
       if (openTab) {
-        openTab({ name: tagName, type: 'page', title: tagName, params: {} })
+        openTab({ name: canonical, type: 'page', title: canonical, params: {} })
       }
       return
     }
-    navigate({ to: '/page/$name', params: { name: tagName } })
+    navigate({ to: '/page/$name', params: { name: canonical } })
   }, [navigate, openTab, pageMap])
 
   // Cleanup timers on unmount
