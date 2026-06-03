@@ -36,6 +36,18 @@ _Avoid_: bot, asistente, IA interna
 Bloque con propiedad `template:: nombre` que define estructura (headings, propiedades, slots) y actúa como contrato entre agente y usuario. El agente rellena slots via MCP.
 _Avoid_: plantilla, formato
 
+### Template Page
+Página con nombre prefijado por `template/` que define la estructura, propiedades y comportamiento visual de un Template. Es el origen de la activación — un Bloque con `template:: <nombre>` referencia una Template Page. Las Template Pages también son el origen del page-level cloning via `POST /api/v1/pages/from-template`.
+_Avoid_: plantilla de página, schema
+
+### Card Shape
+Forma visual que toma un Bloque cuando activa una Template. Se declara como propiedad `card-shape:: <shape>` en la Template Page, no en el Bloque. Shapes en V1: `reference` (card plana con metas y acciones), `content` (card colapsable), `inline` (bloque normal con decoración). El renderizado es data-driven: un `CardRenderer` genérico interpreta el shape, no hay componentes React hardcodeados por tipo.
+_Avoid_: tipo de card, layout predefinido
+
+### Card Renderer
+Componente del frontend que interpreta el `card-shape::` de la Template Page activada por un Bloque y produce el HTML correspondiente. Es data-driven: recibe el shape y los metas del bloque, no conoce tipos hardcodeados. Reemplaza los anteriores `ReferenceCard` y `ContentCard`.
+_Avoid_: componente de card, tipo de bloque
+
 ### DSL (Query DSL)
 Lenguaje de consultas tipo `(and (task TODO) (priority A))`. Base compartida entre UI y MCP. El MCP expone un superconjunto con `analyze`, `aggregate`, `stats`, `group_by`.
 _Avoid_: query language, Datalog, SQL
@@ -65,6 +77,8 @@ _Avoid_: stale, outdated, viejo
 - Un **Grafo** contiene muchas **Páginas**
 - Una **Página** contiene muchos **Bloques** en jerarquía
 - Un **Bloque** puede tener **Propiedades**, **Refs** a otros bloques/páginas, y un **Template** asociado
+- Un **Template** referencia una **Template Page** (prefijo `template/`) que define su estructura y Card Shape
+- Una **Template Page** declara su **Card Shape** (`card-shape::`) que el **Card Renderer** interpreta
 - El **MCP Server** expone operaciones sobre el **Grafo** a **Agentes** externos
 - Los **Agentes** crean **Propuestas** (bloques con `created_by:: agent::*`)
 - El **Análisis estructural** provee datos al **MCP Server** para que los **Agentes** entiendan el **Grafo**

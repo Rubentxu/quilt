@@ -107,6 +107,31 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         .with_visibility(true, true, false);
         map.insert("logseq.property/url".to_string(), url);
 
+        // template property — references a template page (prefijo `template/`)
+        // que define la estructura y el card-shape de un bloque. Véase ADR-0007.
+        //
+        // Nota: el db_ident es `template` (sin namespace prefix). Esto
+        // refleja que Quilt introduce este concepto propio — no hereda
+        // el namespace `logseq.property/*` que usan las propiedades
+        // pre-existentes de status/priority/deadline/scheduled/url.
+        // Una migración futura renombrará esas a `quilt.property/*`
+        // (ver deuda técnica registrada en docs/grill/implementation-plan.md).
+        //
+        // El valor es un string libre (nombre de la template page) sin
+        // closed values — cualquier template page es válida. Validación
+        // runtime (warn si la template page no existe) ocurre en el
+        // frontend via CardRenderer.
+        let template = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "template",
+            "Template",
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Block)
+        .with_visibility(true, true, false);
+        map.insert("template".to_string(), template);
+
         map
     })
 }
@@ -133,6 +158,7 @@ mod tests {
         assert!(props.contains_key("logseq.property/deadline"));
         assert!(props.contains_key("logseq.property/scheduled"));
         assert!(props.contains_key("logseq.property/url"));
+        assert!(props.contains_key("template"));
     }
 
     #[test]
@@ -177,5 +203,20 @@ mod tests {
         let url = props.get("logseq.property/url").unwrap();
         assert_eq!(url.property_type, PropertyType::Url);
         assert!(!url.has_closed_values());
+    }
+
+    #[test]
+    fn test_template_property() {
+        // ADR-0007: la propiedad `template` se introduce como builtin
+        // de bloque. Tipo texto (nombre de template page), sin closed
+        // values (cualquier template es válido), view context Block.
+        // El db_ident es `template` (sin namespace prefix) porque es
+        // un concepto propio de Quilt.
+        let props = get_builtin_properties();
+        let template = props.get("template").unwrap();
+        assert_eq!(template.db_ident, "template");
+        assert_eq!(template.property_type, PropertyType::Text);
+        assert!(!template.has_closed_values());
+        assert_eq!(template.view_context, ViewContext::Block);
     }
 }
