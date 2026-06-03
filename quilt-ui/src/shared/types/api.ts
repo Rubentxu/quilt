@@ -143,6 +143,24 @@ export interface Backlink {
   contentPreview: string;
 }
 
+// ──── Search results ─────────────────────────────────────────────
+
+/**
+ * Shape returned by `GET /api/v1/blocks/search?q=...` and
+ * `GET /api/v1/search?q=...`. Mirrors the Rust `SearchResultDto`
+ * (`crates/quilt-server/src/handlers/search.rs`). G3 of the wikilinks
+ * audit wires the search modal to this endpoint so users can find
+ * blocks by content, not just by page name.
+ */
+export interface SearchResult {
+  blockId: string;
+  pageId: string;
+  pageName: string;
+  content: string;
+  snippet: string;
+  score: number;
+}
+
 // ──── OutlinerCommand (WASM history bridge) ───────────────────────
 //
 // Mirrors `crate::outliner::history::OutlinerCommand` (Rust). The

@@ -11,6 +11,7 @@ import type {
   UpdateSettingsRequest,
   DateFormatOption,
   Backlink,
+  SearchResult,
 } from '@shared/types/api';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
 
@@ -155,11 +156,21 @@ export const api = {
     fetchJson<{ deleted: true }>(`/blocks/${id}`, { method: 'DELETE' }),
 
   // Block search
-  searchBlocks: async (query: string, limit = 8): Promise<Block[]> => {
-    const raw = await fetchJson<RawBlock[]>(
-      `/blocks/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+  //
+  // The backend exposes two equivalent search endpoints:
+  //   - GET /api/v1/blocks/search?query=...  (returns `SearchResultDto[]`)
+  //   - GET /api/v1/search?q=...             (same shape)
+  //
+  // The `?query=` name is what the `SearchBlocksParams` struct on the
+  // server expects (`crates/quilt-server/src/handlers/blocks.rs:114-120`).
+  // Note: this is *not* a `Block[]` — the Rust DTO is `SearchResultDto`
+  // with `blockId` / `pageName` / `content` / `snippet` / `score` fields.
+  // G3 of the wikilinks audit wires the search modal here so users can
+  // find blocks by content.
+  searchBlocks: async (query: string, limit = 8): Promise<SearchResult[]> => {
+    return fetchJson<SearchResult[]>(
+      `/blocks/search?query=${encodeURIComponent(query)}&limit=${limit}`,
     )
-    return raw.map(normalizeBlock)
   },
 
   /**

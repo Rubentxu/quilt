@@ -8,14 +8,24 @@ import toast from 'react-hot-toast'
 interface BacklinksPanelProps {
   pageName: string | null
   isOpen: boolean
+  /**
+   * Whether the inner content (filter, sort, list) is expanded.
+   * Defaults to false — the panel shows the header with count and
+   * keeps the content collapsed until the user clicks it open.
+   * This matches the Logseq behaviour of "backlinks appear at the
+   * bottom of every page automatically", where the reference list
+   * is collapsed by default and only the count is visible.
+   */
+  defaultExpanded?: boolean
 }
 
-export function BacklinksPanel({ pageName, isOpen }: BacklinksPanelProps) {
+export function BacklinksPanel({ pageName, isOpen, defaultExpanded = false }: BacklinksPanelProps) {
   const [backlinks, setBacklinks] = useState<Backlink[]>([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('')
   const [sortBy, setSortBy] = useState<'recent' | 'page' | 'count'>('recent')
   const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
+  const [expanded, setExpanded] = useState(defaultExpanded)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -28,6 +38,13 @@ export function BacklinksPanel({ pageName, isOpen }: BacklinksPanelProps) {
       .catch(() => toast.error('Failed to load backlinks'))
       .finally(() => setLoading(false))
   }, [pageName, isOpen])
+
+  // Reset the inner expanded state when the panel is reopened on a
+  // different page (so the count badge reflects the new page and the
+  // user re-decides whether to expand it).
+  useEffect(() => {
+    setExpanded(defaultExpanded)
+  }, [pageName, defaultExpanded])
 
   // Filter backlinks by source page name or content preview
   const filtered = useMemo(() => {
@@ -94,6 +111,7 @@ export function BacklinksPanel({ pageName, isOpen }: BacklinksPanelProps) {
 
   return (
     <aside
+      data-testid="backlinks-panel"
       style={{
         width: '320px',
         borderLeft: '1px solid var(--color-border)',
@@ -104,281 +122,305 @@ export function BacklinksPanel({ pageName, isOpen }: BacklinksPanelProps) {
         boxShadow: 'var(--shadow-sm)',
       }}
     >
-      {/* Header */}
-      <div
+      {/* Header — always visible, click to expand/collapse the content */}
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        aria-expanded={expanded}
+        aria-controls="backlinks-panel-content"
+        data-testid="backlinks-panel-header"
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 'var(--space-2)',
-          marginBottom: 'var(--space-3)',
+          marginBottom: expanded ? 'var(--space-3)' : 0,
           fontSize: '13px',
           fontWeight: 600,
           color: 'var(--color-text-secondary)',
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
+          background: 'transparent',
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+          width: '100%',
+          textAlign: 'left',
         }}
       >
+        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <Link2 size={14} />
-        Linked References
+        <span>Linked References</span>
         <span
+          data-testid="backlinks-panel-count"
           style={{
             fontSize: '12px',
             fontWeight: 400,
             color: 'var(--color-text-muted)',
             marginLeft: 'auto',
+            background: 'var(--color-surface-subtle)',
+            borderRadius: 'var(--radius-pill)',
+            padding: '0 8px',
+            lineHeight: '18px',
+            minWidth: '20px',
+            textAlign: 'center',
           }}
         >
           {backlinks.length}
         </span>
-      </div>
+      </button>
 
-      {/* Controls */}
-      {backlinks.length > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 'var(--space-2)',
-            marginBottom: 'var(--space-3)',
-          }}
-        >
-          {/* Filter input */}
-          <div style={{ flex: 1, position: 'relative' }}>
-            <Search
-              size={12}
+      {/* Content — collapsed by default, expanded on header click */}
+      {expanded && (
+        <div id="backlinks-panel-content" data-testid="backlinks-panel-content">
+          {/* Controls */}
+          {backlinks.length > 0 && (
+            <div
               style={{
-                position: 'absolute',
-                left: '8px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--color-text-muted)',
-                pointerEvents: 'none',
+                display: 'flex',
+                gap: 'var(--space-2)',
+                marginBottom: 'var(--space-3)',
               }}
-            />
-            <input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter references..."
-              style={{
-                width: '100%',
-                padding: '5px 8px 5px 24px',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--color-surface)',
-                color: 'var(--color-text-primary)',
-                fontSize: '12px',
-                outline: 'none',
-              }}
-            />
-          </div>
+            >
+              {/* Filter input */}
+              <div style={{ flex: 1, position: 'relative' }}>
+                <Search
+                  size={12}
+                  style={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    color: 'var(--color-text-muted)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                <input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Filter references..."
+                  style={{
+                    width: '100%',
+                    padding: '5px 8px 5px 24px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text-primary)',
+                    fontSize: '12px',
+                    outline: 'none',
+                  }}
+                />
+              </div>
 
-          {/* Sort dropdown */}
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as 'recent' | 'page' | 'count')}
-            style={{
-              padding: '5px 8px',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-sm)',
-              background: 'var(--color-surface)',
-              color: 'var(--color-text-primary)',
-              fontSize: '12px',
-              cursor: 'pointer',
-              outline: 'none',
-            }}
-          >
-            <option value="recent">Recent</option>
-            <option value="page">By page</option>
-            <option value="count">By count</option>
-          </select>
-        </div>
-      )}
-
-      {/* Loading */}
-      {loading && (
-        <div
-          style={{
-            color: 'var(--color-text-muted)',
-            fontSize: '13px',
-            textAlign: 'center',
-            padding: 'var(--space-4)',
-          }}
-        >
-          Loading...
-        </div>
-      )}
-
-      {/* Empty state per DESIGN.md §15 */}
-      {!loading && backlinks.length === 0 && (
-        <div style={{ padding: 'var(--space-4)', textAlign: 'center' }}>
-          <div
-            style={{
-              fontSize: '13px',
-              color: 'var(--color-text-muted)',
-              marginBottom: 'var(--space-2)',
-            }}
-          >
-            No linked references
-          </div>
-          <div
-            style={{
-              fontSize: '12px',
-              color: 'var(--color-text-disabled)',
-            }}
-          >
-            This page is not linked from other notes.
-            Create links using [[Page Name]].
-          </div>
-        </div>
-      )}
-
-      {/* Filtered empty state */}
-      {!loading && backlinks.length > 0 && sortedGroups.length === 0 && (
-        <div
-          style={{
-            padding: 'var(--space-4)',
-            textAlign: 'center',
-            fontSize: '12px',
-            color: 'var(--color-text-muted)',
-          }}
-        >
-          No matches
-        </div>
-      )}
-
-      {/* Grouped backlink list */}
-      {!loading && sortedGroups.length > 0 && (
-        <div>
-          {sortedGroups.map(([sourcePage, refs]) => {
-            const isCollapsed = collapsedPages.has(sourcePage)
-
-            return (
-              <div
-                key={sourcePage}
+              {/* Sort dropdown */}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as 'recent' | 'page' | 'count')}
                 style={{
-                  marginBottom: 'var(--space-2)',
-                  borderRadius: 'var(--radius-md)',
+                  padding: '5px 8px',
                   border: '1px solid var(--color-border)',
-                  overflow: 'hidden',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  outline: 'none',
                 }}
               >
-                {/* Group header */}
-                <div
-                  onClick={() => toggleCollapse(sourcePage)}
-                  style={{
-                     display: 'flex',
-                     alignItems: 'center',
-                     gap: 'var(--space-2)',
-                     padding: 'var(--space-3) var(--space-4)',
-                     cursor: 'pointer',
-                     background: 'var(--color-surface-subtle)',
-                     fontSize: '13px',
-                     fontWeight: 600,
-                     color: 'var(--color-text-primary)',
-                     userSelect: 'none',
-                  }}
-                >
-                  {isCollapsed ? (
-                    <ChevronRight size={12} />
-                  ) : (
-                    <ChevronDown size={12} />
-                  )}
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {sourcePage}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '10px',
-                      color: 'var(--color-text-muted)',
-                      background: 'var(--color-surface)',
-                      padding: '0 6px',
-                      borderRadius: 'var(--radius-pill)',
-                      lineHeight: '16px',
-                    }}
-                  >
-                    {refs.length}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      copyBacklink(sourcePage)
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--color-text-muted)',
-                      padding: '2px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      borderRadius: 'var(--radius-sm)',
-                    }}
-                    aria-label="Copy link to page"
-                    title="Copy link to page"
-                  >
-                    <Copy size={11} />
-                  </button>
-                </div>
+                <option value="recent">Recent</option>
+                <option value="page">By page</option>
+                <option value="count">By count</option>
+              </select>
+            </div>
+          )}
 
-                {/* Reference items */}
-                {!isCollapsed &&
-                  refs.map((ref, i) => (
+          {/* Loading */}
+          {loading && (
+            <div
+              style={{
+                color: 'var(--color-text-muted)',
+                fontSize: '13px',
+                textAlign: 'center',
+                padding: 'var(--space-4)',
+              }}
+            >
+              Loading...
+            </div>
+          )}
+
+          {/* Empty state per DESIGN.md §15 */}
+          {!loading && backlinks.length === 0 && (
+            <div style={{ padding: 'var(--space-4)', textAlign: 'center' }}>
+              <div
+                style={{
+                  fontSize: '13px',
+                  color: 'var(--color-text-muted)',
+                  marginBottom: 'var(--space-2)',
+                }}
+              >
+                No linked references
+              </div>
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: 'var(--color-text-disabled)',
+                }}
+              >
+                This page is not linked from other notes.
+                Create links using [[Page Name]].
+              </div>
+            </div>
+          )}
+
+          {/* Filtered empty state */}
+          {!loading && backlinks.length > 0 && sortedGroups.length === 0 && (
+            <div
+              style={{
+                padding: 'var(--space-4)',
+                textAlign: 'center',
+                fontSize: '12px',
+                color: 'var(--color-text-muted)',
+              }}
+            >
+              No matches
+            </div>
+          )}
+
+          {/* Grouped backlink list */}
+          {!loading && sortedGroups.length > 0 && (
+            <div>
+              {sortedGroups.map(([sourcePage, refs]) => {
+                const isCollapsed = collapsedPages.has(sourcePage)
+
+                return (
+                  <div
+                    key={sourcePage}
+                    style={{
+                      marginBottom: 'var(--space-2)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--color-border)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {/* Group header */}
                     <div
-                      key={ref.sourceBlockId + i}
-                      onClick={() =>
-                        navigate({
-                          to: '/page/$name',
-                          params: { name: ref.sourcePageName },
-                        })
-                      }
+                      onClick={() => toggleCollapse(sourcePage)}
                       style={{
-                         padding: 'var(--space-3) var(--space-4)',
-                         cursor: 'pointer',
-                         fontSize: '13px',
-                         color: 'var(--color-text-secondary)',
-                         borderTop: '1px solid var(--color-border)',
-                        transition:
-                          'background var(--motion-fast) var(--ease-standard)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-2)',
+                        padding: 'var(--space-3) var(--space-4)',
+                        cursor: 'pointer',
+                        background: 'var(--color-surface-subtle)',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: 'var(--color-text-primary)',
+                        userSelect: 'none',
                       }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          'var(--color-surface-subtle)')
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = 'transparent')
-                      }
                     >
-                      <div
+                      {isCollapsed ? (
+                        <ChevronRight size={12} />
+                      ) : (
+                        <ChevronDown size={12} />
+                      )}
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {sourcePage}
+                      </span>
+                      <span
                         style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 'var(--space-2)',
+                          fontSize: '10px',
+                          color: 'var(--color-text-muted)',
+                          background: 'var(--color-surface)',
+                          padding: '0 6px',
+                          borderRadius: 'var(--radius-pill)',
+                          lineHeight: '16px',
                         }}
                       >
-                        <Link2
-                          size={11}
-                          style={{
-                            color: 'var(--color-text-muted)',
-                            flexShrink: 0,
-                          }}
-                        />
-                        <span
-                          style={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {ref.contentPreview}
-                        </span>
-                      </div>
+                        {refs.length}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          copyBacklink(sourcePage)
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--color-text-muted)',
+                          padding: '2px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          borderRadius: 'var(--radius-sm)',
+                        }}
+                        aria-label="Copy link to page"
+                        title="Copy link to page"
+                      >
+                        <Copy size={11} />
+                      </button>
                     </div>
-                  ))}
-              </div>
-            )
-          })}
+
+                    {/* Reference items */}
+                    {!isCollapsed &&
+                      refs.map((ref, i) => (
+                        <div
+                          key={ref.sourceBlockId + i}
+                          onClick={() =>
+                            navigate({
+                              to: '/page/$name',
+                              params: { name: ref.sourcePageName },
+                            })
+                          }
+                          style={{
+                            padding: 'var(--space-3) var(--space-4)',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            color: 'var(--color-text-secondary)',
+                            borderTop: '1px solid var(--color-border)',
+                            transition:
+                              'background var(--motion-fast) var(--ease-standard)',
+                          }}
+                          onMouseEnter={(e) =>
+                            (e.currentTarget.style.background =
+                              'var(--color-surface-subtle)')
+                          }
+                          onMouseLeave={(e) =>
+                            (e.currentTarget.style.background = 'transparent')
+                          }
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 'var(--space-2)',
+                            }}
+                          >
+                            <Link2
+                              size={11}
+                              style={{
+                                color: 'var(--color-text-muted)',
+                                flexShrink: 0,
+                              }}
+                            />
+                            <span
+                              style={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                lineHeight: 1.4,
+                              }}
+                            >
+                              {ref.contentPreview}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
     </aside>

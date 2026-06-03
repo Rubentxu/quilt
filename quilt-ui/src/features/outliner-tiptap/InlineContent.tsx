@@ -74,8 +74,18 @@ function normalizeSegment(seg: any): SegmentBase | null {
   switch (tag) {
     case 'Text':
       return { type: 'text', value: payload.content ?? '' }
-    case 'PageRef':
-      return { type: 'pageRef', value: payload.page_name ?? '' }
+    case 'PageRef': {
+      // G1: `[[Page|alias]]` carries an optional `alias` field from the
+      // Rust parser. When present, emit the object shape `{ pageName,
+      // alias }`; otherwise keep the legacy plain-string shape for
+      // backward compat with existing test fixtures.
+      const pageName: string = payload.page_name ?? ''
+      const alias: string | null = payload.alias ?? null
+      return {
+        type: 'pageRef',
+        value: alias ? { pageName, alias } : pageName,
+      }
+    }
     case 'BlockRef':
       return { type: 'blockRef', value: payload.block_uuid ?? '' }
     case 'Tag':
@@ -179,7 +189,19 @@ function renderSegment(
       )
 
     case 'pageRef': {
-      const pageName: string = seg.value
+      // G1: support both legacy `{ value: 'PageName' }` and the new
+      // `{ value: { pageName, alias } }` shape. The href and the page
+      // lookup always use `pageName`; only the displayed text may
+      // differ when an alias is present.
+      const rawValue = seg.value
+      const { pageName, alias } =
+        typeof rawValue === 'string'
+          ? { pageName: rawValue as string, alias: null as string | null }
+          : {
+              pageName: (rawValue as { pageName: string }).pageName,
+              alias: (rawValue as { alias: string | null }).alias ?? null,
+            }
+      const displayText = alias ?? pageName
       const pageExists = pageMap?.has(pageName) ?? false
       return (
         <a
@@ -207,7 +229,7 @@ function renderSegment(
             if (pageExists) e.currentTarget.style.background = 'rgba(37, 99, 235, 0.06)'
           }}
         >
-          {pageName}
+          {displayText}
         </a>
       )
     }

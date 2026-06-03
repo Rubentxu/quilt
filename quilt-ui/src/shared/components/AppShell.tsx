@@ -41,6 +41,39 @@ function formatPathTitle(pathname: string): string {
   return pathname
 }
 
+/**
+ * Derive the page name for the right-side BacklinksPanel from the
+ * current location pathname. Returns the decoded page or journal
+ * name when the user is on `/page/<name>` or `/journal/<YYYY-MM-DD>`,
+ * and `null` for routes that don't have a backing page (home,
+ * settings, all-pages, graph, etc.).
+ *
+ * Exported so the AppShell can be unit-tested for every route shape
+ * without having to render the whole shell.
+ */
+export function deriveCurrentPageName(pathname: string): string | null {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments.length >= 2 && segments[0] === 'page') {
+    const raw = segments[1]
+    if (!raw) return null
+    try {
+      return decodeURIComponent(raw)
+    } catch {
+      return raw
+    }
+  }
+  if (segments.length >= 2 && segments[0] === 'journal') {
+    const raw = segments[1]
+    if (!raw) return null
+    try {
+      return decodeURIComponent(raw)
+    } catch {
+      return raw
+    }
+  }
+  return null
+}
+
 function ConnectionStatus() {
   const { sseConnected } = useConnection()
   return (
@@ -166,9 +199,7 @@ export function AppShell() {
   })
   const location = useLocation()
   const pageTitle = formatPathTitle(location.pathname)
-  const currentPageName = location.pathname.startsWith('/page/')
-    ? decodeURIComponent(location.pathname.split('/page/')[1])
-    : null
+  const currentPageName = deriveCurrentPageName(location.pathname)
 
   const [searchOpen, setSearchOpen] = useState(false)
   const { isMobile, isTablet } = useResponsive()

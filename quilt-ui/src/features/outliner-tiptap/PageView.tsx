@@ -786,6 +786,22 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
     [blockRefs],
   )
 
+  // ── Pending focus from SearchModal ─────────────────────────────
+  // The SearchModal (G3 of the wikilinks audit) writes the target
+  // block id to sessionStorage when the user clicks a block result,
+  // then navigates to this page. We pick it up here once the block
+  // tree has loaded and forward it to the local `onFocusBlock`
+  // callback. The key is cleared on read so a reload or a back-nav
+  // doesn't re-trigger the focus.
+  useEffect(() => {
+    if (loading) return
+    const pendingId = sessionStorage.getItem('quilt:focusBlock')
+    if (!pendingId) return
+    if (!blocks.some(b => b.id === pendingId)) return
+    sessionStorage.removeItem('quilt:focusBlock')
+    onFocusBlock(pendingId, 'start')
+  }, [loading, blocks, onFocusBlock])
+
   // ── Block updates ─────────────────────────────────────────────
   const handleBlockUpdate = useCallback((updatedBlock: Block) => {
     const before = blocksRef.current.find(b => b.id === updatedBlock.id)

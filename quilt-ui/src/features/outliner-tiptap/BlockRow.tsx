@@ -8,6 +8,7 @@ import type { Block, BlockType, TaskMarker, Priority, Page } from '@shared/types
 import { useTabs } from '@shared/contexts/TabsContext'
 import { InlineContent } from './InlineContent'
 import { BlockAutocomplete } from '@features/search/BlockAutocomplete'
+import { TagAutocomplete } from '@features/search/TagAutocomplete'
 import { CommentRow } from '@features/comments/CommentRow'
 import { BlockContextMenu } from './BlockContextMenu'
 import { buildCommentTree } from '@shared/utils/blockProperties'
@@ -149,6 +150,10 @@ export function BlockRow({
     query: string
     position: { top: number; left: number }
   } | null>(null)
+  const [tagAutocomplete, setTagAutocomplete] = useState<{
+    query: string
+    position: { top: number; left: number }
+  } | null>(null)
   const [slashCommand, setSlashCommand] = useState<{
     query: string
     position: { top: number; left: number }
@@ -256,6 +261,26 @@ export function BlockRow({
       }
     }
 
+    // ── # tag autocomplete ──────────────────────────────────────
+    // Only fire when `#` is at the start of a word (start of line, or
+    // preceded by whitespace). The negative lookbehind for `\S` keeps
+    // markdown like `## Heading` and code with `foo#bar` from opening
+    // the dropdown.
+    if (sel && sel.rangeCount > 0 && contentRef.current) {
+      const range = sel.getRangeAt(0)
+      const textBefore = text.substring(0, getCursorPosition(contentRef.current))
+      const tagMatch = textBefore.match(/(?<!\S)#(\w*)$/)
+      if (tagMatch) {
+        const rect = range.getBoundingClientRect()
+        setTagAutocomplete({
+          query: tagMatch[1],
+          position: { top: rect.bottom + 4, left: rect.left },
+        })
+      } else {
+        setTagAutocomplete(null)
+      }
+    }
+
     // ── Slash command: detect "/" at start of block ─────────────
     if (text.startsWith('/')) {
       if (sel && sel.rangeCount > 0) {
@@ -287,6 +312,7 @@ export function BlockRow({
     setIsEditing(false)
     setAutocomplete(null)
     setBlockAutocomplete(null)
+    setTagAutocomplete(null)
     setSlashCommand(null)
     // Flush save immediately on blur
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
@@ -312,6 +338,20 @@ export function BlockRow({
       setLocalContent(newContent)
       if (contentRef.current) contentRef.current.textContent = newContent
       setBlockAutocomplete(null)
+      debouncedSave(newContent)
+    },
+    [localContent, debouncedSave],
+  )
+
+  // ── Tag autocomplete select ──────────────────────────────────
+  // Replaces the partial `#partial` with `#tagname` (no closing
+  // delimiter — Logseq tags are atomic and do not need a closing char).
+  const handleTagAutocompleteSelect = useCallback(
+    (tagName: string) => {
+      const newContent = localContent.replace(/(?<!\S)#\w*$/, `#${tagName}`)
+      setLocalContent(newContent)
+      if (contentRef.current) contentRef.current.textContent = newContent
+      setTagAutocomplete(null)
       debouncedSave(newContent)
     },
     [localContent, debouncedSave],
@@ -503,6 +543,21 @@ export function BlockRow({
         if (e.key === 'Escape') {
           e.preventDefault()
           setBlockAutocomplete(null)
+          return
+        }
+        // Enter, ArrowUp, ArrowDown handled by the menu's document listener
+        if (['Enter', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+          e.preventDefault()
+          return
+        }
+        return // Let other keys through (typing continues to filter)
+      }
+
+      // ── Tag autocomplete is open: intercept keys so the menu handles them ──
+      if (tagAutocomplete) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setTagAutocomplete(null)
           return
         }
         // Enter, ArrowUp, ArrowDown handled by the menu's document listener
@@ -804,7 +859,7 @@ export function BlockRow({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [block, allBlocks, pageName, autocomplete, blockAutocomplete, slashCommand, saveToApi, onUpdate, onCreateBlock, onDeleteBlock, onFocusBlock, onMoveBlockUp, onMoveBlockDown, onMultiSelect, onSelectAll, onSelectParent, onUndo, onRedo],
+    [block, allBlocks, pageName, autocomplete, blockAutocomplete, tagAutocomplete, slashCommand, saveToApi, onUpdate, onCreateBlock, onDeleteBlock, onFocusBlock, onMoveBlockUp, onMoveBlockDown, onMultiSelect, onSelectAll, onSelectParent, onUndo, onRedo],
   )
 
   // ── Indent / Outdent ──────────────────────────────────────────
@@ -1336,6 +1391,16 @@ export function BlockRow({
           query={blockAutocomplete.query}
           onSelect={handleBlockAutocompleteSelect}
           onClose={() => setBlockAutocomplete(null)}
+        />
+      )}
+
+      {/* Tag autocomplete dropdown */}
+      {tagAutocomplete && (
+        <TagAutocomplete
+          position={tagAutocomplete.position}
+          query={tagAutocomplete.query}
+          onSelect={handleTagAutocompleteSelect}
+          onClose={() => setTagAutocomplete(null)}
         />
       )}
 
