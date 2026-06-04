@@ -263,3 +263,50 @@ export type OutlinerCommand =
       newParent: string | null;
       newOrder: number;
     };
+
+// ──── Evidence Contract v1 (ADR-0008) ──────────────────────────────────
+//
+// Every MCP tool/resource response carries a `_meta.evidence` envelope
+// (server-level, additive — pre-change wire format is byte-identical
+// when the field is absent). Mirrors the Rust types in
+// `crates/quilt-mcp/src/protocol.rs` (Evidence, SourceAuthority,
+// MetaEnvelope). All fields are optional since each tool/resource tier
+// (rich / sparse / fallback) only populates a subset.
+
+/** G2 source authority — Manual > PropertyTyped > AutoExtracted. */
+export type SourceAuthority = 'Manual' | 'PropertyTyped' | 'AutoExtracted';
+
+/**
+ * Provenance metadata attached to every MCP tool/resource response.
+ * `is_error: true` indicates the handler returned an error; in that
+ * case the rest of the fields are at their defaults.
+ */
+export interface Evidence {
+  /** Name of the tool that produced this response (or URI for resources). */
+  toolName: string;
+  /** Server timestamp at injection time (ISO-8601 RFC-3339). */
+  timestamp: string;
+  /** True when the handler returned an error envelope. */
+  isError: boolean;
+  /** Block IDs touched/produced by this tool call. */
+  blockIds: string[];
+  /** Page name when the tool references a single page. */
+  pageName?: string;
+  /** Page `updatedAt` (ISO-8601 RFC-3339) when the tool references a single page. */
+  pageUpdatedAt?: string;
+  /** DSL query AST for `quilt_query` (string form). */
+  queryAst?: string;
+  /** Matched search terms for `quilt_search`. */
+  matchedTerms: string[];
+  /** Source authority ranking (G2). None when not derivable. */
+  sourceAuthority?: SourceAuthority;
+}
+
+/**
+ * `_meta` envelope carried by `ToolsCallResult` and `ResourceReadResult`.
+ * Reserved at server level — no handler serializes a top-level
+ * `evidence` key from its returned string.
+ */
+export interface MetaEnvelope {
+  evidence?: Evidence;
+}
