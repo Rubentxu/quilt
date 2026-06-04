@@ -15,6 +15,7 @@ import type {
   TemplateSummary,
   TemplateSchema,
 } from '@shared/types/api';
+import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
 
 const API_BASE = '/api/v1';
@@ -223,4 +224,67 @@ export const api = {
 
   getTemplateSchema: (name: string) =>
     fetchJson<TemplateSchema>(`/templates/${encodeURIComponent(name)}/schema`),
+
+  // Schema Pack (G6)
+  getSchemaPack: (name: string) =>
+    fetchJson<{ schema_pack: unknown }>(
+      `/templates/${encodeURIComponent(name)}/schema-pack`,
+    ),
+
+  // Query execution (F18)
+  executeQuery: async (
+    ast: QueryAst,
+    limit = 100,
+    signal?: AbortSignal,
+  ): Promise<QueryResult> => {
+    // Enforce limit bounds server-side
+    const effectiveLimit = Math.min(Math.max(1, limit), 1000);
+
+    let lastError: Error | null = null;
+
+    // We use fetchJson but with a signal for cancellation
+    const authHeaders: Record<string, string> = {};
+    if (API_KEY) {
+      authHeaders['Authorization'] = `Bearer ${API_KEY}`;
+    }
+
+    const res = await fetch(`${API_BASE}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ ast, limit: effectiveLimit }),
+      signal,
+    });
+
+    if (!res.ok) {
+      let code = 'SERVER_ERROR';
+      let detail = res.statusText;
+      try {
+        const body = await res.json();
+        code = body.code || code;
+        detail = body.error || detail;
+      } catch {
+        // ignore parse error
+      }
+
+      if (res.status === 401) {
+        const err: QueryError = { type: 'Unauthorized', message: detail };
+        throw err;
+      }
+      if (res.status === 422) {
+        const err: QueryError = { type: 'InvalidAst', message: detail };
+        throw err;
+      }
+      if (res.status === 413) {
+        const err: QueryError = { type: 'InvalidAst', message: 'Query too large (>64KB)' };
+        throw err;
+      }
+      const err: QueryError = { type: 'ServerError', message: detail };
+      throw err;
+    }
+
+    return res.json() as Promise<QueryResult>;
+  },
 };
