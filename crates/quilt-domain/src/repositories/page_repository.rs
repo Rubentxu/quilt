@@ -2,8 +2,10 @@
 
 use crate::entities::Page;
 use crate::errors::DomainError;
-use crate::value_objects::{JournalDay, Uuid};
+use crate::properties::entry::DefaultPropertyEntry;
+use crate::value_objects::{JournalDay, PropertyValue, Uuid};
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 /// PageRepository is the abstraction for page data access.
 #[async_trait]
@@ -49,6 +51,24 @@ pub trait PageRepository: Send + Sync {
 
     /// Search pages by name
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<Page>, DomainError>;
+
+    /// Update the typed properties of a page (F5 + F8 + F9).
+    ///
+    /// Behavior:
+    /// 1. Load the existing page (return `PageNotFound` if missing).
+    /// 2. For each incoming key, resolve it via `PropertyKeyResolver` and
+    ///    reject any key whose `PropertyDefinition.read_only == true` with
+    ///    `DomainError::PropertyReadOnly(<key>)`. Rejection is atomic —
+    ///    a single bad key fails the entire call with no partial write.
+    /// 3. Merge `props` into the existing `page.properties` map using
+    ///    `merge_properties` (LWW by timestamp per key).
+    /// 4. Persist the merged map.
+    /// 5. Return the updated `Page`.
+    async fn update_properties(
+        &self,
+        page_id: Uuid,
+        props: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
+    ) -> Result<Page, DomainError>;
 }
 
 /// PageRepositoryExt provides additional convenience methods
