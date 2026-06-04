@@ -4,7 +4,7 @@
 
 use axum::{
     body::Body,
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::IntoResponse,
 };
 use std::path::PathBuf;

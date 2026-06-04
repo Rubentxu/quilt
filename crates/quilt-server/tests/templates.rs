@@ -9,10 +9,10 @@
 //! integration test file as a separate binary).
 
 use anyhow::Result;
-use axum::body::Body;
-use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use serde_json::{json, Value};
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, header};
+use serde_json::{Value, json};
 use std::sync::{Arc, Once};
 use tokio::sync::RwLock;
 use tower::ServiceExt;
@@ -145,12 +145,7 @@ fn url_encode_page_name(name: &str) -> String {
 async fn template_named_page_can_be_created() -> Result<()> {
     let app = create_test_app().await?;
 
-    let (status, body) = post(
-        app,
-        "/api/v1/pages",
-        json!({"name": "template/daily-note"}),
-    )
-    .await;
+    let (status, body) = post(app, "/api/v1/pages", json!({"name": "template/daily-note"})).await;
 
     assert_eq!(
         status,
@@ -232,9 +227,16 @@ async fn create_page_from_basic_template() -> Result<()> {
     let (status, blocks_body) = get(app, &blocks_path).await;
     assert_eq!(status, StatusCode::OK);
     let blocks = blocks_body.as_array().unwrap();
-    assert_eq!(blocks.len(), 2, "cloned page should have both template blocks");
+    assert_eq!(
+        blocks.len(),
+        2,
+        "cloned page should have both template blocks"
+    );
 
-    let contents: Vec<&str> = blocks.iter().map(|b| b["content"].as_str().unwrap()).collect();
+    let contents: Vec<&str> = blocks
+        .iter()
+        .map(|b| b["content"].as_str().unwrap())
+        .collect();
     assert!(contents.contains(&"First block"));
     assert!(contents.contains(&"Second block"));
 
@@ -307,10 +309,7 @@ async fn template_blocks_clone_preserves_tree_structure() -> Result<()> {
 
     // The cloned parent should be a root block (parentId = null) and
     // there should be two children referencing it.
-    let roots: Vec<&Value> = blocks
-        .iter()
-        .filter(|b| b["parentId"].is_null())
-        .collect();
+    let roots: Vec<&Value> = blocks.iter().filter(|b| b["parentId"].is_null()).collect();
     assert_eq!(roots.len(), 1, "expected exactly one root block");
     let cloned_parent_id = roots[0]["id"].as_str().unwrap();
 
@@ -318,8 +317,15 @@ async fn template_blocks_clone_preserves_tree_structure() -> Result<()> {
         .iter()
         .filter(|b| b["parentId"].as_str() == Some(cloned_parent_id))
         .collect();
-    assert_eq!(children.len(), 2, "expected two children under the cloned parent");
-    let child_contents: Vec<&str> = children.iter().map(|b| b["content"].as_str().unwrap()).collect();
+    assert_eq!(
+        children.len(),
+        2,
+        "expected two children under the cloned parent"
+    );
+    let child_contents: Vec<&str> = children
+        .iter()
+        .map(|b| b["content"].as_str().unwrap())
+        .collect();
     assert!(child_contents.contains(&"Child 1"));
     assert!(child_contents.contains(&"Child 2"));
 
@@ -384,7 +390,9 @@ async fn template_placeholders_replaced() -> Result<()> {
     // Built-in variables: {{title}}, {{date}}, ${name} all become the page name / today.
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     assert!(
-        contents.iter().any(|c| c.contains(&format!("Title: placeholder demo | Date: {today} | Greeting: placeholder demo"))),
+        contents.iter().any(|c| c.contains(&format!(
+            "Title: placeholder demo | Date: {today} | Greeting: placeholder demo"
+        ))),
         "expected built-in substitution; got {contents:?}"
     );
     // User-supplied variable.
@@ -537,11 +545,7 @@ async fn create_from_non_template_page_returns_400() -> Result<()> {
         }),
     )
     .await;
-    assert_eq!(
-        status,
-        StatusCode::BAD_REQUEST,
-        "expected 400, got {body}"
-    );
+    assert_eq!(status, StatusCode::BAD_REQUEST, "expected 400, got {body}");
     Ok(())
 }
 
@@ -558,12 +562,7 @@ async fn create_from_template_with_existing_target_page_returns_error() -> Resul
     .await;
 
     // Pre-existing target page
-    let (status, _) = post(
-        app.clone(),
-        "/api/v1/pages",
-        json!({"name": "Cloned"}),
-    )
-    .await;
+    let (status, _) = post(app.clone(), "/api/v1/pages", json!({"name": "Cloned"})).await;
     assert_eq!(status, StatusCode::CREATED);
 
     // Second creation should fail (page name uniqueness)
@@ -661,7 +660,10 @@ async fn list_templates_returns_empty_when_no_template_pages() -> Result<()> {
 
     let (status, body) = get(app, "/api/v1/templates").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.as_array().unwrap().is_empty(), "expected empty array, got {body}");
+    assert!(
+        body.as_array().unwrap().is_empty(),
+        "expected empty array, got {body}"
+    );
     Ok(())
 }
 
@@ -712,16 +714,33 @@ async fn list_templates_filters_only_template_pages() -> Result<()> {
 
     // Mix of regular and template pages
     post(app.clone(), "/api/v1/pages", json!({"name": "regular"})).await;
-    post(app.clone(), "/api/v1/pages", json!({"name": "template/meeting-notes"})).await;
+    post(
+        app.clone(),
+        "/api/v1/pages",
+        json!({"name": "template/meeting-notes"}),
+    )
+    .await;
     post(app.clone(), "/api/v1/pages", json!({"name": "templated"})).await; // not a template
-    post(app.clone(), "/api/v1/pages", json!({"name": "template/bare"})).await;
+    post(
+        app.clone(),
+        "/api/v1/pages",
+        json!({"name": "template/bare"}),
+    )
+    .await;
 
     let (status, body) = get(app, "/api/v1/templates").await;
     assert_eq!(status, StatusCode::OK);
     let templates = body.as_array().unwrap();
-    assert_eq!(templates.len(), 2, "expected only the two template/ pages, got {body}");
+    assert_eq!(
+        templates.len(),
+        2,
+        "expected only the two template/ pages, got {body}"
+    );
 
-    let names: Vec<&str> = templates.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    let names: Vec<&str> = templates
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
     assert!(names.contains(&"meeting-notes"));
     assert!(names.contains(&"bare"));
     assert!(!names.contains(&"regular"));
@@ -733,7 +752,12 @@ async fn list_templates_filters_only_template_pages() -> Result<()> {
 async fn list_templates_defaults_to_inline_shape_when_no_card_shape() -> Result<()> {
     let app = create_test_app().await?;
 
-    let (_status, _) = post(app.clone(), "/api/v1/pages", json!({"name": "template/loose"})).await;
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/pages",
+        json!({"name": "template/loose"}),
+    )
+    .await;
     let (_status, _) = post(
         app.clone(),
         "/api/v1/blocks",
@@ -748,7 +772,10 @@ async fn list_templates_defaults_to_inline_shape_when_no_card_shape() -> Result<
     assert_eq!(status, StatusCode::OK);
     let t = &body.as_array().unwrap()[0];
     assert_eq!(t["name"], "loose");
-    assert_eq!(t["card_shape"], "inline", "missing card-shape should default to inline");
+    assert_eq!(
+        t["card_shape"], "inline",
+        "missing card-shape should default to inline"
+    );
     assert!(t["icon"].is_null());
     Ok(())
 }
@@ -772,7 +799,12 @@ async fn get_template_schema_returns_full_metadata() -> Result<()> {
     let app = create_test_app().await?;
 
     // Create template page with metadata and a user-facing block
-    let (_status, _) = post(app.clone(), "/api/v1/pages", json!({"name": "template/contact"})).await;
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/pages",
+        json!({"name": "template/contact"}),
+    )
+    .await;
     let (_status, _) = post(
         app.clone(),
         "/api/v1/blocks",
@@ -811,7 +843,10 @@ async fn get_template_schema_returns_full_metadata() -> Result<()> {
 
     // Properties exclude reserved keys (card-shape, icon, cssclass)
     let properties = body["properties"].as_array().unwrap();
-    let keys: Vec<&str> = properties.iter().map(|p| p["key"].as_str().unwrap()).collect();
+    let keys: Vec<&str> = properties
+        .iter()
+        .map(|p| p["key"].as_str().unwrap())
+        .collect();
     assert!(keys.contains(&"name"));
     assert!(keys.contains(&"email"));
     assert!(keys.contains(&"priority"));
@@ -832,7 +867,12 @@ async fn get_template_schema_returns_full_metadata() -> Result<()> {
 async fn get_template_schema_reserves_block_level_keys() -> Result<()> {
     let app = create_test_app().await?;
 
-    let (_status, _) = post(app.clone(), "/api/v1/pages", json!({"name": "template/clean"})).await;
+    let (_status, _) = post(
+        app.clone(),
+        "/api/v1/pages",
+        json!({"name": "template/clean"}),
+    )
+    .await;
     let (_status, _) = post(
         app.clone(),
         "/api/v1/blocks",
@@ -853,10 +893,22 @@ async fn get_template_schema_reserves_block_level_keys() -> Result<()> {
     assert_eq!(status, StatusCode::OK);
 
     let properties = body["properties"].as_array().unwrap();
-    let keys: Vec<&str> = properties.iter().map(|p| p["key"].as_str().unwrap()).collect();
-    assert!(!keys.contains(&"template"), "reserved key 'template' should be excluded");
-    assert!(!keys.contains(&"type"), "reserved key 'type' should be excluded");
-    assert!(!keys.contains(&"collapsed"), "reserved key 'collapsed' should be excluded");
+    let keys: Vec<&str> = properties
+        .iter()
+        .map(|p| p["key"].as_str().unwrap())
+        .collect();
+    assert!(
+        !keys.contains(&"template"),
+        "reserved key 'template' should be excluded"
+    );
+    assert!(
+        !keys.contains(&"type"),
+        "reserved key 'type' should be excluded"
+    );
+    assert!(
+        !keys.contains(&"collapsed"),
+        "reserved key 'collapsed' should be excluded"
+    );
     assert!(keys.contains(&"author"));
     Ok(())
 }

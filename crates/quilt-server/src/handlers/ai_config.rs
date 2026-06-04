@@ -1,14 +1,14 @@
 //! AI configuration HTTP handlers
 
-use axum::{extract::Extension, Json};
-use axum::{routing::get, Router};
+use axum::{Json, extract::Extension};
+use axum::{Router, routing::get};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use quilt_cognitive::{ai_client::MockAIClient, AIConfig, AIProvider};
+use quilt_cognitive::{AIConfig, AIProvider, ai_client::MockAIClient};
 
 /// Response status for AI operations
 #[derive(Debug, Clone, Serialize, Deserialize)]

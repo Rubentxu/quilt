@@ -93,11 +93,7 @@ async fn test_navigate_to_block_returns_ok() {
 #[ignore = "requires running server — use: just test-integration"]
 async fn test_list_pages_endpoint() {
     let client = reqwest::Client::new();
-    let resp = client
-        .get(api_url("/pages"))
-        .send()
-        .await
-        .unwrap();
+    let resp = client.get(api_url("/pages")).send().await.unwrap();
 
     assert!(resp.status().is_success());
     let pages: Vec<serde_json::Value> = resp.json().await.unwrap();

@@ -37,9 +37,7 @@ async fn test_websocket_connection_succeeds() {
 #[ignore = "requires running server — use: just test-integration"]
 async fn test_websocket_subscribe_and_receive_navigate() {
     // Connect to WebSocket
-    let (ws_stream, _resp) = connect_async(WS_URL)
-        .await
-        .expect("failed to connect");
+    let (ws_stream, _resp) = connect_async(WS_URL).await.expect("failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -66,17 +64,12 @@ async fn test_websocket_subscribe_and_receive_navigate() {
         .expect("navigate HTTP request failed");
 
     // Read from WebSocket — should receive navigation event
-    let timeout = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        read.next(),
-    )
-    .await;
+    let timeout = tokio::time::timeout(std::time::Duration::from_secs(3), read.next()).await;
 
     match timeout {
         Ok(Some(Ok(msg))) => {
             if let Message::Text(text) = msg {
-                let parsed: serde_json::Value =
-                    serde_json::from_str(&text).unwrap_or_default();
+                let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
                 // Should be a navigation event
                 assert!(
                     parsed["type"].as_str().is_some(),
@@ -103,9 +96,7 @@ async fn test_websocket_subscribe_and_receive_navigate() {
 #[tokio::test]
 #[ignore = "requires running server — use: just test-integration"]
 async fn test_websocket_ping_pong() {
-    let (ws_stream, _resp) = connect_async(WS_URL)
-        .await
-        .expect("failed to connect");
+    let (ws_stream, _resp) = connect_async(WS_URL).await.expect("failed to connect");
 
     let (mut write, mut read) = ws_stream.split();
 
@@ -116,11 +107,7 @@ async fn test_websocket_ping_pong() {
         .expect("failed to send ping");
 
     // Expect pong back
-    let timeout = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        read.next(),
-    )
-    .await;
+    let timeout = tokio::time::timeout(std::time::Duration::from_secs(3), read.next()).await;
 
     match timeout {
         Ok(Some(Ok(msg))) => {

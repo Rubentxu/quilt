@@ -1,10 +1,10 @@
 //! Search-related HTTP handlers
 
 use axum::{
-    extract::{Extension, Query},
     Json,
+    extract::{Extension, Query},
 };
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::instrument;

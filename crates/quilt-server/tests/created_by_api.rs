@@ -10,10 +10,10 @@
 //! 4. Whitespace and empty values are handled gracefully.
 
 use anyhow::Result;
-use axum::body::Body;
-use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use serde_json::{json, Value};
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, header};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::sync::Once;
 use tokio::sync::RwLock;
@@ -52,12 +52,7 @@ async fn create_test_app() -> Result<Router> {
     Ok(app)
 }
 
-async fn req(
-    app: Router,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
+async fn req(app: Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
     let mut builder = Request::builder()
         .method(method)
         .uri(uri)
@@ -271,7 +266,11 @@ async fn list_blocks_by_author_filters_correctly() -> Result<()> {
     .await;
     assert_eq!(status, StatusCode::OK);
     let arr = alice_blocks.as_array().expect("array");
-    assert_eq!(arr.len(), 2, "alice should have 2 blocks, got {alice_blocks}");
+    assert_eq!(
+        arr.len(),
+        2,
+        "alice should have 2 blocks, got {alice_blocks}"
+    );
     for b in arr {
         let author = b["properties"]["created_by"].as_str().unwrap_or("");
         assert_eq!(author, "user::alice");
@@ -292,11 +291,7 @@ async fn list_blocks_by_author_filters_correctly() -> Result<()> {
     );
 
     // Query unknown — empty array
-    let (status, none_blocks) = get(
-        app,
-        "/api/v1/blocks/by-author?author=user%3A%3Ano-one",
-    )
-    .await;
+    let (status, none_blocks) = get(app, "/api/v1/blocks/by-author?author=user%3A%3Ano-one").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(none_blocks.as_array().unwrap().len(), 0);
 

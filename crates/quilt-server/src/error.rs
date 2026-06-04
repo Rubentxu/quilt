@@ -4,9 +4,9 @@
 //! and consistent error response format.
 
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde_json::json;
 

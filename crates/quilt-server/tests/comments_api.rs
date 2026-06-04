@@ -6,10 +6,10 @@
 //! the `axum::Router` with an in-memory SQLite database.
 
 use anyhow::Result;
-use axum::body::Body;
-use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use serde_json::{json, Value};
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, header};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::sync::Once;
 use tokio::sync::RwLock;
@@ -149,13 +149,22 @@ async fn create_block_with_comment_properties() -> Result<()> {
         }),
     )
     .await;
-    assert_eq!(status, StatusCode::CREATED, "comment create failed: {comment}");
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "comment create failed: {comment}"
+    );
     let comment_id = comment["id"].as_str().unwrap().to_string();
 
     // The returned block must include all properties
-    let props = comment["properties"].as_object().expect("properties is object");
+    let props = comment["properties"]
+        .as_object()
+        .expect("properties is object");
     assert_eq!(props.get("type").and_then(|v| v.as_str()), Some("comment"));
-    assert_eq!(props.get("resolved").and_then(|v| v.as_str()), Some("false"));
+    assert_eq!(
+        props.get("resolved").and_then(|v| v.as_str()),
+        Some("false")
+    );
     assert_eq!(
         props.get("created_by").and_then(|v| v.as_str()),
         Some("agent-007")
@@ -190,18 +199,17 @@ async fn create_block_with_comment_properties() -> Result<()> {
     let comment_props = comment_from_list["properties"]
         .as_object()
         .expect("comment has properties object");
-    assert_eq!(comment_props.get("type").and_then(|v| v.as_str()), Some("comment"));
+    assert_eq!(
+        comment_props.get("type").and_then(|v| v.as_str()),
+        Some("comment")
+    );
     assert_eq!(
         comment_props.get("created_by").and_then(|v| v.as_str()),
         Some("agent-007")
     );
 
     // Verify via the per-block properties endpoint too
-    let (status, props_body) = get(
-        app,
-        &format!("/api/v1/blocks/{comment_id}/properties"),
-    )
-    .await;
+    let (status, props_body) = get(app, &format!("/api/v1/blocks/{comment_id}/properties")).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(props_body["type"], "comment");
     assert_eq!(props_body["resolved"], "false");
@@ -273,11 +281,7 @@ async fn resolve_and_unresolve_comment() -> Result<()> {
     assert_eq!(status, StatusCode::OK);
 
     // Verify it's false again
-    let (_, after_unresolve) = get(
-        app,
-        &format!("/api/v1/blocks/{comment_id}/properties"),
-    )
-    .await;
+    let (_, after_unresolve) = get(app, &format!("/api/v1/blocks/{comment_id}/properties")).await;
     assert_eq!(after_unresolve["resolved"], "false");
 
     Ok(())
@@ -339,15 +343,25 @@ async fn nested_comment_replies() -> Result<()> {
     )
     .await;
     let arr = blocks.as_array().unwrap();
-    assert_eq!(arr.len(), 3, "expected parent + comment + reply, got {blocks}");
+    assert_eq!(
+        arr.len(),
+        3,
+        "expected parent + comment + reply, got {blocks}"
+    );
 
     // Build a parent-id index and verify the tree structure
     let by_id: std::collections::HashMap<&str, &Value> =
         arr.iter().map(|b| (b["id"].as_str().unwrap(), b)).collect();
 
     assert_eq!(by_id[parent_id.as_str()]["parentId"], Value::Null);
-    assert_eq!(by_id[c1_id.as_str()]["parentId"].as_str(), Some(parent_id.as_str()));
-    assert_eq!(by_id[reply_id.as_str()]["parentId"].as_str(), Some(c1_id.as_str()));
+    assert_eq!(
+        by_id[c1_id.as_str()]["parentId"].as_str(),
+        Some(parent_id.as_str())
+    );
+    assert_eq!(
+        by_id[reply_id.as_str()]["parentId"].as_str(),
+        Some(c1_id.as_str())
+    );
 
     // All three should have properties on the response
     for (id, label) in [
@@ -402,7 +416,10 @@ async fn create_block_skips_unsupported_property_values() -> Result<()> {
         .expect("properties object on response");
     // The supported ones round-trip
     assert_eq!(props.get("type").and_then(|v| v.as_str()), Some("comment"));
-    assert_eq!(props.get("resolved").and_then(|v| v.as_str()), Some("false"));
+    assert_eq!(
+        props.get("resolved").and_then(|v| v.as_str()),
+        Some("false")
+    );
     // The unsupported null is dropped
     assert!(!props.contains_key("tag"));
 

@@ -1,7 +1,7 @@
 //! Settings HTTP handlers
 
 use axum::extract::Extension;
-use axum::{routing::get, Json, Router};
+use axum::{Json, Router, routing::get};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

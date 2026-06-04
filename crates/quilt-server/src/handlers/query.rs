@@ -7,7 +7,7 @@
 
 use crate::error::AppError;
 use crate::state::AppState;
-use axum::{extract::Extension, routing::post, Json, Router};
+use axum::{Json, Router, extract::Extension, routing::post};
 use quilt_application::query::executor::QueryExecutorService;
 use quilt_domain::entities::Block;
 use quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository;

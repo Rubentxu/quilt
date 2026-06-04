@@ -54,12 +54,12 @@ fn test_placeholder_html_is_valid_html() {
     // when wasm_assets/index.html doesn't exist in test environment)
     // We verify the response contains valid HTML structure
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let response = rt.block_on(async {
-        serve_index_html().await.into_response()
-    });
+    let response = rt.block_on(async { serve_index_html().await.into_response() });
 
     let body = rt.block_on(async {
-        axum::body::to_bytes(response.into_body(), 4096).await.unwrap()
+        axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap()
     });
     let html = String::from_utf8_lossy(&body);
 

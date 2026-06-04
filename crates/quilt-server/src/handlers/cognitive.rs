@@ -4,11 +4,11 @@
 //! Full functionality requires the MCP server to be integrated into AppState.
 
 use axum::{
+    Json,
     extract::{Extension, Query, State},
     http::StatusCode,
-    Json,
 };
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;

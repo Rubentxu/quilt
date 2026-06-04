@@ -1,11 +1,11 @@
 //! Page-related HTTP handlers
 
 use axum::{
+    Json,
     extract::{Extension, Path},
     http::StatusCode,
-    Json,
 };
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -135,7 +135,10 @@ pub fn routes() -> Router {
         // NOTE: `/from-template` is a literal segment and must be registered
         // BEFORE the `/:name` catch-all so that axum does not route the
         // literal `from-template` string to the page-by-name handler.
-        .route("/from-template", axum::routing::post(create_page_from_template))
+        .route(
+            "/from-template",
+            axum::routing::post(create_page_from_template),
+        )
         .route("/journal/:date", get(get_journal))
         .route("/:name", get(get_page))
         .route("/:name/blocks", get(get_page_blocks))
@@ -453,9 +456,7 @@ pub async fn create_page_from_template(
         .get_by_name(&req.template_name)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?
-        .ok_or_else(|| {
-            AppError::NotFound(format!("Template not found: {}", req.template_name))
-        })?;
+        .ok_or_else(|| AppError::NotFound(format!("Template not found: {}", req.template_name)))?;
 
     // 2. Verify it's a template (name starts with "template/" or is exactly "template")
     if !template.is_template() {
@@ -622,10 +623,7 @@ pub fn substitute_placeholders(
             if key.is_empty() {
                 continue;
             }
-            for token in [
-                format!("{{{{{key}}}}}"),
-                format!("${{{key}}}"),
-            ] {
+            for token in [format!("{{{{{key}}}}}"), format!("${{{key}}}")] {
                 result = result.replace(&token, value);
             }
         }

@@ -7,13 +7,13 @@ use quilt_application::services::ref_service::RefService;
 use quilt_cognitive::AIClient;
 #[cfg(feature = "cognitive")]
 use quilt_cognitive::{
-    ai_client::MockAIClient, ArgumentCartographer, CognitiveMirror, MorningBriefing,
-    SerendipityEngine,
+    ArgumentCartographer, CognitiveMirror, MorningBriefing, SerendipityEngine,
+    ai_client::MockAIClient,
 };
 use quilt_infrastructure::database::sqlite::connection::DbPool;
 use quilt_search::SearchIndexManager;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 
 /// Navigation event sent to WebSocket clients
 #[derive(Debug, Clone, serde::Serialize)]

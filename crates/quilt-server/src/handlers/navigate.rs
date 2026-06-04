@@ -2,8 +2,8 @@
 //!
 //! These handlers emit WebSocket events for real-time navigation updates.
 
-use axum::{extract::Extension, Json};
-use axum::{routing::post, Router};
+use axum::{Json, extract::Extension};
+use axum::{Router, routing::post};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 

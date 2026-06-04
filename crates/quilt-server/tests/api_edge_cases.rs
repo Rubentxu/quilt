@@ -7,10 +7,10 @@
 //! constructs a test app, and sends HTTP requests via `tower::ServiceExt::oneshot`.
 
 use anyhow::Result;
-use axum::body::Body;
-use axum::http::{header, Method, Request, StatusCode};
 use axum::Router;
-use serde_json::{json, Value};
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode, header};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::sync::Once;
 use tokio::sync::RwLock;
@@ -194,11 +194,12 @@ async fn create_page_then_fetch() -> Result<()> {
     // List all pages — should include ours
     let (status, body) = get(app, "/api/v1/pages").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|p| p["name"] == "my test page"));
+    assert!(
+        body.as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["name"] == "my test page")
+    );
 
     Ok(())
 }
@@ -424,7 +425,11 @@ async fn delete_nonexistent_block_returns_404() -> Result<()> {
     let (status, body) = delete(app, &format!("/api/v1/blocks/{valid_nonexistent_uuid}")).await;
     // The delete handler now verifies existence first, so a missing block
     // is a 404 (not a silent no-op). This makes client errors explicit.
-    assert_eq!(status, StatusCode::NOT_FOUND, "delete nonexistent block: {body}");
+    assert_eq!(
+        status,
+        StatusCode::NOT_FOUND,
+        "delete nonexistent block: {body}"
+    );
 
     Ok(())
 }
@@ -1715,7 +1720,12 @@ async fn delete_block_after_deleting_children_succeeds() -> Result<()> {
 async fn delete_block_with_multiple_children_reports_count() -> Result<()> {
     let app = create_test_app().await?;
 
-    let (_, page) = post(app.clone(), "/api/v1/pages", json!({"name": "Many Children"})).await;
+    let (_, page) = post(
+        app.clone(),
+        "/api/v1/pages",
+        json!({"name": "Many Children"}),
+    )
+    .await;
     let page_name = page["name"].as_str().unwrap().to_string();
 
     let (status, parent) = post(

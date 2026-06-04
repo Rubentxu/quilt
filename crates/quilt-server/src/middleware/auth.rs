@@ -23,7 +23,7 @@
 
 use axum::{
     extract::Request,
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
 };
@@ -151,8 +151,8 @@ pub async fn auth_middleware(request: Request, next: Next) -> Response {
 mod tests {
     use super::*;
     use axum::{
-        body::Body, http::Request, middleware::from_fn, response::IntoResponse, routing::get,
-        Router,
+        Router, body::Body, http::Request, middleware::from_fn, response::IntoResponse,
+        routing::get,
     };
     use std::sync::Once;
     use tower::util::ServiceExt;

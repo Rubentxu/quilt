@@ -1,13 +1,13 @@
 //! Block-related HTTP handlers
 
 use axum::{
+    Json,
     extract::{Extension, Path, Query},
     http::StatusCode,
-    Json,
 };
 use axum::{
-    routing::{delete, get, post},
     Router,
+    routing::{delete, get, post},
 };
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
@@ -352,7 +352,9 @@ pub async fn create_block(
     if let Some(author) = payload.created_by.as_deref() {
         let trimmed = author.trim();
         if !trimmed.is_empty() && !properties.contains_key("created_by") {
-            if let Some(value) = PropertyValue::from_json(&serde_json::Value::String(trimmed.to_string())) {
+            if let Some(value) =
+                PropertyValue::from_json(&serde_json::Value::String(trimmed.to_string()))
+            {
                 properties.insert("created_by".to_string(), value);
             }
         }

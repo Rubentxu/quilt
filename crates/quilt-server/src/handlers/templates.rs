@@ -12,9 +12,9 @@
 use crate::error::AppError;
 use crate::state::AppState;
 use axum::{
+    Json, Router,
     extract::{Extension, Path},
     routing::get,
-    Json, Router,
 };
 use quilt_application::use_cases::{TemplateUseCases, TemplateUseCasesImpl};
 use quilt_infrastructure::database::sqlite::repositories::{
@@ -121,9 +121,7 @@ pub struct TemplatePropertyResponse {
     pub type_: String,
 }
 
-impl From<quilt_application::use_cases::TemplateSchema>
-    for TemplateSchemaResponse
-{
+impl From<quilt_application::use_cases::TemplateSchema> for TemplateSchemaResponse {
     fn from(s: quilt_application::use_cases::TemplateSchema) -> Self {
         Self {
             name: s.name,

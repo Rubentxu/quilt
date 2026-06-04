@@ -2,7 +2,7 @@
 //!
 //! Sets up the Axum router with all routes and middleware.
 
-use axum::{middleware, Router};
+use axum::{Router, middleware};
 use tower_http::cors::CorsLayer;
 
 use crate::handlers;
