@@ -310,6 +310,7 @@ mod tests {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .unwrap();
 
@@ -335,12 +336,13 @@ mod tests {
     #[tokio::test]
     async fn test_chaining() {
         let page = Page::new(PageCreate {
-            name: "Chained".to_string(),
-            title: Some("Chained".to_string()),
+            name: "Test Page".to_string(),
+            title: Some("Test Page".to_string()),
             namespace_id: None,
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .unwrap();
 
@@ -366,6 +368,7 @@ mod tests {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .unwrap();
 

@@ -224,6 +224,7 @@ pub async fn create_page(
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -473,6 +474,7 @@ pub async fn create_page_from_template(
         journal_day: None,
         format: BlockFormat::Markdown,
         file_id: None,
+        properties: std::collections::HashMap::new(),
     })
     .map_err(|e| AppError::Internal(e.to_string()))?;
 

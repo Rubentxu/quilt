@@ -112,6 +112,7 @@ fn test_try_from_page_not_a_journal() {
         journal_day: None,
         format: BlockFormat::Markdown,
         file_id: None,
+        properties: std::collections::HashMap::new(),
     })
     .unwrap();
     let result = Journal::try_from(page);

@@ -1,7 +1,9 @@
 //! Page entity - represents a page in the knowledge graph
 
 use crate::errors::DomainError;
-use crate::value_objects::{BlockFormat, JournalDay, Uuid};
+use crate::properties::entry::DefaultPropertyEntry;
+use crate::value_objects::{BlockFormat, JournalDay, PropertyValue, Uuid};
+use std::collections::HashMap;
 
 /// Page represents a page in Logseq.
 ///
@@ -33,6 +35,11 @@ pub struct Page {
     pub created_at: chrono::DateTime<chrono::Utc>,
     /// Last update timestamp
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Typed properties (F5). Stored as `HashMap<String, DefaultPropertyEntry<PropertyValue>>`
+    /// so LWW merge via `merge_properties` works. System properties (`id`,
+    /// `created_at`, `updated_at`) carry `read_only: true` in BUILTIN_PROPERTIES
+    /// and are rejected from incoming updates by `PageRepository::update_properties`.
+    pub properties: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
 }
 
 /// Data required to create a new page
@@ -44,6 +51,8 @@ pub struct PageCreate {
     pub journal_day: Option<JournalDay>,
     pub format: BlockFormat,
     pub file_id: Option<Uuid>,
+    /// Typed properties to seed the new page with. Defaults to empty.
+    pub properties: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
 }
 
 impl Page {
@@ -71,6 +80,7 @@ impl Page {
             journal: create.journal_day.is_some(),
             created_at: now,
             updated_at: now,
+            properties: create.properties,
         })
     }
 
@@ -99,6 +109,7 @@ impl Page {
             journal: true,
             created_at: now,
             updated_at: now,
+            properties: HashMap::new(),
         })
     }
 
@@ -213,6 +224,7 @@ impl Page {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::properties::entry::HasValue;
 
     #[test]
     fn test_page_creation() {
@@ -223,6 +235,7 @@ mod tests {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: HashMap::new(),
         };
 
         let page = Page::new(create).unwrap();
@@ -239,6 +252,7 @@ mod tests {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: HashMap::new(),
         };
 
         let page = Page::new(create).unwrap();
@@ -257,6 +271,7 @@ mod tests {
                 journal_day: None,
                 format: BlockFormat::Markdown,
                 file_id: None,
+                properties: HashMap::new(),
             };
 
             assert!(Page::new(create).is_err());
@@ -282,6 +297,7 @@ mod tests {
                 journal_day: None,
                 format: BlockFormat::Markdown,
                 file_id: None,
+                properties: HashMap::new(),
             };
 
             let page = Page::new(create)
@@ -300,6 +316,7 @@ mod tests {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: HashMap::new(),
         };
 
         assert!(Page::new(create).is_err());
@@ -337,6 +354,78 @@ mod tests {
         assert_eq!(page.name, "2026-05-14"); // name is always ISO
         assert_eq!(page.title, Some("May 14, 2026".to_string()));
     }
+
+    // ── F5: Page.properties + Default ──
+
+    #[test]
+    fn page_has_properties_field_defaulting_to_empty() {
+        // New pages start with an empty properties map.
+        let create = PageCreate {
+            name: "Test".to_string(),
+            ..Default::default()
+        };
+        let page = Page::new(create).unwrap();
+        assert!(page.properties.is_empty());
+    }
+
+    #[test]
+    fn page_create_supports_properties_field() {
+        // F5: PageCreate carries a properties field. Backward compat: callers
+        // that omit the field get an empty map (PageCreate::default).
+        let mut props = std::collections::HashMap::new();
+        props.insert(
+            "status".to_string(),
+            crate::properties::entry::DefaultPropertyEntry::new(
+                crate::value_objects::PropertyValue::string("Doing"),
+            ),
+        );
+        let create = PageCreate {
+            name: "Test".to_string(),
+            properties: props.clone(),
+            ..Default::default()
+        };
+        assert_eq!(create.properties.len(), 1);
+        assert_eq!(
+            create.properties["status"].value(),
+            &crate::value_objects::PropertyValue::String("Doing".to_string())
+        );
+    }
+
+    #[test]
+    fn page_default_provides_all_fields() {
+        // F5 + task risk mitigation: `impl Default for Page` lets the
+        // 4 direct `Page { ... }` literal sites use `..Default::default()`.
+        let page = Page::default();
+        assert_eq!(page.name, "");
+        assert!(page.title.is_none());
+        assert!(page.namespace_id.is_none());
+        assert!(page.journal_day.is_none());
+        assert_eq!(page.format, BlockFormat::Markdown);
+        assert!(page.file_id.is_none());
+        assert!(page.original_name.is_none());
+        assert!(!page.journal);
+        assert!(page.properties.is_empty());
+    }
+
+    #[test]
+    fn page_default_with_overrides_works() {
+        // Validates that `Page { properties: ..., ..Default::default() }`
+        // pattern works at the literal site.
+        let mut props = std::collections::HashMap::new();
+        props.insert(
+            "custom".to_string(),
+            crate::properties::entry::DefaultPropertyEntry::new(
+                crate::value_objects::PropertyValue::string("v"),
+            ),
+        );
+        let page = Page {
+            name: "X".to_string(),
+            properties: props,
+            ..Default::default()
+        };
+        assert_eq!(page.name, "X");
+        assert_eq!(page.properties.len(), 1);
+    }
 }
 
 impl Default for PageCreate {
@@ -348,6 +437,34 @@ impl Default for PageCreate {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: HashMap::new(),
+        }
+    }
+}
+
+impl Default for Page {
+    /// `Default` provides a Page with empty / falsy fields and a fresh UUID.
+    /// The 4 direct `Page { ... }` literal sites in the codebase (server tests,
+    /// cli, queries, sqlite row decoder) use `..Default::default()` to inherit
+    /// these defaults. `created_at` and `updated_at` use a fixed epoch
+    /// timestamp (1970-01-01) so Default is deterministic; callers that
+    /// care about "now" should use `Page::new` instead.
+    fn default() -> Self {
+        let epoch = chrono::DateTime::<chrono::Utc>::from_timestamp(0, 0)
+            .expect("epoch timestamp is valid");
+        Self {
+            id: Uuid::nil(),
+            name: String::new(),
+            title: None,
+            namespace_id: None,
+            journal_day: None,
+            format: BlockFormat::Markdown,
+            file_id: None,
+            original_name: None,
+            journal: false,
+            created_at: epoch,
+            updated_at: epoch,
+            properties: HashMap::new(),
         }
     }
 }

@@ -33,6 +33,7 @@ fn make_page(name: &str, journal: bool) -> Page {
         },
         format: BlockFormat::Markdown,
         file_id: None,
+        properties: std::collections::HashMap::new(),
     })
     .unwrap()
 }

@@ -303,6 +303,7 @@ impl PageRow {
             journal: self.journal != 0,
             created_at: ts_to_datetime(self.created_at),
             updated_at: ts_to_datetime(self.updated_at),
+            properties: std::collections::HashMap::new(),
         })
     }
 }
@@ -1296,6 +1297,7 @@ mod tests {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         };
         Page::new(create).expect("Failed to create page")
     }

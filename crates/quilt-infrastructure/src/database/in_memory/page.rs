@@ -144,6 +144,7 @@ mod tests {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .unwrap()
     }

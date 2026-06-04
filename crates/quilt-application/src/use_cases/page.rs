@@ -75,6 +75,7 @@ impl<PR: PageRepository + 'static, BR: BlockRepository + 'static> PageUseCases
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         };
 
         let page = Page::new(page_create).map_err(ApplicationError::Domain)?;

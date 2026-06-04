@@ -112,6 +112,7 @@ impl<BR: BlockRepository, PR: PageRepository> BlockUseCasesImpl<BR, PR> {
             title: None,
             namespace_id: None,
             journal_day: None,
+            properties: std::collections::HashMap::new(),
             format: BlockFormat::Markdown,
             file_id: None,
         })
