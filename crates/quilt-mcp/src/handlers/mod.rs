@@ -45,20 +45,19 @@ pub trait ResourceProvider: Send + Sync {
 
     /// Derive evidence for a resource read from its URI and result.
     /// Default: `None` → server injects `Evidence::universal_fallback`.
-    fn resource_evidence(
-        &self,
-        _uri: &str,
-        _result: &serde_json::Value,
-    ) -> Option<Evidence> {
+    fn resource_evidence(&self, _uri: &str, _result: &serde_json::Value) -> Option<Evidence> {
         None
     }
 }
 
 pub mod block;
+pub mod graph;
 pub mod page;
 pub mod query;
 pub mod resource;
+pub mod retrieval;
 pub mod template;
+pub mod temporal;
 
 #[cfg(test)]
 mod tests {

@@ -11,28 +11,32 @@
 //!    `_meta.evidence` populated** — same pattern.
 //! 4. **Error responses carry `is_error: true` in evidence.**
 //!
-//! The test iterates all 14 live tools via the server's `ListTools`
-//! and `ListResources` (per design auto-grill #4: 14 tools, not 18).
+//! The test iterates all 17 live tools via the server's `ListTools`
+//! and `ListResources` (per design auto-grill #4: 17 tools).
 //! The spec's aspirational fallback tier for `settings_*` and
 //! `quilt_*_cognitive` is documented but not exercised.
 
 use std::sync::Arc;
 
+use quilt_application::templates::reapply::{ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
-    ResourceUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
+    ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
 };
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository, SqliteTagRepository,
 };
+use quilt_mcp::McpServer;
 use quilt_mcp::handlers::block::BlockToolHandler;
+use quilt_mcp::handlers::graph::GraphToolHandler;
 use quilt_mcp::handlers::page::PageToolHandler;
 use quilt_mcp::handlers::query::QueryToolHandler;
 use quilt_mcp::handlers::resource::GraphResourceProvider;
+use quilt_mcp::handlers::retrieval::RetrievalToolHandler;
 use quilt_mcp::handlers::template::TemplateToolHandler;
+use quilt_mcp::handlers::temporal::TemporalToolHandler;
 use quilt_mcp::protocol::McpRequest;
-use quilt_mcp::McpServer;
 use sqlx::SqlitePool;
 
 async fn setup_server() -> (McpServer, SqlitePool) {
@@ -62,15 +66,22 @@ async fn setup_server() -> (McpServer, SqlitePool) {
         page_repo.clone(),
         block_repo.clone(),
     ));
+    let reapply_use_cases: Arc<dyn ReapplyTemplateUseCase> = Arc::new(
+        ReapplyTemplateUseCaseImpl::new(template_use_cases.clone(), block_repo.clone()),
+    );
+
+    let search_use_cases = Arc::new(SearchUseCasesImpl::new().with_search_service(Arc::new(
+        quilt_search::SearchService::new(Arc::new(pool.clone())),
+    )));
 
     let block_handler = BlockToolHandler::new(block_use_cases.clone());
     let page_handler = PageToolHandler::new(page_use_cases.clone());
-    let query_handler = QueryToolHandler::new(Arc::new(
-        quilt_application::use_cases::SearchUseCasesImpl::new().with_search_service(Arc::new(
-            quilt_search::SearchService::new(Arc::new(pool.clone())),
-        )),
-    ));
-    let template_handler = TemplateToolHandler::new(template_use_cases.clone());
+    let query_handler = QueryToolHandler::new(search_use_cases.clone());
+    let retrieval_handler = RetrievalToolHandler::new(search_use_cases.clone());
+    let temporal_handler = TemporalToolHandler::new(search_use_cases.clone());
+    let graph_handler = GraphToolHandler::new(block_use_cases.clone());
+    let template_handler =
+        TemplateToolHandler::new(template_use_cases.clone(), reapply_use_cases.clone());
     let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
     let server = McpServer::new(
@@ -78,6 +89,9 @@ async fn setup_server() -> (McpServer, SqlitePool) {
             Box::new(block_handler),
             Box::new(page_handler),
             Box::new(query_handler),
+            Box::new(retrieval_handler),
+            Box::new(temporal_handler),
+            Box::new(graph_handler),
             Box::new(template_handler),
         ],
         vec![Box::new(resource_provider)],
@@ -86,20 +100,20 @@ async fn setup_server() -> (McpServer, SqlitePool) {
 }
 
 /// Contract sub-test A: no handler serializes a top-level `evidence`
-/// key in its returned string. We iterate all 14 live tools and assert
+/// key in its returned string. We iterate all 17 live tools and assert
 /// the JSON text inside the `Text` content block does NOT contain a
 /// top-level `evidence` key.
 #[tokio::test]
 async fn test_no_handler_serializes_top_level_evidence_key() {
     let (server, _pool) = setup_server().await;
 
-    // Get the list of registered tools (14 live tools per design).
+    // Get the list of registered tools (17 live tools per design).
     let tools_response = server.handle_request(McpRequest::ListTools).await;
     let tools = match tools_response {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 14, "Expected exactly 14 live tools");
+    assert_eq!(tools.len(), 17, "Expected exactly 17 live tools");
 
     // For each tool, call it (with safe empty args) and inspect the
     // JSON text. Failures are aggregated.
@@ -170,7 +184,7 @@ async fn test_every_response_carries_meta_evidence() {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 14);
+    assert_eq!(tools.len(), 17);
 
     let mut missing = Vec::new();
     for tool in &tools {
@@ -245,7 +259,10 @@ async fn test_error_responses_have_is_error_true() {
     };
 
     // is_error on the wire (ToolsCallResult) must be true.
-    assert!(result.is_error.unwrap(), "is_error must be true on error path");
+    assert!(
+        result.is_error.unwrap(),
+        "is_error must be true on error path"
+    );
 
     // Evidence.is_error must be true.
     let meta = result._meta.expect("error path must carry _meta");

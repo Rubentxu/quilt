@@ -210,8 +210,12 @@ impl McpServer {
 mod tests {
     use super::*;
     use crate::handlers::{
-        block::BlockToolHandler, page::PageToolHandler, query::QueryToolHandler,
-        resource::GraphResourceProvider, template::TemplateToolHandler,
+        block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
+        query::QueryToolHandler, resource::GraphResourceProvider, retrieval::RetrievalToolHandler,
+        template::TemplateToolHandler, temporal::TemporalToolHandler,
+    };
+    use quilt_application::templates::reapply::{
+        ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl,
     };
     use quilt_application::use_cases::{
         BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
@@ -251,14 +255,30 @@ mod tests {
             page_repo.clone(),
             block_repo.clone(),
         ));
+        // ReapplyTemplateUseCaseImpl requires concrete TC: TemplateUseCases, not dyn TC.
+        // Create a concrete impl for use with ReapplyTemplateUseCaseImpl.
+        let concrete_template_use_cases: TemplateUseCasesImpl<
+            SqlitePageRepository,
+            SqliteBlockRepository,
+        > = TemplateUseCasesImpl::new(page_repo.clone(), block_repo.clone());
+        let reapply_use_cases: Arc<dyn ReapplyTemplateUseCase> =
+            Arc::new(ReapplyTemplateUseCaseImpl::new(
+                Arc::new(concrete_template_use_cases),
+                block_repo.clone(),
+            ));
 
         let block_handler = BlockToolHandler::new(block_use_cases.clone());
         let page_handler = PageToolHandler::new(page_use_cases.clone());
-        let query_handler = QueryToolHandler::new(Arc::new(
-            quilt_application::use_cases::SearchUseCasesImpl::new()
+        let search_use_cases = Arc::new(
+            SearchUseCasesImpl::new()
                 .with_search_service(Arc::new(SearchService::new(Arc::new(pool.clone())))),
-        ));
-        let template_handler = TemplateToolHandler::new(template_use_cases.clone());
+        );
+        let query_handler = QueryToolHandler::new(search_use_cases.clone());
+        let retrieval_handler = RetrievalToolHandler::new(search_use_cases.clone());
+        let temporal_handler = TemporalToolHandler::new(search_use_cases.clone());
+        let graph_handler = GraphToolHandler::new(block_use_cases.clone());
+        let template_handler =
+            TemplateToolHandler::new(template_use_cases.clone(), reapply_use_cases.clone());
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -266,6 +286,9 @@ mod tests {
                 Box::new(block_handler),
                 Box::new(page_handler),
                 Box::new(query_handler),
+                Box::new(retrieval_handler),
+                Box::new(temporal_handler),
+                Box::new(graph_handler),
                 Box::new(template_handler),
             ],
             vec![Box::new(resource_provider)],
@@ -308,19 +331,63 @@ mod tests {
 
         match response {
             McpResponse::ToolsList(result) => {
-                // Core tools: 14 total
+                // Core tools: 19 total
                 // BlockToolHandler: quilt_create_block, quilt_delete_block, quilt_link_blocks,
                 //                   quilt_get_block_tree, quilt_get_backlinks, quilt_create_task,
                 //                   quilt_list_blocks_by_author (7) — ADR-0003 added the last
                 // PageToolHandler: quilt_list_pages, quilt_get_page_blocks, quilt_get_journal (3)
                 // QueryToolHandler: quilt_query, quilt_search (2)
-                // TemplateToolHandler: quilt_list_templates, quilt_get_template_schema (2) — ADR-0007
-                assert_eq!(result.tools.len(), 14);
+                // TemplateToolHandler: quilt_list_templates, quilt_get_template_schema,
+                //                      quilt_reapply_template, quilt_get_template_schema_pack (4) — ADR-0007 + F20
+                // RetrievalToolHandler: quilt_query_retrieve (1) — G5
+                // TemporalToolHandler: quilt_query_temporal (1) — G3
+                // GraphToolHandler: quilt_graph_edges (1) — G4
+                assert_eq!(result.tools.len(), 19);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
-                assert!(result.tools.iter().any(|t| t.name == "quilt_list_blocks_by_author"));
-                assert!(result.tools.iter().any(|t| t.name == "quilt_list_templates"));
-                assert!(result.tools.iter().any(|t| t.name == "quilt_get_template_schema"));
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_list_blocks_by_author")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_list_templates")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_get_template_schema")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_reapply_template")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_get_template_schema_pack")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_query_retrieve")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_query_temporal")
+                );
+                assert!(result.tools.iter().any(|t| t.name == "quilt_graph_edges"));
             }
             _ => panic!("Expected ToolsList response"),
         }
@@ -457,7 +524,7 @@ mod tests {
     #[tokio::test]
     async fn test_page_with_blocks_fixture() {
         // Verify quilt-test-helpers::page_with_blocks works correctly
-        use quilt_test_helpers::{page_with_blocks, InMemoryBlockRepo, InMemoryPageRepo};
+        use quilt_test_helpers::{InMemoryBlockRepo, InMemoryPageRepo, page_with_blocks};
 
         let (page, blocks) = page_with_blocks("Test Page", vec!["Block 1", "Block 2"])
             .expect("page_with_blocks should succeed");

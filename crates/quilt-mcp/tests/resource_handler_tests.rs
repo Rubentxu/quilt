@@ -6,12 +6,12 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use quilt_application::ApplicationError;
 use quilt_application::use_cases::{
     GraphSnapshot, JournalSummary, PageSummary, ResourceUseCases, TagSummary,
 };
-use quilt_application::ApplicationError;
-use quilt_mcp::handlers::resource::GraphResourceProvider;
 use quilt_mcp::handlers::ResourceProvider;
+use quilt_mcp::handlers::resource::GraphResourceProvider;
 
 // ── Simple Mock (no Mutex — uses fixed data) ────────────────
 
@@ -33,14 +33,12 @@ impl ResourceUseCases for MockResourceUseCases {
     }
 
     async fn list_pages(&self) -> Result<Vec<PageSummary>, ApplicationError> {
-        Ok(vec![
-            PageSummary {
-                id: "p1".into(),
-                name: "home".into(),
-                title: Some("Home".into()),
-                is_journal: false,
-            },
-        ])
+        Ok(vec![PageSummary {
+            id: "p1".into(),
+            name: "home".into(),
+            title: Some("Home".into()),
+            is_journal: false,
+        }])
     }
 
     async fn list_journals(&self) -> Result<Vec<JournalSummary>, ApplicationError> {

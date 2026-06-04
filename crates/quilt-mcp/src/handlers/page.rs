@@ -107,7 +107,8 @@ impl ToolHandler for PageToolHandler {
                     },
                     "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
                     "count": page_with_blocks.blocks.len(),
-                })).unwrap_or_else(|e| e.to_string()))
+                }))
+                .unwrap_or_else(|e| e.to_string()))
             }
 
             "quilt_get_journal" => {
@@ -141,7 +142,8 @@ impl ToolHandler for PageToolHandler {
                     },
                     "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
                     "block_count": page_with_blocks.blocks.len(),
-                })).unwrap_or_else(|e| e.to_string()))
+                }))
+                .unwrap_or_else(|e| e.to_string()))
             }
 
             _ => Err(format!("Unknown tool: {}", name)),

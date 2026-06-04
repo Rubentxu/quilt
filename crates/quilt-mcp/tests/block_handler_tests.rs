@@ -11,12 +11,12 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use quilt_application::use_cases::{BlockTree, BlockUseCases};
 use quilt_application::ApplicationError;
+use quilt_application::use_cases::{BlockTree, BlockUseCases};
 use quilt_domain::entities::Block;
 use quilt_domain::value_objects::{BlockFormat, PropertyValue, TaskMarker, Uuid};
-use quilt_mcp::handlers::block::BlockToolHandler;
 use quilt_mcp::handlers::ToolHandler;
+use quilt_mcp::handlers::block::BlockToolHandler;
 use serde_json::json;
 
 // ── Mock BlockUseCases ──────────────────────────────────────
@@ -378,7 +378,10 @@ async fn test_list_blocks_by_author_success() {
     let h = handler();
     let args = json!({ "author": "agent::claude" });
 
-    let result = h.execute("quilt_list_blocks_by_author", &args).await.unwrap();
+    let result = h
+        .execute("quilt_list_blocks_by_author", &args)
+        .await
+        .unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     assert_eq!(parsed["author"], "agent::claude");
     assert!(parsed["blocks"].is_array());
@@ -389,7 +392,10 @@ async fn test_list_blocks_by_author_default_limit() {
     let h = handler();
     let args = json!({ "author": "agent::claude" });
 
-    let result = h.execute("quilt_list_blocks_by_author", &args).await.unwrap();
+    let result = h
+        .execute("quilt_list_blocks_by_author", &args)
+        .await
+        .unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
     // Default limit is 50
     assert_eq!(parsed["count"], 0);

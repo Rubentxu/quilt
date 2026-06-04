@@ -94,7 +94,15 @@ fn test_block_to_json_without_parent() {
 fn test_block_to_json_with_todo_marker() {
     let id = Uuid::new_v4();
     let page_id = Uuid::new_v4();
-    let block = make_block(id, page_id, None, "Task", Some(TaskMarker::Todo), None, false);
+    let block = make_block(
+        id,
+        page_id,
+        None,
+        "Task",
+        Some(TaskMarker::Todo),
+        None,
+        false,
+    );
     let json = block_to_json(&block);
 
     let marker_str = json["marker"].as_str().unwrap();
@@ -105,7 +113,15 @@ fn test_block_to_json_with_todo_marker() {
 fn test_block_to_json_with_done_marker() {
     let id = Uuid::new_v4();
     let page_id = Uuid::new_v4();
-    let block = make_block(id, page_id, None, "Done", Some(TaskMarker::Done), None, false);
+    let block = make_block(
+        id,
+        page_id,
+        None,
+        "Done",
+        Some(TaskMarker::Done),
+        None,
+        false,
+    );
     let json = block_to_json(&block);
 
     let marker_str = json["marker"].as_str().unwrap();
@@ -259,7 +275,11 @@ fn test_block_to_json_ids_are_strings_not_objects() {
     let block = make_block(id, page_id, None, "IDs", None, None, false);
     let json = block_to_json(&block);
 
-    assert!(json["id"].is_string(), "id should be string, got {:?}", json["id"]);
+    assert!(
+        json["id"].is_string(),
+        "id should be string, got {:?}",
+        json["id"]
+    );
     assert!(json["page_id"].is_string(), "page_id should be string");
 }
 

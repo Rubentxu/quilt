@@ -6,12 +6,12 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use quilt_application::use_cases::{PageUseCases, PageWithBlocks};
 use quilt_application::ApplicationError;
+use quilt_application::use_cases::{PageUseCases, PageWithBlocks};
 use quilt_domain::entities::{Page, PageCreate};
 use quilt_domain::value_objects::BlockFormat;
-use quilt_mcp::handlers::page::PageToolHandler;
 use quilt_mcp::handlers::ToolHandler;
+use quilt_mcp::handlers::page::PageToolHandler;
 use serde_json::json;
 
 // ── Mock PageUseCases ───────────────────────────────────────
@@ -78,7 +78,9 @@ impl PageUseCases for MockPageUseCases {
         // Mock: this test fixture doesn't simulate property updates; tests
         // that exercise the real update_properties logic live in
         // quilt-infrastructure's SQLite test module.
-        Err(ApplicationError::Validation("MockPageUseCases::update_properties".into()))
+        Err(ApplicationError::Validation(
+            "MockPageUseCases::update_properties".into(),
+        ))
     }
 
     async fn list(&self) -> Result<Vec<Page>, ApplicationError> {
@@ -131,7 +133,9 @@ impl PageUseCases for MockPageUseCases {
             name: "2026-06-02".to_string(),
             title: None,
             namespace_id: None,
-            journal_day: Some(quilt_domain::value_objects::JournalDay::from_ymd(2026, 6, 2).unwrap()),
+            journal_day: Some(
+                quilt_domain::value_objects::JournalDay::from_ymd(2026, 6, 2).unwrap(),
+            ),
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),

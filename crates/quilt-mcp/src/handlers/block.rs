@@ -9,7 +9,7 @@ use crate::serialization::block_to_json;
 use crate::tools::Tool;
 use crate::use_cases::{BlockTree, BlockUseCases};
 use async_trait::async_trait;
-use quilt_application::{parse_properties, TaskMarker, Uuid};
+use quilt_application::{TaskMarker, Uuid, parse_properties};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
@@ -336,18 +336,30 @@ impl ToolHandler for BlockToolHandler {
         let mut ev = Evidence::universal_fallback(name);
         match name {
             "quilt_create_block" | "quilt_create_task" => {
-                if let Some(uuid) = result.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                if let Some(uuid) = result
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .and_then(Uuid::parse_str)
+                {
                     ev.block_ids.push(uuid.into());
                 }
             }
             "quilt_delete_block" => {
-                if let Some(uuid) = result.get("block_id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                if let Some(uuid) = result
+                    .get("block_id")
+                    .and_then(|v| v.as_str())
+                    .and_then(Uuid::parse_str)
+                {
                     ev.block_ids.push(uuid.into());
                 }
             }
             "quilt_link_blocks" => {
                 for k in ["source_id", "target_id"] {
-                    if let Some(uuid) = result.get(k).and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                    if let Some(uuid) = result
+                        .get(k)
+                        .and_then(|v| v.as_str())
+                        .and_then(Uuid::parse_str)
+                    {
                         ev.block_ids.push(uuid.into());
                     }
                 }
@@ -364,7 +376,11 @@ impl ToolHandler for BlockToolHandler {
                 for key in ["backlinks", "children"] {
                     if let Some(arr) = result.get(key).and_then(|v| v.as_array()) {
                         for b in arr {
-                            if let Some(uuid) = b.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                            if let Some(uuid) = b
+                                .get("id")
+                                .and_then(|v| v.as_str())
+                                .and_then(Uuid::parse_str)
+                            {
                                 ev.block_ids.push(uuid.into());
                             }
                         }
@@ -374,7 +390,11 @@ impl ToolHandler for BlockToolHandler {
             "quilt_list_blocks_by_author" => {
                 if let Some(blocks) = result.get("blocks").and_then(|v| v.as_array()) {
                     for b in blocks {
-                        if let Some(uuid) = b.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                        if let Some(uuid) = b
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .and_then(Uuid::parse_str)
+                        {
                             ev.block_ids.push(uuid.into());
                         }
                     }
@@ -422,9 +442,14 @@ mod tests {
             _content: &str,
             _parent_id: Option<quilt_application::Uuid>,
             _marker: Option<quilt_application::TaskMarker>,
-            _properties: std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>,
+            _properties: std::collections::HashMap<
+                String,
+                quilt_domain::value_objects::PropertyValue,
+            >,
         ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn create_task(
             &self,
@@ -433,31 +458,55 @@ mod tests {
             _deadline: Option<chrono::NaiveDate>,
             _priority: Option<&str>,
         ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
-        async fn delete(&self, _id: quilt_application::Uuid) -> Result<(), quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        async fn delete(
+            &self,
+            _id: quilt_application::Uuid,
+        ) -> Result<(), quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn link(
             &self,
             _src: quilt_application::Uuid,
             _tgt: quilt_application::Uuid,
         ) -> Result<(), quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
-        async fn get_tree(&self, _id: quilt_application::Uuid) -> Result<quilt_application::use_cases::BlockTree, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        async fn get_tree(
+            &self,
+            _id: quilt_application::Uuid,
+        ) -> Result<quilt_application::use_cases::BlockTree, quilt_application::ApplicationError>
+        {
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
-        async fn get_backlinks(&self, _id: quilt_application::Uuid) -> Result<Vec<quilt_domain::entities::Block>, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        async fn get_backlinks(
+            &self,
+            _id: quilt_application::Uuid,
+        ) -> Result<Vec<quilt_domain::entities::Block>, quilt_application::ApplicationError>
+        {
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn list_by_property(
             &self,
             _key: &str,
             _value: &str,
             _limit: usize,
-        ) -> Result<Vec<quilt_domain::entities::Block>, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        ) -> Result<Vec<quilt_domain::entities::Block>, quilt_application::ApplicationError>
+        {
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
     }
 
@@ -507,7 +556,11 @@ mod tests {
             ],
         });
         let ev = h()
-            .tool_evidence("quilt_list_blocks_by_author", &serde_json::json!({}), &result)
+            .tool_evidence(
+                "quilt_list_blocks_by_author",
+                &serde_json::json!({}),
+                &result,
+            )
             .unwrap();
         assert_eq!(ev.block_ids.len(), 2);
     }
@@ -523,7 +576,11 @@ mod tests {
             }],
         });
         let ev = h()
-            .tool_evidence("quilt_list_blocks_by_author", &serde_json::json!({}), &result)
+            .tool_evidence(
+                "quilt_list_blocks_by_author",
+                &serde_json::json!({}),
+                &result,
+            )
             .unwrap();
         assert_eq!(ev.source_authority, Some(SourceAuthority::Manual));
     }
@@ -539,14 +596,22 @@ mod tests {
             }],
         });
         let ev = h()
-            .tool_evidence("quilt_list_blocks_by_author", &serde_json::json!({}), &result)
+            .tool_evidence(
+                "quilt_list_blocks_by_author",
+                &serde_json::json!({}),
+                &result,
+            )
             .unwrap();
         assert_eq!(ev.source_authority, Some(SourceAuthority::AutoExtracted));
     }
 
     #[test]
     fn test_tool_evidence_unknown_tool_returns_none() {
-        let ev = h().tool_evidence("quilt_search", &serde_json::json!({}), &serde_json::json!({}));
+        let ev = h().tool_evidence(
+            "quilt_search",
+            &serde_json::json!({}),
+            &serde_json::json!({}),
+        );
         assert!(ev.is_none());
     }
 }
