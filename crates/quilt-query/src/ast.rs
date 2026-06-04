@@ -3,11 +3,16 @@
 //! This module provides the Abstract Syntax Tree (AST) for query expressions.
 //! The AST is independent of domain types (no Uuid, JournalDay) and can be
 //! reused across different backends.
+//!
+//! All types derive [`serde::Serialize`]/[`serde::Deserialize`] so the
+//! canonical AST can be re-exported by `quilt-core` (WASM) and serialized
+//! across the JS boundary via `serde-wasm-bindgen`.
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Operators available for property queries.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PropertyOp {
     /// Equality (default when no operator is specified)
     Equals,
@@ -28,7 +33,7 @@ pub enum PropertyOp {
 }
 
 /// Sort direction for ordering results.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SortDirection {
     /// Ascending order
     Asc,
@@ -46,7 +51,7 @@ impl std::fmt::Display for SortDirection {
 }
 
 /// Values that can be used in query expressions.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum QueryValue {
     /// String value
     String(String),
@@ -82,7 +87,7 @@ impl From<QueryValue> for String {
 ///
 /// Each variant represents a different query operation that can be
 /// performed on the knowledge graph.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum QueryAst {
     /// Boolean AND of multiple expressions
     And(Vec<QueryAst>),
@@ -143,7 +148,7 @@ pub enum QueryAst {
 pub type QueryExpr = QueryAst;
 
 /// Errors that can occur during query parsing.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone, Serialize, Deserialize)]
 pub enum ParseError {
     /// Syntax error in the query string (e.g., unclosed parenthesis)
     Syntax {

@@ -8,8 +8,8 @@ license.workspace = true
 description = "Query DSL - parser, AST, and executor for Logseq-style queries"
 
 [dependencies]
-quilt-domain = { path = "../quilt-domain" }
 pest = "2.7"
+serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 anyhow.workspace = true

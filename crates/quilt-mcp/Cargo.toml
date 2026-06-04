@@ -9,6 +9,7 @@ description = "MCP protocol layer - server, tools, resources, and notifications"
 
 [dependencies]
 quilt-application = { path = "../quilt-application" }
+quilt-domain = { path = "../quilt-domain" }
 anyhow.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
