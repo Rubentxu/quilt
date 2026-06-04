@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 32c748c8785a317108ee0eb4b9103408dc5406fb99702b1a6f4a2085cf28bbeb # shrinks to n = 2
+cc 6ecd4e84ec84acf729627ce30c9395ddb5c05bda9e25751cb8196a3472c01f86 # shrinks to max_sibling = 1.0, preceding_delta = 0.0

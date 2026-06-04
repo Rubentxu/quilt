@@ -21,6 +21,9 @@ pub mod services;
 // Use cases module - higher-level operations for presentation layers
 pub mod use_cases;
 
+// Template extension types (G6 schema packs, F15 reapply)
+pub mod templates;
+
 // Re-exports
 pub use bootstrap::AppServices;
 pub use errors::ApplicationError;
