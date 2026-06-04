@@ -55,6 +55,12 @@ export interface FilterChipGroupProps {
   disabled?: boolean;
   /** Error messages per chip (chip.id → error string). */
   errors?: Record<string, string>;
+  /**
+   * Callback fired when the Apply button is clicked.
+   * FilterChipGroup does NOT execute the query — it signals
+   * that the user wants to apply the current chips.
+   */
+  onApply?: (chips: FilterChip[]) => void;
 }
 
 // ─── Validation ────────────────────────────────────────────────────────────────
