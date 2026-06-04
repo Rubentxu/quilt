@@ -5,9 +5,9 @@
 
 use quilt_core::outliner::history::OutlinerCommand;
 use quilt_core::outliner::tree::{
-    apply_structural_mutation, build_tree, calculate_drop_position, count_descendants,
-    flatten_tree, indent, is_descendant_of, merge_content, merge_with_next, merge_with_prev,
-    outdent, split_block, BlockNode, DropPosition, TreeError,
+    BlockNode, DropPosition, TreeError, apply_structural_mutation, build_tree,
+    calculate_drop_position, count_descendants, flatten_tree, indent, is_descendant_of,
+    merge_content, merge_with_next, merge_with_prev, outdent, split_block,
 };
 use quilt_core::types::BlockDto;
 

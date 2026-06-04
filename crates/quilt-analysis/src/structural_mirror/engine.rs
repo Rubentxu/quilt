@@ -1,6 +1,6 @@
+use crate::AnalysisError;
 use crate::structural_mirror::graph::build_structure_map;
 use crate::structural_mirror::types::StructureMap;
-use crate::AnalysisError;
 use quilt_domain::repositories::BlockRepository;
 use quilt_domain::value_objects::Uuid;
 use std::sync::Arc;

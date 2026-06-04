@@ -13,7 +13,7 @@
 //!   via `record_structural` and `structural_apply`.
 
 use crate::outliner::history::{
-    build_content_command, invert_command, HistoryStack, OutlinerCommand,
+    HistoryStack, OutlinerCommand, build_content_command, invert_command,
 };
 use std::sync::Arc;
 

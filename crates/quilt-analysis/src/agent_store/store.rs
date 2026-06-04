@@ -1,7 +1,7 @@
 //! Block-based Storage for Agent Store
 
-use crate::agent_store::types::MemoryEntry;
 use crate::AnalysisError;
+use crate::agent_store::types::MemoryEntry;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
 use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid as DomainUuid};

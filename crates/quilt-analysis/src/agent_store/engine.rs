@@ -1,6 +1,6 @@
+use crate::AnalysisError;
 use crate::agent_store::store::{self, find_by_key};
 use crate::agent_store::types::{InteractionProfile, MemoryEntry, MemoryQuery, ThinkingPattern};
-use crate::AnalysisError;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
 use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid as DomainUuid};

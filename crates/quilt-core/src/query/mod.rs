@@ -49,13 +49,22 @@ mod tests {
             TypeId::of::<crate::query::QueryValue>(),
             TypeId::of::<QueryValue>()
         );
-        assert_eq!(TypeId::of::<crate::query::ParseError>(), TypeId::of::<ParseError>());
-        assert_eq!(TypeId::of::<crate::query::PropertyOp>(), TypeId::of::<PropertyOp>());
+        assert_eq!(
+            TypeId::of::<crate::query::ParseError>(),
+            TypeId::of::<ParseError>()
+        );
+        assert_eq!(
+            TypeId::of::<crate::query::PropertyOp>(),
+            TypeId::of::<PropertyOp>()
+        );
         assert_eq!(
             TypeId::of::<crate::query::AggregateFn>(),
             TypeId::of::<AggregateFn>()
         );
-        assert_eq!(TypeId::of::<crate::query::StatsFn>(), TypeId::of::<StatsFn>());
+        assert_eq!(
+            TypeId::of::<crate::query::StatsFn>(),
+            TypeId::of::<StatsFn>()
+        );
         assert_eq!(
             TypeId::of::<crate::query::AnalyzeKind>(),
             TypeId::of::<AnalyzeKind>()

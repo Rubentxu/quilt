@@ -2,8 +2,8 @@
 //!
 //! Main implementation of the structure mapping logic.
 
-use crate::structure_mapper::types::*;
 use crate::AnalysisError;
+use crate::structure_mapper::types::*;
 use quilt_domain::entities::Block;
 use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::BlockRepository;
@@ -776,9 +776,11 @@ mod tests {
 
         let fallacies = mapper.detect_fallacies(block_id).await.unwrap();
         assert!(!fallacies.is_empty());
-        assert!(fallacies
-            .iter()
-            .any(|f| f.fallacy_type == FallacyType::StrawMan));
+        assert!(
+            fallacies
+                .iter()
+                .any(|f| f.fallacy_type == FallacyType::StrawMan)
+        );
     }
 
     #[tokio::test]

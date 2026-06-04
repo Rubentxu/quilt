@@ -3,8 +3,8 @@
 //! Tracks belief evolution in journal pages, detects contradictions,
 //! and suggests areas for deeper exploration.
 
-use crate::structure_gardener::types::*;
 use crate::AnalysisError;
+use crate::structure_gardener::types::*;
 use quilt_domain::entities::Block;
 use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::BlockRepository;
@@ -622,9 +622,11 @@ mod tests {
 
         // Single mention → depth 1, should be below threshold 2 → suggestion generated
         assert!(!suggestions.is_empty());
-        assert!(suggestions
-            .iter()
-            .any(|s| s.concept.to_lowercase().contains("macros")));
+        assert!(
+            suggestions
+                .iter()
+                .any(|s| s.concept.to_lowercase().contains("macros"))
+        );
     }
 
     #[tokio::test]

@@ -24,7 +24,8 @@ fn test_custom_db_path() {
 
 #[test]
 fn test_long_db_path_flag() {
-    let cli = QuiltCLI::try_parse_from(["quilt", "--db-path", "/tmp/test.db", "list-pages"]).unwrap();
+    let cli =
+        QuiltCLI::try_parse_from(["quilt", "--db-path", "/tmp/test.db", "list-pages"]).unwrap();
     assert_eq!(cli.db_path, PathBuf::from("/tmp/test.db"));
 }
 
@@ -87,8 +88,7 @@ fn test_page_requires_name() {
 
 #[test]
 fn test_block_command() {
-    let cli =
-        QuiltCLI::try_parse_from(["quilt", "block", "-p", "my-page", "-c", "Hello"]).unwrap();
+    let cli = QuiltCLI::try_parse_from(["quilt", "block", "-p", "my-page", "-c", "Hello"]).unwrap();
     match cli.command {
         Command::Block {
             page,
@@ -164,8 +164,7 @@ fn test_query_default_limit() {
 
 #[test]
 fn test_query_custom_limit() {
-    let cli =
-        QuiltCLI::try_parse_from(["quilt", "query", "-d", "test", "-l", "50"]).unwrap();
+    let cli = QuiltCLI::try_parse_from(["quilt", "query", "-d", "test", "-l", "50"]).unwrap();
     match cli.command {
         Command::Query { limit, .. } => assert_eq!(limit, 50),
         _ => panic!("expected Query"),

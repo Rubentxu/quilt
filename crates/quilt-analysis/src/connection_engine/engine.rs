@@ -1,7 +1,7 @@
+use crate::AnalysisError;
 use crate::connection_engine::types::{
     ConnectionType, SerendipityConnection, SerendipityOptions, SerendipityQuery,
 };
-use crate::AnalysisError;
 use lru::LruCache;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;

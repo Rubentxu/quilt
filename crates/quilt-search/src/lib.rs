@@ -16,6 +16,6 @@ pub mod search;
 pub use indexing::SearchIndex;
 pub use indexing::SearchIndex as SearchIndexManager;
 pub use sanitize::{
-    build_fts5_match_query, sanitize_fts5_query, QuoteStrategy, SanitizationStrategy,
+    QuoteStrategy, SanitizationStrategy, build_fts5_match_query, sanitize_fts5_query,
 };
 pub use search::{SearchError, SearchResult, SearchService, SearchServiceTrait};

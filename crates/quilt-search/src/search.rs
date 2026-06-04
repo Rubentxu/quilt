@@ -873,7 +873,11 @@ mod tests {
 
         let results = env.service.search(&large_query, 10).await.unwrap();
         // Sanitized: "aaaa...a" "needle" — the padding term doesn't match anything
-        assert_eq!(results.len(), 0, "Sanitization splits on whitespace, so the padding is a separate term that doesn't match");
+        assert_eq!(
+            results.len(),
+            0,
+            "Sanitization splits on whitespace, so the padding is a separate term that doesn't match"
+        );
     }
 
     /// Test 9: Very long content (1MB block)

@@ -2,8 +2,7 @@
 //! WASM boundary DTOs: BlockDto, Segment, OutlinerCommand, etc.
 
 use quilt_core::types::{
-    BlockDto, CommandResponse, OutlinerCommand, OutlinerState,
-    PageDto, SearchResultDto, Segment,
+    BlockDto, CommandResponse, OutlinerCommand, OutlinerState, PageDto, SearchResultDto, Segment,
 };
 
 // ── BlockDto serde ─────────────────────────────────────────
@@ -106,7 +105,10 @@ fn test_segment_code_roundtrip() {
 
 #[test]
 fn test_segment_property_roundtrip() {
-    let seg = Segment::Property { key: "status".into(), value: "draft".into() };
+    let seg = Segment::Property {
+        key: "status".into(),
+        value: "draft".into(),
+    };
     let json = serde_json::to_string(&seg).unwrap();
     let restored: Segment = serde_json::from_str(&json).unwrap();
     assert_eq!(seg, restored);
@@ -116,7 +118,10 @@ fn test_segment_property_roundtrip() {
 
 #[test]
 fn test_outliner_command_set_content() {
-    let cmd = OutlinerCommand::SetContent { block_id: "b1".into(), content: "new".into() };
+    let cmd = OutlinerCommand::SetContent {
+        block_id: "b1".into(),
+        content: "new".into(),
+    };
     let json = serde_json::to_string(&cmd).unwrap();
     eprintln!("JSON: {}", json);
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -129,7 +134,10 @@ fn test_outliner_command_set_content() {
 
 #[test]
 fn test_outliner_command_split_block() {
-    let cmd = OutlinerCommand::SplitBlock { block_id: "b1".into(), cursor_pos: 5 };
+    let cmd = OutlinerCommand::SplitBlock {
+        block_id: "b1".into(),
+        cursor_pos: 5,
+    };
     let json = serde_json::to_string(&cmd).unwrap();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
 
@@ -139,7 +147,9 @@ fn test_outliner_command_split_block() {
 
 #[test]
 fn test_outliner_command_indent() {
-    let cmd = OutlinerCommand::Indent { block_id: "b1".into() };
+    let cmd = OutlinerCommand::Indent {
+        block_id: "b1".into(),
+    };
     let json = serde_json::to_string(&cmd).unwrap();
     let restored: OutlinerCommand = serde_json::from_str(&json).unwrap();
 
@@ -167,7 +177,11 @@ fn test_outliner_command_move_block() {
 
 #[test]
 fn test_command_response_roundtrip() {
-    let resp = CommandResponse { accepted: true, state_hash: 42, error: None };
+    let resp = CommandResponse {
+        accepted: true,
+        state_hash: 42,
+        error: None,
+    };
     let json = serde_json::to_string(&resp).unwrap();
     let restored: CommandResponse = serde_json::from_str(&json).unwrap();
 

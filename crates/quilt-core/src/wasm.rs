@@ -189,11 +189,7 @@ thread_local! {
 fn alloc_stack_id(stack: WasmHistoryStack) -> u32 {
     HISTORY_STACKS.with(|reg| {
         let mut reg = reg.borrow_mut();
-        if let Some((idx, slot)) = reg
-            .iter_mut()
-            .enumerate()
-            .find(|(_, s)| s.is_none())
-        {
+        if let Some((idx, slot)) = reg.iter_mut().enumerate().find(|(_, s)| s.is_none()) {
             *slot = Some(stack);
             idx as u32
         } else {
@@ -228,9 +224,7 @@ pub fn history_apply(stack_id: u32, command_js: JsValue) -> Result<JsValue, JsVa
         let stack = slot
             .as_mut()
             .ok_or_else(|| JsValue::from_str("Stack was freed"))?;
-        stack
-            .apply(cmd)
-            .map_err(|e| JsValue::from_str(&e))?;
+        stack.apply(cmd).map_err(|e| JsValue::from_str(&e))?;
         serde_wasm_bindgen::to_value(stack.current_blocks())
             .map_err(|e| JsValue::from_str(&e.to_string()))
     })
@@ -321,13 +315,14 @@ pub fn history_free(stack_id: u32) {
 /// Content commands (SetContent, AutocompleteInsert) are applied via
 /// direct field updates. All other variants delegate to
 /// `apply_structural_mutation` from `outliner/tree`.
-fn apply_history_command(
-    blocks: &mut Vec<BlockDto>,
-    cmd: &HistoryCommand,
-) -> Result<(), String> {
+fn apply_history_command(blocks: &mut Vec<BlockDto>, cmd: &HistoryCommand) -> Result<(), String> {
     match cmd {
-        HistoryCommand::SetContent { block_id, after, .. }
-        | HistoryCommand::AutocompleteInsert { block_id, after, .. } => {
+        HistoryCommand::SetContent {
+            block_id, after, ..
+        }
+        | HistoryCommand::AutocompleteInsert {
+            block_id, after, ..
+        } => {
             let block = blocks
                 .iter_mut()
                 .find(|b| b.id == *block_id)
@@ -340,9 +335,7 @@ fn apply_history_command(
             if tree::apply_structural_mutation(blocks, cmd) {
                 Ok(())
             } else {
-                Err(format!(
-                    "Structural mutation failed for command: {cmd}"
-                ))
+                Err(format!("Structural mutation failed for command: {cmd}"))
             }
         }
     }
@@ -1381,10 +1374,7 @@ mod tests {
                 new_order: 2.001,
             }
         );
-        assert_eq!(
-            stack.current_blocks()[1].parent_id.as_deref(),
-            Some("b1")
-        );
+        assert_eq!(stack.current_blocks()[1].parent_id.as_deref(), Some("b1"));
     }
 
     #[test]

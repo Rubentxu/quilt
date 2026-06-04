@@ -10,7 +10,7 @@
 //! without a WASM environment.
 
 use crate::parser::autocomplete::{
-    detect_trigger, AutocompleteItem, AutocompleteResult, AutocompleteTrigger,
+    AutocompleteItem, AutocompleteResult, AutocompleteTrigger, detect_trigger,
 };
 use crate::parser::providers::create_default_service;
 
