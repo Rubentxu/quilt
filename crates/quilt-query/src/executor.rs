@@ -5,7 +5,7 @@
 
 use crate::compiler::CompilerError;
 use crate::dialect::{SqlDialect, SqliteDialect};
-use crate::parser::{QueryExpr, QueryValue};
+use crate::parser::{PropertyOp, QueryExpr, QueryValue};
 
 /// SQL parameter type for safe query parameterization.
 #[derive(Debug, Clone, PartialEq)]
@@ -215,10 +215,34 @@ where
                 Ok((sql, vec![start_val, end_val]))
             }
 
-            QueryExpr::Property { key, value } => {
+            QueryExpr::Property {
+                key,
+                op,
+                value,
+                value2,
+            } => {
+                // F3 — use the dialect's `property_op_sql` for the
+                // operator-specific fragment. `Contains` is bound with
+                // `LIKE`; we wrap the value as `%v%` here.
+                let prop_path = self.dialect.property_path(key);
+                let sql_fragment = self.dialect.property_op_sql(*op, &prop_path);
                 let val = self.value_to_param(value);
-                let sql = format!("{} = ?", self.dialect.property_path(key));
-                Ok((sql, vec![val]))
+                let bound_value = match op {
+                    crate::parser::PropertyOp::Contains => {
+                        SqlParam::String(format!("%{}%", val.as_string()))
+                    }
+                    _ => val,
+                };
+                let mut params = vec![bound_value];
+                if matches!(op, crate::parser::PropertyOp::Between) {
+                    let v2 = value2
+                        .as_ref()
+                        .ok_or_else(|| CompilerError::Invalid(
+                            "PropertyOp::Between requires value2".to_string(),
+                        ))?;
+                    params.push(self.value_to_param(v2));
+                }
+                Ok((sql_fragment, params))
             }
 
             QueryExpr::Tags(tag) => {
@@ -269,6 +293,32 @@ where
             // the executor panic-free in the runtime paths.
             QueryExpr::Analyze { .. } => {
                 Err(CompilerError::UnsupportedOperator { op: "Analyze" })
+            }
+
+            // F2 — `Table` is a passthrough (the table layout is a
+            // presentation concern, not a SQL filter).
+            QueryExpr::Table(_) => Ok((String::new(), vec![])),
+
+            // F2 — `SortBy` is a passthrough at the WHERE level; the
+            // sort direction is applied by the caller in `build_sql`.
+            QueryExpr::SortBy { inner, .. } => self.build_where(inner),
+
+            // F2 — `Exists(key)` — property is present.
+            QueryExpr::Exists(key) => {
+                let sql = format!("{} IS NOT NULL", self.dialect.property_path(&key));
+                Ok((sql, vec![]))
+            }
+
+            // F2 — `Missing(key)` — property is absent.
+            QueryExpr::Missing(key) => {
+                let sql = format!("{} IS NULL", self.dialect.property_path(&key));
+                Ok((sql, vec![]))
+            }
+
+            // F2 — `Namespace(ns)` — filter on the page namespace.
+            QueryExpr::Namespace(ns) => {
+                let sql = "EXISTS (SELECT 1 FROM pages p WHERE p.id = b.page_id AND p.namespace_id = ?)".to_string();
+                Ok((sql, vec![SqlParam::String(ns.clone())]))
             }
         }
     }
@@ -441,6 +491,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::parser::QueryAst;
 
     #[test]
     fn test_simple_task_query() {
@@ -587,10 +638,12 @@ mod tests {
     #[test]
     fn test_property_query() {
         let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "author".to_string(),
-            value: QueryValue::String("John".to_string()),
-        };
+        let expr = QueryAst::Property {
+     key: "author".to_string(),
+     op: PropertyOp::Equals,
+     value: QueryValue::String("John".to_string()),
+     value2: None,
+ };
         let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));
@@ -601,10 +654,12 @@ mod tests {
     #[test]
     fn test_property_query_integer() {
         let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "count".to_string(),
-            value: QueryValue::Integer(42),
-        };
+        let expr = QueryAst::Property {
+     key: "count".to_string(),
+     op: PropertyOp::Equals,
+     value: QueryValue::Integer(42),
+     value2: None,
+ };
         let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));
@@ -615,10 +670,12 @@ mod tests {
     #[test]
     fn test_property_query_boolean() {
         let executor = QueryExecutor::new();
-        let expr = QueryExpr::Property {
-            key: "active".to_string(),
-            value: QueryValue::Boolean(true),
-        };
+        let expr = QueryAst::Property {
+     key: "active".to_string(),
+     op: PropertyOp::Equals,
+     value: QueryValue::Boolean(true),
+     value2: None,
+ };
         let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));

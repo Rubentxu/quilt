@@ -44,10 +44,13 @@ pub mod ast;
 pub mod compiler;
 pub mod dialect;
 pub mod executor;
+pub mod merge;
 pub mod parser;
+pub mod property_op;
 pub mod time_helpers;
 
 pub use ast::{PropertyOp, QueryAst, QueryValue, SortDirection};
+pub use compiler::{CompiledQuery, CompilerError, QueryCompiler, SqliteCompiler};
 pub use dialect::{SqlDialect, SqliteDialect, WindowFnKind};
 pub use executor::{AnalyzeError, AnalyzeResult, QueryExecutor, SqlParam};
 pub use parser::{

@@ -2,9 +2,22 @@
 //!
 //! This module provides a recursive descent parser for the Quilt Query DSL.
 //! The parser converts query strings into an Abstract Syntax Tree (AST)
-//! represented by [`QueryExpr`].
+//! represented by [`crate::ast::QueryAst`].
 
 use thiserror::Error;
+
+// Re-export the canonical AST and companion types from `crate::ast`.
+// The parser produces the same types, so the public API is unchanged
+// for existing callers.
+pub use crate::ast::{
+    AggregateFn, AnalyzeKind, QueryAst, QueryValue, SortDirection, StatsFn,
+};
+// Re-export `PropertyOp` (F3) — the parser uses it in `parse_property`
+// to record the operator.
+pub use crate::property_op::PropertyOp;
+// `QueryExpr` is preserved as a backward-compatible alias.
+#[deprecated(since = "0.1.0", note = "Use QueryAst instead")]
+pub use crate::ast::QueryExpr;
 
 /// Errors that can occur during query parsing.
 #[derive(Debug, Error)]
@@ -15,125 +28,6 @@ pub enum ParseError {
     /// The query is syntactically valid but semantically invalid
     #[error("Invalid query: {0}")]
     Invalid(String),
-}
-
-/// Abstract Syntax Tree (AST) for query expressions.
-///
-/// Each variant represents a different query operation that can be
-/// performed on the knowledge graph.
-#[derive(Debug, Clone, PartialEq)]
-pub enum QueryExpr {
-    /// Boolean AND of multiple expressions
-    And(Vec<QueryExpr>),
-    /// Boolean OR of multiple expressions
-    Or(Vec<QueryExpr>),
-    /// Boolean NOT of an expression
-    Not(Box<QueryExpr>),
-    /// Range filter between two values
-    Between {
-        field: String,
-        start: QueryValue,
-        end: QueryValue,
-    },
-    /// JSON property filter
-    Property { key: String, value: QueryValue },
-    /// Task marker filter (e.g., todo, done, now, later, cancelled)
-    Task(Vec<String>),
-    /// Priority filter (a, b, c)
-    Priority(Vec<String>),
-    /// Page name filter
-    Page(String),
-    /// Tag filter
-    Tags(String),
-    /// Page reference (e.g., `[[Page Name]]`)
-    PageRef(String),
-    /// Self-reference (current block)
-    SelfRef,
-    /// Full-text search content
-    BlockContent(String),
-    /// Random sample of N results
-    Sample(usize),
-    /// Aggregate with GROUP BY
-    Aggregate {
-        inner: Box<QueryExpr>,
-        group_by: String,
-        aggregate_fn: AggregateFn,
-    },
-    /// Statistical computation over a property
-    Stats { property: String, compute: StatsFn },
-    /// Group by property (no aggregation)
-    GroupBy {
-        inner: Box<QueryExpr>,
-        property: String,
-    },
-    /// Analysis operator for cognitive/serendipity analysis
-    Analyze {
-        inner: Box<QueryExpr>,
-        kind: AnalyzeKind,
-    },
-}
-
-/// Values that can be used in query expressions.
-#[derive(Debug, Clone, PartialEq)]
-pub enum QueryValue {
-    /// String value
-    String(String),
-    /// Integer value
-    Integer(i64),
-    /// Date string (YYYY-MM-DD format)
-    Date(String),
-    /// Time offset (relative time like "-1w" or "+3d")
-    TimeOffset(String),
-    /// Boolean value
-    Boolean(bool),
-}
-
-impl std::fmt::Display for QueryValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            QueryValue::String(s) => write!(f, "{}", s),
-            QueryValue::Integer(n) => write!(f, "{}", n),
-            QueryValue::Date(d) => write!(f, "{}", d),
-            QueryValue::TimeOffset(t) => write!(f, "{}", t),
-            QueryValue::Boolean(b) => write!(f, "{}", b),
-        }
-    }
-}
-
-impl From<QueryValue> for String {
-    fn from(val: QueryValue) -> Self {
-        val.to_string()
-    }
-}
-
-/// Aggregate functions for grouping queries.
-#[derive(Debug, Clone, PartialEq)]
-pub enum AggregateFn {
-    Count,
-    Avg,
-    Sum,
-    Min,
-    Max,
-}
-
-/// Statistical functions for property queries.
-#[derive(Debug, Clone, PartialEq)]
-pub enum StatsFn {
-    Stddev,
-    Variance,
-    Median,
-    Percentile(u8),
-}
-
-/// Analysis kinds for the analyze operator.
-#[derive(Debug, Clone, PartialEq)]
-pub enum AnalyzeKind {
-    StructuralMirror,
-    Serendipity {
-        limit: Option<usize>,
-        min_confidence: Option<f32>,
-        temporal_window_days: Option<i64>,
-    },
 }
 
 /// Errors that can occur during query execution.
@@ -294,17 +188,39 @@ impl QueryParser {
         })
     }
 
-    fn parse_property(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_property(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
-        if args.len() != 2 {
-            return Err(ParseError::Invalid(
-                "property requires 2 arguments".to_string(),
-            ));
+        if args.len() == 2 {
+            return Ok(QueryAst::Property {
+                key: args[0].trim_matches('"').to_string(),
+                op: PropertyOp::Equals,
+                value: self.parse_value(&args[1])?,
+                value2: None,
+            });
         }
-        Ok(QueryExpr::Property {
-            key: args[0].trim_matches('"').to_string(),
-            value: self.parse_value(&args[1])?,
-        })
+        if args.len() == 3 {
+            let key = args[0].trim_matches('"').to_string();
+            let op_str = args[1].trim();
+            if let Some(op) = parse_property_op_token(op_str) {
+                let value = self.parse_value(&args[2])?;
+                return Ok(QueryAst::Property {
+                    key,
+                    op,
+                    value,
+                    value2: None,
+                });
+            }
+            return Ok(QueryAst::Property {
+                key,
+                op: PropertyOp::Between,
+                value: self.parse_value(&args[1])?,
+                value2: Some(self.parse_value(&args[2])?),
+            });
+        }
+        Err(ParseError::Invalid(
+            "property requires 2 (key value) or 3 (key op value | key lo hi) arguments"
+                .to_string(),
+        ))
     }
 
     fn parse_task(&self, rest: &str) -> Result<QueryExpr, ParseError> {
@@ -765,9 +681,16 @@ mod tests {
         let result = parse("(property \"author\" \"John\")");
         assert_eq!(
             result,
-            QueryExpr::Property {
+            QueryAst::Property {
+
                 key: "author".to_string(),
+
+                op: PropertyOp::Equals,
+
                 value: QueryValue::String("John".to_string()),
+
+                value2: None,
+
             }
         );
     }
@@ -777,9 +700,16 @@ mod tests {
         let result = parse("(property \"count\" 42)");
         assert_eq!(
             result,
-            QueryExpr::Property {
+            QueryAst::Property {
+
                 key: "count".to_string(),
+
+                op: PropertyOp::Equals,
+
                 value: QueryValue::Integer(42),
+
+                value2: None,
+
             }
         );
     }
@@ -789,9 +719,16 @@ mod tests {
         let result = parse("(property \"active\" true)");
         assert_eq!(
             result,
-            QueryExpr::Property {
+            QueryAst::Property {
+
                 key: "active".to_string(),
+
+                op: PropertyOp::Equals,
+
                 value: QueryValue::Boolean(true),
+
+                value2: None,
+
             }
         );
     }
@@ -855,9 +792,16 @@ mod tests {
         let result = parse("(property \"author\" \"张三\")");
         assert_eq!(
             result,
-            QueryExpr::Property {
+            QueryAst::Property {
+
                 key: "author".to_string(),
+
+                op: PropertyOp::Equals,
+
                 value: QueryValue::String("张三".to_string()),
+
+                value2: None,
+
             }
         );
     }
@@ -1029,5 +973,20 @@ mod tests {
     fn test_parse_analyze_structural_mirror_with_kwargs() {
         let err = parse_err("(analyze (task todo) structural_mirror :limit 5)");
         assert!(matches!(err, ParseError::Invalid(_)));
+    }
+}
+
+/// F3 — Map a DSL operator token to a [`PropertyOp`] variant. Returns
+/// `None` for tokens that aren't operators (e.g., numeric literals
+/// which the parser then interprets as the start of a `Between` range).
+fn parse_property_op_token(token: &str) -> Option<PropertyOp> {
+    match token {
+        ">" => Some(PropertyOp::GreaterThan),
+        "<" => Some(PropertyOp::LessThan),
+        ">=" => Some(PropertyOp::GreaterThanOrEqual),
+        "<=" => Some(PropertyOp::LessThanOrEqual),
+        "!=" => Some(PropertyOp::NotEquals),
+        "contains" => Some(PropertyOp::Contains),
+        _ => None,
     }
 }

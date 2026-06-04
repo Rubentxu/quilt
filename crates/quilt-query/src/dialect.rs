@@ -4,7 +4,7 @@
 //! [`QueryExecutor`](super::executor::QueryExecutor) to generate SQL for different
 //! database backends (SQLite, PostgreSQL, MySQL) without changing the executor logic.
 
-use crate::parser::{AggregateFn, StatsFn};
+use crate::parser::{AggregateFn, PropertyOp, StatsFn};
 
 /// Kinds of window functions for statistical queries.
 ///
@@ -135,6 +135,21 @@ pub trait SqlDialect: Send + Sync + std::fmt::Debug {
     /// SQL expression that casts the input to REAL type.
     fn cast_to_real(&self, expr: &str) -> String {
         format!("CAST({} AS REAL)", expr)
+    }
+
+    /// F3 — generates the SQL fragment for a property operator comparison.
+    /// `Contains` is bound with `LIKE`; caller wraps value as `%v%`.
+    fn property_op_sql(&self, op: PropertyOp, prop_path: &str) -> String {
+        match op {
+            PropertyOp::Equals => format!("{} = ?", prop_path),
+            PropertyOp::NotEquals => format!("{} != ?", prop_path),
+            PropertyOp::Contains => format!("{} LIKE ?", prop_path),
+            PropertyOp::GreaterThan => format!("{} > ?", prop_path),
+            PropertyOp::LessThan => format!("{} < ?", prop_path),
+            PropertyOp::GreaterThanOrEqual => format!("{} >= ?", prop_path),
+            PropertyOp::LessThanOrEqual => format!("{} <= ?", prop_path),
+            PropertyOp::Between => format!("{} BETWEEN ? AND ?", prop_path),
+        }
     }
 }
 

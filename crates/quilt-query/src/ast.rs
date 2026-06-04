@@ -11,26 +11,10 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-/// Operators available for property queries.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PropertyOp {
-    /// Equality (default when no operator is specified)
-    Equals,
-    /// Not equals
-    NotEquals,
-    /// String contains substring
-    Contains,
-    /// Greater than comparison
-    GreaterThan,
-    /// Less than comparison
-    LessThan,
-    /// Greater than or equal
-    GreaterThanOrEqual,
-    /// Less than or equal
-    LessThanOrEqual,
-    /// Range between two values (requires value2)
-    Between,
-}
+// Re-export `PropertyOp` from its own module (extracted in F3) so all
+// existing import paths (`crate::ast::PropertyOp`, `quilt_query::PropertyOp`)
+// continue to work. The canonical enum lives in `crate::property_op`.
+pub use crate::property_op::PropertyOp;
 
 /// Sort direction for ordering results.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,10 +67,44 @@ impl From<QueryValue> for String {
     }
 }
 
+/// Aggregate functions for grouping queries (F2 — moved from `parser`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AggregateFn {
+    Count,
+    Avg,
+    Sum,
+    Min,
+    Max,
+}
+
+/// Statistical functions for property queries (F2 — moved from `parser`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum StatsFn {
+    Stddev,
+    Variance,
+    Median,
+    Percentile(u8),
+}
+
+/// Analysis kinds for the analyze operator (F2 — moved from `parser`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AnalyzeKind {
+    StructuralMirror,
+    Serendipity {
+        limit: Option<usize>,
+        min_confidence: Option<f32>,
+        temporal_window_days: Option<i64>,
+    },
+}
+
 /// Abstract Syntax Tree (AST) for query expressions.
 ///
 /// Each variant represents a different query operation that can be
-/// performed on the knowledge graph.
+/// performed on the knowledge graph. F2 (Work Unit A) merged the
+/// previously separate `parser::QueryExpr` variants (Aggregate, Stats,
+/// GroupBy, Analyze) with the original `ast::QueryAst` variants
+/// (Table, SortBy, Exists, Missing, Namespace) into a single
+/// canonical type.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum QueryAst {
     /// Boolean AND of multiple expressions
@@ -101,7 +119,7 @@ pub enum QueryAst {
         start: QueryValue,
         end: QueryValue,
     },
-    /// JSON property filter with optional operator
+    /// JSON property filter with optional operator (F3)
     Property {
         key: String,
         op: PropertyOp,
@@ -124,6 +142,27 @@ pub enum QueryAst {
     BlockContent(String),
     /// Random sample of N results
     Sample(usize),
+    /// Aggregate with GROUP BY (F2 — moved from `parser::QueryExpr`)
+    Aggregate {
+        inner: Box<QueryAst>,
+        group_by: String,
+        aggregate_fn: AggregateFn,
+    },
+    /// Statistical computation over a property (F2)
+    Stats {
+        property: String,
+        compute: StatsFn,
+    },
+    /// Group by property (no aggregation) (F2)
+    GroupBy {
+        inner: Box<QueryAst>,
+        property: String,
+    },
+    /// Analysis operator for cognitive/serendipity analysis (F2)
+    Analyze {
+        inner: Box<QueryAst>,
+        kind: AnalyzeKind,
+    },
     /// Table view with structured columns from inner expressions
     Table(Vec<QueryAst>),
     /// Sort results by field and direction
