@@ -132,6 +132,44 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         .with_visibility(true, true, false);
         map.insert("template".to_string(), template);
 
+        // ── System properties (F9: read-only) ────────────────────────────
+        // id, created_at, updated_at are system identifiers managed by the
+        // domain layer (not user-editable). They are registered as
+        // read-only Text properties with ViewContext::Never (they don't
+        // appear in the page properties panel). Writes via
+        // PageRepository::update_properties are rejected with
+        // DomainError::PropertyReadOnly(<key>).
+        let id = PropertyDefinition::new(Uuid::new_v4(), "id", "ID", PropertyType::Text)
+            .with_cardinality(Cardinality::One)
+            .with_view_context(ViewContext::Never)
+            .with_visibility(false, false, true)
+            .with_read_only(true);
+        map.insert("id".to_string(), id);
+
+        let created_at = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "created_at",
+            "Created At",
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Never)
+        .with_visibility(false, false, true)
+        .with_read_only(true);
+        map.insert("created_at".to_string(), created_at);
+
+        let updated_at = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "updated_at",
+            "Updated At",
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Never)
+        .with_visibility(false, false, true)
+        .with_read_only(true);
+        map.insert("updated_at".to_string(), updated_at);
+
         map
     })
 }
@@ -218,5 +256,58 @@ mod tests {
         assert_eq!(template.property_type, PropertyType::Text);
         assert!(!template.has_closed_values());
         assert_eq!(template.view_context, ViewContext::Block);
+    }
+
+    // ── F9: system property builtins (id, created_at, updated_at) ──
+
+    #[test]
+    fn test_system_properties_are_registered() {
+        // The three system identifiers must exist in BUILTIN_PROPERTIES.
+        // They are the "system" side of the F9 read_only protection.
+        let props = get_builtin_properties();
+        assert!(props.contains_key("id"), "missing builtin 'id'");
+        assert!(props.contains_key("created_at"), "missing builtin 'created_at'");
+        assert!(props.contains_key("updated_at"), "missing builtin 'updated_at'");
+    }
+
+    #[test]
+    fn test_system_properties_are_read_only() {
+        // F9 spec: id, created_at, updated_at are read-only system props.
+        // update_properties must reject writes to these keys with
+        // DomainError::PropertyReadOnly.
+        for key in &["id", "created_at", "updated_at"] {
+            let def = get_builtin_property(key).expect("system property exists");
+            assert!(def.read_only, "{} must be read_only", key);
+        }
+    }
+
+    #[test]
+    fn test_system_properties_have_never_view_context() {
+        // System properties are not user-editable UI properties — they
+        // are not displayed in the page properties panel.
+        for key in &["id", "created_at", "updated_at"] {
+            let def = get_builtin_property(key).expect("system property exists");
+            assert_eq!(
+                def.view_context,
+                ViewContext::Never,
+                "{} must have view_context = Never",
+                key
+            );
+        }
+    }
+
+    #[test]
+    fn test_system_properties_are_text_type() {
+        // V1 recommendation: Text for system properties (string
+        // representation of UUID or RFC3339 timestamp).
+        for key in &["id", "created_at", "updated_at"] {
+            let def = get_builtin_property(key).expect("system property exists");
+            assert_eq!(
+                def.property_type,
+                PropertyType::Text,
+                "{} must have property_type = Text",
+                key
+            );
+        }
     }
 }
