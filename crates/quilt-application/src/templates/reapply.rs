@@ -103,12 +103,12 @@ pub trait ReapplyTemplateUseCase: Send + Sync {
 // ── Implementation ─────────────────────────────────────────────────────────────
 
 /// Concrete implementation backed by TemplateUseCases + BlockRepository.
-pub struct ReapplyTemplateUseCaseImpl<TC: TemplateUseCases, BR> {
+pub struct ReapplyTemplateUseCaseImpl<TC: TemplateUseCases + ?Sized, BR> {
     template_use_cases: Arc<TC>,
     block_repo: Arc<BR>,
 }
 
-impl<TC: TemplateUseCases, BR> ReapplyTemplateUseCaseImpl<TC, BR> {
+impl<TC: TemplateUseCases + ?Sized, BR> ReapplyTemplateUseCaseImpl<TC, BR> {
     pub fn new(template_use_cases: Arc<TC>, block_repo: Arc<BR>) -> Self {
         Self {
             template_use_cases,
@@ -118,7 +118,7 @@ impl<TC: TemplateUseCases, BR> ReapplyTemplateUseCaseImpl<TC, BR> {
 }
 
 #[async_trait]
-impl<TC: TemplateUseCases + 'static, BR: quilt_domain::repositories::BlockRepository + 'static>
+impl<TC: TemplateUseCases + ?Sized + 'static, BR: quilt_domain::repositories::BlockRepository + 'static>
     ReapplyTemplateUseCase for ReapplyTemplateUseCaseImpl<TC, BR>
 {
     #[instrument(skip(self))]

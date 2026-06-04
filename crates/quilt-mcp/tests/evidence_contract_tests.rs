@@ -113,7 +113,7 @@ async fn test_no_handler_serializes_top_level_evidence_key() {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 17, "Expected exactly 17 live tools");
+    assert_eq!(tools.len(), 19, "Expected exactly 19 live tools (14 base + 3 retrieval-graph + 2 template)");
 
     // For each tool, call it (with safe empty args) and inspect the
     // JSON text. Failures are aggregated.
@@ -184,7 +184,7 @@ async fn test_every_response_carries_meta_evidence() {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 17);
+    assert_eq!(tools.len(), 19);
 
     let mut missing = Vec::new();
     for tool in &tools {
