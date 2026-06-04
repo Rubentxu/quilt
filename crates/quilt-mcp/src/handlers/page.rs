@@ -99,7 +99,11 @@ impl ToolHandler for PageToolHandler {
                     .map_err(|e| e.to_string())?;
 
                 Ok(serde_json::to_string_pretty(&serde_json::json!({
-                    "page": { "id": page_with_blocks.page.id.to_string(), "name": page_with_blocks.page.name },
+                    "page": {
+                        "id": page_with_blocks.page.id.to_string(),
+                        "name": page_with_blocks.page.name,
+                        "updated_at": page_with_blocks.page.updated_at.to_rfc3339(),
+                    },
                     "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
                     "count": page_with_blocks.blocks.len(),
                 })).unwrap_or_else(|e| e.to_string()))
@@ -128,7 +132,12 @@ impl ToolHandler for PageToolHandler {
                 let journal_day = page.journal_day.map(|d| d.as_i32());
 
                 Ok(serde_json::to_string_pretty(&serde_json::json!({
-                    "page": { "id": page.id.to_string(), "name": page.name, "journal_day": journal_day },
+                    "page": {
+                        "id": page.id.to_string(),
+                        "name": page.name,
+                        "journal_day": journal_day,
+                        "updated_at": page.updated_at.to_rfc3339(),
+                    },
                     "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
                     "block_count": page_with_blocks.blocks.len(),
                 })).unwrap_or_else(|e| e.to_string()))

@@ -184,6 +184,41 @@ async fn test_get_page_blocks_success() {
     assert!(parsed["count"].is_number());
 }
 
+// T-01: page.updated_at must be present in the JSON output so that
+// server-level evidence injection (Phase 3) can extract it for
+// `page_updated_at` in the Evidence envelope.
+#[tokio::test]
+async fn test_get_page_blocks_includes_updated_at() {
+    let mock = Arc::new(MockPageUseCases::new());
+    mock.seed_page("my-page", false);
+    let h = PageToolHandler::new(mock);
+
+    let args = json!({ "page_name": "my-page" });
+    let result = h.execute("quilt_get_page_blocks", &args).await.unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    assert!(
+        parsed["page"]["updated_at"].is_string(),
+        "page.updated_at must be present in quilt_get_page_blocks JSON (got: {:?})",
+        parsed["page"]
+    );
+}
+
+// T-01: page.updated_at must also be present in quilt_get_journal output.
+#[tokio::test]
+async fn test_get_journal_includes_updated_at() {
+    let h = handler();
+    let args = json!({ "date": "2026-06-02" });
+    let result = h.execute("quilt_get_journal", &args).await.unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+    assert!(
+        parsed["page"]["updated_at"].is_string(),
+        "page.updated_at must be present in quilt_get_journal JSON (got: {:?})",
+        parsed["page"]
+    );
+}
+
 #[tokio::test]
 async fn test_get_page_blocks_missing_page_name() {
     let h = handler();
