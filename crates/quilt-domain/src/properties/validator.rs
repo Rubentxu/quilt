@@ -92,12 +92,9 @@ impl<P: PropertyRepository> PropertyValidator<P> {
             (PropertyType::Number, PropertyValue::Float(_)) => true,
             (PropertyType::Date, PropertyValue::Date(_)) => true,
             (PropertyType::DateTime, PropertyValue::Date(_)) => true,
-            (PropertyType::Url, PropertyValue::Url(_)) => true,
             (PropertyType::Url, PropertyValue::String(_)) => true, // Backward compat
-            (PropertyType::Checkbox, PropertyValue::Checkbox(_)) => true,
             (PropertyType::Checkbox, PropertyValue::Boolean(_)) => true, // Backward compat
-            (PropertyType::Node, PropertyValue::Node(_)) => true,
-            (PropertyType::Node, PropertyValue::Ref(_)) => true, // Backward compat
+            (PropertyType::Node, PropertyValue::Ref(_)) => true,    // Backward compat
             _ => false,
         };
 
@@ -148,7 +145,6 @@ impl<P: PropertyRepository> PropertyValidator<P> {
 
         let value_str = match value {
             PropertyValue::String(s) => Some(s.as_str()),
-            PropertyValue::Url(s) => Some(s.as_str()),
             _ => None,
         };
 

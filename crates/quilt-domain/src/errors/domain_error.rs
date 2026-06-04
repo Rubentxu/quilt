@@ -28,6 +28,10 @@ pub enum DomainError {
     InvalidTimezone(String),
     /// Invalid configuration value
     InvalidConfiguration(String),
+    /// Property failed type / cardinality / closed-set validation
+    PropertyValidationError { property: String, error: String },
+    /// Property is marked read-only and cannot be set by the caller
+    PropertyReadOnly(String),
 
     // Operation errors
     /// Circular reference detected (moving block to own descendant)
@@ -46,6 +50,8 @@ pub enum DomainError {
     // Repository errors (storage, defined here for convenience)
     /// Storage error (data couldn't be stored or retrieved)
     Storage(String),
+    /// Database error (e.g. failed to look up a property via the repository)
+    Database(String),
     /// Feature not yet implemented
     NotImplemented(&'static str),
 }
@@ -77,6 +83,12 @@ impl fmt::Display for DomainError {
             DomainError::InvalidConfiguration(msg) => {
                 write!(f, "Invalid configuration: {}", msg)
             }
+            DomainError::PropertyValidationError { property, error } => {
+                write!(f, "Property validation failed for '{}': {}", property, error)
+            }
+            DomainError::PropertyReadOnly(key) => {
+                write!(f, "Property is read-only: {}", key)
+            }
             DomainError::CircularReference(id) => {
                 write!(f, "Circular reference detected for block: {}", id)
             }
@@ -94,6 +106,9 @@ impl fmt::Display for DomainError {
             }
             DomainError::Storage(msg) => {
                 write!(f, "Storage error: {}", msg)
+            }
+            DomainError::Database(msg) => {
+                write!(f, "Database error: {}", msg)
             }
             DomainError::NotImplemented(feature) => {
                 write!(f, "Not implemented: {}", feature)

@@ -14,6 +14,7 @@
 
 pub mod entities;
 pub mod errors;
+pub mod properties;
 pub mod references;
 pub mod repositories;
 pub mod services;
