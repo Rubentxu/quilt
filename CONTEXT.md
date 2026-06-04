@@ -37,7 +37,7 @@ Bloque con propiedad `template:: nombre` que define estructura (headings, propie
 _Avoid_: plantilla, formato
 
 ### Template Page
-Página con nombre prefijado por `template/` que define la estructura, propiedades y comportamiento visual de un Template. Es el origen de la activación — un Bloque con `template:: <nombre>` referencia una Template Page. Las Template Pages también son el origen del page-level cloning via `POST /api/v1/pages/from-template`.
+Página con nombre prefijado por `template/` que define la estructura completa de una página: properties (schema con tipos y layout), estilos (`card-shape::`, `icon::`, `cssclass::`), y contenido (bloques hijos que pueden incluir Acciones, Queries embebidas, Views y secciones). Es el contrato completo entre agente y usuario — no solo estructura visual, sino comportamiento. Las queries embebidas usan variables `{{this.property}}` que se resuelven con las properties de la página creada.
 _Avoid_: plantilla de página, schema
 
 ### Card Shape
@@ -53,7 +53,7 @@ Lenguaje de consultas tipo `(and (task TODO) (priority A))`. Base compartida ent
 _Avoid_: query language, Datalog, SQL
 
 ### Propiedad
-Par clave-valor tipada en un bloque o página (`status:: draft`, `priority:: A`). Las propiedades son el mecanismo de colaboración: el usuario y el agente negocian estado y contexto mediante propiedades custom.
+Par clave-valor tipada en un bloque o página (`status:: draft`, `priority:: A`). Las propiedades son el mecanismo de colaboración: el usuario y el agente negocian estado y contexto mediante propiedades custom. Tipos soportados: Text, Number, Date, DateTime, Url, Checkbox, Select, Multi-select, Relation, Rollup, Formula, Node (page-ref). Las properties definen layout (header/inline/panel), estilos y comportamiento por template.
 _Avoid_: metadato, atributo, tag
 
 ### Propuesta
@@ -72,6 +72,30 @@ _Avoid_: análisis de texto, NLP interno
 Bloques o páginas sin actividad reciente, detectados por `updated_at`. Expuesto via MCP para que el agente actúe.
 _Avoid_: stale, outdated, viejo
 
+### Rol
+Interpretación semántica de un Bloque basada en sus Properties. No es un tipo de entidad — es un Bloque con properties que le dan significado especial. Los roles se descubren leyendo `type:: <rol>`. Ejemplos: `annotation`, `query`, `action`, `view`, `link`, `comment`, `task`.
+_Avoid_: tipo especial, entidad, objeto
+
+### Annotation
+Bloque hijo con `type:: annotation` que marca un fragmento de texto dentro de su bloque padre. Properties: `target-offset`, `target-length`, `target-text`, `resolved`, `created_by`. El renderizador subraya el rango en amarillo. Navegable desde panel lateral y sidebar. Accesible por agentes via MCP para leer y crear.
+_Avoid_: comment, highlight, marca
+
+### Link (rol)
+Bloque con `type:: link` que representa una relación tipada entre dos entidades del grafo. Properties: `source`, `target`, `verb` (tipo de relación), `weight` (fuerza 0.0-1.0), `confidence` (certeza), `decay` (debilitamiento temporal). Se auto-materializa a partir de referencias inline (`[[page]]`, `((uuid))`) y pueden ser creados explícitamente por usuarios y agentes. Los pesos se calculan a partir de señales del grafo: frecuencia de co-acceso, properties compartidas, annotations compartidas, tiempo sin acceso.
+_Avoid_: conexión, arista, edge (salvo contexto técnico)
+
+### Acción
+Bloque con `type:: action` que define una operación ejecutable. Tipos: `prompt` (texto enviado al agente AI via MCP), `query` (ejecuta DSL), `link` (navega), `set-property` (modifica property en otro bloque/página). Futuro: `script` (JavaScript). Se renderizan como botones en la UI.
+_Avoid_: botón, trigger, automation
+
+### Query embebida
+Bloque con `type:: query` y property `dsl:: (and ...)` que define una consulta parametrizable. La query usa variables `{{this.property}}` que se resuelven con las properties de la página actual. Se renderiza como vista (tabla, kanban, timeline, lista, grafo) según property `display::`.
+_Avoid_: widget, componente, saved search
+
+### Grafo pesado (Weighted Graph)
+El grafo de Quilt donde cada Link tiene un `weight` numérico (0.0-1.0) que representa la fuerza de la relación. Los pesos se calculan automáticamente por el motor de análisis estructural a partir de señales: referencias inline (+0.3), links explícitos con verb (+0.5), co-acceso (+0.1), properties compartidas (+0.2), annotations compartidas (+0.3), decay temporal (-0.1/mes). Los agentes pueden consultar subgrafos filtrados por peso mínimo.
+_Avoid_: graph neural network, embedding, vector
+
 ## Relationships
 
 - Un **Grafo** contiene muchas **Páginas**
@@ -79,11 +103,17 @@ _Avoid_: stale, outdated, viejo
 - Un **Bloque** puede tener **Propiedades**, **Refs** a otros bloques/páginas, y un **Template** asociado
 - Un **Template** referencia una **Template Page** (prefijo `template/`) que define su estructura y Card Shape
 - Una **Template Page** declara su **Card Shape** (`card-shape::`) que el **Card Renderer** interpreta
+- Una **Template Page** define el layout de **Properties** (header/inline/panel), estilos (`cssclass::`, `icon::`), **Acciones**, **Queries embebidas** y **Views** como bloques hijos
 - El **MCP Server** expone operaciones sobre el **Grafo** a **Agentes** externos
 - Los **Agentes** crean **Propuestas** (bloques con `created_by:: agent::*`)
 - El **Análisis estructural** provee datos al **MCP Server** para que los **Agentes** entiendan el **Grafo**
 - Las **Propiedades** son el mecanismo de comunicación entre **Usuario** y **Agente**
 - El **DSL** es compartido: la UI usa el base, el MCP usa el superconjunto
+- Un **Rol** es una interpretación de un **Bloque** según sus **Properties** (`type:: <rol>`)
+- Una **Annotation** es un **Bloque** (rol) que marca un fragmento de texto en su padre
+- Un **Link** es un **Bloque** (rol) con peso que conecta dos entidades del **Grafo pesado**
+- Una **Acción** es un **Bloque** (rol) que define una operación ejecutable (prompt, query, set-property)
+- Una **Query embebida** es un **Bloque** (rol) con DSL parametrizable por **Properties** de la página actual
 
 ## Flagged ambiguities
 
