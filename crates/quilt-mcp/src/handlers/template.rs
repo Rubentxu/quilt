@@ -8,6 +8,7 @@
 //! what properties a block with `template:: <name>` should have.
 
 use crate::handlers::ToolHandler;
+use crate::protocol::Evidence;
 use crate::tools::Tool;
 use crate::use_cases::TemplateUseCases;
 use async_trait::async_trait;
@@ -143,6 +144,21 @@ impl ToolHandler for TemplateToolHandler {
                 }
             }
             _ => Err(format!("Unknown tool: {}", name)),
+        }
+    }
+
+    // T-14: get_template_schema returns sparse evidence (template name
+    // in page_name). list_templates uses universal fallback.
+    fn tool_evidence(&self, name: &str, _args: &Value, result: &Value) -> Option<Evidence> {
+        let mut ev = Evidence::universal_fallback(name);
+        match name {
+            "quilt_get_template_schema" => {
+                if let Some(n) = result.get("name").and_then(|v| v.as_str()) {
+                    ev.page_name = Some(n.to_string());
+                }
+                Some(ev)
+            }
+            _ => None,
         }
     }
 }

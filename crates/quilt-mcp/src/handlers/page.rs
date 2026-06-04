@@ -3,6 +3,7 @@
 //! Owns: quilt_list_pages, quilt_get_page_blocks, quilt_get_journal
 
 use crate::handlers::ToolHandler;
+use crate::protocol::Evidence;
 use crate::serialization::block_to_json;
 use crate::tools::Tool;
 use crate::use_cases::PageUseCases;
@@ -144,6 +145,40 @@ impl ToolHandler for PageToolHandler {
             }
 
             _ => Err(format!("Unknown tool: {}", name)),
+        }
+    }
+
+    // T-12: rich evidence for get_page_blocks and get_journal — both
+    // reference a single page, so we surface page_name + page_updated_at
+    // (added in T-01) + the block IDs of the page's blocks.
+    fn tool_evidence(&self, name: &str, _args: &Value, result: &Value) -> Option<Evidence> {
+        let mut ev = Evidence::universal_fallback(name);
+        match name {
+            "quilt_get_page_blocks" | "quilt_get_journal" => {
+                if let Some(page) = result.get("page") {
+                    ev.page_name = page
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    ev.page_updated_at = page
+                        .get("updated_at")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.with_timezone(&chrono::Utc));
+                }
+                if let Some(blocks) = result.get("blocks").and_then(|v| v.as_array()) {
+                    for b in blocks {
+                        if let Some(id) = b.get("id").and_then(|v| v.as_str()) {
+                            if let Ok(uuid) = uuid::Uuid::parse_str(id) {
+                                ev.block_ids.push(uuid);
+                            }
+                        }
+                    }
+                }
+                Some(ev)
+            }
+            // Fallback tier (universal) for list_pages.
+            _ => None,
         }
     }
 }

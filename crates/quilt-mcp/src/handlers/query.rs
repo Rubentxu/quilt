@@ -3,6 +3,7 @@
 //! Owns: quilt_query, quilt_search
 
 use crate::handlers::ToolHandler;
+use crate::protocol::Evidence;
 use crate::tools::Tool;
 use crate::use_cases::SearchUseCases;
 use async_trait::async_trait;
@@ -109,6 +110,39 @@ impl ToolHandler for QueryToolHandler {
             }
 
             _ => Err(format!("Unknown tool: {}", name)),
+        }
+    }
+
+    // T-13: rich evidence for quilt_query (AST) and quilt_search
+    // (block_ids + matched_terms, but source_authority is None in V1
+    // because SearchResult lacks created_by — deferred to V2).
+    fn tool_evidence(&self, name: &str, args: &Value, result: &Value) -> Option<Evidence> {
+        let mut ev = Evidence::universal_fallback(name);
+        match name {
+            "quilt_query" => {
+                if let Some(ast) = result.get("ast") {
+                    // AST is a structured object — keep its JSON form as a string.
+                    ev.query_ast = Some(ast.to_string());
+                }
+                Some(ev)
+            }
+            "quilt_search" => {
+                if let Some(q) = args.get("query").and_then(|v| v.as_str()) {
+                    ev.matched_terms.push(q.to_string());
+                }
+                if let Some(results) = result.get("results").and_then(|v| v.as_array()) {
+                    for r in results {
+                        if let Some(id) = r.get("block_id").and_then(|v| v.as_str()) {
+                            if let Ok(uuid) = uuid::Uuid::parse_str(id) {
+                                ev.block_ids.push(uuid);
+                            }
+                        }
+                    }
+                }
+                // T-18: source_authority is None in V1.
+                Some(ev)
+            }
+            _ => None,
         }
     }
 }

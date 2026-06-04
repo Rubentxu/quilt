@@ -3,6 +3,7 @@
 //! Owns: quilt://graph, quilt://pages, quilt://journals, quilt://tags
 
 use crate::handlers::ResourceProvider;
+use crate::protocol::Evidence;
 use crate::resources::Resource;
 use crate::use_cases::ResourceUseCases;
 use async_trait::async_trait;
@@ -135,5 +136,20 @@ impl ResourceProvider for GraphResourceProvider {
 
             _ => Err(format!("Unknown resource: {}", uri)),
         }
+    }
+
+    // T-15: per-URI resource evidence. graph → summary block count;
+    // pages/journals/tags → counts. All evidence is minimal — the
+    // resource tier doesn't expose block IDs (resources are aggregate
+    // views, not block-level).
+    fn resource_evidence(&self, uri: &str, _result: &serde_json::Value) -> Option<Evidence> {
+        let mut ev = Evidence::universal_fallback(uri);
+        match uri {
+            "quilt://graph" | "quilt://pages" | "quilt://journals" | "quilt://tags" => {
+                // Aggregate resource — universal fallback.
+            }
+            _ => return None,
+        }
+        Some(ev)
     }
 }
