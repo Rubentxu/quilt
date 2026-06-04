@@ -44,6 +44,8 @@ export interface TemplateProperty {
   value: string;
   /** JSON-ish type: "string" | "boolean" | "integer" | "float" | "date" | "ref" | "array" */
   type: string;
+  /** Canonical property type: "Text" | "Number" | "Date" | "DateTime" | "Url" | "Checkbox" | "Node" | undefined */
+  property_type?: string;
 }
 
 // ──── Shared ────────────────────────────────────────────────────

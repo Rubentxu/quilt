@@ -119,6 +119,10 @@ pub struct TemplatePropertyResponse {
     pub value: String,
     #[serde(rename = "type")]
     pub type_: String,
+    /// Canonical property type from quilt-domain. None when type_hint
+    /// doesn't map to a known PropertyType.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub property_type: Option<String>,
 }
 
 impl From<quilt_application::use_cases::TemplateSchema> for TemplateSchemaResponse {
@@ -137,6 +141,7 @@ impl From<quilt_application::use_cases::TemplateSchema> for TemplateSchemaRespon
                     key: p.key,
                     value: p.value,
                     type_: p.r#type,
+                    property_type: p.property_type.map(|pt| pt.as_str().to_string()),
                 })
                 .collect(),
         }

@@ -13,6 +13,7 @@ use crate::errors::ApplicationError;
 use crate::templates::schema_pack::SchemaPack;
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, Page};
+use quilt_domain::properties::types::PropertyType;
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::value_objects::Uuid;
 use serde::Serialize;
@@ -114,6 +115,22 @@ pub struct TemplateProperty {
     /// "string" | "number" | "boolean" | "date" | "array" | "object"
     /// (the JSON type the value would deserialize as).
     pub r#type: String,
+    /// Canonical property type from quilt-domain.
+    /// None when type_hint doesn't map to a known PropertyType.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub property_type: Option<PropertyType>,
+}
+
+/// Combines a property definition with display hints and default value.
+/// Used to provide full schema information for template properties.
+#[derive(Debug, Clone, Serialize)]
+pub struct TemplatePropertySchema {
+    /// The property definition from quilt-domain.
+    pub property: quilt_domain::properties::PropertyDefinition,
+    /// Display hints for rendering.
+    pub display_hint: crate::templates::schema_pack::DisplayHint,
+    /// Default value for this property, if any.
+    pub default: Option<quilt_domain::value_objects::PropertyValue>,
 }
 
 // ── Implementation ───────────────────────────────────────────────
@@ -316,7 +333,8 @@ fn collect_properties(blocks: &[Block]) -> Vec<TemplateProperty> {
             out.push(TemplateProperty {
                 key: key.clone(),
                 value: stringified,
-                r#type: type_hint,
+                r#type: type_hint.clone(),
+                property_type: property_type_to_domain(&type_hint),
             });
         }
     }
@@ -364,9 +382,27 @@ fn property_value_to_string(
     (stringified, type_hint)
 }
 
+/// Maps a legacy type hint string (from `PropertyValue.type_name()`)
+/// to a canonical `PropertyType`.
+///
+/// Returns `None` when the type hint doesn't map to any `PropertyType`
+/// variant (e.g., "array" has no direct equivalent).
+fn property_type_to_domain(type_hint: &str) -> Option<PropertyType> {
+    match type_hint {
+        "string" => Some(PropertyType::Text),
+        "integer" | "float" => Some(PropertyType::Number),
+        "date" => Some(PropertyType::Date),
+        "boolean" => Some(PropertyType::Checkbox),
+        "ref" => Some(PropertyType::Node),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::templates::schema_pack::{DisplayFormat, DisplayHint};
+    use quilt_domain::properties::types::PropertyType;
 
     #[test]
     fn strip_template_prefix_variants() {
@@ -389,5 +425,188 @@ mod tests {
         assert!(is_template_name("templates/legacy"));
         assert!(!is_template_name("regular"));
         assert!(!is_template_name("templated"));
+    }
+
+    // ── property_type_to_domain tests ─────────────────────────────────────────
+
+    #[test]
+    fn property_type_to_domain_string() {
+        // "string" maps to Text
+        assert_eq!(
+            property_type_to_domain("string"),
+            Some(PropertyType::Text)
+        );
+    }
+
+    #[test]
+    fn property_type_to_domain_number_variants() {
+        // "integer" and "float" both map to Number
+        assert_eq!(
+            property_type_to_domain("integer"),
+            Some(PropertyType::Number)
+        );
+        assert_eq!(
+            property_type_to_domain("float"),
+            Some(PropertyType::Number)
+        );
+    }
+
+    #[test]
+    fn property_type_to_domain_date() {
+        assert_eq!(
+            property_type_to_domain("date"),
+            Some(PropertyType::Date)
+        );
+    }
+
+    #[test]
+    fn property_type_to_domain_boolean() {
+        assert_eq!(
+            property_type_to_domain("boolean"),
+            Some(PropertyType::Checkbox)
+        );
+    }
+
+    #[test]
+    fn property_type_to_domain_ref() {
+        assert_eq!(
+            property_type_to_domain("ref"),
+            Some(PropertyType::Node)
+        );
+    }
+
+    #[test]
+    fn property_type_to_domain_array_returns_none() {
+        // "array" has no direct PropertyType mapping
+        assert_eq!(property_type_to_domain("array"), None);
+    }
+
+    #[test]
+    fn property_type_to_domain_unknown_returns_none() {
+        // Completely unknown type hints return None
+        assert_eq!(property_type_to_domain("unknown"), None);
+        assert_eq!(property_type_to_domain(""), None);
+        assert_eq!(property_type_to_domain("something-else"), None);
+    }
+
+    // ── TemplateProperty with property_type tests ───────────────────────────────
+
+    #[test]
+    fn template_property_deserializes_with_property_type() {
+        use serde_json;
+
+        #[derive(Debug, serde::Deserialize)]
+        struct JsonProperty {
+            key: String,
+            value: String,
+            #[serde(rename = "type")]
+            r#type: String,
+            property_type: Option<String>,
+        }
+
+        let json = r#"{"key":"title","value":"My Title","type":"string","property_type":"Text"}"#;
+        let prop: JsonProperty = serde_json::from_str(json).unwrap();
+        assert_eq!(prop.key, "title");
+        assert_eq!(prop.value, "My Title");
+        assert_eq!(prop.r#type, "string");
+        assert_eq!(prop.property_type, Some("Text".to_string()));
+    }
+
+    #[test]
+    fn template_property_deserializes_without_property_type_backward_compat() {
+        use serde_json;
+
+        #[derive(Debug, serde::Deserialize)]
+        struct JsonProperty {
+            key: String,
+            value: String,
+            #[serde(rename = "type")]
+            r#type: String,
+            property_type: Option<String>,
+        }
+
+        // Legacy JSON without property_type field should deserialize OK
+        let json = r#"{"key":"title","value":"My Title","type":"string"}"#;
+        let prop: JsonProperty = serde_json::from_str(json).unwrap();
+        assert_eq!(prop.key, "title");
+        assert_eq!(prop.property_type, None);
+    }
+
+    #[test]
+    fn template_property_serializes_without_property_type_when_none() {
+        use serde_json;
+        use quilt_domain::properties::types::PropertyType;
+
+        // TemplateProperty with property_type = None should NOT serialize property_type field
+        let prop = TemplateProperty {
+            key: "title".to_string(),
+            value: "My Title".to_string(),
+            r#type: "string".to_string(),
+            property_type: None,
+        };
+        let json = serde_json::to_string(&prop).unwrap();
+        assert!(!json.contains("property_type"));
+        assert!(json.contains(r#""type":"string""#));
+    }
+
+    #[test]
+    fn template_property_serializes_property_type_when_some() {
+        use serde_json;
+        use quilt_domain::properties::types::PropertyType;
+
+        let prop = TemplateProperty {
+            key: "status".to_string(),
+            value: "todo".to_string(),
+            r#type: "string".to_string(),
+            property_type: Some(PropertyType::Text),
+        };
+        let json = serde_json::to_string(&prop).unwrap();
+        assert!(json.contains("property_type"));
+        assert!(json.contains(r#""property_type":"Text""#));
+    }
+
+    // ── TemplatePropertySchema tests ───────────────────────────────────────────
+
+    #[test]
+    fn template_property_schema_construction() {
+        use quilt_domain::properties::types::PropertyType;
+        use quilt_domain::value_objects::PropertyValue;
+
+        let prop = TemplatePropertySchema {
+            property: quilt_domain::properties::PropertyDefinition::new(
+                quilt_domain::value_objects::Uuid::new_v4(),
+                "status",
+                "Status",
+                PropertyType::Text,
+            ),
+            display_hint: DisplayHint {
+                format: DisplayFormat::Bold,
+                hidden: false,
+                order: 1,
+            },
+            default: Some(PropertyValue::String("todo".to_string())),
+        };
+
+        assert_eq!(prop.property.db_ident, "status");
+        assert_eq!(prop.display_hint.format, DisplayFormat::Bold);
+        assert!(prop.default.is_some());
+    }
+
+    #[test]
+    fn template_property_schema_default_can_be_none() {
+        use quilt_domain::properties::types::PropertyType;
+
+        let schema = TemplatePropertySchema {
+            property: quilt_domain::properties::PropertyDefinition::new(
+                quilt_domain::value_objects::Uuid::new_v4(),
+                "tags",
+                "Tags",
+                PropertyType::Text,
+            ),
+            display_hint: DisplayHint::default(),
+            default: None,
+        };
+
+        assert!(schema.default.is_none());
     }
 }

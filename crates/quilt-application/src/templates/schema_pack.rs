@@ -145,11 +145,27 @@ impl SchemaPack {
     }
 }
 
-/// True for known JSON-ish value type strings.
+/// True for known JSON-ish value type strings and PropertyType canonical names.
 fn is_known_value_type(t: &str) -> bool {
     matches!(
         t,
-        "string" | "boolean" | "number" | "integer" | "float" | "date" | "array" | "object"
+        // Legacy JSON-ish types
+        "string"
+            | "boolean"
+            | "number"
+            | "integer"
+            | "float"
+            | "date"
+            | "array"
+            | "object"
+            // PropertyType canonical names (from quilt-domain)
+            | "Text"
+            | "Number"
+            | "Date"
+            | "DateTime"
+            | "Url"
+            | "Checkbox"
+            | "Node"
     )
 }
 
@@ -237,6 +253,46 @@ mod tests {
             result,
             Err(SchemaPackError::UnknownValueType(t)) if t == "invalid"
         ));
+    }
+
+    #[test]
+    fn schema_pack_value_type_accepts_property_type_variants() {
+        // PropertyType canonical names should be accepted
+        let type_names = [
+            "Text", "Number", "Date", "DateTime", "Url", "Checkbox", "Node",
+        ];
+        for type_name in type_names {
+            let json = format!(
+                r#"{{"default_properties":[{{"key":"status","value_type":"{}","default":"todo"}}]}}"#,
+                type_name
+            );
+            let result = SchemaPack::from_json(&json);
+            assert!(
+                result.is_ok(),
+                "Expected {} to be accepted but got {:?}",
+                type_name,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn schema_pack_value_type_accepts_legacy_json_types() {
+        // Legacy JSON-ish type names should still be accepted
+        let type_names = ["string", "boolean", "number", "integer", "float", "date", "array", "object"];
+        for type_name in type_names {
+            let json = format!(
+                r#"{{"default_properties":[{{"key":"status","value_type":"{}","default":"todo"}}]}}"#,
+                type_name
+            );
+            let result = SchemaPack::from_json(&json);
+            assert!(
+                result.is_ok(),
+                "Expected {} to be accepted but got {:?}",
+                type_name,
+                result
+            );
+        }
     }
 
     #[test]

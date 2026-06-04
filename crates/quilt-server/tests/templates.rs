@@ -857,9 +857,13 @@ async fn get_template_schema_returns_full_metadata() -> Result<()> {
     let name_prop = properties.iter().find(|p| p["key"] == "name").unwrap();
     assert_eq!(name_prop["type"], "string");
     assert_eq!(name_prop["value"], "Alice Doe");
+    // property_type maps "string" → PropertyType::Text → "Text"
+    assert_eq!(name_prop["property_type"], "Text");
 
     let priority_prop = properties.iter().find(|p| p["key"] == "priority").unwrap();
     assert_eq!(priority_prop["type"], "integer");
+    // property_type maps "integer" → PropertyType::Number → "Number"
+    assert_eq!(priority_prop["property_type"], "Number");
     Ok(())
 }
 
