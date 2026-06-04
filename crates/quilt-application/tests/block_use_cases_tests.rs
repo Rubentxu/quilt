@@ -39,7 +39,13 @@ async fn test_create_with_page_with_marker() {
     let use_cases = setup();
 
     let block = use_cases
-        .create_with_page("tasks", "Buy milk", None, Some(TaskMarker::Todo), HashMap::new())
+        .create_with_page(
+            "tasks",
+            "Buy milk",
+            None,
+            Some(TaskMarker::Todo),
+            HashMap::new(),
+        )
         .await
         .unwrap();
 
@@ -58,7 +64,13 @@ async fn test_create_with_page_with_parent() {
 
     // Create child block with parent_id
     let child = use_cases
-        .create_with_page("parent-page", "Child", Some(parent.id), None, HashMap::new())
+        .create_with_page(
+            "parent-page",
+            "Child",
+            Some(parent.id),
+            None,
+            HashMap::new(),
+        )
         .await
         .unwrap();
 
@@ -69,7 +81,10 @@ async fn test_create_with_page_with_parent() {
 async fn test_create_with_page_with_properties() {
     let use_cases = setup();
     let mut props = HashMap::new();
-    props.insert("created_by".to_string(), PropertyValue::String("agent::test".into()));
+    props.insert(
+        "created_by".to_string(),
+        PropertyValue::String("agent::test".into()),
+    );
 
     let block = use_cases
         .create_with_page("meta", "Content", None, None, props)
@@ -132,11 +147,23 @@ async fn test_get_tree_returns_block_with_children() {
         .await
         .unwrap();
     let _child1 = use_cases
-        .create_with_page("tree-page", "Child 1", Some(parent.id), None, HashMap::new())
+        .create_with_page(
+            "tree-page",
+            "Child 1",
+            Some(parent.id),
+            None,
+            HashMap::new(),
+        )
         .await
         .unwrap();
     let _child2 = use_cases
-        .create_with_page("tree-page", "Child 2", Some(parent.id), None, HashMap::new())
+        .create_with_page(
+            "tree-page",
+            "Child 2",
+            Some(parent.id),
+            None,
+            HashMap::new(),
+        )
         .await
         .unwrap();
 
@@ -177,7 +204,10 @@ async fn test_get_backlinks_returns_linked_blocks() {
 async fn test_list_by_property_finds_matching_blocks() {
     let use_cases = setup();
     let mut props = HashMap::new();
-    props.insert("created_by".to_string(), PropertyValue::String("agent::claude".into()));
+    props.insert(
+        "created_by".to_string(),
+        PropertyValue::String("agent::claude".into()),
+    );
 
     let _block1 = use_cases
         .create_with_page("agent-page", "Block by claude", None, None, props.clone())
@@ -188,7 +218,10 @@ async fn test_list_by_property_finds_matching_blocks() {
         .await
         .unwrap();
 
-    let results = use_cases.list_by_property("created_by", "agent::claude", 10).await.unwrap();
+    let results = use_cases
+        .list_by_property("created_by", "agent::claude", 10)
+        .await
+        .unwrap();
     assert!(!results.is_empty());
 }
 
@@ -196,16 +229,28 @@ async fn test_list_by_property_finds_matching_blocks() {
 async fn test_list_by_property_respects_limit() {
     let use_cases = setup();
     let mut props = HashMap::new();
-    props.insert("created_by".to_string(), PropertyValue::String("user::test".into()));
+    props.insert(
+        "created_by".to_string(),
+        PropertyValue::String("user::test".into()),
+    );
 
     for i in 0..5 {
         use_cases
-            .create_with_page("limit-page", &format!("Block {}", i), None, None, props.clone())
+            .create_with_page(
+                "limit-page",
+                &format!("Block {}", i),
+                None,
+                None,
+                props.clone(),
+            )
             .await
             .unwrap();
     }
 
-    let results = use_cases.list_by_property("created_by", "user::test", 2).await.unwrap();
+    let results = use_cases
+        .list_by_property("created_by", "user::test", 2)
+        .await
+        .unwrap();
     assert!(results.len() <= 2);
 }
 
@@ -233,7 +278,10 @@ async fn test_create_task_with_priority() {
         .await
         .unwrap();
 
-    assert_eq!(task.priority, Some(quilt_domain::value_objects::Priority::A));
+    assert_eq!(
+        task.priority,
+        Some(quilt_domain::value_objects::Priority::A)
+    );
     assert_eq!(task.marker, Some(TaskMarker::Todo));
 }
 

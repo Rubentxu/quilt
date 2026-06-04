@@ -7,8 +7,8 @@
 
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_query::executor::QueryExecutor;
 use quilt_query::ast::QueryAst;
+use quilt_query::executor::QueryExecutor;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::instrument;
@@ -50,7 +50,11 @@ impl<BR: BlockRepository> QueryExecutorService<BR> {
     /// # Returns
     /// Matching blocks, or an empty vec on success (no panic).
     #[instrument(skip(self))]
-    pub async fn execute(&self, ast: &QueryAst, limit: usize) -> Result<Vec<Block>, QueryExecutorError> {
+    pub async fn execute(
+        &self,
+        ast: &QueryAst,
+        limit: usize,
+    ) -> Result<Vec<Block>, QueryExecutorError> {
         // Cap limit at 1000 to match server-side constraint
         let effective_limit = limit.min(1000);
 
@@ -84,8 +88,8 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use quilt_domain::entities::{Block, BlockCreate};
-    use quilt_domain::value_objects::BlockFormat;
     use quilt_domain::errors::DomainError;
+    use quilt_domain::value_objects::BlockFormat;
     use quilt_domain::value_objects::Uuid;
     use std::collections::HashMap;
 
@@ -149,7 +153,11 @@ mod tests {
         async fn count_all(&self) -> Result<usize, DomainError> {
             Ok(self.blocks.len())
         }
-        async fn query_dsl(&self, sql: &str, _params: &[String]) -> Result<Vec<Block>, DomainError> {
+        async fn query_dsl(
+            &self,
+            sql: &str,
+            _params: &[String],
+        ) -> Result<Vec<Block>, DomainError> {
             // Return all blocks if SQL contains basic SELECT
             if sql.contains("SELECT") {
                 Ok(self.blocks.clone())

@@ -4,7 +4,7 @@
 //! for SQLite databases using the sqlx async driver.
 
 use anyhow::Result;
-use sqlx::{sqlite::SqlitePoolOptions, Pool, Sqlite};
+use sqlx::{Pool, Sqlite, sqlite::SqlitePoolOptions};
 use std::path::Path;
 
 /// A type alias for the SQLite connection pool.

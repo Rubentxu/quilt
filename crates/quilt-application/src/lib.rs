@@ -40,4 +40,4 @@ pub use use_cases::{
 // Domain types re-exported for use by presentation layers (MCP, REST)
 // This allows quilt-mcp to use domain types without a direct quilt-domain dependency
 pub use quilt_domain::entities::Block;
-pub use quilt_domain::value_objects::{parse_properties, JournalDay, TaskMarker, Uuid};
+pub use quilt_domain::value_objects::{JournalDay, TaskMarker, Uuid, parse_properties};

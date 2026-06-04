@@ -35,8 +35,8 @@ use quilt_domain::errors::DomainError;
 use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
-    BlockRepository, PageRepository, PropertyRepository, RefRepository, RefRow,
-    SettingsRepository, TagRepository,
+    BlockRepository, PageRepository, PropertyRepository, RefRepository, RefRow, SettingsRepository,
+    TagRepository,
 };
 use quilt_domain::value_objects::{
     BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
@@ -312,10 +312,7 @@ impl PageRow {
             .properties
             .as_deref()
             .filter(|s| !s.is_empty() && *s != "{}")
-            .map(|s| {
-                serde_json::from_str::<HashMap<String, PropertyValue>>(s)
-                    .unwrap_or_default()
-            })
+            .map(|s| serde_json::from_str::<HashMap<String, PropertyValue>>(s).unwrap_or_default())
             .unwrap_or_default()
             .into_iter()
             .map(|(k, v)| (k, DefaultPropertyEntry::new(v)))
@@ -702,10 +699,7 @@ impl SqlitePageRepository {
 
     /// Creates a new `SqlitePageRepository` with a property repository for
     /// read-only checks. Used by integration tests (T-B.14).
-    pub fn with_property_repo(
-        pool: DbPool,
-        repo: Arc<dyn PropertyRepository>,
-    ) -> Self {
+    pub fn with_property_repo(pool: DbPool, repo: Arc<dyn PropertyRepository>) -> Self {
         Self {
             pool,
             property_repo: Some(repo),
@@ -727,9 +721,7 @@ impl SqlitePageRepository {
     }
 
     /// Serialize a properties map to a JSON string for SQLite storage.
-    fn properties_to_json(
-        props: &HashMap<String, DefaultPropertyEntry<PropertyValue>>,
-    ) -> String {
+    fn properties_to_json(props: &HashMap<String, DefaultPropertyEntry<PropertyValue>>) -> String {
         // Serialize the inner values only (strip the entry wrapper) — the
         // schema treats the column as `{"key": value}` JSON.
         let map: HashMap<String, PropertyValue> = props
@@ -1231,15 +1223,13 @@ impl RefRepository for SqliteRefRepository {
         target_id: Uuid,
         ref_type: RefType,
     ) -> Result<(), DomainError> {
-        sqlx::query(
-            "INSERT OR IGNORE INTO refs (source_id, target_id, ref_type) VALUES (?, ?, ?)",
-        )
-        .bind(uuid_to_blob(&source_id))
-        .bind(uuid_to_blob(&target_id))
-        .bind(Self::ref_type_to_str(&ref_type))
-        .execute(&self.pool)
-        .await
-        .map_err(|e| DomainError::Storage(format!("insert_ref: {}", e)))?;
+        sqlx::query("INSERT OR IGNORE INTO refs (source_id, target_id, ref_type) VALUES (?, ?, ?)")
+            .bind(uuid_to_blob(&source_id))
+            .bind(uuid_to_blob(&target_id))
+            .bind(Self::ref_type_to_str(&ref_type))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("insert_ref: {}", e)))?;
         Ok(())
     }
 
@@ -1249,7 +1239,8 @@ impl RefRepository for SqliteRefRepository {
         page_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
         // Escape special LIKE characters in the page name
-        let escaped = page_name.replace('\\', "\\\\")
+        let escaped = page_name
+            .replace('\\', "\\\\")
             .replace('%', "\\%")
             .replace('_', "\\_");
 
@@ -1331,15 +1322,13 @@ impl SettingsRepository for SqliteSettingsRepository {
         .map_err(|e| DomainError::Storage(format!("get_user_settings: {}", e)))?;
 
         match row {
-            Some((timezone, journal_format, start_of_week, preferred_format)) => {
-                Ok(UserSettings {
-                    timezone,
-                    journal_format,
-                    start_of_week,
-                    preferred_format: BlockFormat::parse_str(&preferred_format)
-                        .unwrap_or(BlockFormat::Markdown),
-                })
-            }
+            Some((timezone, journal_format, start_of_week, preferred_format)) => Ok(UserSettings {
+                timezone,
+                journal_format,
+                start_of_week,
+                preferred_format: BlockFormat::parse_str(&preferred_format)
+                    .unwrap_or(BlockFormat::Markdown),
+            }),
             None => Ok(UserSettings::default()),
         }
     }
@@ -1634,10 +1623,7 @@ mod tests {
     // ── F5 + F8 + F9: update_properties integration tests ─────────
 
     /// Helper: create a page and return its id.
-    async fn create_test_page_in_repo(
-        repo: &SqlitePageRepository,
-        name: &str,
-    ) -> Uuid {
+    async fn create_test_page_in_repo(repo: &SqlitePageRepository, name: &str) -> Uuid {
         let page = make_page(name);
         repo.insert(&page).await.unwrap();
         page.id

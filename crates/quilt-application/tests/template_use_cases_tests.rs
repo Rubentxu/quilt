@@ -73,10 +73,7 @@ async fn test_list_templates_empty() {
 #[tokio::test]
 async fn test_list_templates_filters_by_template_prefix() {
     let page_repo = InMemoryPageRepo::new();
-    let use_cases = TemplateUseCasesImpl::new(
-        page_repo.clone(),
-        InMemoryBlockRepo::new(),
-    );
+    let use_cases = TemplateUseCasesImpl::new(page_repo.clone(), InMemoryBlockRepo::new());
 
     // Mix of regular pages and template pages
     insert_page(&page_repo, &make_page("regular-page")).await;
@@ -103,10 +100,7 @@ async fn test_list_templates_filters_by_template_prefix() {
 #[tokio::test]
 async fn test_list_templates_sorted_by_name() {
     let page_repo = InMemoryPageRepo::new();
-    let use_cases = TemplateUseCasesImpl::new(
-        page_repo.clone(),
-        InMemoryBlockRepo::new(),
-    );
+    let use_cases = TemplateUseCasesImpl::new(page_repo.clone(), InMemoryBlockRepo::new());
 
     // Insert in non-alphabetical order. Page names are stored
     // lowercase by the domain layer, so we expect the same.
@@ -136,7 +130,10 @@ async fn test_list_templates_reads_card_metadata_from_first_block() {
         vec![
             ("card-shape", PropertyValue::String("reference".to_string())),
             ("icon", PropertyValue::String("📋".to_string())),
-            ("cssclass", PropertyValue::String("card-meeting".to_string())),
+            (
+                "cssclass",
+                PropertyValue::String("card-meeting".to_string()),
+            ),
         ],
     );
     insert_block(&block_repo, &metadata_block).await;
@@ -214,7 +211,11 @@ async fn test_get_template_schema_returns_full_metadata() {
     insert_block(&block_repo, &meta).await;
     insert_block(&block_repo, &example).await;
 
-    let schema = use_cases.get_template_schema("contact").await.unwrap().unwrap();
+    let schema = use_cases
+        .get_template_schema("contact")
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(schema.name, "contact");
     assert_eq!(schema.full_name, "template/contact");
     assert_eq!(schema.card_shape, "reference");
@@ -230,7 +231,11 @@ async fn test_get_template_schema_returns_full_metadata() {
     assert!(!keys.contains(&"icon"));
 
     // Type hints preserved
-    let priority_prop = schema.properties.iter().find(|p| p.key == "priority").unwrap();
+    let priority_prop = schema
+        .properties
+        .iter()
+        .find(|p| p.key == "priority")
+        .unwrap();
     assert_eq!(priority_prop.r#type, "integer");
     assert_eq!(priority_prop.value, "1");
 }
@@ -247,7 +252,10 @@ async fn test_get_template_schema_reserves_block_level_keys() {
         page.id,
         "content",
         vec![
-            ("template", PropertyValue::String("other-template".to_string())),
+            (
+                "template",
+                PropertyValue::String("other-template".to_string()),
+            ),
             ("type", PropertyValue::String("reference".to_string())),
             ("collapsed", PropertyValue::Boolean(true)),
             ("author", PropertyValue::String("claude".to_string())),
@@ -255,7 +263,11 @@ async fn test_get_template_schema_reserves_block_level_keys() {
     );
     insert_block(&block_repo, &block).await;
 
-    let schema = use_cases.get_template_schema("with-reserved").await.unwrap().unwrap();
+    let schema = use_cases
+        .get_template_schema("with-reserved")
+        .await
+        .unwrap()
+        .unwrap();
     let keys: Vec<&str> = schema.properties.iter().map(|p| p.key.as_str()).collect();
     // template, type, collapsed are reserved block-level keys —
     // not part of the template contract

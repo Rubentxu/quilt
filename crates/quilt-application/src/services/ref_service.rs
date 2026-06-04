@@ -253,9 +253,7 @@ impl RefService {
         page_name: &str,
         page_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
-        self.repo
-            .get_unlinked_references(page_name, page_id)
-            .await
+        self.repo.get_unlinked_references(page_name, page_id).await
     }
 
     /// Create an explicit block-to-block link.
@@ -266,12 +264,15 @@ impl RefService {
     ///
     /// If the link already exists, this is a no-op (idempotent).
     #[instrument(skip(self))]
-    pub async fn create_link(&mut self, source_id: Uuid, target_id: Uuid) -> Result<(), DomainError> {
+    pub async fn create_link(
+        &mut self,
+        source_id: Uuid,
+        target_id: Uuid,
+    ) -> Result<(), DomainError> {
         self.repo
             .insert_ref(source_id, target_id, RefType::BlockRef)
             .await?;
-        self.index
-            .add_ref(source_id, target_id, RefType::BlockRef);
+        self.index.add_ref(source_id, target_id, RefType::BlockRef);
         Ok(())
     }
 
@@ -356,7 +357,9 @@ mod tests {
         ) -> Result<(), DomainError> {
             let mut stored = self.refs.lock().unwrap();
             // Avoid duplicates (same behavior as INSERT OR IGNORE)
-            if !stored.iter().any(|r| r.source_id == source_id && r.target_id == target_id && r.ref_type == ref_type) {
+            if !stored.iter().any(|r| {
+                r.source_id == source_id && r.target_id == target_id && r.ref_type == ref_type
+            }) {
                 stored.push(RefRow {
                     source_id,
                     target_id,
@@ -564,9 +567,7 @@ mod tests {
         let block_id = Uuid::new_v4();
         let page_id = Uuid::new_v4();
 
-        let resolver = |name: &str| -> Option<Uuid> {
-            (name == "Page").then_some(page_id)
-        };
+        let resolver = |name: &str| -> Option<Uuid> { (name == "Page").then_some(page_id) };
 
         let content = "Check [[Page|]]".to_string();
         service

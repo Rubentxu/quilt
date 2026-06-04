@@ -145,16 +145,15 @@ impl<TC: TemplateUseCases + 'static, BR: quilt_domain::repositories::BlockReposi
             .ok_or(ReapplyError::BlockNotFound(block_id.to_string()))?;
 
         // 3. Determine the template-applied-at timestamp from block properties
-        let template_applied_at = block
-            .properties
-            .get(TEMPLATE_APPLIED_AT_KEY)
-            .and_then(|v| {
-                if let quilt_domain::value_objects::PropertyValue::String(s) = v {
-                    DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
-                } else {
-                    None
-                }
-            });
+        let template_applied_at = block.properties.get(TEMPLATE_APPLIED_AT_KEY).and_then(|v| {
+            if let quilt_domain::value_objects::PropertyValue::String(s) = v {
+                DateTime::parse_from_rfc3339(s)
+                    .ok()
+                    .map(|dt| dt.with_timezone(&Utc))
+            } else {
+                None
+            }
+        });
 
         // 4. Build the new properties map
         let now = Utc::now();
@@ -182,8 +181,9 @@ impl<TC: TemplateUseCases + 'static, BR: quilt_domain::repositories::BlockReposi
             match mode {
                 ReapplyMode::OverrideAll => {
                     // LWW: always apply the template value
-                    let prop_value =
-                        quilt_domain::value_objects::PropertyValue::String(template_prop.value.clone());
+                    let prop_value = quilt_domain::value_objects::PropertyValue::String(
+                        template_prop.value.clone(),
+                    );
                     new_properties.insert(key.clone(), prop_value);
                     applied.push(key.clone());
                     if block.properties.contains_key(key) {
@@ -196,8 +196,9 @@ impl<TC: TemplateUseCases + 'static, BR: quilt_domain::repositories::BlockReposi
                         preserved.push(key.clone());
                     } else {
                         // Apply template value
-                        let prop_value =
-                            quilt_domain::value_objects::PropertyValue::String(template_prop.value.clone());
+                        let prop_value = quilt_domain::value_objects::PropertyValue::String(
+                            template_prop.value.clone(),
+                        );
                         new_properties.insert(key.clone(), prop_value);
                         applied.push(key.clone());
                     }

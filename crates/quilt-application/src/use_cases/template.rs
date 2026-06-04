@@ -10,6 +10,7 @@
 //! template picker with live card-shape previews.
 
 use crate::errors::ApplicationError;
+use crate::templates::schema_pack::SchemaPack;
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, Page};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
@@ -46,6 +47,16 @@ pub trait TemplateUseCases: Send + Sync {
         &self,
         template_name: &str,
     ) -> Result<Option<TemplateSchema>, ApplicationError>;
+
+    /// Get the schema pack (G6) for a single template by its short name.
+    ///
+    /// The schema pack is stored as the `schema-pack::` string property
+    /// on the template page. Returns `Ok(None)` if the template page
+    /// does not exist or has no schema-pack property.
+    async fn get_schema_pack(
+        &self,
+        template_name: &str,
+    ) -> Result<Option<SchemaPack>, ApplicationError>;
 }
 
 /// Summary of one template page — what the MCP tool returns to the
@@ -188,7 +199,47 @@ impl<PR: PageRepository + 'static, BR: BlockRepository + 'static> TemplateUseCas
             cssclass: summary.cssclass,
         }))
     }
+
+    #[instrument(skip(self))]
+    async fn get_schema_pack(
+        &self,
+        template_name: &str,
+    ) -> Result<Option<SchemaPack>, ApplicationError> {
+        let full_name = format!("template/{}", template_name);
+        let page = match self
+            .page_repo
+            .get_by_name(&full_name)
+            .await
+            .map_err(ApplicationError::from)?
+        {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+
+        let blocks = self
+            .block_repo
+            .get_by_page(page.id)
+            .await
+            .map_err(ApplicationError::from)?;
+
+        // Look for the schema-pack:: property on any block
+        for block in &blocks {
+            if let Some(prop) = block.properties.get(SCHEMA_PACK_KEY) {
+                if let quilt_domain::value_objects::PropertyValue::String(json_str) = prop {
+                    match SchemaPack::from_json(json_str) {
+                        Ok(pack) => return Ok(Some(pack)),
+                        Err(_) => return Ok(None),
+                    }
+                }
+            }
+        }
+
+        Ok(None)
+    }
 }
+
+/// Schema pack property key on a template page.
+const SCHEMA_PACK_KEY: &str = "schema-pack";
 
 // ── Helpers (private) ─────────────────────────────────────────────
 
@@ -301,7 +352,11 @@ fn property_value_to_string(
         PropertyValue::Date(d) => d.to_rfc3339(),
         PropertyValue::Ref(s) => s.clone(),
         PropertyValue::Array(arr) => {
-            let parts: Vec<String> = arr.iter().map(property_value_to_string).map(|(s, _)| s).collect();
+            let parts: Vec<String> = arr
+                .iter()
+                .map(property_value_to_string)
+                .map(|(s, _)| s)
+                .collect();
             format!("[{}]", parts.join(", "))
         }
     };
@@ -316,7 +371,10 @@ mod tests {
     #[test]
     fn strip_template_prefix_variants() {
         assert_eq!(strip_template_prefix("template/reference"), "reference");
-        assert_eq!(strip_template_prefix("template/meeting-notes"), "meeting-notes");
+        assert_eq!(
+            strip_template_prefix("template/meeting-notes"),
+            "meeting-notes"
+        );
         assert_eq!(strip_template_prefix("template/nested/path"), "nested/path");
         assert_eq!(strip_template_prefix("templates/legacy"), "legacy");
         assert_eq!(strip_template_prefix("template"), "template");

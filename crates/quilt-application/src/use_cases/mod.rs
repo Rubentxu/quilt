@@ -27,4 +27,4 @@ pub use resource::{
     GraphSnapshot, JournalSummary, PageSummary, ResourceUseCases, ResourceUseCasesImpl, TagSummary,
 };
 pub use search::{QueryPlan, SearchResult, SearchUseCases, SearchUseCasesImpl};
-pub use template::{TemplateSummary, TemplateSchema, TemplateUseCases, TemplateUseCasesImpl};
+pub use template::{TemplateSchema, TemplateSummary, TemplateUseCases, TemplateUseCasesImpl};

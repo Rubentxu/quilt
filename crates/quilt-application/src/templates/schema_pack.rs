@@ -123,13 +123,13 @@ impl SchemaPack {
     pub fn from_json(s: &str) -> Result<Self, SchemaPackError> {
         // Reject multiline JSON — schema-pack:: must be single-line
         if s.contains('\n') {
-            return Err(SchemaPackError::InvalidJson(
-                serde_json::Value::String(s.to_string()),
-            ));
+            return Err(SchemaPackError::InvalidJson(serde_json::Value::String(
+                s.to_string(),
+            )));
         }
 
-        let value: serde_json::Value =
-            serde_json::from_str(s).map_err(|e| SchemaPackError::InvalidJson(serde_json::Value::String(s.to_string())))?;
+        let value: serde_json::Value = serde_json::from_str(s)
+            .map_err(|e| SchemaPackError::InvalidJson(serde_json::Value::String(s.to_string())))?;
 
         let pack: SchemaPack = serde_json::from_value(value)
             .map_err(|e| SchemaPackError::InvalidJson(serde_json::Value::String(s.to_string())))?;
@@ -149,14 +149,7 @@ impl SchemaPack {
 fn is_known_value_type(t: &str) -> bool {
     matches!(
         t,
-        "string"
-            | "boolean"
-            | "number"
-            | "integer"
-            | "float"
-            | "date"
-            | "array"
-            | "object"
+        "string" | "boolean" | "number" | "integer" | "float" | "date" | "array" | "object"
     )
 }
 

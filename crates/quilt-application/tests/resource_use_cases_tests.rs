@@ -60,11 +60,7 @@ async fn test_graph_snapshot_with_pages() {
     let block_repo = InMemoryBlockRepo::new();
     let page_repo = InMemoryPageRepo::new();
     let tag_repo = InMemoryTagRepo::new();
-    let use_cases = ResourceUseCasesImpl::new(
-        block_repo.clone(),
-        page_repo.clone(),
-        tag_repo,
-    );
+    let use_cases = ResourceUseCasesImpl::new(block_repo.clone(), page_repo.clone(), tag_repo);
 
     let page1 = make_page("page-1", false);
     let page2 = make_page("journal-1", true);
@@ -91,11 +87,7 @@ async fn test_list_pages_returns_all() {
     let block_repo = InMemoryBlockRepo::new();
     let page_repo = InMemoryPageRepo::new();
     let tag_repo = InMemoryTagRepo::new();
-    let use_cases = ResourceUseCasesImpl::new(
-        block_repo.clone(),
-        page_repo.clone(),
-        tag_repo,
-    );
+    let use_cases = ResourceUseCasesImpl::new(block_repo.clone(), page_repo.clone(), tag_repo);
 
     let page1 = make_page("alpha", false);
     let page2 = make_page("beta", false);
@@ -115,11 +107,7 @@ async fn test_list_pages_summary_has_is_journal_flag() {
     let block_repo = InMemoryBlockRepo::new();
     let page_repo = InMemoryPageRepo::new();
     let tag_repo = InMemoryTagRepo::new();
-    let use_cases = ResourceUseCasesImpl::new(
-        block_repo.clone(),
-        page_repo.clone(),
-        tag_repo,
-    );
+    let use_cases = ResourceUseCasesImpl::new(block_repo.clone(), page_repo.clone(), tag_repo);
 
     let journal_page = make_page("2026-06-01", true);
     insert_page(&page_repo, &journal_page).await;
@@ -136,11 +124,7 @@ async fn test_list_journals_filters_non_journals() {
     let block_repo = InMemoryBlockRepo::new();
     let page_repo = InMemoryPageRepo::new();
     let tag_repo = InMemoryTagRepo::new();
-    let use_cases = ResourceUseCasesImpl::new(
-        block_repo.clone(),
-        page_repo.clone(),
-        tag_repo,
-    );
+    let use_cases = ResourceUseCasesImpl::new(block_repo.clone(), page_repo.clone(), tag_repo);
 
     let regular = make_page("regular", false);
     let journal = make_page("2026-06-01", true);
