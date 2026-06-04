@@ -24,7 +24,7 @@ import toast from 'react-hot-toast'
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export type CardShape = 'reference' | 'content' | 'inline'
+export type CardShape = 'reference' | 'content' | 'inline' | 'kanban-card' | 'timeline-card'
 
 export interface BlockCard {
   /** The card's visual shape. */
@@ -394,10 +394,14 @@ function ContentShape({ card, title, children }: CardRendererProps) {
 
 /** inline-shape: no card wrapper, just the children with a className. */
 function InlineShape({ card, children }: CardRendererProps) {
+  // T-22: when invoked from the V1 placeholder path for
+  // kanban-card / timeline-card, `card.shape` will be the original
+  // shape name and we use that. For the default inline case it's
+  // 'inline'. Either way, we render the actual card.shape value.
   return (
     <div
       data-testid="card-renderer"
-      data-shape="inline"
+      data-shape={card.shape}
       data-template={card.templateName}
       className={card.cssclass}
       style={{ display: 'contents' }}
@@ -425,6 +429,14 @@ export function CardRenderer(props: CardRendererProps) {
     case 'content':
       return <ContentShape {...props} />
     case 'inline':
+      return <InlineShape {...props} />
+    case 'kanban-card':
+    case 'timeline-card':
+      // V1 placeholder: render with the original shape name preserved
+      // on the data-shape attribute so user CSS can hook into it. The
+      // actual kanban board / timeline wrappers will be added in a
+      // follow-up. We use the same wrapper as InlineShape but override
+      // data-shape via the card prop's shape field.
       return <InlineShape {...props} />
     default:
       // Unknown shape — render as inline with a console warning so the

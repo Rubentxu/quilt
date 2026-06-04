@@ -76,4 +76,48 @@ describe('CardRenderer (ADR-0007)', () => {
     )
     warn.mockRestore()
   })
+
+  // T-22: F14 extends CardShape with kanban-card and timeline-card.
+  // V1: both new shapes render via InlineShape (placeholder) but
+  // preserve the data-shape attribute so user CSS can hook into them.
+  it('renders kanban-card shape (V1 placeholder) preserving data-shape', () => {
+    const card: BlockCard = {
+      shape: 'kanban-card',
+      templateName: 'kanban-task',
+    }
+    const { container } = render(<CardRenderer {...baseProps} card={card} />)
+    const root = screen.getByTestId('card-renderer')
+    expect(root.getAttribute('data-shape')).toBe('kanban-card')
+    expect(root.getAttribute('data-template')).toBe('kanban-task')
+    expect(container.firstChild).not.toBeNull()
+  })
+
+  it('renders timeline-card shape (V1 placeholder) preserving data-shape', () => {
+    const card: BlockCard = {
+      shape: 'timeline-card',
+      templateName: 'timeline-event',
+    }
+    const { container } = render(<CardRenderer {...baseProps} card={card} />)
+    const root = screen.getByTestId('card-renderer')
+    expect(root.getAttribute('data-shape')).toBe('timeline-card')
+    expect(root.getAttribute('data-template')).toBe('timeline-event')
+    expect(container.firstChild).not.toBeNull()
+  })
+
+  // T-22: pre-change shapes are byte-identical — reference shape still
+  // renders with all meta and template attrs.
+  it('reference shape is unchanged after CardShape extension (regression)', () => {
+    const card: BlockCard = {
+      shape: 'reference',
+      icon: '🔗',
+      templateName: 'reference',
+    }
+    render(
+      <CardRenderer {...baseProps} card={card} metas={[{ key: 'author', value: 'alice' }]} />,
+    )
+    const root = screen.getByTestId('card-renderer')
+    expect(root.getAttribute('data-shape')).toBe('reference')
+    expect(screen.getByText('author:')).toBeInTheDocument()
+    expect(screen.getByText('alice')).toBeInTheDocument()
+  })
 })
