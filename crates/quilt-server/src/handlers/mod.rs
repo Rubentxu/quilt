@@ -12,6 +12,7 @@ pub mod health;
 pub mod metrics;
 pub mod navigate;
 pub mod pages;
+pub mod query;
 pub mod search;
 pub mod settings;
 pub mod templates;
