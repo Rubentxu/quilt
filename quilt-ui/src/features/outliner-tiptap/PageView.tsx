@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal, FileText, Link } from 'lucide-react'
+import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal, FileText, Link, LayoutGrid, List } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
 import { DndContext, closestCenter, useDndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -21,6 +21,7 @@ import { useConnection } from '@shared/contexts/ConnectionContext'
 import type { Block } from '@shared/types/api'
 import { flattenBlockTree, type FlatBlock } from './flattenTree'
 import { formatJournalDate } from '@shared/utils/formatJournalDate'
+import { KanbanBoard, useKanbanGrouping } from '../kanban'
 
 interface PageViewProps {
   pageName: string
@@ -534,6 +535,53 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set())
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectionAnchor, setSelectionAnchor] = useState<string | null>(null)
+
+  // Kanban view state
+  const [view, setView] = useState<'list' | 'kanban'>('list')
+  const navigate = useNavigate()
+
+  // Determine if Kanban view is available based on block properties
+  const kanbanGrouping = useKanbanGrouping(blocks)
+
+  // Read view from URL param on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('view') === 'kanban' && kanbanGrouping.isValid) {
+      setView('kanban')
+    }
+  }, [kanbanGrouping.isValid])
+
+  // Toggle between list and kanban view
+  const handleViewToggle = useCallback(() => {
+    const newView = view === 'list' ? 'kanban' : 'list'
+    setView(newView)
+    // Update URL param without navigation
+    const url = new URL(window.location.href)
+    if (newView === 'kanban') {
+      url.searchParams.set('view', 'kanban')
+    } else {
+      url.searchParams.delete('view')
+    }
+    window.history.replaceState({}, '', url.toString())
+  }, [view])
+
+  // Handle property change (for kanban card moves)
+  const handleKanbanPropertyChange = useCallback(
+    async (blockId: string, key: string, value: string) => {
+      try {
+        await api.setBlockProperty(blockId, key, value)
+        // Refresh blocks after property change
+        const updatedBlocks = await api.getPageBlocks(pageName)
+        setBlocks(updatedBlocks)
+      } catch (err) {
+        toast.error('Failed to update property')
+        // Revert by re-fetching
+        const freshBlocks = await api.getPageBlocks(pageName)
+        setBlocks(freshBlocks)
+      }
+    },
+    [pageName],
+  )
 
   // ADR-0007: index of `template/*` pages → their card definition. Built
   // once per page render and passed to `getBlockCard` for each block.
@@ -1489,14 +1537,55 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
 
       {/* Non-journal page title */}
       {!isJournal && (
-        <h1
-          className="type-display-sm"
+        <div
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             marginBottom: 'var(--space-6)',
           }}
         >
-          {pageName}
-        </h1>
+          <h1 className="type-display-sm" style={{ margin: 0 }}>
+            {pageName}
+          </h1>
+
+          {/* View toggle — only visible when Kanban grouping is available */}
+          {kanbanGrouping.isValid && (
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <button
+                type="button"
+                onClick={handleViewToggle}
+                aria-label={view === 'kanban' ? 'Switch to list view' : 'Switch to kanban view'}
+                data-testid="view-toggle"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                  padding: 'var(--space-2) var(--space-3)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  background: view === 'kanban' ? 'var(--color-surface-subtle)' : 'var(--color-surface)',
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                }}
+              >
+                {view === 'kanban' ? (
+                  <>
+                    <List size={14} />
+                    List
+                  </>
+                ) : (
+                  <>
+                    <LayoutGrid size={14} />
+                    Kanban
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Block list (virtualized) or empty state */}
@@ -1504,6 +1593,12 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
         <EmptyState
           isJournal={isJournal}
           onCreateBlock={handleCreateFromTemplatePicker}
+        />
+      ) : view === 'kanban' && kanbanGrouping.isValid ? (
+        <KanbanBoard
+          propertyKey={kanbanGrouping.propertyKey}
+          blocks={blocks}
+          onPropertyChange={handleKanbanPropertyChange}
         />
       ) : (
         <div

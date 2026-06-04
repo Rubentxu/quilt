@@ -392,6 +392,108 @@ function ContentShape({ card, title, children }: CardRendererProps) {
   )
 }
 
+/** kanban-card shape: compact card with title, 2 metas, and footer. */
+function KanbanCardShape({ card, title, metas, children }: CardRendererProps) {
+  return (
+    <div
+      data-testid="card-renderer"
+      data-shape={card.shape}
+      data-template={card.templateName}
+      className={card.cssclass}
+      style={{
+        background: 'var(--color-surface)',
+        borderRadius: 'var(--radius-md)',
+        padding: 'var(--space-3)',
+        boxShadow: 'var(--shadow-sm)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--space-2)',
+      }}
+    >
+      {/* Icon + Title */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)' }}>
+        {card.icon && (
+          <span
+            aria-hidden="true"
+            style={{
+              fontSize: '16px',
+              flexShrink: 0,
+              marginTop: '2px',
+            }}
+          >
+            {card.icon}
+          </span>
+        )}
+        <div
+          style={{
+            fontSize: '14px',
+            fontWeight: 600,
+            color: 'var(--color-text-primary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+          }}
+        >
+          {title}
+        </div>
+      </div>
+
+      {/* Meta properties (up to 2) */}
+      {metas && metas.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 'var(--space-1)',
+          }}
+        >
+          {metas.slice(0, 2).map((m) => (
+            <span
+              key={m.key}
+              style={{
+                fontSize: '11px',
+                color: 'var(--color-text-muted)',
+                background: 'var(--color-surface-subtle)',
+                padding: '2px 6px',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              {m.key}: {m.value}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div
+        style={{
+          fontSize: '10px',
+          color: 'var(--color-text-muted)',
+          borderTop: '1px solid var(--color-border)',
+          paddingTop: 'var(--space-2)',
+          marginTop: 'auto',
+        }}
+      >
+        {card.templateName}
+      </div>
+
+      {/* Children (block content) */}
+      {children && (
+        <div
+          style={{
+            fontSize: '13px',
+            color: 'var(--color-text-secondary)',
+            lineHeight: 1.5,
+          }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** inline-shape: no card wrapper, just the children with a className. */
 function InlineShape({ card, children }: CardRendererProps) {
   // T-22: when invoked from the V1 placeholder path for
@@ -431,13 +533,10 @@ export function CardRenderer(props: CardRendererProps) {
     case 'inline':
       return <InlineShape {...props} />
     case 'kanban-card':
+      return <KanbanCardShape {...props} />
     case 'timeline-card':
-      // V1 placeholder: render with the original shape name preserved
-      // on the data-shape attribute so user CSS can hook into it. The
-      // actual kanban board / timeline wrappers will be added in a
-      // follow-up. We use the same wrapper as InlineShape but override
-      // data-shape via the card prop's shape field.
-      return <InlineShape {...props} />
+      // Timeline uses same card shape but could have different styling
+      return <KanbanCardShape {...props} />
     default:
       // Unknown shape — render as inline with a console warning so the
       // user/dev knows their template page has an invalid card-shape::

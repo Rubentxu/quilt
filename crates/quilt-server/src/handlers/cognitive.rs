@@ -302,3 +302,307 @@ pub async fn mental_model(
         "goals": []
     })))
 }
+
+// ─── Analysis endpoints for Dream Cycle Display (G7) ────────────────────────────────────────
+// These are display-only REST endpoints returning cognitive analysis results.
+
+// Query params for analysis connections
+#[derive(Debug, Deserialize)]
+pub struct AnalysisConnectionsParams {
+    #[serde(default = "default_connection_limit")]
+    pub limit: usize,
+}
+
+fn default_connection_limit() -> usize {
+    10
+}
+
+// Mirror analysis DTO — structural map of clusters, gaps, frontiers, density
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MirrorAnalysisDto {
+    pub clusters: Vec<ClusterDto>,
+    pub gaps: Vec<GapDto>,
+    pub frontiers: Vec<String>,
+    pub density: f64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterDto {
+    pub block_ids: Vec<String>,
+    pub theme: Option<String>,
+    pub coherence_score: f32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GapDto {
+    pub from_block: String,
+    pub to_block: String,
+    pub shared_refs: Vec<String>,
+}
+
+// Connections analysis DTO
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionDto {
+    pub pairs: Vec<ConnectionPairDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionPairDto {
+    pub block_a: String,
+    pub block_b: String,
+    pub score: f32,
+    pub reason: String,
+}
+
+// Gardener analysis DTO — beliefs and suggestions
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GardenerDto {
+    pub beliefs: Vec<BeliefDto>,
+    pub suggestions: Vec<DeepeningSuggestionDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BeliefDto {
+    pub id: String,
+    pub statement: String,
+    pub confidence: f64,
+    pub last_updated: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeepeningSuggestionDto {
+    pub concept: String,
+    pub current_depth: usize,
+    pub suggested_questions: Vec<String>,
+}
+
+// ─── Analysis routes ─────────────────────────────────────────────────────────────────────
+
+/// Create router for /api/v1/analysis
+pub fn analysis_routes() -> Router {
+    Router::new()
+        .route("/mirror", get(analysis_mirror))
+        .route("/connections", get(analysis_connections))
+        .route("/gardener", get(analysis_gardener))
+}
+
+/// GET /api/v1/analysis/mirror
+///
+/// Returns structural mirror analysis: clusters, gaps, frontiers, density.
+/// Display-only endpoint for the Dream Cycle cognitive panel.
+#[instrument(skip(state))]
+pub async fn analysis_mirror(
+    Extension(state): Extension<AppState>,
+) -> Result<Json<MirrorAnalysisDto>, AppError> {
+    // Get all blocks from the database for analysis
+    let blocks = state
+        .pool
+        .get_all_blocks()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    if blocks.is_empty() {
+        return Ok(Json(MirrorAnalysisDto {
+            clusters: Vec::new(),
+            gaps: Vec::new(),
+            frontiers: Vec::new(),
+            density: 0.0,
+        }));
+    }
+
+    // Use the structural mirror if available
+    let Some(mirror) = &state.cognitive_mirror else {
+        return Ok(MirrorAnalysisDto {
+            clusters: Vec::new(),
+            gaps: Vec::new(),
+            frontiers: Vec::new(),
+            density: 0.0,
+        });
+    };
+
+    // Analyze the blocks - convert to domain Block format
+    use quilt_domain::entities::Block;
+    use quilt_domain::value_objects::{BlockFormat, Uuid};
+
+    let domain_blocks: Vec<Block> = blocks
+        .into_iter()
+        .map(|b| {
+            let refs: Vec<Uuid> = b
+                .refs
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|r| Uuid::parse_str(r).ok())
+                .collect();
+            Block {
+                id: Uuid::parse_str(&b.id).unwrap_or_else(|_| Uuid::new_v4()),
+                page_id: Uuid::parse_str(&b.page_id).unwrap_or_else(|_| Uuid::new_v4()),
+                parent_id: b.parent_id.and_then(|p| Uuid::parse_str(&p).ok()),
+                order: b.order.unwrap_or(1.0),
+                level: b.level.unwrap_or(0) as i32,
+                format: BlockFormat::Markdown,
+                marker: b.marker.as_ref().and_then(|m| m.parse().ok()),
+                priority: b.priority.as_ref().and_then(|p| p.parse().ok()),
+                content: b.content.unwrap_or_default(),
+                properties: std::collections::HashMap::new(),
+                refs,
+                tags: Vec::new(),
+                scheduled: None,
+                deadline: None,
+                start_time: None,
+                repeated: None,
+                collapsed: false,
+                created_at: b
+                    .created_at
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(chrono::Utc::now),
+                updated_at: b
+                    .updated_at
+                    .and_then(|s| chrono::DateTime::parse_from_rfc3339(&s).ok())
+                    .map(|dt| dt.with_timezone(&chrono::Utc))
+                    .unwrap_or_else(chrono::Utc::now),
+            }
+        })
+        .collect();
+
+    let structure_map = mirror.analyze_blocks(&domain_blocks).await;
+
+    // Convert to DTOs
+    let clusters = structure_map
+        .clusters
+        .into_iter()
+        .map(|c| ClusterDto {
+            block_ids: c.block_ids.iter().map(|u| u.to_string()).collect(),
+            theme: c.theme,
+            coherence_score: c.coherence_score,
+        })
+        .collect();
+
+    let gaps = structure_map
+        .gaps
+        .into_iter()
+        .map(|g| GapDto {
+            from_block: g.from.to_string(),
+            to_block: g.to.to_string(),
+            shared_refs: g.shared_refs.iter().map(|u| u.to_string()).collect(),
+        })
+        .collect();
+
+    let frontiers = structure_map
+        .frontiers
+        .iter()
+        .map(|u| u.to_string())
+        .collect();
+
+    // Calculate average density
+    let density = if structure_map.density.is_empty() {
+        0.0
+    } else {
+        structure_map.density.values().copied().sum::<f32>() as f64
+            / structure_map.density.len() as f64
+    };
+
+    Ok(Json(MirrorAnalysisDto {
+        clusters,
+        gaps,
+        frontiers,
+        density,
+    }))
+}
+
+/// GET /api/v1/analysis/connections
+///
+/// Returns serendipitous connections between blocks.
+/// Limits results to 50 maximum regardless of requested limit.
+#[instrument(skip(state))]
+pub async fn analysis_connections(
+    Extension(state): Extension<AppState>,
+    Query(params): Query<AnalysisConnectionsParams>,
+) -> Result<Json<ConnectionDto>, AppError> {
+    // Clamp limit to 50
+    let limit = params.limit.min(50);
+
+    // Get all blocks
+    let blocks = state
+        .pool
+        .get_all_blocks()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    if blocks.is_empty() {
+        return Ok(Json(ConnectionDto { pairs: Vec::new() }));
+    }
+
+    // Use the serendipity engine if available
+    let Some(engine) = &state.serendipity_engine else {
+        return Ok(Json(ConnectionDto { pairs: Vec::new() }));
+    };
+
+    // Build query for the engine
+    use crate::connection_engine::types::SerendipityQuery;
+    let query = SerendipityQuery {
+        topic: None,
+        limit,
+        offset: 0,
+        min_confidence: 0.1,
+        temporal_window_days: Some(30),
+        page_id: None,
+    };
+
+    let connections = engine
+        .find_connections(query)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Convert to DTOs
+    let pairs = connections
+        .into_iter()
+        .map(|c| ConnectionPairDto {
+            block_a: c.idea_a.to_string(),
+            block_b: c.idea_b.to_string(),
+            score: c.confidence,
+            reason: c.explanation,
+        })
+        .collect();
+
+    Ok(Json(ConnectionDto { pairs }))
+}
+
+/// GET /api/v1/analysis/gardener
+///
+/// Returns belief suggestions from the structure gardener.
+/// Display-only endpoint for cognitive panel.
+#[instrument(skip(state))]
+pub async fn analysis_gardener(
+    Extension(state): Extension<AppState>,
+) -> Result<Json<GardenerDto>, AppError> {
+    // Get all blocks
+    let blocks = state
+        .pool
+        .get_all_blocks()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    if blocks.is_empty() {
+        return Ok(Json(GardenerDto {
+            beliefs: Vec::new(),
+            suggestions: Vec::new(),
+        }));
+    }
+
+    // For now, return empty beliefs and suggestions
+    // The StructureGardener would need to be integrated into state
+    // to provide real suggestions
+    Ok(Json(GardenerDto {
+        beliefs: Vec::new(),
+        suggestions: Vec::new(),
+    }))
+}

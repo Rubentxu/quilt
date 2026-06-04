@@ -57,7 +57,8 @@ pub fn create_app(state: AppState) -> Router {
     #[cfg(feature = "cognitive")]
     let router = router
         .nest("/api/v1/ai-config", handlers::ai_config::routes())
-        .nest("/api/v1/cognitive", handlers::cognitive::routes());
+        .nest("/api/v1/cognitive", handlers::cognitive::routes())
+        .nest("/api/v1/analysis", handlers::cognitive::analysis_routes());
 
     // Layers
     // Order (outermost → innermost):

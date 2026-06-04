@@ -287,4 +287,78 @@ export const api = {
 
     return res.json() as Promise<QueryResult>;
   },
+
+  // ─── Analysis endpoints (G7 Dream Cycle) ────────────────────────────
+
+  /**
+   * GET /api/v1/analysis/mirror
+   * Returns structural mirror analysis: clusters, gaps, frontiers, density.
+   */
+  getAnalysisMirror: () =>
+    fetchJson<MirrorAnalysisDto>('/analysis/mirror'),
+
+  /**
+   * GET /api/v1/analysis/connections
+   * Returns serendipitous connections between blocks.
+   * @param limit Maximum number of connections (clamped to 50 server-side)
+   */
+  getAnalysisConnections: (limit = 10) =>
+    fetchJson<ConnectionDto>(`/analysis/connections?limit=${limit}`),
+
+  /**
+   * GET /api/v1/analysis/gardener
+   * Returns belief suggestions from the structure gardener.
+   */
+  getAnalysisGardener: () =>
+    fetchJson<GardenerDto>('/analysis/gardener'),
 };
+
+// ─── Analysis DTOs ──────────────────────────────────────────────────────
+
+export interface MirrorAnalysisDto {
+  clusters: ClusterDto[]
+  gaps: GapDto[]
+  frontiers: string[]
+  density: number
+}
+
+export interface ClusterDto {
+  block_ids: string[]
+  theme: string | null
+  coherence_score: number
+}
+
+export interface GapDto {
+  from_block: string
+  to_block: string
+  shared_refs: string[]
+}
+
+export interface ConnectionDto {
+  pairs: ConnectionPairDto[]
+}
+
+export interface ConnectionPairDto {
+  block_a: string
+  block_b: string
+  score: number
+  reason: string
+}
+
+export interface GardenerDto {
+  beliefs: BeliefDto[]
+  suggestions: DeepeningSuggestionDto[]
+}
+
+export interface BeliefDto {
+  id: string
+  statement: string
+  confidence: number
+  last_updated: string
+}
+
+export interface DeepeningSuggestionDto {
+  concept: string
+  current_depth: number
+  suggested_questions: string[]
+}
