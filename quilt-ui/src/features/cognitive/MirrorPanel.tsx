@@ -315,6 +315,72 @@ export function MirrorPanel({ refreshInterval = 300000 }: MirrorPanelProps) {
           </div>
         </div>
       )}
+
+      {/* Top Influencers */}
+      {data && data.top_influencers.length > 0 && (
+        <div
+          style={{
+            padding: 'var(--space-2)',
+            borderTop: '1px solid var(--color-border)',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '10px',
+              fontWeight: 600,
+              color: 'var(--color-text-muted)',
+              marginBottom: 'var(--space-1)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+            }}
+          >
+            Top Influencers ({data.top_influencers.length})
+          </div>
+          {data.top_influencers.slice(0, 5).map((influencer, idx) => (
+            <div
+              key={idx}
+              data-testid="mirror-influencer"
+              style={{
+                fontSize: '11px',
+                padding: 'var(--space-1) 0',
+                color: 'var(--color-text-secondary)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: '10px',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
+                {influencer.block_id.slice(0, 8)}
+              </span>
+              <span
+                style={{
+                  fontWeight: 500,
+                  color: 'var(--color-primary)',
+                }}
+              >
+                {(influencer.influence_score * 100).toFixed(1)}%
+              </span>
+            </div>
+          ))}
+          {data.top_influencers.length > 5 && (
+            <div
+              style={{
+                fontSize: '10px',
+                color: 'var(--color-text-muted)',
+                fontStyle: 'italic',
+              }}
+            >
+              +{data.top_influencers.length - 5} more influencers
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

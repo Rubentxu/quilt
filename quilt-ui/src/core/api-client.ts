@@ -320,6 +320,7 @@ export interface MirrorAnalysisDto {
   gaps: GapDto[]
   frontiers: string[]
   density: number
+  top_influencers: InfluencerDto[]
 }
 
 export interface ClusterDto {
@@ -332,6 +333,11 @@ export interface GapDto {
   from_block: string
   to_block: string
   shared_refs: string[]
+}
+
+export interface InfluencerDto {
+  block_id: string
+  influence_score: number
 }
 
 export interface ConnectionDto {

@@ -114,7 +114,7 @@ describe('KanbanBoard', () => {
     expect(todoColumn).toBeDefined()
   })
 
-  it('4.1 [TEST] shows blocks without the property in an "uncategorized" column', () => {
+  it('4.1 [TEST] shows blocks without the property in an "Unset" column', () => {
     const blocksWithoutProperty: Block[] = [
       {
         ...mockBlocks[0],
@@ -131,8 +131,8 @@ describe('KanbanBoard', () => {
       />
     )
 
-    // Should show an uncategorized column
-    const uncategorized = screen.getByTestId('kanban-column-uncategorized')
-    expect(uncategorized).toBeInTheDocument()
+    // Should show an Unset column
+    const unset = screen.getByTestId('kanban-column-unset')
+    expect(unset).toBeInTheDocument()
   })
 })

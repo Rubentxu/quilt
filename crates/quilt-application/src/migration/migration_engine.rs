@@ -5,8 +5,9 @@
 use crate::migration::{parse_md_import, Frontmatter, MigrationError as ParseMigrationError, RawBlock};
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
+use quilt_domain::properties::resolver::PropertyKeyResolver;
 use quilt_domain::properties::types::PropertyType;
-use quilt_domain::repositories::{BlockRepository, PageRepository};
+use quilt_domain::repositories::{BlockRepository, PageRepository, PropertyRepository};
 use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid};
 use quilt_domain::errors::DomainError;
 use std::path::Path;
@@ -41,17 +42,19 @@ pub enum MigrationError {
     Io(#[from] std::io::Error),
 }
 
-/// Migration engine - generic over page and block repositories.
-pub struct MigrationEngine<PR: PageRepository, BR: BlockRepository> {
+/// Migration engine - generic over page, block, and property repositories.
+pub struct MigrationEngine<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> {
     page_repo: Arc<PR>,
     block_repo: Arc<BR>,
+    property_repo: Arc<PropR>,
 }
 
-impl<PR: PageRepository, BR: BlockRepository> MigrationEngine<PR, BR> {
-    pub fn new(page_repo: Arc<PR>, block_repo: Arc<BR>) -> Self {
+impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> MigrationEngine<PR, BR, PropR> {
+    pub fn new(page_repo: Arc<PR>, block_repo: Arc<BR>, property_repo: Arc<PropR>) -> Self {
         Self {
             page_repo,
             block_repo,
+            property_repo,
         }
     }
 
@@ -99,8 +102,10 @@ impl<PR: PageRepository, BR: BlockRepository> MigrationEngine<PR, BR> {
             .map_err(|e| MigrationError::Import(e.to_string()))?;
 
         // Create blocks from parsed raw blocks
+        let resolver = PropertyKeyResolver::new(self.property_repo.clone());
         let blocks_created = create_blocks_from_raw(
             self.block_repo.as_ref(),
+            &resolver,
             &raw_blocks,
             page_id,
         )
@@ -151,8 +156,10 @@ impl<PR: PageRepository, BR: BlockRepository> MigrationEngine<PR, BR> {
 }
 
 /// Create blocks from parsed raw blocks using iterative approach with a work stack.
-async fn create_blocks_from_raw<BR: BlockRepository>(
+/// Uses PropertyKeyResolver to normalize property keys (case-insensitive, builtin match).
+async fn create_blocks_from_raw<BR: BlockRepository, PropR: PropertyRepository>(
     block_repo: &BR,
+    resolver: &PropertyKeyResolver<PropR>,
     raw_blocks: &[RawBlock],
     page_id: Uuid,
 ) -> Result<usize, MigrationError> {
@@ -164,10 +171,16 @@ async fn create_blocks_from_raw<BR: BlockRepository>(
     while let Some((blocks, parent_id, mut order)) = stack.pop() {
         for raw in blocks {
             // Convert raw properties to PropertyValue map
+            // Use resolver to normalize keys (case-insensitive, builtin match)
             let mut properties = std::collections::HashMap::new();
             for prop in &raw.properties {
                 let pv = infer_property_value(&prop.value);
-                properties.insert(prop.key.clone(), pv);
+                // Resolve the key to get the canonical (lowercase) property key
+                let canonical_key = match resolver.resolve(&prop.key).await {
+                    Ok(def) => def.db_ident.clone(),
+                    Err(_) => prop.key.to_lowercase(),
+                };
+                properties.insert(canonical_key, pv);
             }
 
             let block_create = BlockCreate {
@@ -203,7 +216,7 @@ async fn create_blocks_from_raw<BR: BlockRepository>(
 pub fn infer_property_value(value: &str) -> PropertyValue {
     let trimmed = value.trim();
 
-    // Check for boolean
+    // Check for boolean (true/false - checkbox detection)
     if trimmed.eq_ignore_ascii_case("true") {
         return PropertyValue::Boolean(true);
     }
@@ -219,6 +232,17 @@ pub fn infer_property_value(value: &str) -> PropertyValue {
         return PropertyValue::Float(f);
     }
 
+    // Check for date: YYYY-MM-DDTHH:MM:SS format first
+    if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(trimmed, "%Y-%m-%dT%H:%M:%S") {
+        return PropertyValue::Date(dt.and_utc());
+    }
+
+    // Check for date: YYYY-MM-DD format
+    if let Ok(date) = chrono::NaiveDate::parse_from_str(trimmed, "%Y-%m-%d") {
+        let dt = date.and_hms_opt(0, 0, 0).unwrap();
+        return PropertyValue::Date(dt.and_utc());
+    }
+
     // Default to string
     PropertyValue::String(trimmed.to_string())
 }
@@ -227,6 +251,11 @@ pub fn infer_property_value(value: &str) -> PropertyValue {
 mod tests {
     use super::*;
     use crate::migration::parse_md_import;
+    use async_trait::async_trait;
+    use quilt_domain::errors::DomainError;
+    use quilt_domain::properties::definition::PropertyDefinition;
+    use quilt_domain::properties::types::{Cardinality, PropertyType, ViewContext};
+    use std::collections::HashMap;
 
     #[test]
     fn infer_property_value_tests() {
@@ -236,5 +265,142 @@ mod tests {
         assert!(matches!(infer_property_value("123"), PropertyValue::Integer(123)));
         assert!(matches!(infer_property_value("3.14"), PropertyValue::Float(f) if (f - 3.14).abs() < 0.001));
         assert!(matches!(infer_property_value("hello"), PropertyValue::String(s) if s == "hello"));
+    }
+
+    #[test]
+    fn infer_property_value_date_tests() {
+        // Date detection: YYYY-MM-DD format
+        let result = infer_property_value("2024-01-15");
+        assert!(matches!(result, PropertyValue::Date(_)));
+        if let PropertyValue::Date(dt) = result {
+            assert_eq!(dt.naive_utc().date().to_string(), "2024-01-15");
+        }
+
+        // DateTime detection: YYYY-MM-DDTHH:MM:SS format
+        let result = infer_property_value("2024-12-31T23:59:59");
+        assert!(matches!(result, PropertyValue::Date(_)));
+        if let PropertyValue::Date(dt) = result {
+            assert_eq!(dt.naive_utc().date().to_string(), "2024-12-31");
+            assert_eq!(dt.naive_utc().time().to_string(), "23:59:59");
+        }
+
+        // Edge case: YYYY-MM-DD at month boundary
+        let result = infer_property_value("2024-01-01");
+        assert!(matches!(result, PropertyValue::Date(_)));
+
+        // Not a date: YYYY-MM-DD but with invalid month/day falls back to String
+        let result = infer_property_value("2024-13-45");
+        assert!(matches!(result, PropertyValue::String(_)));
+
+        // Not a date: looks like date but has extra text
+        let result = infer_property_value("2024-01-15 some text");
+        assert!(matches!(result, PropertyValue::String(_)));
+    }
+
+    // Mock PropertyRepository for testing resolver integration
+    mod mock_property_repo {
+        use super::*;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        #[derive(Default)]
+        pub struct MockPropertyRepo {
+            pub properties: HashMap<String, PropertyDefinition>,
+            pub consult_count: AtomicUsize,
+        }
+
+        #[async_trait]
+        impl PropertyRepository for MockPropertyRepo {
+            async fn get_by_id(&self, _id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
+                Ok(None)
+            }
+
+            async fn get_by_db_ident(&self, ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+                self.consult_count.fetch_add(1, Ordering::SeqCst);
+                Ok(self.properties.get(ident).cloned())
+            }
+
+            async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
+                Ok(self.properties.values().cloned().collect())
+            }
+
+            async fn insert(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
+                Ok(())
+            }
+
+            async fn update(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
+                Ok(())
+            }
+
+            async fn get_closed_values(
+                &self,
+                _property_id: Uuid,
+            ) -> Result<Vec<quilt_domain::properties::types::ClosedValue>, DomainError> {
+                Ok(Vec::new())
+            }
+
+            async fn delete(&self, _id: Uuid) -> Result<(), DomainError> {
+                Ok(())
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_resolver_normalizes_case_insensitive_keys() {
+        use mock_property_repo::MockPropertyRepo;
+
+        // Create a mock property repo with a custom property
+        let custom_prop = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "custom/property".to_string(),
+            "Custom Property".to_string(),
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Block);
+
+        let mock_repo = MockPropertyRepo {
+            properties: HashMap::from([(custom_prop.db_ident.clone(), custom_prop.clone())]),
+            ..Default::default()
+        };
+
+        let repo = Arc::new(mock_repo);
+        let resolver = PropertyKeyResolver::new(repo.clone());
+
+        // Test that mixed-case key resolves to the same definition
+        let result1 = resolver.resolve("CUSTOM/PROPERTY").await;
+        assert!(result1.is_ok());
+        assert_eq!(result1.unwrap().db_ident, "custom/property");
+
+        let result2 = resolver.resolve("Custom/Property").await;
+        assert!(result2.is_ok());
+        assert_eq!(result2.unwrap().db_ident, "custom/property");
+
+        // Verify the repo was consulted (not just builtin fallback)
+        // The mock should have been called for these lookups
+        assert!(repo.consult_count.load(std::sync::atomic::Ordering::SeqCst) >= 2);
+    }
+
+    #[tokio::test]
+    async fn test_resolver_falls_back_to_builtin() {
+        use mock_property_repo::MockPropertyRepo;
+
+        let mock_repo: Arc<MockPropertyRepo> = Arc::new(Default::default());
+        let resolver = PropertyKeyResolver::new(mock_repo.clone());
+
+        // "logseq.property/priority" is a builtin property
+        let result = resolver.resolve("logseq.property/priority").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().db_ident, "logseq.property/priority");
+    }
+
+    #[tokio::test]
+    async fn test_resolver_unknown_key_returns_not_found() {
+        use mock_property_repo::MockPropertyRepo;
+
+        let mock_repo: Arc<MockPropertyRepo> = Arc::new(Default::default());
+        let resolver = PropertyKeyResolver::new(mock_repo);
+
+        let result = resolver.resolve("nonexistent/property").await;
+        assert!(result.is_err());
     }
 }

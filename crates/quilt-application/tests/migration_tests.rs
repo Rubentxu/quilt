@@ -2,11 +2,54 @@
 //!
 //! Tests the Markdown parser and MigrationEngine with fixtures and property-based testing.
 
+use async_trait::async_trait;
 use quilt_application::migration::{parse_md_import, Frontmatter, MigrationEngine, infer_property_value};
-use quilt_domain::repositories::PageRepository;
-use quilt_domain::value_objects::PropertyValue;
+use quilt_domain::errors::DomainError;
+use quilt_domain::properties::definition::PropertyDefinition;
+use quilt_domain::properties::types::ClosedValue;
+use quilt_domain::repositories::{PageRepository, PropertyRepository};
+use quilt_domain::value_objects::{PropertyValue, Uuid};
 use quilt_test_helpers::{InMemoryBlockRepo, InMemoryPageRepo};
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
+
+/// In-memory property repository for testing
+#[derive(Default)]
+struct InMemoryPropertyRepo {
+    properties: HashMap<String, PropertyDefinition>,
+}
+
+#[async_trait]
+impl PropertyRepository for InMemoryPropertyRepo {
+    async fn get_by_id(&self, _id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
+        Ok(None)
+    }
+
+    async fn get_by_db_ident(&self, ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+        Ok(self.properties.get(ident).cloned())
+    }
+
+    async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
+        Ok(self.properties.values().cloned().collect())
+    }
+
+    async fn insert(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn update(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn get_closed_values(&self, _property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
+        Ok(Vec::new())
+    }
+
+    async fn delete(&self, _id: Uuid) -> Result<(), DomainError> {
+        Ok(())
+    }
+}
 
 /// Helper to get path to a test fixture
 fn fixture_path(name: &str) -> PathBuf {
@@ -170,10 +213,14 @@ fn test_infer_string_when_not_numeric_or_boolean() {
 }
 
 #[test]
-fn test_infer_date_like_strings_stay_as_strings() {
-    // Date-like strings are not automatically parsed as dates at this level
-    assert!(matches!(infer_property_value("2024-01-15"), PropertyValue::String(_)));
-    assert!(matches!(infer_property_value("2024-12-31"), PropertyValue::String(_)));
+fn test_infer_date_like_strings_as_dates() {
+    // Date-like strings ARE automatically parsed as dates (F21.2 fix)
+    assert!(matches!(infer_property_value("2024-01-15"), PropertyValue::Date(_)));
+    assert!(matches!(infer_property_value("2024-12-31"), PropertyValue::Date(_)));
+    // DateTime strings are also parsed as dates
+    assert!(matches!(infer_property_value("2024-01-15T10:30:00"), PropertyValue::Date(_)));
+    // Invalid dates fall back to string
+    assert!(matches!(infer_property_value("not-a-date"), PropertyValue::String(_)));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -290,7 +337,8 @@ fn test_parse_date_properties_fixture() {
 async fn test_migration_engine_import_simple_file() {
     let page_repo = InMemoryPageRepo::new();
     let block_repo = InMemoryBlockRepo::new();
-    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone());
+    let property_repo = Arc::new(InMemoryPropertyRepo::default());
+    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
     
     let content = load_fixture("simple.md");
     let result = engine.import_file(&content, "Test Page").await;
@@ -305,7 +353,8 @@ async fn test_migration_engine_import_simple_file() {
 async fn test_migration_engine_import_no_duplicate_page() {
     let page_repo = InMemoryPageRepo::new();
     let block_repo = InMemoryBlockRepo::new();
-    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone());
+    let property_repo = Arc::new(InMemoryPropertyRepo::default());
+    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
     
     let content = load_fixture("simple.md");
     
@@ -326,7 +375,8 @@ async fn test_migration_engine_import_no_duplicate_page() {
 async fn test_migration_engine_import_with_properties() {
     let page_repo = InMemoryPageRepo::new();
     let block_repo = InMemoryBlockRepo::new();
-    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone());
+    let property_repo = Arc::new(InMemoryPropertyRepo::default());
+    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
     
     let content = load_fixture("with_properties.md");
     let result = engine.import_file(&content, "Properties Test").await;
@@ -345,7 +395,8 @@ async fn test_migration_engine_import_with_properties() {
 async fn test_migration_engine_import_nested_blocks() {
     let page_repo = InMemoryPageRepo::new();
     let block_repo = InMemoryBlockRepo::new();
-    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone());
+    let property_repo = Arc::new(InMemoryPropertyRepo::default());
+    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
     
     let content = load_fixture("complex_nested.md");
     let result = engine.import_file(&content, "Nested Test").await;
@@ -361,7 +412,8 @@ async fn test_migration_engine_import_nested_blocks() {
 async fn test_migration_engine_import_directory_empty_dir() {
     let page_repo = InMemoryPageRepo::new();
     let block_repo = InMemoryBlockRepo::new();
-    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone());
+    let property_repo = Arc::new(InMemoryPropertyRepo::default());
+    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
     
     // Use the root directory which likely has no .md files
     let temp_dir = std::env::temp_dir();
@@ -379,7 +431,8 @@ async fn test_migration_engine_import_directory_empty_dir() {
 async fn test_migration_engine_import_directory_with_files() {
     let page_repo = InMemoryPageRepo::new();
     let block_repo = InMemoryBlockRepo::new();
-    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone());
+    let property_repo = Arc::new(InMemoryPropertyRepo::default());
+    let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
     
     // Use the fixtures directory
     let fixtures_dir = PathBuf::from("tests/fixtures/md_import");

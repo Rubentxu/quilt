@@ -317,7 +317,7 @@ fn default_connection_limit() -> usize {
     10
 }
 
-// Mirror analysis DTO — structural map of clusters, gaps, frontiers, density
+// Mirror analysis DTO — structural map of clusters, gaps, frontiers, density, top influencers
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MirrorAnalysisDto {
@@ -325,6 +325,7 @@ pub struct MirrorAnalysisDto {
     pub gaps: Vec<GapDto>,
     pub frontiers: Vec<String>,
     pub density: f64,
+    pub top_influencers: Vec<InfluencerDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -341,6 +342,13 @@ pub struct GapDto {
     pub from_block: String,
     pub to_block: String,
     pub shared_refs: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InfluencerDto {
+    pub block_id: String,
+    pub influence_score: f32,
 }
 
 // Connections analysis DTO
@@ -415,6 +423,7 @@ pub async fn analysis_mirror(
             gaps: Vec::new(),
             frontiers: Vec::new(),
             density: 0.0,
+            top_influencers: Vec::new(),
         }));
     }
 
@@ -425,6 +434,7 @@ pub async fn analysis_mirror(
             gaps: Vec::new(),
             frontiers: Vec::new(),
             density: 0.0,
+            top_influencers: Vec::new(),
         });
     };
 
@@ -510,11 +520,23 @@ pub async fn analysis_mirror(
             / structure_map.density.len() as f64
     };
 
+    // Convert top influencers - take top 10 by influence score
+    let top_influencers = structure_map
+        .influences
+        .into_iter()
+        .take(10)
+        .map(|inf| InfluencerDto {
+            block_id: inf.block_id.to_string(),
+            influence_score: inf.influence_score,
+        })
+        .collect();
+
     Ok(Json(MirrorAnalysisDto {
         clusters,
         gaps,
         frontiers,
         density,
+        top_influencers,
     }))
 }
 

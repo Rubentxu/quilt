@@ -9,6 +9,7 @@ use axum::{
     Router,
     routing::post,
 };
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,9 +18,50 @@ use tracing::instrument;
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_application::migration::MigrationEngine;
+use quilt_domain::errors::DomainError;
+use quilt_domain::properties::definition::PropertyDefinition;
+use quilt_domain::properties::types::ClosedValue;
+use quilt_domain::repositories::PropertyRepository;
+use quilt_domain::value_objects::Uuid;
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository,
 };
+
+/// Empty property repository for migration engine.
+/// Returns no custom properties, relying entirely on builtin property fallbacks.
+#[derive(Default)]
+struct EmptyPropertyRepo;
+
+#[async_trait]
+impl PropertyRepository for EmptyPropertyRepo {
+    async fn get_by_id(&self, _id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
+        Ok(None)
+    }
+
+    async fn get_by_db_ident(&self, _ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+        Ok(None)
+    }
+
+    async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
+        Ok(Vec::new())
+    }
+
+    async fn insert(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn update(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn get_closed_values(&self, _property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
+        Ok(Vec::new())
+    }
+
+    async fn delete(&self, _id: Uuid) -> Result<(), DomainError> {
+        Ok(())
+    }
+}
 
 /// Request body for POST /api/v1/migration/md
 #[derive(Debug, Deserialize)]
@@ -96,7 +138,8 @@ pub async fn migrate_md_import(
     // Create repositories and migration engine
     let page_repo = SqlitePageRepository::new(state.pool.clone());
     let block_repo = SqliteBlockRepository::new(state.pool.clone());
-    let engine = MigrationEngine::new(Arc::new(page_repo), Arc::new(block_repo));
+    let property_repo = EmptyPropertyRepo::default();
+    let engine = MigrationEngine::new(Arc::new(page_repo), Arc::new(block_repo), Arc::new(property_repo));
     
     // Import all files from directory
     let results = engine

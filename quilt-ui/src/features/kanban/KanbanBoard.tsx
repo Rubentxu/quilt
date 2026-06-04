@@ -16,44 +16,69 @@ export interface KanbanBoardProps {
   blocks: Block[]
   /** Called when a block's property is changed (e.g., moving to a different column) */
   onPropertyChange: (blockId: string, key: string, value: string) => void
+  /** Optional closed values for the grouping property (defines column order) */
+  closedValues?: string[]
 }
 
 /**
  * Groups blocks by a property value, returning a map of column name -> blocks.
+ * Uses closed_values if provided for column order, otherwise falls back to distinct values.
  */
 function groupBlocksByProperty(
   blocks: Block[],
   propertyKey: string,
+  closedValues?: string[],
 ): Map<string, Block[]> {
   const groups = new Map<string, Block[]>()
 
+  // Use closed_values for column order if provided, otherwise use distinct values
+  const columnOrder = closedValues
+    ? new Set(closedValues)
+    : new Set<string>()
+
   for (const block of blocks) {
     const prop = block.properties?.find(p => p.key === propertyKey)
-    const columnKey = prop ? String(prop.value) : 'uncategorized'
+    const columnKey = prop ? String(prop.value) : 'Unset'
 
     if (!groups.has(columnKey)) {
       groups.set(columnKey, [])
     }
     groups.get(columnKey)!.push(block)
+
+    // If no closed_values provided, collect distinct values
+    if (!closedValues) {
+      columnOrder.add(columnKey)
+    }
   }
 
   return groups
 }
 
-export function KanbanBoard({ propertyKey, blocks, onPropertyChange }: KanbanBoardProps) {
+export function KanbanBoard({ propertyKey, blocks, onPropertyChange, closedValues }: KanbanBoardProps) {
   const columns = useMemo(() => {
-    return groupBlocksByProperty(blocks, propertyKey)
-  }, [blocks, propertyKey])
+    return groupBlocksByProperty(blocks, propertyKey, closedValues)
+  }, [blocks, propertyKey, closedValues])
 
-  // Sort columns: uncategorized last, then alphabetical
+  // Sort columns: Unset last, then by closed_values order if provided, otherwise alphabetical
   const sortedColumnKeys = useMemo(() => {
     const keys = Array.from(columns.keys())
+
+    // If closedValues provided, use that order (placing Unset at the end)
+    if (closedValues && closedValues.length > 0) {
+      const orderedKeys = closedValues.filter(v => columns.has(v))
+      if (columns.has('Unset')) {
+        orderedKeys.push('Unset')
+      }
+      return orderedKeys
+    }
+
+    // Otherwise sort: Unset last, then alphabetical
     return keys.sort((a, b) => {
-      if (a === 'uncategorized') return 1
-      if (b === 'uncategorized') return -1
+      if (a === 'Unset') return 1
+      if (b === 'Unset') return -1
       return a.localeCompare(b)
     })
-  }, [columns])
+  }, [columns, closedValues])
 
   if (blocks.length === 0) {
     return (
@@ -85,8 +110,8 @@ export function KanbanBoard({ propertyKey, blocks, onPropertyChange }: KanbanBoa
       {sortedColumnKeys.map(columnKey => (
         <KanbanColumn
           key={columnKey}
-          columnId={columnKey === 'uncategorized' ? 'uncategorized' : columnKey}
-          title={columnKey === 'uncategorized' ? 'Uncategorized' : columnKey}
+          columnId={columnKey === 'Unset' ? 'unset' : columnKey}
+          title={columnKey === 'Unset' ? 'Unset' : columnKey}
           blocks={columns.get(columnKey) ?? []}
           propertyKey={propertyKey}
           onPropertyChange={onPropertyChange}
