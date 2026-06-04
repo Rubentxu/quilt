@@ -14,7 +14,7 @@ pub use asset_type::AssetType;
 pub use block_format::BlockFormat;
 pub use journal_day::JournalDay;
 pub use priority::Priority;
-pub use property_value::{parse_properties, PropertyValue};
+pub use property_value::{PropertyValue, parse_properties};
 pub use task_marker::TaskMarker;
 pub use uuid::Uuid;
 

@@ -55,7 +55,12 @@ pub struct ResolvedName {
 impl ResolvedName {
     /// Create a new ResolvedName.
     pub fn new(id: String, kind: ResolvedKind, name: String, score: f32) -> Self {
-        Self { id, kind, name, score }
+        Self {
+            id,
+            kind,
+            name,
+            score,
+        }
     }
 }
 

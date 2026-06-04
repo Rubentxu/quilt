@@ -94,7 +94,7 @@ impl<P: PropertyRepository> PropertyValidator<P> {
             (PropertyType::DateTime, PropertyValue::Date(_)) => true,
             (PropertyType::Url, PropertyValue::String(_)) => true, // Backward compat
             (PropertyType::Checkbox, PropertyValue::Boolean(_)) => true, // Backward compat
-            (PropertyType::Node, PropertyValue::Ref(_)) => true,    // Backward compat
+            (PropertyType::Node, PropertyValue::Ref(_)) => true,   // Backward compat
             _ => false,
         };
 
@@ -314,24 +314,32 @@ mod tests {
         let validator = PropertyValidator::new(Arc::new(repo));
 
         // Valid status values
-        assert!(validator
-            .validate_property("status", &PropertyValue::string("To Do"))
-            .await
-            .is_ok());
-        assert!(validator
-            .validate_property("status", &PropertyValue::string("Doing"))
-            .await
-            .is_ok());
-        assert!(validator
-            .validate_property("status", &PropertyValue::string("Done"))
-            .await
-            .is_ok());
+        assert!(
+            validator
+                .validate_property("status", &PropertyValue::string("To Do"))
+                .await
+                .is_ok()
+        );
+        assert!(
+            validator
+                .validate_property("status", &PropertyValue::string("Doing"))
+                .await
+                .is_ok()
+        );
+        assert!(
+            validator
+                .validate_property("status", &PropertyValue::string("Done"))
+                .await
+                .is_ok()
+        );
 
         // Also accept by db_ident
-        assert!(validator
-            .validate_property("status", &PropertyValue::string("todo"))
-            .await
-            .is_ok());
+        assert!(
+            validator
+                .validate_property("status", &PropertyValue::string("todo"))
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]

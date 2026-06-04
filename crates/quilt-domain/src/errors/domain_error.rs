@@ -84,7 +84,11 @@ impl fmt::Display for DomainError {
                 write!(f, "Invalid configuration: {}", msg)
             }
             DomainError::PropertyValidationError { property, error } => {
-                write!(f, "Property validation failed for '{}': {}", property, error)
+                write!(
+                    f,
+                    "Property validation failed for '{}': {}",
+                    property, error
+                )
             }
             DomainError::PropertyReadOnly(key) => {
                 write!(f, "Property is read-only: {}", key)

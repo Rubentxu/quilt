@@ -22,9 +22,18 @@ fn test_mime_type() {
 
 #[test]
 fn test_parse_str_markdown_variants() {
-    assert_eq!(BlockFormat::parse_str("markdown"), Some(BlockFormat::Markdown));
-    assert_eq!(BlockFormat::parse_str("MARKDOWN"), Some(BlockFormat::Markdown));
-    assert_eq!(BlockFormat::parse_str("Markdown"), Some(BlockFormat::Markdown));
+    assert_eq!(
+        BlockFormat::parse_str("markdown"),
+        Some(BlockFormat::Markdown)
+    );
+    assert_eq!(
+        BlockFormat::parse_str("MARKDOWN"),
+        Some(BlockFormat::Markdown)
+    );
+    assert_eq!(
+        BlockFormat::parse_str("Markdown"),
+        Some(BlockFormat::Markdown)
+    );
     assert_eq!(BlockFormat::parse_str("md"), Some(BlockFormat::Markdown));
     assert_eq!(BlockFormat::parse_str("MD"), Some(BlockFormat::Markdown));
 }

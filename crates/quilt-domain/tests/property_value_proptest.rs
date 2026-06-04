@@ -27,8 +27,7 @@ fn arb_leaf_value() -> impl Strategy<Value = PropertyValue> {
 fn arb_array_value(depth: u32) -> impl Strategy<Value = PropertyValue> {
     let leaf = arb_leaf_value();
     if depth == 0 {
-        leaf.prop_map(|v| PropertyValue::Array(vec![v]))
-            .boxed()
+        leaf.prop_map(|v| PropertyValue::Array(vec![v])).boxed()
     } else {
         let inner = arb_array_value(depth - 1);
         prop::collection::vec(leaf, 0..5)

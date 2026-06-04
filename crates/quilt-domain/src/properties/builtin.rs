@@ -121,15 +121,11 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         // closed values — cualquier template page es válida. Validación
         // runtime (warn si la template page no existe) ocurre en el
         // frontend via CardRenderer.
-        let template = PropertyDefinition::new(
-            Uuid::new_v4(),
-            "template",
-            "Template",
-            PropertyType::Text,
-        )
-        .with_cardinality(Cardinality::One)
-        .with_view_context(ViewContext::Block)
-        .with_visibility(true, true, false);
+        let template =
+            PropertyDefinition::new(Uuid::new_v4(), "template", "Template", PropertyType::Text)
+                .with_cardinality(Cardinality::One)
+                .with_view_context(ViewContext::Block)
+                .with_visibility(true, true, false);
         map.insert("template".to_string(), template);
 
         // ── System properties (F9: read-only) ────────────────────────────
@@ -266,8 +262,14 @@ mod tests {
         // They are the "system" side of the F9 read_only protection.
         let props = get_builtin_properties();
         assert!(props.contains_key("id"), "missing builtin 'id'");
-        assert!(props.contains_key("created_at"), "missing builtin 'created_at'");
-        assert!(props.contains_key("updated_at"), "missing builtin 'updated_at'");
+        assert!(
+            props.contains_key("created_at"),
+            "missing builtin 'created_at'"
+        );
+        assert!(
+            props.contains_key("updated_at"),
+            "missing builtin 'updated_at'"
+        );
     }
 
     #[test]

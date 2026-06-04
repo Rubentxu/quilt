@@ -6,9 +6,9 @@
 //! the invariants of the algorithm hold for arbitrary input.
 
 use proptest::prelude::*;
+use quilt_domain::OrderCalculator;
 use quilt_domain::entities::Block;
 use quilt_domain::value_objects::{BlockFormat, Uuid};
-use quilt_domain::OrderCalculator;
 
 /// Build a Block with a controllable `order` value. All other fields are
 /// filled with sensible defaults — the order algorithm only reads

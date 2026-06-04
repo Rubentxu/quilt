@@ -70,7 +70,10 @@ mod tests {
         DefaultPropertyEntry::new(PropertyValue::string(s))
     }
 
-    fn entry_str_ts(s: &str, t: chrono::DateTime<chrono::Utc>) -> DefaultPropertyEntry<PropertyValue> {
+    fn entry_str_ts(
+        s: &str,
+        t: chrono::DateTime<chrono::Utc>,
+    ) -> DefaultPropertyEntry<PropertyValue> {
         DefaultPropertyEntry::with_timestamp(PropertyValue::string(s), t)
     }
 
@@ -87,9 +90,18 @@ mod tests {
         let merged = merge_properties(&existing, incoming);
 
         assert_eq!(merged.len(), 3);
-        assert_eq!(merged["a"].value(), &PropertyValue::String("A0".to_string()));
-        assert_eq!(merged["b"].value(), &PropertyValue::String("B0".to_string()));
-        assert_eq!(merged["c"].value(), &PropertyValue::String("C0".to_string()));
+        assert_eq!(
+            merged["a"].value(),
+            &PropertyValue::String("A0".to_string())
+        );
+        assert_eq!(
+            merged["b"].value(),
+            &PropertyValue::String("B0".to_string())
+        );
+        assert_eq!(
+            merged["c"].value(),
+            &PropertyValue::String("C0".to_string())
+        );
     }
 
     #[test]
@@ -102,7 +114,10 @@ mod tests {
         let merged = merge_properties(&existing, incoming);
 
         assert_eq!(merged.len(), 1);
-        assert_eq!(merged["status"].value(), &PropertyValue::String("Done".to_string()));
+        assert_eq!(
+            merged["status"].value(),
+            &PropertyValue::String("Done".to_string())
+        );
         assert_eq!(merged["status"].updated_at(), Some(ts(200)));
     }
 
@@ -115,7 +130,10 @@ mod tests {
 
         let merged = merge_properties(&existing, incoming);
 
-        assert_eq!(merged["status"].value(), &PropertyValue::String("Done".to_string()));
+        assert_eq!(
+            merged["status"].value(),
+            &PropertyValue::String("Done".to_string())
+        );
         assert_eq!(merged["status"].updated_at(), Some(ts(200)));
     }
 
@@ -129,7 +147,10 @@ mod tests {
         let merged = merge_properties(&existing, incoming);
 
         // Same ts → existing wins (deterministic tie-break).
-        assert_eq!(merged["status"].value(), &PropertyValue::String("Doing".to_string()));
+        assert_eq!(
+            merged["status"].value(),
+            &PropertyValue::String("Doing".to_string())
+        );
     }
 
     #[test]
@@ -141,7 +162,10 @@ mod tests {
 
         let merged = merge_properties(&existing, incoming);
 
-        assert_eq!(merged["status"].value(), &PropertyValue::String("new-ts".to_string()));
+        assert_eq!(
+            merged["status"].value(),
+            &PropertyValue::String("new-ts".to_string())
+        );
         assert_eq!(merged["status"].updated_at(), Some(ts(50)));
     }
 
@@ -154,7 +178,10 @@ mod tests {
 
         let merged = merge_properties(&existing, incoming);
 
-        assert_eq!(merged["status"].value(), &PropertyValue::String("old-ts".to_string()));
+        assert_eq!(
+            merged["status"].value(),
+            &PropertyValue::String("old-ts".to_string())
+        );
         assert_eq!(merged["status"].updated_at(), Some(ts(50)));
     }
 
@@ -168,7 +195,10 @@ mod tests {
         let merged = merge_properties(&existing, incoming);
 
         // Both None → "keep self" tie-break → existing.
-        assert_eq!(merged["status"].value(), &PropertyValue::String("existing-bare".to_string()));
+        assert_eq!(
+            merged["status"].value(),
+            &PropertyValue::String("existing-bare".to_string())
+        );
     }
 
     // ── Pure function contract ──
@@ -184,9 +214,15 @@ mod tests {
 
         // Inputs are untouched after the merge.
         assert_eq!(existing.len(), 1);
-        assert_eq!(existing["a"].value(), &PropertyValue::String("A0".to_string()));
+        assert_eq!(
+            existing["a"].value(),
+            &PropertyValue::String("A0".to_string())
+        );
         assert_eq!(incoming.len(), 1);
-        assert_eq!(incoming["a"].value(), &PropertyValue::String("A1".to_string()));
+        assert_eq!(
+            incoming["a"].value(),
+            &PropertyValue::String("A1".to_string())
+        );
     }
 
     #[test]
@@ -198,8 +234,14 @@ mod tests {
         let merged = merge_properties(&existing, HashMap::new());
 
         assert_eq!(merged.len(), 2);
-        assert_eq!(merged["a"].value(), &PropertyValue::String("A0".to_string()));
-        assert_eq!(merged["b"].value(), &PropertyValue::String("B0".to_string()));
+        assert_eq!(
+            merged["a"].value(),
+            &PropertyValue::String("A0".to_string())
+        );
+        assert_eq!(
+            merged["b"].value(),
+            &PropertyValue::String("B0".to_string())
+        );
     }
 
     #[test]
@@ -239,7 +281,8 @@ mod tests {
     /// Strategy: generate a HashMap<String, DefaultPropertyEntry<PropertyValue>>
     /// with 0-5 entries, each key a unique "kN" string, and each value a string
     /// with a random timestamp 0..1000.
-    fn arb_entry_map() -> impl Strategy<Value = HashMap<String, DefaultPropertyEntry<PropertyValue>>> {
+    fn arb_entry_map() -> impl Strategy<Value = HashMap<String, DefaultPropertyEntry<PropertyValue>>>
+    {
         proptest::collection::hash_map(
             proptest::string::string_regex("[a-z][a-z0-9]{0,4}")
                 .expect("valid regex")

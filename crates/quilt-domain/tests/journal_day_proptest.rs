@@ -6,8 +6,8 @@
 //! hold for any valid calendar date.
 
 use proptest::prelude::*;
-use std::str::FromStr;
 use quilt_domain::JournalDay;
+use std::str::FromStr;
 
 /// Build a JournalDay from safe (year, month, day) where every
 /// triple is a valid calendar date. We restrict the day to <= 28 to

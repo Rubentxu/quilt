@@ -50,7 +50,7 @@ pub trait RefRepository: Send + Sync {
     /// 2. Insert the new set of refs
     /// 3. Do both in a single transaction
     async fn sync_refs(&self, source_id: Uuid, refs: &[(Uuid, RefType)])
-        -> Result<(), DomainError>;
+    -> Result<(), DomainError>;
 
     /// Rebuild the entire reference index from persistent storage.
     ///

@@ -5,17 +5,23 @@
 //! and edge cases (empty arrays, nested arrays, null, objects).
 
 use chrono::{TimeZone, Utc};
-use quilt_domain::value_objects::{parse_properties, PropertyValue};
+use quilt_domain::value_objects::{PropertyValue, parse_properties};
 
 // ── Constructors ──────────────────────────────────────────────
 
 #[test]
 fn test_constructors() {
-    assert_eq!(PropertyValue::string("hello"), PropertyValue::String("hello".into()));
+    assert_eq!(
+        PropertyValue::string("hello"),
+        PropertyValue::String("hello".into())
+    );
     assert_eq!(PropertyValue::boolean(true), PropertyValue::Boolean(true));
     assert_eq!(PropertyValue::integer(42), PropertyValue::Integer(42));
     assert_eq!(PropertyValue::float(3.14), PropertyValue::Float(3.14));
-    assert_eq!(PropertyValue::reference("mypage"), PropertyValue::Ref("mypage".into()));
+    assert_eq!(
+        PropertyValue::reference("mypage"),
+        PropertyValue::Ref("mypage".into())
+    );
 }
 
 #[test]
@@ -160,7 +166,10 @@ fn test_from_json_object_returns_none() {
 
 #[test]
 fn test_display_string() {
-    assert_eq!(format!("{}", PropertyValue::String("hello".into())), "hello");
+    assert_eq!(
+        format!("{}", PropertyValue::String("hello".into())),
+        "hello"
+    );
 }
 
 #[test]
@@ -214,7 +223,10 @@ fn test_display_empty_array() {
 
 #[test]
 fn test_default_is_empty_string() {
-    assert_eq!(PropertyValue::default(), PropertyValue::String(String::new()));
+    assert_eq!(
+        PropertyValue::default(),
+        PropertyValue::String(String::new())
+    );
 }
 
 // ── parse_properties (exercises normalize_property_name internally) ──
@@ -223,23 +235,47 @@ fn test_default_is_empty_string() {
 fn test_parse_properties_normalizes_keys() {
     let mut map = serde_json::Map::new();
     // Keys with mixed case, slashes, spaces, underscores — all get normalized
-    map.insert("My Title".to_string(), serde_json::Value::String("hello".to_string()));
-    map.insert("FOO/BAR".to_string(), serde_json::Value::String("baz".to_string()));
-    map.insert("snake_case".to_string(), serde_json::Value::String("val".to_string()));
+    map.insert(
+        "My Title".to_string(),
+        serde_json::Value::String("hello".to_string()),
+    );
+    map.insert(
+        "FOO/BAR".to_string(),
+        serde_json::Value::String("baz".to_string()),
+    );
+    map.insert(
+        "snake_case".to_string(),
+        serde_json::Value::String("val".to_string()),
+    );
     let props = parse_properties(&map);
 
-    assert_eq!(props.get("my-title"), Some(&PropertyValue::String("hello".into())));
-    assert_eq!(props.get("foo-bar"), Some(&PropertyValue::String("baz".into())));
-    assert_eq!(props.get("snake-case"), Some(&PropertyValue::String("val".into())));
+    assert_eq!(
+        props.get("my-title"),
+        Some(&PropertyValue::String("hello".into()))
+    );
+    assert_eq!(
+        props.get("foo-bar"),
+        Some(&PropertyValue::String("baz".into()))
+    );
+    assert_eq!(
+        props.get("snake-case"),
+        Some(&PropertyValue::String("val".into()))
+    );
 }
 
 #[test]
 fn test_parse_properties_single() {
     let mut map = serde_json::Map::new();
-    map.insert("status".to_string(), serde_json::Value::String("draft".to_string()));
+    map.insert(
+        "status".to_string(),
+        serde_json::Value::String("draft".to_string()),
+    );
     let props = parse_properties(&map);
     assert_eq!(props.len(), 1);
-    assert_eq!(props.get("status"), Some(&PropertyValue::String("draft".into())));
+    assert_eq!(
+        props.get("status"),
+        Some(&PropertyValue::String("draft".into()))
+    );
 }
 
 #[test]
@@ -256,7 +292,10 @@ fn test_parse_properties_multiple() {
 #[test]
 fn test_parse_properties_skips_invalid_values() {
     let mut map = serde_json::Map::new();
-    map.insert("valid".to_string(), serde_json::Value::String("ok".to_string()));
+    map.insert(
+        "valid".to_string(),
+        serde_json::Value::String("ok".to_string()),
+    );
     map.insert("invalid".to_string(), serde_json::Value::Null);
     let props = parse_properties(&map);
     assert_eq!(props.len(), 1);

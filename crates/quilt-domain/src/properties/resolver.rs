@@ -212,10 +212,7 @@ mod tests {
         let repo = MockPropertyRepository::new();
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
-        let result = resolver
-            .resolve("logseq.property/priority")
-            .await
-            .unwrap();
+        let result = resolver.resolve("logseq.property/priority").await.unwrap();
         assert_eq!(result.db_ident, "logseq.property/priority");
         assert_eq!(result.title, "Priority");
     }
@@ -227,10 +224,7 @@ mod tests {
 
         // Builtin key is lowercase "logseq.property/priority" — uppercase input
         // must still resolve via builtin fallback after lowercase normalization.
-        let result = resolver
-            .resolve("LOGSEQ.PROPERTY/PRIORITY")
-            .await
-            .unwrap();
+        let result = resolver.resolve("LOGSEQ.PROPERTY/PRIORITY").await.unwrap();
         assert_eq!(result.db_ident, "logseq.property/priority");
     }
 

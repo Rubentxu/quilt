@@ -30,9 +30,7 @@ pub mod validator;
 
 pub use builtin::{get_all_builtin_properties, get_builtin_property};
 pub use definition::PropertyDefinition;
-pub use entry::{
-    DefaultPropertyEntry, HasTimestamp, HasValue, Mergeable, PropertyEntry,
-};
+pub use entry::{DefaultPropertyEntry, HasTimestamp, HasValue, Mergeable, PropertyEntry};
 pub use merge::merge_properties;
 pub use resolver::PropertyKeyResolver;
 pub use types::{Cardinality, ClosedValue, PropertyType, ViewContext};

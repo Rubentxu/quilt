@@ -135,12 +135,12 @@ impl FromStr for JournalDay {
 
         // Try common date formats in order of specificity
         let formats = [
-            "%Y-%m-%d",     // ISO: 2026-05-14
-            "%d-%m-%Y",     // European: 14-05-2026
-            "%d/%m/%Y",     // European slash: 14/05/2026
-            "%m/%d/%Y",     // US: 05/14/2026
-            "%Y/%m/%d",     // Asian: 2026/05/14
-            "%d.%m.%Y",     // German: 14.05.2026
+            "%Y-%m-%d", // ISO: 2026-05-14
+            "%d-%m-%Y", // European: 14-05-2026
+            "%d/%m/%Y", // European slash: 14/05/2026
+            "%m/%d/%Y", // US: 05/14/2026
+            "%Y/%m/%d", // Asian: 2026/05/14
+            "%d.%m.%Y", // German: 14.05.2026
         ];
 
         for fmt in &formats {

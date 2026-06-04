@@ -15,10 +15,7 @@ fn arb_json_value() -> impl Strategy<Value = serde_json::Value> {
         Just(serde_json::Value::Null),
     ];
     leaf.prop_recursive(2, 4, 3, |inner| {
-        prop_oneof![
-            prop::collection::vec(inner.clone(), 0..3)
-                .prop_map(serde_json::Value::Array),
-        ]
+        prop_oneof![prop::collection::vec(inner.clone(), 0..3).prop_map(serde_json::Value::Array),]
     })
 }
 

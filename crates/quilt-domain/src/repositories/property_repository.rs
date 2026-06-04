@@ -17,7 +17,7 @@ pub trait PropertyRepository: Send + Sync {
 
     /// Get a property definition by database identifier
     async fn get_by_db_ident(&self, ident: &str)
-        -> Result<Option<PropertyDefinition>, DomainError>;
+    -> Result<Option<PropertyDefinition>, DomainError>;
 
     /// Get all property definitions
     async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError>;

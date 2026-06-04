@@ -23,9 +23,7 @@
 
 use chrono::{DateTime, TimeZone, Utc};
 use proptest::prelude::*;
-use quilt_domain::properties::entry::{
-    DefaultPropertyEntry, HasTimestamp, HasValue, Mergeable,
-};
+use quilt_domain::properties::entry::{DefaultPropertyEntry, HasTimestamp, HasValue, Mergeable};
 use quilt_domain::properties::merge::merge_properties;
 use quilt_domain::value_objects::PropertyValue;
 

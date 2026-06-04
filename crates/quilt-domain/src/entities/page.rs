@@ -172,9 +172,7 @@ impl Page {
         let lower = name.trim().to_lowercase();
         // Accept both `template/foo` and a bare `template` page as templates.
         // `templates/` is accepted as an alias for visual distinction.
-        lower == "template"
-            || lower.starts_with("template/")
-            || lower.starts_with("templates/")
+        lower == "template" || lower.starts_with("template/") || lower.starts_with("templates/")
     }
 
     /// Rename this page
@@ -302,7 +300,10 @@ mod tests {
 
             let page = Page::new(create)
                 .unwrap_or_else(|_| panic!("expected template name to be valid: {name}"));
-            assert!(page.is_template(), "{name} should be detected as a template");
+            assert!(
+                page.is_template(),
+                "{name} should be detected as a template"
+            );
         }
     }
 
@@ -348,8 +349,7 @@ mod tests {
     #[test]
     fn test_journal_page_custom_format() {
         let day = JournalDay::from_ymd(2026, 5, 14).unwrap();
-        let page =
-            Page::new_journal(day, BlockFormat::Markdown, "%B %d, %Y").unwrap();
+        let page = Page::new_journal(day, BlockFormat::Markdown, "%B %d, %Y").unwrap();
 
         assert_eq!(page.name, "2026-05-14"); // name is always ISO
         assert_eq!(page.title, Some("May 14, 2026".to_string()));

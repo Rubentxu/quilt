@@ -11,11 +11,11 @@
 //! Persistence is handled by the [`RefRepository`] trait in `repositories/`.
 
 mod edge_type;
+#[cfg(test)]
+mod edge_type_test;
 mod ref_;
 mod ref_index;
 mod ref_type;
-#[cfg(test)]
-mod edge_type_test;
 
 pub use edge_type::{EdgeType, TypedEdge};
 pub use ref_::Ref;

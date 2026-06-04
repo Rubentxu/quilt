@@ -48,15 +48,16 @@ impl OrderCalculator {
 
     /// Raw variant that operates on a sorted sequence of f64 values.
     /// Used internally and for testing.
-    fn insert_after_raw(preceding_order: f64, sibling_orders: impl Iterator<Item = f64>) -> Result<f64, String> {
+    fn insert_after_raw(
+        preceding_order: f64,
+        sibling_orders: impl Iterator<Item = f64>,
+    ) -> Result<f64, String> {
         // Collect sorted orders
         let mut orders: Vec<f64> = sibling_orders.collect();
         orders.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));
 
         // Find the next sibling after preceding_order
-        let next_order = orders
-            .into_iter()
-            .find(|o| *o > preceding_order);
+        let next_order = orders.into_iter().find(|o| *o > preceding_order);
 
         match next_order {
             Some(next) => {
