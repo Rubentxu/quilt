@@ -5,8 +5,10 @@
 use crate::errors::ApplicationError;
 use async_trait::async_trait;
 use quilt_domain::entities::{Page, PageCreate};
+use quilt_domain::properties::entry::DefaultPropertyEntry;
 use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
+use quilt_domain::value_objects::{BlockFormat, JournalDay, PropertyValue, Uuid};
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::instrument;
@@ -28,6 +30,19 @@ pub trait PageUseCases: Send + Sync {
 
     /// Get or create a journal page for a given date.
     async fn get_or_create_journal(&self, date: &str) -> Result<Page, ApplicationError>;
+
+    /// Update typed properties of a page (F5 + F8 + F9).
+    ///
+    /// Each incoming entry is stamped with the current timestamp so the LWW
+    /// merge in `PageRepository::update_properties` correctly applies the
+    /// user's intent. Read-only keys (e.g. `id`, `created_at`, `updated_at`)
+    /// are rejected with `ApplicationError::Domain(PropertyReadOnly(k))`
+    /// atomically — a single bad key fails the whole call.
+    async fn update_properties(
+        &self,
+        page_id: Uuid,
+        props: HashMap<String, PropertyValue>,
+    ) -> Result<Page, ApplicationError>;
 }
 
 /// Page with its blocks returned by [`PageUseCases::get_blocks`].
@@ -141,5 +156,28 @@ impl<PR: PageRepository + 'static, BR: BlockRepository + 'static> PageUseCases
             .map_err(ApplicationError::Domain)?;
 
         Ok(page)
+    }
+
+    #[instrument(skip(self, props))]
+    async fn update_properties(
+        &self,
+        page_id: Uuid,
+        props: HashMap<String, PropertyValue>,
+    ) -> Result<Page, ApplicationError> {
+        // Stamp every incoming entry with the current timestamp. This is the
+        // LWW "win" for explicit user updates — without a timestamp, the
+        // bare entry would lose to any timestamped existing value during
+        // merge_properties (and would lose to existing bare entries per the
+        // deterministic tie-break).
+        let now = chrono::Utc::now();
+        let stamped: HashMap<String, DefaultPropertyEntry<PropertyValue>> = props
+            .into_iter()
+            .map(|(k, v)| (k, DefaultPropertyEntry::with_timestamp(v, now)))
+            .collect();
+
+        self.page_repo
+            .update_properties(page_id, stamped)
+            .await
+            .map_err(ApplicationError::Domain)
     }
 }

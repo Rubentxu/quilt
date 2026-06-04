@@ -41,6 +41,7 @@ impl MockPageUseCases {
             },
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .unwrap();
         self.pages.lock().unwrap().push(page.clone());
@@ -62,10 +63,22 @@ impl PageUseCases for MockPageUseCases {
             journal_day: None,
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .map_err(|e| ApplicationError::Domain(e))?;
         self.pages.lock().unwrap().push(page.clone());
         Ok(page)
+    }
+
+    async fn update_properties(
+        &self,
+        _page_id: quilt_domain::value_objects::Uuid,
+        _props: std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>,
+    ) -> Result<Page, ApplicationError> {
+        // Mock: this test fixture doesn't simulate property updates; tests
+        // that exercise the real update_properties logic live in
+        // quilt-infrastructure's SQLite test module.
+        Err(ApplicationError::Validation("MockPageUseCases::update_properties".into()))
     }
 
     async fn list(&self) -> Result<Vec<Page>, ApplicationError> {
@@ -98,6 +111,7 @@ impl PageUseCases for MockPageUseCases {
                     journal_day: None,
                     format: BlockFormat::Markdown,
                     file_id: None,
+                    properties: std::collections::HashMap::new(),
                 })
                 .unwrap()
             });
@@ -120,6 +134,7 @@ impl PageUseCases for MockPageUseCases {
             journal_day: Some(quilt_domain::value_objects::JournalDay::from_ymd(2026, 6, 2).unwrap()),
             format: BlockFormat::Markdown,
             file_id: None,
+            properties: std::collections::HashMap::new(),
         })
         .unwrap();
         Ok(page)

@@ -8,8 +8,9 @@ use parking_lot::RwLock;
 
 use quilt_domain::entities::Page;
 use quilt_domain::errors::DomainError;
+use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
 use quilt_domain::repositories::PageRepository;
-use quilt_domain::value_objects::{JournalDay, Uuid};
+use quilt_domain::value_objects::{JournalDay, PropertyValue, Uuid};
 
 /// In-memory PageRepository using HashMap storage, wrapped for test usability.
 #[derive(Debug)]
@@ -153,6 +154,30 @@ impl PageRepository for InMemoryPageRepo {
             .take(limit)
             .cloned()
             .collect())
+    }
+
+    async fn update_properties(
+        &self,
+        page_id: Uuid,
+        props: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
+    ) -> Result<Page, DomainError> {
+        // Read-only check via hardcoded system keys (no PropertyRepository
+        // is wired in this test helper — call sites that need the full
+        // resolver integration use SqlitePageRepository::with_property_repo).
+        for key in props.keys() {
+            if matches!(key.as_str(), "id" | "created_at" | "updated_at") {
+                return Err(DomainError::PropertyReadOnly(key.clone()));
+            }
+        }
+
+        let mut repo = self.repo.write();
+        let page = repo
+            .get_mut(&page_id)
+            .ok_or(DomainError::PageNotFound(page_id))?;
+        let merged = quilt_domain::properties::merge_properties(&page.properties, props);
+        page.properties = merged;
+        page.updated_at = chrono::Utc::now();
+        Ok(page.clone())
     }
 }
 
