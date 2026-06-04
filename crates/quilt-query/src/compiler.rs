@@ -288,4 +288,48 @@ mod tests {
             Err(CompilerError::UnsupportedOperator { op: "Analyze" })
         );
     }
+
+    // T-D.3 — End-to-end integration: parse → compile → SQL.
+    // Asserts that `(property "count" > 5)` produces
+    //   `json_extract(properties,'$.count') > ?`
+    // with the bound value `5`.
+
+    #[test]
+    fn test_end_to_end_property_greater_than() {
+        let parser = QueryParser;
+        let ast = parser
+            .parse("(property \"count\" > 5)")
+            .expect("parse must succeed");
+        let compiler = SqliteCompiler::new();
+        let compiled = compiler
+            .compile(&ast, 100)
+            .expect("compile must succeed");
+        assert!(
+            compiled.sql.contains("json_extract(properties, '$.count') > ?"),
+            "expected '> ?' in SQL, got: {}",
+            compiled.sql
+        );
+        assert!(
+            compiled.sql.contains("LIMIT 100"),
+            "expected LIMIT 100 in SQL, got: {}",
+            compiled.sql
+        );
+        assert_eq!(compiled.params.len(), 1);
+        assert_eq!(compiled.params[0].as_string(), "5");
+    }
+
+    #[test]
+    fn test_end_to_end_contains() {
+        let parser = QueryParser;
+        let ast = parser
+            .parse("(property \"name\" contains \"ru\")")
+            .expect("parse must succeed");
+        let compiler = SqliteCompiler::new();
+        let compiled = compiler
+            .compile(&ast, 50)
+            .expect("compile must succeed");
+        assert!(compiled.sql.contains("LIKE"));
+        // Caller wraps the value as %v% at compile time.
+        assert_eq!(compiled.params[0].as_string(), "%ru%");
+    }
 }
