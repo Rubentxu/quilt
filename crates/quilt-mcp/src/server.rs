@@ -5,7 +5,6 @@
 
 use crate::handlers::{ResourceProvider, ToolHandler};
 use crate::protocol::*;
-use std::sync::Arc;
 
 /// MCP server for Quilt knowledge graph operations.
 ///
@@ -212,7 +211,7 @@ mod tests {
     use crate::handlers::{
         block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
         query::QueryToolHandler, resource::GraphResourceProvider, retrieval::RetrievalToolHandler,
-        template::TemplateToolHandler, temporal::TemporalToolHandler,
+        system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
     use quilt_application::templates::reapply::{
         ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl,
@@ -225,6 +224,7 @@ mod tests {
     use quilt_infrastructure::database::sqlite::repositories::{
         SqliteBlockRepository, SqlitePageRepository, SqliteTagRepository,
     };
+    use std::sync::Arc;
     use quilt_search::SearchService;
     use sqlx::SqlitePool;
 
@@ -279,6 +279,7 @@ mod tests {
         let graph_handler = GraphToolHandler::new(block_use_cases.clone());
         let template_handler =
             TemplateToolHandler::new(template_use_cases.clone(), reapply_use_cases.clone());
+        let system_handler = SystemToolHandler::new();
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -290,6 +291,7 @@ mod tests {
                 Box::new(temporal_handler),
                 Box::new(graph_handler),
                 Box::new(template_handler),
+                Box::new(system_handler),
             ],
             vec![Box::new(resource_provider)],
         );
@@ -331,7 +333,7 @@ mod tests {
 
         match response {
             McpResponse::ToolsList(result) => {
-                // Core tools: 19 total
+                // Core tools: 21 total
                 // BlockToolHandler: quilt_create_block, quilt_delete_block, quilt_link_blocks,
                 //                   quilt_get_block_tree, quilt_get_backlinks, quilt_create_task,
                 //                   quilt_list_blocks_by_author (7) — ADR-0003 added the last
@@ -342,7 +344,8 @@ mod tests {
                 // RetrievalToolHandler: quilt_query_retrieve (1) — G5
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
-                assert_eq!(result.tools.len(), 19);
+                // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
+                assert_eq!(result.tools.len(), 21);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(
@@ -388,6 +391,8 @@ mod tests {
                         .any(|t| t.name == "quilt_query_temporal")
                 );
                 assert!(result.tools.iter().any(|t| t.name == "quilt_graph_edges"));
+                assert!(result.tools.iter().any(|t| t.name == "quilt_list_property_types"));
+                assert!(result.tools.iter().any(|t| t.name == "quilt_get_query_capabilities"));
             }
             _ => panic!("Expected ToolsList response"),
         }

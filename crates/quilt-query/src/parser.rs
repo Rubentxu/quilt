@@ -19,9 +19,6 @@ pub use crate::property_op::PropertyOp;
 // TimeOffset is used in tests via `use super::*`
 #[cfg(test)]
 use crate::time_helpers::TimeOffset;
-// `QueryExpr` is preserved as a backward-compatible alias.
-#[deprecated(since = "0.1.0", note = "Use QueryAst instead")]
-pub use crate::ast::QueryExpr;
 
 /// Errors that can occur during query parsing.
 #[derive(Debug, Error)]
@@ -48,12 +45,12 @@ pub enum QueryError {
 /// Parser for the Quilt Query DSL.
 ///
 /// This parser implements a recursive descent parsing strategy to convert
-/// query strings into [`QueryExpr`] AST nodes.
+/// query strings into [`QueryAst`] AST nodes.
 ///
 /// # Example
 ///
 /// ```
-/// use quilt_query::{QueryParser, QueryExpr};
+/// use quilt_query::{QueryParser, QueryAst};
 ///
 /// let parser = QueryParser;
 /// let result = parser.parse("(task todo)");
@@ -62,7 +59,7 @@ pub enum QueryError {
 pub struct QueryParser;
 
 impl QueryParser {
-    /// Parses a query string into a [`QueryExpr`] AST.
+    /// Parses a query string into a [`QueryAst`] AST.
     ///
     /// # Arguments
     ///
@@ -70,7 +67,7 @@ impl QueryParser {
     ///
     /// # Returns
     ///
-    /// Returns the parsed [`QueryExpr`] on success.
+    /// Returns the parsed [`QueryAst`] on success.
     ///
     /// # Errors
     ///
@@ -91,7 +88,7 @@ impl QueryParser {
     /// let result = parser.parse("");
     /// assert!(result.is_err());
     /// ```
-    pub fn parse(&self, input: &str) -> Result<QueryExpr, ParseError> {
+    pub fn parse(&self, input: &str) -> Result<QueryAst, ParseError> {
         // Simple recursive descent parser for the query DSL
         let input = input.trim();
 
@@ -102,7 +99,7 @@ impl QueryParser {
         self.parse_expr(input)
     }
 
-    fn parse_expr(&self, input: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_expr(&self, input: &str) -> Result<QueryAst, ParseError> {
         let input = input.trim();
 
         // Handle parentheses
@@ -117,7 +114,7 @@ impl QueryParser {
 
         // Handle self ref
         if input == "self" {
-            return Ok(QueryExpr::SelfRef);
+            return Ok(QueryAst::SelfRef);
         }
 
         Err(ParseError::Invalid(format!(
@@ -126,7 +123,7 @@ impl QueryParser {
         )))
     }
 
-    fn parse_compound(&self, input: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_compound(&self, input: &str) -> Result<QueryAst, ParseError> {
         if !input.starts_with('(') || !input.ends_with(')') {
             return Err(ParseError::Invalid("Expected parentheses".to_string()));
         }
@@ -165,30 +162,30 @@ impl QueryParser {
         }
     }
 
-    fn parse_and(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_and(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
         let exprs: Result<Vec<_>, _> = args.iter().map(|s| self.parse_expr(s)).collect();
-        Ok(QueryExpr::And(exprs?))
+        Ok(QueryAst::And(exprs?))
     }
 
-    fn parse_or(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_or(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
         let exprs: Result<Vec<_>, _> = args.iter().map(|s| self.parse_expr(s)).collect();
-        Ok(QueryExpr::Or(exprs?))
+        Ok(QueryAst::Or(exprs?))
     }
 
-    fn parse_not(&self, rest: &str) -> Result<QueryExpr, ParseError> {
-        Ok(QueryExpr::Not(Box::new(self.parse_expr(rest)?)))
+    fn parse_not(&self, rest: &str) -> Result<QueryAst, ParseError> {
+        Ok(QueryAst::Not(Box::new(self.parse_expr(rest)?)))
     }
 
-    fn parse_between(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_between(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
         if args.len() != 2 {
             return Err(ParseError::Invalid(
                 "between requires 2 arguments".to_string(),
             ));
         }
-        Ok(QueryExpr::Between {
+        Ok(QueryAst::Between {
             field: "created_at".to_string(),
             start: self.parse_value(&args[0])?,
             end: self.parse_value(&args[1])?,
@@ -229,51 +226,51 @@ impl QueryParser {
         ))
     }
 
-    fn parse_task(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_task(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
-        Ok(QueryExpr::Task(
+        Ok(QueryAst::Task(
             args.iter().map(|s| s.to_string()).collect(),
         ))
     }
 
-    fn parse_priority(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_priority(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
-        Ok(QueryExpr::Priority(
+        Ok(QueryAst::Priority(
             args.iter().map(|s| s.to_lowercase()).collect(),
         ))
     }
 
-    fn parse_page(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_page(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let name = rest.trim_matches('"');
-        Ok(QueryExpr::Page(name.to_string()))
+        Ok(QueryAst::Page(name.to_string()))
     }
 
-    fn parse_tags(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_tags(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let name = rest.trim_matches('"');
-        Ok(QueryExpr::Tags(name.to_string()))
+        Ok(QueryAst::Tags(name.to_string()))
     }
 
-    fn parse_page_ref(&self, input: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_page_ref(&self, input: &str) -> Result<QueryAst, ParseError> {
         if !input.starts_with("[[") || !input.ends_with("]]") {
             return Err(ParseError::Invalid("Expected page ref".to_string()));
         }
         let name = &input[2..input.len() - 2];
-        Ok(QueryExpr::PageRef(name.to_string()))
+        Ok(QueryAst::PageRef(name.to_string()))
     }
 
-    fn parse_full_text_search(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_full_text_search(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let content = rest.trim_matches('"');
-        Ok(QueryExpr::BlockContent(content.to_string()))
+        Ok(QueryAst::BlockContent(content.to_string()))
     }
 
-    fn parse_sample(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_sample(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let n: usize = rest
             .parse()
             .map_err(|_| ParseError::Invalid("Invalid number for sample".to_string()))?;
-        Ok(QueryExpr::Sample(n))
+        Ok(QueryAst::Sample(n))
     }
 
-    fn parse_aggregate(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_aggregate(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
         if args.len() != 3 {
             return Err(ParseError::Invalid(
@@ -283,7 +280,7 @@ impl QueryParser {
         let inner = self.parse_expr(&args[0])?;
         let prop = Self::extract_property_arg(&args[1])?;
         let afn = Self::parse_aggregate_fn(&args[2])?;
-        Ok(QueryExpr::Aggregate {
+        Ok(QueryAst::Aggregate {
             inner: Box::new(inner),
             group_by: prop,
             aggregate_fn: afn,
@@ -320,7 +317,7 @@ impl QueryParser {
         }
     }
 
-    fn parse_stats(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_stats(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
         if args.len() != 2 {
             return Err(ParseError::Invalid(
@@ -329,7 +326,7 @@ impl QueryParser {
         }
         let prop = Self::extract_property_arg(&args[0])?;
         let sfn = Self::parse_stats_fn(&args[1])?;
-        Ok(QueryExpr::Stats {
+        Ok(QueryAst::Stats {
             property: prop,
             compute: sfn,
         })
@@ -359,7 +356,7 @@ impl QueryParser {
         }
     }
 
-    fn parse_group_by(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_group_by(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
         if args.len() != 2 {
             return Err(ParseError::Invalid(
@@ -368,13 +365,13 @@ impl QueryParser {
         }
         let inner = self.parse_expr(&args[0])?;
         let prop = Self::extract_property_arg(&args[1])?;
-        Ok(QueryExpr::GroupBy {
+        Ok(QueryAst::GroupBy {
             inner: Box::new(inner),
             property: prop,
         })
     }
 
-    fn parse_analyze(&self, rest: &str) -> Result<QueryExpr, ParseError> {
+    fn parse_analyze(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
         if args.len() < 2 {
             return Err(ParseError::Invalid(
@@ -383,7 +380,7 @@ impl QueryParser {
         }
         let inner = self.parse_expr(&args[0])?;
         let kind = self.parse_analyze_kind(&args[1], &args[2..])?;
-        Ok(QueryExpr::Analyze {
+        Ok(QueryAst::Analyze {
             inner: Box::new(inner),
             kind,
         })
@@ -711,7 +708,7 @@ impl QueryParser {
 mod tests {
     use super::*;
 
-    fn parse(input: &str) -> QueryExpr {
+    fn parse(input: &str) -> QueryAst {
         QueryParser.parse(input).expect("parse failed")
     }
 
@@ -724,49 +721,49 @@ mod tests {
     #[test]
     fn test_parse_simple_task() {
         let result = parse("(task todo)");
-        assert_eq!(result, QueryExpr::Task(vec!["todo".to_string()]));
+        assert_eq!(result, QueryAst::Task(vec!["todo".to_string()]));
     }
 
     #[test]
     fn test_parse_priority() {
         let result = parse("(priority a)");
-        assert_eq!(result, QueryExpr::Priority(vec!["a".to_string()]));
+        assert_eq!(result, QueryAst::Priority(vec!["a".to_string()]));
     }
 
     #[test]
     fn test_parse_page() {
         let result = parse("(page \"MyPage\")");
-        assert_eq!(result, QueryExpr::Page("MyPage".to_string()));
+        assert_eq!(result, QueryAst::Page("MyPage".to_string()));
     }
 
     #[test]
     fn test_parse_tags() {
         let result = parse("(tags \"rust\")");
-        assert_eq!(result, QueryExpr::Tags("rust".to_string()));
+        assert_eq!(result, QueryAst::Tags("rust".to_string()));
     }
 
     #[test]
     fn test_parse_sample() {
         let result = parse("(sample 10)");
-        assert_eq!(result, QueryExpr::Sample(10));
+        assert_eq!(result, QueryAst::Sample(10));
     }
 
     #[test]
     fn test_parse_self_ref() {
         let result = parse("self");
-        assert_eq!(result, QueryExpr::SelfRef);
+        assert_eq!(result, QueryAst::SelfRef);
     }
 
     #[test]
     fn test_parse_page_ref() {
         let result = parse("[[Some Page]]");
-        assert_eq!(result, QueryExpr::PageRef("Some Page".to_string()));
+        assert_eq!(result, QueryAst::PageRef("Some Page".to_string()));
     }
 
     #[test]
     fn test_parse_full_text_search() {
         let result = parse("(full-text-search \"hello\")");
-        assert_eq!(result, QueryExpr::BlockContent("hello".to_string()));
+        assert_eq!(result, QueryAst::BlockContent("hello".to_string()));
     }
 
     // Compound queries
@@ -776,9 +773,9 @@ mod tests {
         let result = parse("(and (task todo) (priority a))");
         assert_eq!(
             result,
-            QueryExpr::And(vec![
-                QueryExpr::Task(vec!["todo".to_string()]),
-                QueryExpr::Priority(vec!["a".to_string()]),
+            QueryAst::And(vec![
+                QueryAst::Task(vec!["todo".to_string()]),
+                QueryAst::Priority(vec!["a".to_string()]),
             ])
         );
     }
@@ -788,9 +785,9 @@ mod tests {
         let result = parse("(or (task todo) (task done))");
         assert_eq!(
             result,
-            QueryExpr::Or(vec![
-                QueryExpr::Task(vec!["todo".to_string()]),
-                QueryExpr::Task(vec!["done".to_string()]),
+            QueryAst::Or(vec![
+                QueryAst::Task(vec!["todo".to_string()]),
+                QueryAst::Task(vec!["done".to_string()]),
             ])
         );
     }
@@ -800,7 +797,7 @@ mod tests {
         let result = parse("(not (task done))");
         assert_eq!(
             result,
-            QueryExpr::Not(Box::new(QueryExpr::Task(vec!["done".to_string()])))
+            QueryAst::Not(Box::new(QueryAst::Task(vec!["done".to_string()])))
         );
     }
 
@@ -811,12 +808,12 @@ mod tests {
         let result = parse("(and (or (task todo) (priority a)) (page \"X\"))");
         assert_eq!(
             result,
-            QueryExpr::And(vec![
-                QueryExpr::Or(vec![
-                    QueryExpr::Task(vec!["todo".to_string()]),
-                    QueryExpr::Priority(vec!["a".to_string()]),
+            QueryAst::And(vec![
+                QueryAst::Or(vec![
+                    QueryAst::Task(vec!["todo".to_string()]),
+                    QueryAst::Priority(vec!["a".to_string()]),
                 ]),
-                QueryExpr::Page("X".to_string()),
+                QueryAst::Page("X".to_string()),
             ])
         );
     }
@@ -826,12 +823,12 @@ mod tests {
         let result = parse("(and (not (or (task done) (task cancelled))) (priority a))");
         assert_eq!(
             result,
-            QueryExpr::And(vec![
-                QueryExpr::Not(Box::new(QueryExpr::Or(vec![
-                    QueryExpr::Task(vec!["done".to_string()]),
-                    QueryExpr::Task(vec!["cancelled".to_string()]),
+            QueryAst::And(vec![
+                QueryAst::Not(Box::new(QueryAst::Or(vec![
+                    QueryAst::Task(vec!["done".to_string()]),
+                    QueryAst::Task(vec!["cancelled".to_string()]),
                 ]))),
-                QueryExpr::Priority(vec!["a".to_string()]),
+                QueryAst::Priority(vec!["a".to_string()]),
             ])
         );
     }
@@ -843,7 +840,7 @@ mod tests {
         let result = parse("(between 100 200)");
         assert_eq!(
             result,
-            QueryExpr::Between {
+            QueryAst::Between {
                 field: "created_at".to_string(),
                 start: QueryValue::Integer(100),
                 end: QueryValue::Integer(200),
@@ -856,7 +853,7 @@ mod tests {
         let result = parse("(between \"2024-01-01\" \"2024-12-31\")");
         assert_eq!(
             result,
-            QueryExpr::Between {
+            QueryAst::Between {
                 field: "created_at".to_string(),
                 start: QueryValue::String("2024-01-01".to_string()),
                 end: QueryValue::String("2024-12-31".to_string()),
@@ -948,7 +945,7 @@ mod tests {
         let result = parse("(task todo done)");
         assert_eq!(
             result,
-            QueryExpr::Task(vec!["todo".to_string(), "done".to_string()])
+            QueryAst::Task(vec!["todo".to_string(), "done".to_string()])
         );
     }
 
@@ -958,7 +955,7 @@ mod tests {
         // Priorities are lowercased
         assert_eq!(
             result,
-            QueryExpr::Priority(vec!["a".to_string(), "b".to_string(), "c".to_string()])
+            QueryAst::Priority(vec!["a".to_string(), "b".to_string(), "c".to_string()])
         );
     }
 
@@ -968,7 +965,7 @@ mod tests {
     fn test_parse_unicode_page_name() {
         // Page names can contain unicode
         let result = parse("(page \"日本語ページ\")");
-        assert_eq!(result, QueryExpr::Page("日本語ページ".to_string()));
+        assert_eq!(result, QueryAst::Page("日本語ページ".to_string()));
     }
 
     #[test]
@@ -991,7 +988,7 @@ mod tests {
     #[test]
     fn test_parse_emoji_in_tags() {
         let result = parse("(tags \"🚀\")");
-        assert_eq!(result, QueryExpr::Tags("🚀".to_string()));
+        assert_eq!(result, QueryAst::Tags("🚀".to_string()));
     }
 
     // Edge cases: large inputs
@@ -1001,7 +998,7 @@ mod tests {
         let large_name = "a".repeat(10000);
         let query = format!("(page \"{}\")", large_name);
         let result = parse(&query);
-        assert_eq!(result, QueryExpr::Page(large_name));
+        assert_eq!(result, QueryAst::Page(large_name));
     }
 
     #[test]
@@ -1010,7 +1007,7 @@ mod tests {
         let result = parse("(task todo done later now cancelled)");
         assert_eq!(
             result,
-            QueryExpr::Task(vec![
+            QueryAst::Task(vec![
                 "todo".to_string(),
                 "done".to_string(),
                 "later".to_string(),
@@ -1026,7 +1023,7 @@ mod tests {
         let result = parse("(priority a b c)");
         assert_eq!(
             result,
-            QueryExpr::Priority(vec!["a".to_string(), "b".to_string(), "c".to_string()])
+            QueryAst::Priority(vec!["a".to_string(), "b".to_string(), "c".to_string()])
         );
     }
 
@@ -1035,19 +1032,19 @@ mod tests {
     #[test]
     fn test_parse_leading_whitespace() {
         let result = parse("  (task todo)");
-        assert_eq!(result, QueryExpr::Task(vec!["todo".to_string()]));
+        assert_eq!(result, QueryAst::Task(vec!["todo".to_string()]));
     }
 
     #[test]
     fn test_parse_trailing_whitespace() {
         let result = parse("(task todo)   ");
-        assert_eq!(result, QueryExpr::Task(vec!["todo".to_string()]));
+        assert_eq!(result, QueryAst::Task(vec!["todo".to_string()]));
     }
 
     #[test]
     fn test_parse_nested_whitespace() {
         let result = parse("(task  todo)");
-        assert_eq!(result, QueryExpr::Task(vec!["todo".to_string()]));
+        assert_eq!(result, QueryAst::Task(vec!["todo".to_string()]));
     }
 
     // Analyze tests
@@ -1057,8 +1054,8 @@ mod tests {
         let result = parse("(analyze (task todo) structural_mirror)");
         assert_eq!(
             result,
-            QueryExpr::Analyze {
-                inner: Box::new(QueryExpr::Task(vec!["todo".to_string()])),
+            QueryAst::Analyze {
+                inner: Box::new(QueryAst::Task(vec!["todo".to_string()])),
                 kind: AnalyzeKind::StructuralMirror,
             }
         );
@@ -1069,8 +1066,8 @@ mod tests {
         let result = parse("(analyze (page \"X\") serendipity)");
         assert_eq!(
             result,
-            QueryExpr::Analyze {
-                inner: Box::new(QueryExpr::Page("X".to_string())),
+            QueryAst::Analyze {
+                inner: Box::new(QueryAst::Page("X".to_string())),
                 kind: AnalyzeKind::Serendipity {
                     limit: None,
                     min_confidence: None,
@@ -1084,7 +1081,7 @@ mod tests {
     fn test_parse_analyze_serendipity_with_limit() {
         let result = parse("(analyze (task todo) serendipity :limit 20)");
         match result {
-            QueryExpr::Analyze {
+            QueryAst::Analyze {
                 kind: AnalyzeKind::Serendipity { limit, .. },
                 ..
             } => {
@@ -1100,7 +1097,7 @@ mod tests {
             "(analyze (task todo) serendipity :limit 10 :min-confidence 0.4 :temporal-window-days 14)",
         );
         match result {
-            QueryExpr::Analyze {
+            QueryAst::Analyze {
                 kind:
                     AnalyzeKind::Serendipity {
                         limit,
@@ -1209,7 +1206,7 @@ mod tests {
         match result {
             QueryAst::Temporal { range, inner } => {
                 assert_eq!(range, TemporalRange::Today);
-                assert_eq!(*inner, QueryExpr::Page("x".to_string()));
+                assert_eq!(*inner, QueryAst::Page("x".to_string()));
             }
             other => panic!("expected Temporal, got {:?}", other),
         }
@@ -1331,7 +1328,7 @@ mod tests {
         match result {
             QueryAst::VirtualSelect { columns, inner } => {
                 assert_eq!(columns, vec![VirtualColumn::WordCount]);
-                assert_eq!(*inner, QueryExpr::Page("x".to_string()));
+                assert_eq!(*inner, QueryAst::Page("x".to_string()));
             }
             other => panic!("expected VirtualSelect, got {:?}", other),
         }

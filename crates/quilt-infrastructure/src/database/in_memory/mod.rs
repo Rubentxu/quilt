@@ -10,6 +10,4 @@ mod block;
 mod page;
 mod tag;
 
-pub use block::InMemoryBlockRepository;
-pub use page::InMemoryPageRepository;
-pub use tag::InMemoryTagRepository;
+// No public re-exports - use quilt_test_helpers instead

@@ -13,11 +13,14 @@ use std::collections::HashMap;
     since = "0.1.0",
     note = "Use `quilt_test_helpers::InMemoryBlockRepo` instead"
 )]
+#[allow(dead_code)]
 #[derive(Debug, Default)]
 pub struct InMemoryBlockRepository {
     blocks: RwLock<HashMap<Uuid, Block>>,
 }
 
+#[allow(deprecated)]
+#[allow(dead_code)]
 impl InMemoryBlockRepository {
     /// Create a new empty in-memory block repository.
     pub fn new() -> Self {
@@ -27,6 +30,7 @@ impl InMemoryBlockRepository {
     }
 }
 
+#[allow(deprecated)]
 #[async_trait]
 impl BlockRepository for InMemoryBlockRepository {
     async fn get_by_id(&self, id: Uuid) -> Result<Option<Block>, DomainError> {
@@ -181,6 +185,7 @@ impl BlockRepository for InMemoryBlockRepository {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use quilt_domain::entities::BlockCreate;

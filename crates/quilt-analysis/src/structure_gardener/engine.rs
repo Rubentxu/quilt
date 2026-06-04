@@ -6,7 +6,6 @@
 use crate::AnalysisError;
 use crate::structure_gardener::types::*;
 use quilt_domain::entities::Block;
-use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::BlockRepository;
 use quilt_domain::value_objects::Uuid;
 use std::collections::HashMap;
@@ -383,6 +382,7 @@ pub type StructureGardenerError = AnalysisError;
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use quilt_domain::errors::DomainError;
     use quilt_domain::value_objects::BlockFormat;
 
     fn make_block(

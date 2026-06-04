@@ -8,7 +8,7 @@ use parking_lot::RwLock;
 
 use quilt_domain::entities::Page;
 use quilt_domain::errors::DomainError;
-use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
+use quilt_domain::properties::entry::DefaultPropertyEntry;
 use quilt_domain::repositories::PageRepository;
 use quilt_domain::value_objects::{JournalDay, PropertyValue, Uuid};
 

@@ -5,7 +5,6 @@
 use crate::AnalysisError;
 use crate::structure_mapper::types::*;
 use quilt_domain::entities::Block;
-use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::BlockRepository;
 use quilt_domain::value_objects::Uuid;
 use std::collections::HashSet;
@@ -577,6 +576,7 @@ fn detect_cycle(node_id: Uuid, edges: &[StructureEdge]) -> bool {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use quilt_domain::errors::DomainError;
     use quilt_domain::value_objects::BlockFormat;
 
     fn make_block(id: Uuid, refs: Vec<Uuid>, page_id: Uuid, content: &str) -> Block {

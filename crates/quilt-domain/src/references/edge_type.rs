@@ -42,6 +42,7 @@ pub enum EdgeType {
 /// Custom edge type for user-defined edge semantics.
 ///
 /// This is a separate type so that `EdgeType` can derive `Copy` for unit variants.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CustomEdgeType(pub String);
 

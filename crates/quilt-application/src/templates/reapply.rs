@@ -3,7 +3,6 @@
 //! Re-applies template properties to an existing block with conflict detection.
 //! V1 modes: `OverrideAll` (LWW) and `PreserveManual` (timestamp-based).
 
-use crate::errors::ApplicationError;
 use crate::use_cases::TemplateUseCases;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};

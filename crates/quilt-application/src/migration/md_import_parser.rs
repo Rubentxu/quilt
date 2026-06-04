@@ -111,7 +111,7 @@ pub fn parse_md_import(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), Migr
             blocks.push(new_block);
             let idx = blocks.len() - 1;
             parent_at_indent.push((indent_level, idx));
-        } else if let Some(&(parent_indent, parent_idx)) = parent_at_indent.last() {
+        } else if let Some(&(parent_indent, _parent_idx)) = parent_at_indent.last() {
             // Add as child of the appropriate parent
             if parent_indent == indent_level - 1 {
                 // Parent is one level up - add to its children

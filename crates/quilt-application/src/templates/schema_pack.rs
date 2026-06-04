@@ -129,10 +129,10 @@ impl SchemaPack {
         }
 
         let value: serde_json::Value = serde_json::from_str(s)
-            .map_err(|e| SchemaPackError::InvalidJson(serde_json::Value::String(s.to_string())))?;
+            .map_err(|_e| SchemaPackError::InvalidJson(serde_json::Value::String(s.to_string())))?;
 
         let pack: SchemaPack = serde_json::from_value(value)
-            .map_err(|e| SchemaPackError::InvalidJson(serde_json::Value::String(s.to_string())))?;
+            .map_err(|_e| SchemaPackError::InvalidJson(serde_json::Value::String(s.to_string())))?;
 
         // Validate value_type values
         for dp in &pack.default_properties {

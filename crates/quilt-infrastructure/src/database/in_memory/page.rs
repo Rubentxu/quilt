@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 use quilt_domain::entities::Page;
 use quilt_domain::errors::DomainError;
-use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
+use quilt_domain::properties::entry::DefaultPropertyEntry;
 use quilt_domain::repositories::{PageRepository, PropertyRepository};
-use quilt_domain::value_objects::{BlockFormat, JournalDay, PropertyValue, Uuid};
+use quilt_domain::value_objects::{JournalDay, PropertyValue, Uuid};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -15,6 +15,7 @@ use std::sync::Arc;
     since = "0.1.0",
     note = "Use `quilt_test_helpers::InMemoryPageRepo` instead"
 )]
+#[allow(dead_code)]
 pub struct InMemoryPageRepository {
     pages: RwLock<HashMap<Uuid, Page>>,
     /// Optional property repository for read-only checks in `update_properties`.
@@ -22,6 +23,7 @@ pub struct InMemoryPageRepository {
     property_repo: Option<Arc<dyn PropertyRepository>>,
 }
 
+#[allow(deprecated)]
 impl std::fmt::Debug for InMemoryPageRepository {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InMemoryPageRepository")
@@ -31,12 +33,15 @@ impl std::fmt::Debug for InMemoryPageRepository {
     }
 }
 
+#[allow(deprecated)]
 impl Default for InMemoryPageRepository {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[allow(deprecated)]
+#[allow(dead_code)]
 impl InMemoryPageRepository {
     /// Create a new empty in-memory page repository.
     pub fn new() -> Self {
@@ -48,6 +53,7 @@ impl InMemoryPageRepository {
 
     /// Create a new in-memory page repository with a property repository for
     /// read-only checks. Used by integration tests (T-B.14, T-B.15).
+    #[allow(dead_code)]
     pub fn with_property_repo(repo: Arc<dyn PropertyRepository>) -> Self {
         Self {
             pages: RwLock::new(HashMap::new()),
@@ -75,6 +81,7 @@ impl InMemoryPageRepository {
     }
 }
 
+#[allow(deprecated)]
 #[async_trait]
 impl PageRepository for InMemoryPageRepository {
     async fn get_by_id(&self, id: Uuid) -> Result<Option<Page>, DomainError> {
@@ -204,9 +211,12 @@ impl PageRepository for InMemoryPageRepository {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use quilt_domain::entities::PageCreate;
+    use quilt_domain::properties::HasValue;
+    use quilt_domain::value_objects::BlockFormat;
 
     fn create_test_page(name: &str) -> Page {
         Page::new(PageCreate {

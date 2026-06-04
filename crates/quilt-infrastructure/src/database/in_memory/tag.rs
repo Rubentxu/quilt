@@ -13,12 +13,15 @@ use std::collections::HashMap;
     since = "0.1.0",
     note = "Use `quilt_test_helpers::InMemoryTagRepo` instead"
 )]
+#[allow(dead_code)]
 #[derive(Debug, Default)]
 pub struct InMemoryTagRepository {
     /// Maps tag name -> set of page IDs with that tag
     tags: RwLock<HashMap<String, std::collections::HashSet<Uuid>>>,
 }
 
+#[allow(deprecated)]
+#[allow(dead_code)]
 impl InMemoryTagRepository {
     /// Create a new empty in-memory tag repository.
     pub fn new() -> Self {
@@ -28,6 +31,7 @@ impl InMemoryTagRepository {
     }
 }
 
+#[allow(deprecated)]
 #[async_trait]
 impl TagRepository for InMemoryTagRepository {
     async fn get_by_page(&self, page_id: Uuid) -> Result<Vec<String>, DomainError> {
@@ -92,6 +96,7 @@ impl TagRepository for InMemoryTagRepository {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

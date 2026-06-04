@@ -143,7 +143,7 @@ impl ResourceProvider for GraphResourceProvider {
     // resource tier doesn't expose block IDs (resources are aggregate
     // views, not block-level).
     fn resource_evidence(&self, uri: &str, _result: &serde_json::Value) -> Option<Evidence> {
-        let mut ev = Evidence::universal_fallback(uri);
+        let ev = Evidence::universal_fallback(uri);
         match uri {
             "quilt://graph" | "quilt://pages" | "quilt://journals" | "quilt://tags" => {
                 // Aggregate resource — universal fallback.

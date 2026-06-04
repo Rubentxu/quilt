@@ -151,6 +151,7 @@ pub struct CreateBlockRequest {
 /// Update block request
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct UpdateBlockRequest {
     pub content: Option<String>,
     pub marker: Option<String>,

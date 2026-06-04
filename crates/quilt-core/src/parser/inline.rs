@@ -2,7 +2,6 @@
 //!
 //! Parses `[[Page]]`, `((Block))`, `#tag`, and `property:: value` syntax
 //! from block content. Provides range information for decorations.
-use serde::{Deserialize, Serialize};
 
 use std::collections::HashMap;
 
