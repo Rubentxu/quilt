@@ -159,6 +159,25 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Migration 006: add `properties` column to `pages` (F5).
+    // Additive: no data backfill, no row rewriting. Pre-existing pages get
+    // `'{}'` (empty JSON object) which parses to an empty HashMap on read.
+    // The migration is idempotent: if the column already exists, this errors
+    // with "duplicate column" but we catch and ignore that case.
+    match sqlx::query("ALTER TABLE pages ADD COLUMN properties TEXT NOT NULL DEFAULT '{}'")
+        .execute(pool)
+        .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            // Ignore "duplicate column" error so the migration is idempotent.
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+        }
+    }
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS files (
