@@ -86,10 +86,12 @@ impl McpServer {
             Ok(text) => McpResponse::ToolsCall(ToolsCallResult {
                 content: vec![ContentBlock::Text { text }],
                 is_error: Some(false),
+                _meta: None,
             }),
             Err(e) => McpResponse::ToolsCall(ToolsCallResult {
                 content: vec![ContentBlock::Text { text: e }],
                 is_error: Some(true),
+                _meta: None,
             }),
         }
     }
@@ -112,6 +114,7 @@ impl McpServer {
                     mime_type: "application/json".to_string(),
                     text: Some(text),
                 }],
+                _meta: None,
             }),
             Err(e) => McpResponse::ResourcesRead(ResourceReadResult {
                 contents: vec![ResourceContent {
@@ -119,6 +122,7 @@ impl McpServer {
                     mime_type: "text/plain".to_string(),
                     text: Some(e),
                 }],
+                _meta: None,
             }),
         }
     }
