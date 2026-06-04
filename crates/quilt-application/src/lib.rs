@@ -27,6 +27,9 @@ pub mod templates;
 // Query execution (F18)
 pub mod query;
 
+// Migration module (F21) - Logseq markdown import
+pub mod migration;
+
 // Re-exports
 pub use bootstrap::AppServices;
 pub use errors::ApplicationError;

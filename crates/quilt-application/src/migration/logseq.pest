@@ -1,0 +1,59 @@
+// Pest grammar for Logseq markdown files.
+//
+// Logseq pages are markdown files with optional YAML frontmatter.
+// Block content uses indentation (2 spaces) to indicate hierarchy.
+//
+// Example structure:
+// ---
+// title: My Page
+// tags: [tag1, tag2]
+// ---
+//
+// Content of the page.
+//
+// - Top level block
+//   - Nested block
+//     - Deeply nested
+//
+// More content outside blocks.
+
+grammar Logseq;
+
+logseq_file = { SOI ~ frontmatter? ~ block* ~ EOI }
+
+// ── Frontmatter ──────────────────────────────────────────────────
+
+frontmatter = { "---" ~ frontmatter_lines ~ "---" }
+
+frontmatter_lines = { (frontmatter_line ~ NEWLINE)* }
+
+frontmatter_line = { property_line | comment_line | empty_line }
+
+comment_line = { "#" ~ any_char* }
+
+property_line = { property_key ~ "::" ~ property_value }
+
+property_key = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "-" | "_")* }
+
+property_value = @{ any_char* }
+
+// ── Blocks ───────────────────────────────────────────────────────
+
+block = { block_line ~ (indent ~ block)* }
+
+block_line = { (&indent? ~ content_line) | empty_line }
+
+indent = @{ "  " ~ "  "* }  // 2 spaces per indent level
+
+content_line = @{ any_char* }
+
+empty_line = { "" }
+
+// ── Primitives ───────────────────────────────────────────────────
+
+any_char = { !["\n"] ~ ANY }
+
+NEWLINE = _{ "\n" | "\r\n" }
+
+// Allow anything through
+// ─────────────────────────────────────────────────────────────────
