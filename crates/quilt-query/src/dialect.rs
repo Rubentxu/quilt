@@ -4,6 +4,7 @@
 //! [`QueryExecutor`](super::executor::QueryExecutor) to generate SQL for different
 //! database backends (SQLite, PostgreSQL, MySQL) without changing the executor logic.
 
+use crate::ast::TemporalRange;
 use crate::parser::{AggregateFn, PropertyOp, StatsFn};
 
 /// Kinds of window functions for statistical queries.
@@ -151,6 +152,28 @@ pub trait SqlDialect: Send + Sync + std::fmt::Debug {
             PropertyOp::Between => format!("{} BETWEEN ? AND ?", prop_path),
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // G3: Temporal range SQL generation
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Generates SQL WHERE conditions for a temporal range filter.
+    ///
+    /// # Week Convention
+    ///
+    /// **Weeks start on Monday** (ISO 8601 standard). This convention is
+    /// shared between `compile_temporal` and `temporal_range_sql`. Documented
+    /// here to prevent hidden meaning connascence (~0.8 bits per spec discovery).
+    ///
+    /// # Arguments
+    ///
+    /// * `range` - The temporal range to convert to SQL
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (sql_fragment, params) suitable for embedding in a WHERE clause.
+    fn temporal_range_sql(&self, range: &TemporalRange)
+    -> (String, Vec<crate::executor::SqlParam>);
 }
 
 /// SQLite-specific SQL dialect implementation.
@@ -159,4 +182,108 @@ pub trait SqlDialect: Send + Sync + std::fmt::Debug {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SqliteDialect;
 
-impl SqlDialect for SqliteDialect {}
+impl SqlDialect for SqliteDialect {
+    /// Generates SQL WHERE conditions for a temporal range.
+    ///
+    /// Uses SQLite's `julianday()` function for date arithmetic.
+    /// Weeks start on Monday (ISO 8601 convention).
+    fn temporal_range_sql(
+        &self,
+        range: &TemporalRange,
+    ) -> (String, Vec<crate::executor::SqlParam>) {
+        use crate::executor::SqlParam;
+        use crate::time_helpers::TimeOffset;
+        use chrono::{Datelike, Local, NaiveDate};
+
+        let today = Local::now().date_naive();
+
+        match range {
+            TemporalRange::Today => {
+                let start = today.format("%Y-%m-%d").to_string();
+                let sql =
+                    "date(b.created_at / 1000, 'unixepoch', 'localtime') = date(?,'localtime')"
+                        .to_string();
+                (sql, vec![SqlParam::String(start)])
+            }
+            TemporalRange::Yesterday => {
+                let yesterday = today - chrono::Duration::days(1);
+                let start = yesterday.format("%Y-%m-%d").to_string();
+                let sql =
+                    "date(b.created_at / 1000, 'unixepoch', 'localtime') = date(?,'localtime')"
+                        .to_string();
+                (sql, vec![SqlParam::String(start)])
+            }
+            TemporalRange::ThisWeek => {
+                // ISO week starts on Monday
+                let weekday = today.weekday().num_days_from_monday();
+                let monday = today - chrono::Duration::days(weekday as i64);
+                let start = monday.format("%Y-%m-%d").to_string();
+                let sql =
+                    "date(b.created_at / 1000, 'unixepoch', 'localtime') >= date(?,'localtime')"
+                        .to_string();
+                (sql, vec![SqlParam::String(start)])
+            }
+            TemporalRange::LastWeek => {
+                // Previous week: Monday to Sunday of last week
+                let weekday = today.weekday().num_days_from_monday();
+                let this_monday = today - chrono::Duration::days(weekday as i64);
+                let last_monday = this_monday - chrono::Duration::days(7);
+                let last_sunday = this_monday - chrono::Duration::days(1);
+                let start = last_monday.format("%Y-%m-%d").to_string();
+                let end = last_sunday.format("%Y-%m-%d").to_string();
+                let sql = "date(b.created_at / 1000, 'unixepoch', 'localtime') BETWEEN date(?,'localtime') AND date(?,'localtime')".to_string();
+                (sql, vec![SqlParam::String(start), SqlParam::String(end)])
+            }
+            TemporalRange::ThisMonth => {
+                let start = format!("{}-01", today.format("%Y-%m"));
+                let sql =
+                    "date(b.created_at / 1000, 'unixepoch', 'localtime') >= date(?,'localtime')"
+                        .to_string();
+                (sql, vec![SqlParam::String(start)])
+            }
+            TemporalRange::LastMonth => {
+                let first_of_this_month =
+                    NaiveDate::from_ymd_opt(today.year(), today.month(), 1).expect("valid date");
+                let last_month = if today.month() == 1 {
+                    NaiveDate::from_ymd_opt(today.year() - 1, 12, 1).expect("valid date")
+                } else {
+                    NaiveDate::from_ymd_opt(today.year(), today.month() - 1, 1).expect("valid date")
+                };
+                // Last day of last month is day before first of this month
+                let end = first_of_this_month - chrono::Duration::days(1);
+                let start = last_month.format("%Y-%m-%d").to_string();
+                let end_str = end.format("%Y-%m-%d").to_string();
+                let sql = "date(b.created_at / 1000, 'unixepoch', 'localtime') BETWEEN date(?,'localtime') AND date(?,'localtime')".to_string();
+                (
+                    sql,
+                    vec![SqlParam::String(start), SqlParam::String(end_str)],
+                )
+            }
+            TemporalRange::Custom { start, end } => {
+                let sql = "date(b.created_at / 1000, 'unixepoch', 'localtime') BETWEEN date(?,'localtime') AND date(?,'localtime')".to_string();
+                (
+                    sql,
+                    vec![
+                        SqlParam::String(start.clone()),
+                        SqlParam::String(end.clone()),
+                    ],
+                )
+            }
+            TemporalRange::Relative(offset) => {
+                let base_date = match offset {
+                    TimeOffset::Days(n) => today - chrono::Duration::days(*n),
+                    TimeOffset::Weeks(n) => today - chrono::Duration::weeks(*n),
+                    TimeOffset::Months(n) => today - chrono::Duration::days(n * 30),
+                    TimeOffset::Years(n) => today - chrono::Duration::days(n * 365),
+                    TimeOffset::Hours(n) => today - chrono::Duration::hours(*n),
+                    TimeOffset::Minutes(n) => today - chrono::Duration::minutes(*n),
+                };
+                let date_str = base_date.format("%Y-%m-%d").to_string();
+                let sql =
+                    "date(b.created_at / 1000, 'unixepoch', 'localtime') >= date(?,'localtime')"
+                        .to_string();
+                (sql, vec![SqlParam::String(date_str)])
+            }
+        }
+    }
+}

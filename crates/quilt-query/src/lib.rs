@@ -37,7 +37,7 @@
 //! let expr = parser.parse("(task todo)").unwrap();
 //!
 //! // Generate SQL
-//! let (sql, params) = executor.build_sql(&expr, 100);
+//! let (sql, params) = executor.build_sql(&expr, 100).unwrap();
 //! ```
 
 pub mod ast;
@@ -53,9 +53,7 @@ pub use ast::{PropertyOp, QueryAst, QueryValue, SortDirection};
 pub use compiler::{CompiledQuery, CompilerError, QueryCompiler, SqliteCompiler};
 pub use dialect::{SqlDialect, SqliteDialect, WindowFnKind};
 pub use executor::{AnalyzeError, AnalyzeResult, QueryExecutor, SqlParam};
-pub use parser::{
-    AggregateFn, AnalyzeKind, ParseError, QueryError, QueryParser, StatsFn,
-};
+pub use parser::{AggregateFn, AnalyzeKind, ParseError, QueryError, QueryParser, StatsFn};
 
 #[deprecated(since = "0.1.0", note = "Use QueryAst instead")]
 pub use ast::QueryExpr;

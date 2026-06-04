@@ -4,12 +4,13 @@
 //! time expressions like "-7d" (7 days ago) or "2w" (2 weeks from now).
 
 use chrono::{NaiveDate, Utc};
+use serde::{Deserialize, Serialize};
 
 /// Represents a relative time offset.
 ///
 /// Used to express dates relative to a base date, such as "7 days ago"
 /// or "2 weeks from now".
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TimeOffset {
     /// Days offset (positive = future, negative = past)
     Days(i64),

@@ -123,10 +123,7 @@ where
     /// `Ok((sql, params))` on success, `Err(CompilerError)` if the
     /// expression contains a top-level operator that `build_where`
     /// cannot compile (e.g., `Stats`, `Analyze`).
-    pub fn build_where(
-        &self,
-        expr: &QueryExpr,
-    ) -> Result<(String, Vec<SqlParam>), CompilerError> {
+    pub fn build_where(&self, expr: &QueryExpr) -> Result<(String, Vec<SqlParam>), CompilerError> {
         match expr {
             QueryExpr::And(exprs) => {
                 let mut sqls = Vec::with_capacity(exprs.len());
@@ -235,11 +232,9 @@ where
                 };
                 let mut params = vec![bound_value];
                 if matches!(op, crate::parser::PropertyOp::Between) {
-                    let v2 = value2
-                        .as_ref()
-                        .ok_or_else(|| CompilerError::Invalid(
-                            "PropertyOp::Between requires value2".to_string(),
-                        ))?;
+                    let v2 = value2.as_ref().ok_or_else(|| {
+                        CompilerError::Invalid("PropertyOp::Between requires value2".to_string())
+                    })?;
                     params.push(self.value_to_param(v2));
                 }
                 Ok((sql_fragment, params))
@@ -291,9 +286,7 @@ where
             // F1 — Analyze is handled in `build_analyze_sql`, not
             // `build_where`. Returning `Err` instead of `panic!` makes
             // the executor panic-free in the runtime paths.
-            QueryExpr::Analyze { .. } => {
-                Err(CompilerError::UnsupportedOperator { op: "Analyze" })
-            }
+            QueryExpr::Analyze { .. } => Err(CompilerError::UnsupportedOperator { op: "Analyze" }),
 
             // F2 — `Table` is a passthrough (the table layout is a
             // presentation concern, not a SQL filter).
@@ -317,9 +310,26 @@ where
 
             // F2 — `Namespace(ns)` — filter on the page namespace.
             QueryExpr::Namespace(ns) => {
-                let sql = "EXISTS (SELECT 1 FROM pages p WHERE p.id = b.page_id AND p.namespace_id = ?)".to_string();
+                let sql =
+                    "EXISTS (SELECT 1 FROM pages p WHERE p.id = b.page_id AND p.namespace_id = ?)"
+                        .to_string();
                 Ok((sql, vec![SqlParam::String(ns.clone())]))
             }
+
+            // G5 — PageFuzzy is handled in compile_page_fuzzy hook, not build_where.
+            QueryExpr::PageFuzzy { .. } => {
+                Err(CompilerError::UnsupportedOperator { op: "PageFuzzy" })
+            }
+
+            // G3 — Temporal is handled in compile_temporal hook, not build_where.
+            QueryExpr::Temporal { .. } => {
+                Err(CompilerError::UnsupportedOperator { op: "Temporal" })
+            }
+
+            // F12 — VirtualSelect is handled in compile_virtual_select hook, not build_where.
+            QueryExpr::VirtualSelect { .. } => Err(CompilerError::UnsupportedOperator {
+                op: "VirtualSelect",
+            }),
         }
     }
 
@@ -639,11 +649,11 @@ mod tests {
     fn test_property_query() {
         let executor = QueryExecutor::new();
         let expr = QueryAst::Property {
-     key: "author".to_string(),
-     op: PropertyOp::Equals,
-     value: QueryValue::String("John".to_string()),
-     value2: None,
- };
+            key: "author".to_string(),
+            op: PropertyOp::Equals,
+            value: QueryValue::String("John".to_string()),
+            value2: None,
+        };
         let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));
@@ -655,11 +665,11 @@ mod tests {
     fn test_property_query_integer() {
         let executor = QueryExecutor::new();
         let expr = QueryAst::Property {
-     key: "count".to_string(),
-     op: PropertyOp::Equals,
-     value: QueryValue::Integer(42),
-     value2: None,
- };
+            key: "count".to_string(),
+            op: PropertyOp::Equals,
+            value: QueryValue::Integer(42),
+            value2: None,
+        };
         let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));
@@ -671,11 +681,11 @@ mod tests {
     fn test_property_query_boolean() {
         let executor = QueryExecutor::new();
         let expr = QueryAst::Property {
-     key: "active".to_string(),
-     op: PropertyOp::Equals,
-     value: QueryValue::Boolean(true),
-     value2: None,
- };
+            key: "active".to_string(),
+            op: PropertyOp::Equals,
+            value: QueryValue::Boolean(true),
+            value2: None,
+        };
         let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));

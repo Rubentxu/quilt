@@ -10,11 +10,15 @@ use thiserror::Error;
 // The parser produces the same types, so the public API is unchanged
 // for existing callers.
 pub use crate::ast::{
-    AggregateFn, AnalyzeKind, QueryAst, QueryValue, SortDirection, StatsFn,
+    AggregateFn, AnalyzeKind, QueryAst, QueryValue, SortDirection, StatsFn, TemporalRange,
+    VirtualColumn,
 };
 // Re-export `PropertyOp` (F3) — the parser uses it in `parse_property`
 // to record the operator.
 pub use crate::property_op::PropertyOp;
+// TimeOffset is used in tests via `use super::*`
+#[cfg(test)]
+use crate::time_helpers::TimeOffset;
 // `QueryExpr` is preserved as a backward-compatible alias.
 #[deprecated(since = "0.1.0", note = "Use QueryAst instead")]
 pub use crate::ast::QueryExpr;
@@ -151,6 +155,9 @@ impl QueryParser {
                 "stats" => self.parse_stats(rest),
                 "group_by" => self.parse_group_by(rest),
                 "analyze" => self.parse_analyze(rest),
+                "page-fuzzy" => self.parse_page_fuzzy(rest),
+                "temporal" => self.parse_temporal(rest),
+                "virtual-select" => self.parse_virtual_select(rest),
                 _ => Err(ParseError::Invalid(format!("Unknown operator: {}", op))),
             }
         } else {
@@ -218,8 +225,7 @@ impl QueryParser {
             });
         }
         Err(ParseError::Invalid(
-            "property requires 2 (key value) or 3 (key op value | key lo hi) arguments"
-                .to_string(),
+            "property requires 2 (key value) or 3 (key op value | key lo hi) arguments".to_string(),
         ))
     }
 
@@ -383,6 +389,181 @@ impl QueryParser {
         })
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // G5: PageFuzzy — fuzzy page name matching
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Parses `(page-fuzzy "term" limit)` into `QueryAst::PageFuzzy`.
+    fn parse_page_fuzzy(&self, rest: &str) -> Result<QueryAst, ParseError> {
+        let args = self.split_args(rest);
+        if args.len() != 2 {
+            return Err(ParseError::Invalid(
+                "page-fuzzy requires exactly 2 arguments: term and limit".to_string(),
+            ));
+        }
+        let term = args[0].trim_matches('"').to_string();
+        let limit: usize = args[1]
+            .parse()
+            .map_err(|_| ParseError::Invalid("limit must be a positive integer".to_string()))?;
+        Ok(QueryAst::PageFuzzy { term, limit })
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // G3: Temporal — temporal classification
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Parses `(temporal :today (page "x"))` into `QueryAst::Temporal`.
+    fn parse_temporal(&self, rest: &str) -> Result<QueryAst, ParseError> {
+        let args = self.split_args(rest);
+        if args.len() < 2 {
+            return Err(ParseError::Invalid(
+                "temporal requires a range and an inner expression".to_string(),
+            ));
+        }
+
+        // Determine how many args the range takes
+        let range_arg_count = match args[0].trim() {
+            ":custom" => 3,   // :custom + start + end
+            ":relative" => 2, // :relative + offset
+            _ => 1,           // simple keywords like :today
+        };
+
+        if args.len() < range_arg_count + 1 {
+            return Err(ParseError::Invalid(
+                "temporal requires a range and an inner expression".to_string(),
+            ));
+        }
+
+        // Extract range args
+        let range_args = &args[..range_arg_count];
+        let range = self.parse_temporal_range(range_args)?;
+
+        // Inner expression starts at index range_arg_count
+        let inner_str = &args[range_arg_count..].join(" ");
+        let inner = self.parse_expr(inner_str)?;
+        Ok(QueryAst::Temporal {
+            range,
+            inner: Box::new(inner),
+        })
+    }
+
+    /// Parses temporal range arguments into `TemporalRange`.
+    ///
+    /// Handles:
+    /// - Simple keywords: `:today`, `:yesterday`, `:this-week`, etc.
+    /// - Custom range: `:custom "start" "end"`
+    /// - Relative offset: `:relative "-7d"`
+    fn parse_temporal_range(&self, args: &[String]) -> Result<TemporalRange, ParseError> {
+        if args.is_empty() {
+            return Err(ParseError::Invalid(
+                "temporal range keyword missing".to_string(),
+            ));
+        }
+        let first = args[0].trim();
+        match first {
+            ":today" => Ok(TemporalRange::Today),
+            ":yesterday" => Ok(TemporalRange::Yesterday),
+            ":this-week" => Ok(TemporalRange::ThisWeek),
+            ":last-week" => Ok(TemporalRange::LastWeek),
+            ":this-month" => Ok(TemporalRange::ThisMonth),
+            ":last-month" => Ok(TemporalRange::LastMonth),
+            ":custom" => {
+                // args: [":custom", "start", "end"]
+                if args.len() != 3 {
+                    return Err(ParseError::Invalid(
+                        ":custom requires two date arguments".to_string(),
+                    ));
+                }
+                let start = args[1].trim_matches('"').to_string();
+                let end = args[2].trim_matches('"').to_string();
+                Ok(TemporalRange::Custom { start, end })
+            }
+            ":relative" => {
+                // args: [":relative", "offset"]
+                if args.len() != 2 {
+                    return Err(ParseError::Invalid(
+                        ":relative requires an offset argument".to_string(),
+                    ));
+                }
+                let offset_str = args[1].trim_matches('"').to_string();
+                let offset =
+                    crate::time_helpers::TimeOffset::parse(&offset_str).ok_or_else(|| {
+                        ParseError::Invalid(format!(
+                            "invalid time offset: {} (expected format like \"-7d\", \"2w\", etc.)",
+                            offset_str
+                        ))
+                    })?;
+                Ok(TemporalRange::Relative(offset))
+            }
+            _ => Err(ParseError::Invalid(format!(
+                "unknown temporal range: {} (expected :today, :yesterday, :this-week, :last-week, :this-month, :last-month, :custom, or :relative",
+                first
+            ))),
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // F12: VirtualSelect — virtual column selection
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Parses `(virtual-select [word_count ref_count] (page "x"))` into
+    /// `QueryAst::VirtualSelect`.
+    fn parse_virtual_select(&self, rest: &str) -> Result<QueryAst, ParseError> {
+        let args = self.split_args(rest);
+        if args.len() != 2 {
+            return Err(ParseError::Invalid(
+                "virtual-select requires a column list and an inner expression".to_string(),
+            ));
+        }
+
+        let columns = self.parse_virtual_column_list(&args[0])?;
+        let inner = self.parse_expr(&args[1])?;
+        Ok(QueryAst::VirtualSelect {
+            columns,
+            inner: Box::new(inner),
+        })
+    }
+
+    /// Parses `[word_count ref_count]` into `Vec<VirtualColumn>`.
+    fn parse_virtual_column_list(&self, s: &str) -> Result<Vec<VirtualColumn>, ParseError> {
+        let s = s.trim();
+        if !s.starts_with('[') || !s.ends_with(']') {
+            return Err(ParseError::Invalid(
+                "virtual-select column list must be enclosed in brackets".to_string(),
+            ));
+        }
+        let inner = &s[1..s.len() - 1];
+        let names: Vec<&str> = inner
+            .split_whitespace()
+            .map(|n| n.trim())
+            .filter(|n| !n.is_empty())
+            .collect();
+
+        if names.is_empty() {
+            return Err(ParseError::Invalid(
+                "virtual-select requires at least one column".to_string(),
+            ));
+        }
+
+        let mut columns = Vec::with_capacity(names.len());
+        for name in names {
+            let col = match name {
+                "word_count" => VirtualColumn::WordCount,
+                "char_count" => VirtualColumn::CharCount,
+                "ref_count" => VirtualColumn::RefCount,
+                "block_age_days" => VirtualColumn::BlockAgeDays,
+                _ => {
+                    return Err(ParseError::Invalid(format!(
+                        "unknown virtual column: {} (expected word_count, char_count, ref_count, block_age_days)",
+                        name
+                    )));
+                }
+            };
+            columns.push(col);
+        }
+        Ok(columns)
+    }
+
     fn parse_analyze_kind(
         &self,
         kind_str: &str,
@@ -487,6 +668,7 @@ impl QueryParser {
     fn split_args(&self, input: &str) -> Vec<String> {
         let mut result = Vec::new();
         let mut depth = 0;
+        let mut bracket_depth = 0;
         let mut current = String::new();
 
         for c in input.chars() {
@@ -499,7 +681,15 @@ impl QueryParser {
                     depth -= 1;
                     current.push(c);
                 }
-                ' ' if depth == 0 => {
+                '[' => {
+                    bracket_depth += 1;
+                    current.push(c);
+                }
+                ']' => {
+                    bracket_depth -= 1;
+                    current.push(c);
+                }
+                ' ' if depth == 0 && bracket_depth == 0 => {
                     if !current.is_empty() {
                         result.push(current.trim().to_string());
                         current = String::new();
@@ -682,7 +872,6 @@ mod tests {
         assert_eq!(
             result,
             QueryAst::Property {
-
                 key: "author".to_string(),
 
                 op: PropertyOp::Equals,
@@ -690,7 +879,6 @@ mod tests {
                 value: QueryValue::String("John".to_string()),
 
                 value2: None,
-
             }
         );
     }
@@ -701,7 +889,6 @@ mod tests {
         assert_eq!(
             result,
             QueryAst::Property {
-
                 key: "count".to_string(),
 
                 op: PropertyOp::Equals,
@@ -709,7 +896,6 @@ mod tests {
                 value: QueryValue::Integer(42),
 
                 value2: None,
-
             }
         );
     }
@@ -720,7 +906,6 @@ mod tests {
         assert_eq!(
             result,
             QueryAst::Property {
-
                 key: "active".to_string(),
 
                 op: PropertyOp::Equals,
@@ -728,7 +913,6 @@ mod tests {
                 value: QueryValue::Boolean(true),
 
                 value2: None,
-
             }
         );
     }
@@ -793,7 +977,6 @@ mod tests {
         assert_eq!(
             result,
             QueryAst::Property {
-
                 key: "author".to_string(),
 
                 op: PropertyOp::Equals,
@@ -801,7 +984,6 @@ mod tests {
                 value: QueryValue::String("张三".to_string()),
 
                 value2: None,
-
             }
         );
     }
@@ -914,7 +1096,9 @@ mod tests {
 
     #[test]
     fn test_parse_analyze_serendipity_full() {
-        let result = parse("(analyze (task todo) serendipity :limit 10 :min-confidence 0.4 :temporal-window-days 14)");
+        let result = parse(
+            "(analyze (task todo) serendipity :limit 10 :min-confidence 0.4 :temporal-window-days 14)",
+        );
         match result {
             QueryExpr::Analyze {
                 kind:
@@ -972,6 +1156,242 @@ mod tests {
     #[test]
     fn test_parse_analyze_structural_mirror_with_kwargs() {
         let err = parse_err("(analyze (task todo) structural_mirror :limit 5)");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // G5: PageFuzzy tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_page_fuzzy_basic() {
+        let result = parse("(page-fuzzy \"rust\" 10)");
+        match result {
+            QueryAst::PageFuzzy { term, limit } => {
+                assert_eq!(term, "rust");
+                assert_eq!(limit, 10);
+            }
+            other => panic!("expected PageFuzzy, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_page_fuzzy_default_limit() {
+        let result = parse("(page-fuzzy \"rust\" 50)");
+        match result {
+            QueryAst::PageFuzzy { term, limit } => {
+                assert_eq!(term, "rust");
+                assert_eq!(limit, 50);
+            }
+            other => panic!("expected PageFuzzy, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_page_fuzzy_requires_two_args() {
+        let err = parse_err("(page-fuzzy \"rust\")");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    #[test]
+    fn test_parse_page_fuzzy_limit_must_be_integer() {
+        let err = parse_err("(page-fuzzy \"rust\" abc)");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // G3: Temporal tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_temporal_today() {
+        let result = parse("(temporal :today (page \"x\"))");
+        match result {
+            QueryAst::Temporal { range, inner } => {
+                assert_eq!(range, TemporalRange::Today);
+                assert_eq!(*inner, QueryExpr::Page("x".to_string()));
+            }
+            other => panic!("expected Temporal, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_this_week() {
+        let result = parse("(temporal :this-week (page \"x\"))");
+        match result {
+            QueryAst::Temporal { range, inner: _ } => {
+                assert_eq!(range, TemporalRange::ThisWeek);
+            }
+            other => panic!("expected Temporal, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_last_week() {
+        let result = parse("(temporal :last-week (task todo))");
+        match result {
+            QueryAst::Temporal { range, .. } => {
+                assert_eq!(range, TemporalRange::LastWeek);
+            }
+            other => panic!("expected Temporal, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_yesterday() {
+        let result = parse("(temporal :yesterday (priority a))");
+        match result {
+            QueryAst::Temporal { range, .. } => {
+                assert_eq!(range, TemporalRange::Yesterday);
+            }
+            other => panic!("expected Temporal, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_this_month() {
+        let result = parse("(temporal :this-month (page \"test\"))");
+        match result {
+            QueryAst::Temporal { range, .. } => {
+                assert_eq!(range, TemporalRange::ThisMonth);
+            }
+            other => panic!("expected Temporal, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_last_month() {
+        let result = parse("(temporal :last-month (page \"test\"))");
+        match result {
+            QueryAst::Temporal { range, .. } => {
+                assert_eq!(range, TemporalRange::LastMonth);
+            }
+            other => panic!("expected Temporal, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_custom() {
+        let result = parse("(temporal :custom \"2024-01-01\" \"2024-12-31\" (page \"x\"))");
+        match result {
+            QueryAst::Temporal { range, .. } => {
+                assert_eq!(
+                    range,
+                    TemporalRange::Custom {
+                        start: "2024-01-01".to_string(),
+                        end: "2024-12-31".to_string(),
+                    }
+                );
+            }
+            other => panic!("expected Temporal with Custom, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_relative() {
+        let result = parse("(temporal :relative \"-7d\" (page \"x\"))");
+        match result {
+            QueryAst::Temporal { range, .. } => {
+                assert_eq!(range, TemporalRange::Relative(TimeOffset::Days(-7)));
+            }
+            other => panic!("expected Temporal with Relative, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_relative_weeks() {
+        let result = parse("(temporal :relative \"2w\" (page \"x\"))");
+        match result {
+            QueryAst::Temporal { range, .. } => {
+                assert_eq!(range, TemporalRange::Relative(TimeOffset::Weeks(2)));
+            }
+            other => panic!("expected Temporal with Relative, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_temporal_requires_range_and_inner() {
+        let err = parse_err("(temporal :today)");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    #[test]
+    fn test_parse_temporal_unknown_range() {
+        let err = parse_err("(temporal :unknown (page \"x\"))");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // F12: VirtualSelect tests
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_virtual_select_word_count() {
+        let result = parse("(virtual-select [word_count] (page \"x\"))");
+        match result {
+            QueryAst::VirtualSelect { columns, inner } => {
+                assert_eq!(columns, vec![VirtualColumn::WordCount]);
+                assert_eq!(*inner, QueryExpr::Page("x".to_string()));
+            }
+            other => panic!("expected VirtualSelect, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_virtual_select_multiple_columns() {
+        let result = parse("(virtual-select [word_count ref_count] (page \"x\"))");
+        match result {
+            QueryAst::VirtualSelect { columns, .. } => {
+                assert_eq!(
+                    columns,
+                    vec![VirtualColumn::WordCount, VirtualColumn::RefCount]
+                );
+            }
+            other => panic!("expected VirtualSelect, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_virtual_select_all_columns() {
+        let result =
+            parse("(virtual-select [word_count char_count ref_count block_age_days] (page \"x\"))");
+        match result {
+            QueryAst::VirtualSelect { columns, .. } => {
+                assert_eq!(
+                    columns,
+                    vec![
+                        VirtualColumn::WordCount,
+                        VirtualColumn::CharCount,
+                        VirtualColumn::RefCount,
+                        VirtualColumn::BlockAgeDays
+                    ]
+                );
+            }
+            other => panic!("expected VirtualSelect, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_virtual_select_requires_two_args() {
+        let err = parse_err("(virtual-select [word_count])");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    #[test]
+    fn test_parse_virtual_select_requires_brackets() {
+        let err = parse_err("(virtual-select word_count (page \"x\"))");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    #[test]
+    fn test_parse_virtual_select_unknown_column() {
+        let err = parse_err("(virtual-select [unknown_col] (page \"x\"))");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    #[test]
+    fn test_parse_virtual_select_requires_at_least_one_column() {
+        let err = parse_err("(virtual-select [] (page \"x\"))");
         assert!(matches!(err, ParseError::Invalid(_)));
     }
 }

@@ -97,6 +97,69 @@ pub enum AnalyzeKind {
     },
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// G3: TemporalRange — temporal classification for queries
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Time range for temporal classification queries (G3).
+///
+/// Variants cover common temporal ranges used in knowledge management:
+/// - `Today` / `Yesterday`: exact day boundaries
+/// - `ThisWeek` / `LastWeek`: week boundaries (week starts Monday per convention)
+/// - `ThisMonth` / `LastMonth`: month boundaries
+/// - `Custom`: explicit date range
+/// - `Relative`: dynamic offset from current time
+///
+/// # Week Convention
+///
+/// **Weeks start on Monday** (ISO 8601 standard). This convention is shared
+/// between `compile_temporal` and `SqlDialect::temporal_range_sql`. Documented
+/// here to prevent hidden meaning connascence (~0.8 bits per spec discovery).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum TemporalRange {
+    /// Today (the current calendar day)
+    Today,
+    /// Yesterday (one day before today)
+    Yesterday,
+    /// This week (Monday 00:00 to today)
+    ThisWeek,
+    /// Last week (Monday 00:00 to Sunday 23:59)
+    LastWeek,
+    /// This month (day 1 to today)
+    ThisMonth,
+    /// Last month (day 1 to last day of previous month)
+    LastMonth,
+    /// Custom date range with explicit start and end dates
+    Custom {
+        /// Start date (inclusive)
+        start: String,
+        /// End date (inclusive)
+        end: String,
+    },
+    /// Relative time offset from now
+    Relative(crate::time_helpers::TimeOffset),
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// F12: VirtualColumn — SQL-computed column types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Virtual columns computed from block data at query time (F12).
+///
+/// These columns are not stored in the database but computed from block content
+/// using SQL expressions. Each variant maps to a specific SQL computation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum VirtualColumn {
+    /// Word count: `LENGTH(content) - LENGTH(REPLACE(content, ' ', '')) + 1`
+    WordCount,
+    /// Character count: `LENGTH(content)`
+    CharCount,
+    /// Reference count: subquery on refs table
+    RefCount,
+    /// Block age in days: `CAST(julianday('now') - julianday(created_at) AS INTEGER)`
+    BlockAgeDays,
+}
+
 /// Abstract Syntax Tree (AST) for query expressions.
 ///
 /// Each variant represents a different query operation that can be
@@ -149,10 +212,7 @@ pub enum QueryAst {
         aggregate_fn: AggregateFn,
     },
     /// Statistical computation over a property (F2)
-    Stats {
-        property: String,
-        compute: StatsFn,
-    },
+    Stats { property: String, compute: StatsFn },
     /// Group by property (no aggregation) (F2)
     GroupBy {
         inner: Box<QueryAst>,
@@ -180,6 +240,47 @@ pub enum QueryAst {
     Missing(String),
     /// Filter to items within a namespace
     Namespace(String),
+
+    // ─────────────────────────────────────────────────────────────────────
+    // G5: PageFuzzy — fuzzy page name matching
+    // ─────────────────────────────────────────────────────────────────────
+    /// Fuzzy page name search (G5).
+    ///
+    /// Uses FTS5 prefix-first matching: try `term*` first, fall back to LIKE `%term%`.
+    PageFuzzy {
+        /// The search term
+        term: String,
+        /// Maximum results to return
+        limit: usize,
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    // G3: Temporal — temporal classification
+    // ─────────────────────────────────────────────────────────────────────
+    /// Filter by temporal range (G3).
+    ///
+    /// Combines a [`TemporalRange`] with an inner expression.
+    /// The compiler generates SQL that filters by the temporal range.
+    Temporal {
+        /// The temporal range to filter by
+        range: TemporalRange,
+        /// Inner expression to filter
+        inner: Box<QueryAst>,
+    },
+
+    // ─────────────────────────────────────────────────────────────────────
+    // F12: VirtualSelect — virtual column selection
+    // ─────────────────────────────────────────────────────────────────────
+    /// Select with virtual columns computed at query time (F12).
+    ///
+    /// Emits SQL with computed columns (word_count, char_count, ref_count, block_age)
+    /// alongside the inner query results.
+    VirtualSelect {
+        /// Virtual columns to compute
+        columns: Vec<VirtualColumn>,
+        /// Inner expression
+        inner: Box<QueryAst>,
+    },
 }
 
 /// Type alias for backward compatibility
