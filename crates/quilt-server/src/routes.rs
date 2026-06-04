@@ -42,6 +42,7 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/settings", handlers::settings::routes())
         .nest("/api/v1/templates", handlers::templates::routes())
         .nest("/api/v1/query", handlers::query::routes())
+        .nest("/api/v1/migration", handlers::migration::routes())
         // Frontend serving (catch-all for SPA)
         .route(
             "/",

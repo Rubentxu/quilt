@@ -10,6 +10,7 @@ pub mod cognitive;
 pub mod frontend;
 pub mod health;
 pub mod metrics;
+pub mod migration;
 pub mod navigate;
 pub mod pages;
 pub mod query;

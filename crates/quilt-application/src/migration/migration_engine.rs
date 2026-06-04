@@ -199,7 +199,8 @@ async fn create_blocks_from_raw<BR: BlockRepository>(
 }
 
 /// Infer PropertyValue from a string value.
-fn infer_property_value(value: &str) -> PropertyValue {
+/// Used internally during block creation from parsed Logseq content.
+pub fn infer_property_value(value: &str) -> PropertyValue {
     let trimmed = value.trim();
 
     // Check for boolean

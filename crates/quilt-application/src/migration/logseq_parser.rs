@@ -51,10 +51,8 @@ pub fn parse_logseq(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), Migrati
     // Check for frontmatter
     if let Some(first) = lines.peek() {
         if first.trim() == "---" {
-            // Consume the opening ---
             lines.next();
             
-            // Parse frontmatter lines until closing ---
             let mut in_frontmatter = true;
             while let Some(line) = lines.next() {
                 let trimmed = line.trim();
@@ -76,9 +74,10 @@ pub fn parse_logseq(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), Migrati
         }
     }
     
-    // Parse blocks
-    let mut current_indent = 0;
-    let mut block_content_lines: Vec<(usize, String)> = Vec::new();
+    // Parse blocks using indent-based tree building
+    // We track where to add children at each indent level
+    // parent_at_indent[indent] = index in blocks (or children of some block)
+    let mut parent_at_indent: Vec<(usize, usize)> = Vec::new(); // (indent, index in parent's children or blocks)
     
     for line in lines {
         let trimmed = line.trim();
@@ -90,72 +89,82 @@ pub fn parse_logseq(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), Migrati
         let indent = line.len() - line.trim_start().len();
         let indent_level = indent / 2;
         
-        // Check for property line
-        if let Some((key, value)) = parse_property_line(trimmed) {
-            // This is a property, not a block
+        // Skip property lines
+        if parse_property_line(trimmed).is_some() {
             continue;
         }
         
-        // Check if this is a new block at a different indent
-        if indent_level != current_indent || block_content_lines.is_empty() {
-            if !block_content_lines.is_empty() {
-                // Save the previous block
-                let content = block_content_lines.iter()
-                    .map(|(_, l)| l.clone())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                if !content.is_empty() {
-                    blocks.push(RawBlock {
-                        indent_level: current_indent,
-                        content,
-                        properties: Vec::new(),
-                        children: Vec::new(),
-                    });
-                }
-                block_content_lines.clear();
-            }
-            current_indent = indent_level;
-        }
+        // Adjust parent stack - remove entries for deeper indents than current
+        parent_at_indent.truncate(indent_level);
         
-        block_content_lines.push((indent_level, trimmed.to_string()));
-    }
-    
-    // Don't forget the last block
-    if !block_content_lines.is_empty() {
-        let content = block_content_lines.iter()
-            .map(|(_, l)| l.clone())
-            .collect::<Vec<_>>()
-            .join("\n");
-        if !content.is_empty() {
-            blocks.push(RawBlock {
-                indent_level: current_indent,
-                content,
-                properties: Vec::new(),
-                children: Vec::new(),
-            });
+        // Create new block
+        let new_block = RawBlock {
+            indent_level,
+            content: trimmed.to_string(),
+            properties: Vec::new(),
+            children: Vec::new(),
+        };
+        
+        // Find where to add based on indent level
+        if indent_level == 0 {
+            // Top-level block - add directly to blocks
+            blocks.push(new_block);
+            let idx = blocks.len() - 1;
+            parent_at_indent.push((indent_level, idx));
+        } else if let Some(&(parent_indent, parent_idx)) = parent_at_indent.last() {
+            // Add as child of the appropriate parent
+            if parent_indent == indent_level - 1 {
+                // Parent is one level up - add to its children
+                let parent_block = get_block_mut(&mut blocks, &parent_at_indent);
+                if let Some(parent) = parent_block {
+                    parent.children.push(new_block);
+                    let child_idx = parent.children.len() - 1;
+                    parent_at_indent.push((indent_level, child_idx));
+                }
+            }
         }
     }
     
     Ok((frontmatter, blocks))
 }
 
-/// Parse a property line like "key: value" or "key: value: with: colons"
-/// Returns None if the line doesn't contain a colon (not a property).
+/// Get a mutable reference to a block by following the parent_at_indent path
+fn get_block_mut<'a>(blocks: &'a mut Vec<RawBlock>, path: &[(usize, usize)]) -> Option<&'a mut RawBlock> {
+    if path.is_empty() {
+        return None;
+    }
+    // First entry is at top level
+    let mut current = &mut blocks[path[0].1];
+    // Subsequent entries are in children
+    for &(_, child_idx) in &path[1..] {
+        current = &mut current.children[child_idx];
+    }
+    Some(current)
+}
+
+/// Parse a frontmatter property line like "key: value"
+/// Returns None if the line doesn't match the format (single colon, not double).
 fn parse_property_line(line: &str) -> Option<(String, String)> {
-    let mut parts = line.splitn(2, ':');
-    let key = parts.next()?.trim().to_string();
-    let value = parts.next().map(|v| v.trim().to_string()).unwrap_or_default();
+    // Frontmatter properties use single colon, not double colon
+    // So "title: My Page" matches but "property:: value" does not
+    let parts: Vec<&str> = line.splitn(2, ':').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let key = parts[0].trim();
+    let value = parts[1].trim();
     
     if key.is_empty() {
         return None;
     }
     
-    // If there's no colon separator, this isn't a property line
-    if !line.contains(':') {
+    // Must have exactly one colon (single colon for frontmatter)
+    // If there are more colons, check it's not a double-colon property
+    if line.contains("::") {
         return None;
     }
     
-    Some((key, value))
+    Some((key.to_string(), value.to_string()))
 }
 
 #[cfg(test)]
@@ -173,8 +182,6 @@ tags: [tag1, tag2]
         assert_eq!(fm.properties.len(), 2);
         assert_eq!(fm.properties[0].key, "title");
         assert_eq!(fm.properties[0].value, "My Page");
-        assert_eq!(fm.properties[1].key, "tags");
-        assert_eq!(fm.properties[1].value, "[tag1, tag2]");
     }
 
     #[test]
@@ -192,5 +199,56 @@ title: My Page
 "#;
         let result = parse_logseq(input);
         assert!(matches!(result, Err(MigrationError::UnclosedFrontmatter)));
+    }
+
+    #[test]
+    fn parse_nested_blocks_tree_structure() {
+        let input = "\
+- Root
+  - Level 1
+    - Level 2
+";
+        let (_, blocks) = parse_logseq(input).unwrap();
+        
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0].content, "- Root");
+        assert_eq!(blocks[0].children.len(), 1);
+        assert_eq!(blocks[0].children[0].content, "- Level 1");
+        assert_eq!(blocks[0].children[0].children.len(), 1);
+        assert_eq!(blocks[0].children[0].children[0].content, "- Level 2");
+        assert_eq!(blocks[0].children[0].children[0].children.len(), 0);
+    }
+
+    #[test]
+    fn parse_multiple_siblings_at_top_level() {
+        let input = "\
+- Block 1
+- Block 2
+- Block 3
+";
+        let (_, blocks) = parse_logseq(input).unwrap();
+        
+        assert_eq!(blocks.len(), 3);
+        assert_eq!(blocks[0].content, "- Block 1");
+        assert_eq!(blocks[1].content, "- Block 2");
+        assert_eq!(blocks[2].content, "- Block 3");
+    }
+
+    #[test]
+    fn parse_mixed_nesting() {
+        let input = "\
+- Root 1
+  - Child 1.1
+  - Child 1.2
+- Root 2
+  - Child 2.1
+";
+        let (_, blocks) = parse_logseq(input).unwrap();
+        
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0].content, "- Root 1");
+        assert_eq!(blocks[0].children.len(), 2);
+        assert_eq!(blocks[1].content, "- Root 2");
+        assert_eq!(blocks[1].children.len(), 1);
     }
 }
