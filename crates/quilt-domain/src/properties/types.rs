@@ -6,7 +6,7 @@ use std::fmt;
 ///
 /// Each PropertyType has a canonical string representation and validates
 /// PropertyValue for type compatibility.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum PropertyType {
     /// Plain text value
     Text,
@@ -61,7 +61,7 @@ impl fmt::Display for PropertyType {
 }
 
 /// Cardinality defines how many values a property can have.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub enum Cardinality {
     /// Single value (default)
     #[default]
@@ -97,7 +97,7 @@ impl fmt::Display for Cardinality {
 }
 
 /// ViewContext determines where and how a property is displayed in the UI.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
 pub enum ViewContext {
     /// Show in the page properties panel
     Page,
@@ -139,7 +139,7 @@ impl fmt::Display for ViewContext {
 /// ClosedValue represents a predefined option for a property with closed set semantics.
 ///
 /// Used for properties like status (TODO, DOING, DONE) or priority (A, B, C).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ClosedValue {
     /// Unique identifier
     pub id: crate::value_objects::Uuid,

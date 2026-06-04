@@ -7,7 +7,7 @@ use crate::value_objects::Uuid;
 ///
 /// Each property has a unique identifier, database identifier, display title,
 /// type information, and constraints.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PropertyDefinition {
     /// Unique identifier
     pub id: Uuid,
@@ -31,6 +31,14 @@ pub struct PropertyDefinition {
     pub hidden: bool,
     /// Optional attribute for custom external storage paths
     pub attribute: Option<String>,
+    /// Whether this property is read-only (system/computed).
+    /// Defaults to `false` for user-defined properties. System properties
+    /// (`id`, `created_at`, `updated_at`) are registered with `read_only: true`
+    /// in `BUILTIN_PROPERTIES` and reject writes from `update_properties` via
+    /// `DomainError::PropertyReadOnly`. Legacy JSON without this field
+    /// deserializes to `false` via `#[serde(default)]`.
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 impl PropertyDefinition {
@@ -53,6 +61,7 @@ impl PropertyDefinition {
             queryable: true,
             hidden: false,
             attribute: None,
+            read_only: false,
         }
     }
 
@@ -85,6 +94,14 @@ impl PropertyDefinition {
     /// Set attribute
     pub fn with_attribute(mut self, attribute: impl Into<String>) -> Self {
         self.attribute = Some(attribute.into());
+        self
+    }
+
+    /// Mark this property as read-only (or back to writable). System/computed
+    /// properties like `id`, `created_at`, `updated_at` are registered with
+    /// `read_only: true` in `BUILTIN_PROPERTIES`.
+    pub fn with_read_only(mut self, read_only: bool) -> Self {
+        self.read_only = read_only;
         self
     }
 
@@ -124,6 +141,8 @@ mod tests {
         assert!(prop.public);
         assert!(prop.queryable);
         assert!(!prop.hidden);
+        // F9: read_only defaults to false
+        assert!(!prop.read_only);
     }
 
     #[test]
@@ -152,5 +171,53 @@ mod tests {
         assert!(!prop.has_closed_values());
         assert!(prop.is_value_allowed("any value"));
         assert!(prop.is_value_allowed("anything"));
+    }
+
+    // ── F9: read_only flag ──
+
+    #[test]
+    fn read_only_defaults_to_false() {
+        let prop = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text);
+        assert!(!prop.read_only);
+    }
+
+    #[test]
+    fn with_read_only_builder_sets_flag() {
+        let prop = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_read_only(true);
+        assert!(prop.read_only);
+    }
+
+    #[test]
+    fn with_read_only_can_toggle_back() {
+        let prop = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_read_only(true)
+            .with_read_only(false);
+        assert!(!prop.read_only);
+    }
+
+    #[test]
+    fn legacy_json_without_read_only_field_deserializes_to_false() {
+        // F9 forward-compat: a PropertyDefinition serialized before this
+        // change (no `read_only` field) must deserialize with `read_only: false`
+        // (the safe default — writable, not system).
+        // Serde uses the variant name for enums (One, Many, Block, etc.) since
+        // the types module doesn't have a custom serde representation.
+        let json = r#"{
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "db_ident": "my-prop",
+            "title": "My Prop",
+            "property_type": "Text",
+            "cardinality": "One",
+            "closed_values": [],
+            "view_context": "Block",
+            "public": true,
+            "queryable": true,
+            "hidden": false,
+            "attribute": null
+        }"#;
+        let def: PropertyDefinition = serde_json::from_str(json).unwrap();
+        assert!(!def.read_only);
+        assert_eq!(def.db_ident, "my-prop");
     }
 }
