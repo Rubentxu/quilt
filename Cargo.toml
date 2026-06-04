@@ -17,7 +17,7 @@ resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["Quilt Team"]
 license = "MIT OR Apache-2.0"
 
@@ -59,7 +59,7 @@ lru = "0.13"
 # CLI
 clap = { version = "4", features = ["derive"] }
 
-# Platform — no Tauri, Leptos CSR in browser
+# Platform — Tauri shell in `quilt-platform`, React+Vite SPA in `quilt-ui/`
 
 # Utils
 once_cell = "1"
