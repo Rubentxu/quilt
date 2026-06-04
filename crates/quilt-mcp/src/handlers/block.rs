@@ -4,6 +4,7 @@
 //!       quilt_get_block_tree, quilt_get_backlinks, quilt_create_task
 
 use crate::handlers::ToolHandler;
+use crate::protocol::{Evidence, SourceAuthority};
 use crate::serialization::block_to_json;
 use crate::tools::Tool;
 use crate::use_cases::{BlockTree, BlockUseCases};
@@ -328,5 +329,224 @@ impl ToolHandler for BlockToolHandler {
 
             _ => Err(format!("Unknown tool: {}", name)),
         }
+    }
+
+    // T-11, T-17: per-handler evidence override.
+    fn tool_evidence(&self, name: &str, _args: &Value, result: &Value) -> Option<Evidence> {
+        let mut ev = Evidence::universal_fallback(name);
+        match name {
+            "quilt_create_block" | "quilt_create_task" => {
+                if let Some(uuid) = result.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                    ev.block_ids.push(uuid.into());
+                }
+            }
+            "quilt_delete_block" => {
+                if let Some(uuid) = result.get("block_id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                    ev.block_ids.push(uuid.into());
+                }
+            }
+            "quilt_link_blocks" => {
+                for k in ["source_id", "target_id"] {
+                    if let Some(uuid) = result.get(k).and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                        ev.block_ids.push(uuid.into());
+                    }
+                }
+            }
+            "quilt_get_block_tree" | "quilt_get_backlinks" => {
+                if let Some(uuid) = result
+                    .get("block")
+                    .and_then(|b| b.get("id"))
+                    .and_then(|v| v.as_str())
+                    .and_then(Uuid::parse_str)
+                {
+                    ev.block_ids.push(uuid.into());
+                }
+                for key in ["backlinks", "children"] {
+                    if let Some(arr) = result.get(key).and_then(|v| v.as_array()) {
+                        for b in arr {
+                            if let Some(uuid) = b.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                                ev.block_ids.push(uuid.into());
+                            }
+                        }
+                    }
+                }
+            }
+            "quilt_list_blocks_by_author" => {
+                if let Some(blocks) = result.get("blocks").and_then(|v| v.as_array()) {
+                    for b in blocks {
+                        if let Some(uuid) = b.get("id").and_then(|v| v.as_str()).and_then(Uuid::parse_str) {
+                            ev.block_ids.push(uuid.into());
+                        }
+                    }
+                    if let Some(first) = blocks.first() {
+                        ev.source_authority = derive_authority(first);
+                    }
+                }
+            }
+            _ => return None,
+        }
+        Some(ev)
+    }
+}
+
+fn derive_authority(block: &Value) -> Option<SourceAuthority> {
+    let created_by = block
+        .get("properties")
+        .and_then(|p| p.get("created_by"))
+        .and_then(|v| v.as_str());
+    match created_by {
+        Some(s) if s.starts_with("user::") => Some(SourceAuthority::Manual),
+        Some(_) => Some(SourceAuthority::AutoExtracted),
+        None => Some(SourceAuthority::AutoExtracted),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn h() -> BlockToolHandler {
+        BlockToolHandler::new(Arc::new(NoopBlockUseCases))
+    }
+
+    /// Minimal stub of `BlockUseCases` that always errors. Only the
+    /// shape of the trait matters here — `tool_evidence` is a pure
+    /// function that does not call any use_case method.
+    struct NoopBlockUseCases;
+
+    #[async_trait]
+    impl quilt_application::use_cases::BlockUseCases for NoopBlockUseCases {
+        async fn create_with_page(
+            &self,
+            _page_name: &str,
+            _content: &str,
+            _parent_id: Option<quilt_application::Uuid>,
+            _marker: Option<quilt_application::TaskMarker>,
+            _properties: std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>,
+        ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn create_task(
+            &self,
+            _page_name: &str,
+            _content: &str,
+            _deadline: Option<chrono::NaiveDate>,
+            _priority: Option<&str>,
+        ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn delete(&self, _id: quilt_application::Uuid) -> Result<(), quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn link(
+            &self,
+            _src: quilt_application::Uuid,
+            _tgt: quilt_application::Uuid,
+        ) -> Result<(), quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn get_tree(&self, _id: quilt_application::Uuid) -> Result<quilt_application::use_cases::BlockTree, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn get_backlinks(&self, _id: quilt_application::Uuid) -> Result<Vec<quilt_domain::entities::Block>, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn list_by_property(
+            &self,
+            _key: &str,
+            _value: &str,
+            _limit: usize,
+        ) -> Result<Vec<quilt_domain::entities::Block>, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+    }
+
+    #[test]
+    fn test_tool_evidence_create_block_has_block_id() {
+        let block_id = "11111111-2222-3333-4444-555555555555";
+        let result = serde_json::json!({ "id": block_id });
+        let ev = h()
+            .tool_evidence("quilt_create_block", &serde_json::json!({}), &result)
+            .unwrap();
+        assert_eq!(ev.block_ids.len(), 1);
+        assert_eq!(ev.block_ids[0].to_string(), block_id);
+        assert_eq!(ev.tool_name, "quilt_create_block");
+    }
+
+    #[test]
+    fn test_tool_evidence_delete_block_has_block_id() {
+        let block_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        let result = serde_json::json!({ "status": "deleted", "block_id": block_id });
+        let ev = h()
+            .tool_evidence("quilt_delete_block", &serde_json::json!({}), &result)
+            .unwrap();
+        assert_eq!(ev.block_ids[0].to_string(), block_id);
+    }
+
+    #[test]
+    fn test_tool_evidence_link_blocks_has_both_ids() {
+        let src = "11111111-2222-3333-4444-555555555555";
+        let tgt = "66666666-7777-8888-9999-000000000000";
+        let result = serde_json::json!({ "status": "linked", "source_id": src, "target_id": tgt });
+        let ev = h()
+            .tool_evidence("quilt_link_blocks", &serde_json::json!({}), &result)
+            .unwrap();
+        assert_eq!(ev.block_ids.len(), 2);
+        assert!(ev.block_ids.iter().any(|u| u.to_string() == src));
+        assert!(ev.block_ids.iter().any(|u| u.to_string() == tgt));
+    }
+
+    #[test]
+    fn test_tool_evidence_list_by_author_extracts_all_ids() {
+        let result = serde_json::json!({
+            "author": "user::alice",
+            "count": 2,
+            "blocks": [
+                { "id": "11111111-2222-3333-4444-555555555555" },
+                { "id": "66666666-7777-8888-9999-000000000000" },
+            ],
+        });
+        let ev = h()
+            .tool_evidence("quilt_list_blocks_by_author", &serde_json::json!({}), &result)
+            .unwrap();
+        assert_eq!(ev.block_ids.len(), 2);
+    }
+
+    #[test]
+    fn test_tool_evidence_list_by_author_authority_user_prefix() {
+        let result = serde_json::json!({
+            "author": "user::alice",
+            "count": 1,
+            "blocks": [{
+                "id": "11111111-2222-3333-4444-555555555555",
+                "properties": { "created_by": "user::alice" },
+            }],
+        });
+        let ev = h()
+            .tool_evidence("quilt_list_blocks_by_author", &serde_json::json!({}), &result)
+            .unwrap();
+        assert_eq!(ev.source_authority, Some(SourceAuthority::Manual));
+    }
+
+    #[test]
+    fn test_tool_evidence_list_by_author_authority_agent_prefix() {
+        let result = serde_json::json!({
+            "author": "agent::claude",
+            "count": 1,
+            "blocks": [{
+                "id": "11111111-2222-3333-4444-555555555555",
+                "properties": { "created_by": "agent::claude" },
+            }],
+        });
+        let ev = h()
+            .tool_evidence("quilt_list_blocks_by_author", &serde_json::json!({}), &result)
+            .unwrap();
+        assert_eq!(ev.source_authority, Some(SourceAuthority::AutoExtracted));
+    }
+
+    #[test]
+    fn test_tool_evidence_unknown_tool_returns_none() {
+        let ev = h().tool_evidence("quilt_search", &serde_json::json!({}), &serde_json::json!({}));
+        assert!(ev.is_none());
     }
 }
