@@ -4,7 +4,7 @@ use crate::value_objects::Uuid;
 
 /// Tag represents a tag/label in the knowledge graph.
 ///
-/// Tags are pages with the # prefix in Logseq syntax.
+/// Tags are pages with the # prefix in Quilt syntax.
 /// They can be hierarchical (e.g., #rust/async).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tag {
@@ -36,7 +36,7 @@ impl Tag {
         &self.name
     }
 
-    /// Get the full tag with # prefix (as used in Logseq)
+    /// Get the full tag with # prefix (as used in Quilt)
     pub fn full_name(&self) -> String {
         format!("#{}", self.name)
     }

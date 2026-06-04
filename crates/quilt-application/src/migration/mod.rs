@@ -1,6 +1,6 @@
 //! Migration module for importing external data into Quilt.
 //!
-//! Currently supports Markdown-flavored files (Logseq/Quilt format).
+//! Currently supports Markdown-flavored files (Quilt format).
 
 pub mod md_import_parser;
 pub mod migration_engine;

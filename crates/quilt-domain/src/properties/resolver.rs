@@ -135,7 +135,7 @@ mod tests {
     fn custom_status_def() -> PropertyDefinition {
         PropertyDefinition::new(
             Uuid::new_v4(),
-            "logseq.property/status",
+            "quilt.property/status",
             "Custom Status",
             PropertyType::Text,
         )
@@ -147,13 +147,13 @@ mod tests {
 
     #[tokio::test]
     async fn mixed_case_input_resolves_identically() {
-        // The builtin `logseq.property/status` exists (lowercase key). Resolver
+        // The builtin `quilt.property/status` exists (lowercase key). Resolver
         // must lowercase the input first.
         let repo = MockPropertyRepository::new();
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
         for variant in &["status", "Status", "STATUS", "StAtUs"] {
-            // The builtin key is "logseq.property/status" (lowercase). The
+            // The builtin key is "quilt.property/status" (lowercase). The
             // resolver should lowercase the input then look up. We'll use a
             // bare "status" key by inserting a custom definition.
             // Instead, let's just verify the resolver calls the repo with
@@ -164,9 +164,9 @@ mod tests {
         let repo = MockPropertyRepository::new().with_property(custom_status_def());
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
-        let r1 = resolver.resolve("logseq.property/status").await.unwrap();
-        let r2 = resolver.resolve("LOGSEQ.PROPERTY/STATUS").await.unwrap();
-        let r3 = resolver.resolve("Logseq.Property/Status").await.unwrap();
+        let r1 = resolver.resolve("quilt.property/status").await.unwrap();
+        let r2 = resolver.resolve("QUILT.PROPERTY/STATUS").await.unwrap();
+        let r3 = resolver.resolve("Quilt.Property/Status").await.unwrap();
         assert_eq!(r1.db_ident, r2.db_ident);
         assert_eq!(r2.db_ident, r3.db_ident);
         assert_eq!(r1.title, "Custom Status");
@@ -206,14 +206,14 @@ mod tests {
 
     #[tokio::test]
     async fn builtin_fallback_when_user_repo_lacks_property() {
-        // The builtin map already has `logseq.property/priority`. With an
-        // empty user repo, resolve("logseq.property/priority") should still
+        // The builtin map already has `quilt.property/priority`. With an
+        // empty user repo, resolve("quilt.property/priority") should still
         // succeed via the builtin fallback in find_or_builtin.
         let repo = MockPropertyRepository::new();
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
-        let result = resolver.resolve("logseq.property/priority").await.unwrap();
-        assert_eq!(result.db_ident, "logseq.property/priority");
+        let result = resolver.resolve("quilt.property/priority").await.unwrap();
+        assert_eq!(result.db_ident, "quilt.property/priority");
         assert_eq!(result.title, "Priority");
     }
 
@@ -222,21 +222,21 @@ mod tests {
         let repo = MockPropertyRepository::new();
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
-        // Builtin key is lowercase "logseq.property/priority" — uppercase input
+        // Builtin key is lowercase "quilt.property/priority" — uppercase input
         // must still resolve via builtin fallback after lowercase normalization.
-        let result = resolver.resolve("LOGSEQ.PROPERTY/PRIORITY").await.unwrap();
-        assert_eq!(result.db_ident, "logseq.property/priority");
+        let result = resolver.resolve("QUILT.PROPERTY/PRIORITY").await.unwrap();
+        assert_eq!(result.db_ident, "quilt.property/priority");
     }
 
     #[tokio::test]
     async fn user_definition_shadows_builtin() {
-        // User repo has a custom "logseq.property/status" with title
+        // User repo has a custom "quilt.property/status" with title
         // "Custom Status"; the builtin has title "Status". The user definition
         // must win (per find_or_builtin contract).
         let repo = MockPropertyRepository::new().with_property(custom_status_def());
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
-        let result = resolver.resolve("logseq.property/status").await.unwrap();
+        let result = resolver.resolve("quilt.property/status").await.unwrap();
         assert_eq!(result.title, "Custom Status");
     }
 
@@ -247,7 +247,7 @@ mod tests {
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
         let result = resolver
-            .resolve("  logseq.property/status  ")
+            .resolve("  quilt.property/status  ")
             .await
             .unwrap();
         assert_eq!(result.title, "Custom Status");

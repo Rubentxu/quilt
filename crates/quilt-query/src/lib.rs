@@ -1,7 +1,7 @@
 //! Quilt Query DSL
 //!
 //! This crate provides the query language parser, AST, and executor
-//! for Logseq-style queries.
+//! for Quilt-style queries.
 //!
 //! # Architecture
 //!

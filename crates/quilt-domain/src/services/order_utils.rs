@@ -4,7 +4,7 @@
 //! to blocks so that insertions between siblings don't require re-indexing
 //! existing blocks.
 //!
-//! Inspired by Logseq's approach: each block gets an `f64` order value,
+//! Inspired by Quilt's approach: each block gets an `f64` order value,
 //! and inserting between two siblings calculates the midpoint. When the
 //! gap between two adjacent blocks is exhausted (midpoint rounds to one
 //! of the endpoints), a full re-index of all siblings is triggered.

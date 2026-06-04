@@ -37,7 +37,7 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         ];
         let status = PropertyDefinition::new(
             Uuid::new_v4(),
-            "logseq.property/status",
+            "quilt.property/status",
             "Status",
             PropertyType::Text,
         )
@@ -45,7 +45,7 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         .with_closed_values(status_closed)
         .with_view_context(ViewContext::Page)
         .with_visibility(true, true, false);
-        map.insert("logseq.property/status".to_string(), status);
+        map.insert("quilt.property/status".to_string(), status);
 
         // priority property with closed values: A, B, C
         let priority_closed = vec![
@@ -61,7 +61,7 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         ];
         let priority = PropertyDefinition::new(
             Uuid::new_v4(),
-            "logseq.property/priority",
+            "quilt.property/priority",
             "Priority",
             PropertyType::Text,
         )
@@ -69,50 +69,50 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         .with_closed_values(priority_closed)
         .with_view_context(ViewContext::Page)
         .with_visibility(true, true, false);
-        map.insert("logseq.property/priority".to_string(), priority);
+        map.insert("quilt.property/priority".to_string(), priority);
 
         // deadline property (Date type)
         let deadline = PropertyDefinition::new(
             Uuid::new_v4(),
-            "logseq.property/deadline",
+            "quilt.property/deadline",
             "Deadline",
             PropertyType::Date,
         )
         .with_cardinality(Cardinality::One)
         .with_view_context(ViewContext::Page)
         .with_visibility(true, true, false);
-        map.insert("logseq.property/deadline".to_string(), deadline);
+        map.insert("quilt.property/deadline".to_string(), deadline);
 
         // scheduled property (Date type)
         let scheduled = PropertyDefinition::new(
             Uuid::new_v4(),
-            "logseq.property/scheduled",
+            "quilt.property/scheduled",
             "Scheduled",
             PropertyType::Date,
         )
         .with_cardinality(Cardinality::One)
         .with_view_context(ViewContext::Page)
         .with_visibility(true, true, false);
-        map.insert("logseq.property/scheduled".to_string(), scheduled);
+        map.insert("quilt.property/scheduled".to_string(), scheduled);
 
         // url property (Url type)
         let url = PropertyDefinition::new(
             Uuid::new_v4(),
-            "logseq.property/url",
+            "quilt.property/url",
             "URL",
             PropertyType::Url,
         )
         .with_cardinality(Cardinality::One)
         .with_view_context(ViewContext::Page)
         .with_visibility(true, true, false);
-        map.insert("logseq.property/url".to_string(), url);
+        map.insert("quilt.property/url".to_string(), url);
 
         // template property — references a template page (prefijo `template/`)
         // que define la estructura y el card-shape de un bloque. Véase ADR-0007.
         //
         // Nota: el db_ident es `template` (sin namespace prefix). Esto
         // refleja que Quilt introduce este concepto propio — no hereda
-        // el namespace `logseq.property/*` que usan las propiedades
+        // el namespace `quilt.property/*` que usan las propiedades
         // pre-existentes de status/priority/deadline/scheduled/url.
         // Una migración futura renombrará esas a `quilt.property/*`
         // (ver deuda técnica registrada en docs/grill/implementation-plan.md).
@@ -187,18 +187,18 @@ mod tests {
     #[test]
     fn test_builtin_properties_exist() {
         let props = get_builtin_properties();
-        assert!(props.contains_key("logseq.property/status"));
-        assert!(props.contains_key("logseq.property/priority"));
-        assert!(props.contains_key("logseq.property/deadline"));
-        assert!(props.contains_key("logseq.property/scheduled"));
-        assert!(props.contains_key("logseq.property/url"));
+        assert!(props.contains_key("quilt.property/status"));
+        assert!(props.contains_key("quilt.property/priority"));
+        assert!(props.contains_key("quilt.property/deadline"));
+        assert!(props.contains_key("quilt.property/scheduled"));
+        assert!(props.contains_key("quilt.property/url"));
         assert!(props.contains_key("template"));
     }
 
     #[test]
     fn test_status_has_closed_values() {
         let props = get_builtin_properties();
-        let status = props.get("logseq.property/status").unwrap();
+        let status = props.get("quilt.property/status").unwrap();
         assert!(status.has_closed_values());
         assert_eq!(status.closed_values.len(), 5);
         assert!(status.is_value_allowed("To Do"));
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn test_priority_has_closed_values() {
         let props = get_builtin_properties();
-        let priority = props.get("logseq.property/priority").unwrap();
+        let priority = props.get("quilt.property/priority").unwrap();
         assert!(priority.has_closed_values());
         assert_eq!(priority.closed_values.len(), 3);
         assert!(priority.is_value_allowed("A"));
@@ -222,11 +222,11 @@ mod tests {
     #[test]
     fn test_date_properties_no_closed_values() {
         let props = get_builtin_properties();
-        let deadline = props.get("logseq.property/deadline").unwrap();
+        let deadline = props.get("quilt.property/deadline").unwrap();
         assert!(!deadline.has_closed_values());
         assert_eq!(deadline.property_type, PropertyType::Date);
 
-        let scheduled = props.get("logseq.property/scheduled").unwrap();
+        let scheduled = props.get("quilt.property/scheduled").unwrap();
         assert!(!scheduled.has_closed_values());
         assert_eq!(scheduled.property_type, PropertyType::Date);
     }
@@ -234,7 +234,7 @@ mod tests {
     #[test]
     fn test_url_property() {
         let props = get_builtin_properties();
-        let url = props.get("logseq.property/url").unwrap();
+        let url = props.get("quilt.property/url").unwrap();
         assert_eq!(url.property_type, PropertyType::Url);
         assert!(!url.has_closed_values());
     }

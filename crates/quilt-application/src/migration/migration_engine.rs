@@ -1,6 +1,6 @@
 //! MigrationEngine - imports external data into Quilt.
 //!
-//! Currently supports Markdown-flavored files (Logseq/Quilt format).
+//! Currently supports Markdown-flavored files (Quilt format).
 
 use crate::migration::{parse_md_import, Frontmatter, MigrationError as ParseMigrationError, RawBlock};
 use async_trait::async_trait;
@@ -387,10 +387,10 @@ mod tests {
         let mock_repo: Arc<MockPropertyRepo> = Arc::new(Default::default());
         let resolver = PropertyKeyResolver::new(mock_repo.clone());
 
-        // "logseq.property/priority" is a builtin property
-        let result = resolver.resolve("logseq.property/priority").await;
+        // "quilt.property/priority" is a builtin property
+        let result = resolver.resolve("quilt.property/priority").await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().db_ident, "logseq.property/priority");
+        assert_eq!(result.unwrap().db_ident, "quilt.property/priority");
     }
 
     #[tokio::test]

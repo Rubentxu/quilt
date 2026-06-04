@@ -145,7 +145,7 @@ pub trait SearchHandler: Send + Sync {
     /// Full-text search across all pages and blocks.
     async fn search(&self, params: SearchParams) -> HandlerResult;
 
-    /// Execute a Logseq DSL query against the graph.
+    /// Execute a Quilt DSL query against the graph.
     async fn query(&self, params: QueryParams) -> HandlerResult;
 
     /// Rebuild the search index.

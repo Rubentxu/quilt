@@ -5,7 +5,7 @@ use crate::properties::entry::DefaultPropertyEntry;
 use crate::value_objects::{BlockFormat, JournalDay, PropertyValue, Uuid};
 use std::collections::HashMap;
 
-/// Page represents a page in Logseq.
+/// Page represents a page in Quilt.
 ///
 /// Pages can be:
 /// - Regular pages with a name
@@ -113,7 +113,7 @@ impl Page {
         })
     }
 
-    /// Normalize a page name according to Logseq rules:
+    /// Normalize a page name according to Quilt rules:
     /// - Lowercase
     /// - No special characters: / # ? : | < > * " \
     ///

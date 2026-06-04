@@ -111,7 +111,7 @@ impl From<quilt_application::migration::ImportResult> for ImportResultDto {
 ///
 /// Import Markdown files from a directory into Quilt.
 ///
-/// The directory should contain `.md` files in Logseq/Quilt format.
+/// The directory should contain `.md` files in Quilt format.
 /// Each file becomes a page, and nested blocks are preserved.
 #[instrument(skip(state))]
 pub async fn migrate_md_import(

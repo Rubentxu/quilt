@@ -102,7 +102,7 @@ test.describe("journal editing", () => {
     const main = page.locator("main");
     await expect(main).toContainText("Original text");
 
-    // Single click should start editing (Logseq-like UX)
+    // Single click should start editing (Quilt-like UX)
     const blockText = page.locator("main").getByText("Original text");
     await blockText.first().click();
     await page.waitForTimeout(1000);

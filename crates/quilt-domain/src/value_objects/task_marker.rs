@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 /// TaskMarker represents the status of a task block.
 ///
-/// Tasks in Logseq have a lifecycle:
+/// Tasks in Quilt have a lifecycle:
 /// - NOW: Currently being worked on
 /// - LATER: Planned for future
 /// - TODO: Needs to be done
@@ -40,7 +40,7 @@ impl TaskMarker {
         }
     }
 
-    /// Get the Logseq property value
+    /// Get the Quilt property value
     pub fn as_property_value(&self) -> &'static str {
         match self {
             TaskMarker::Now => "now",

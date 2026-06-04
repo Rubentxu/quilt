@@ -36,7 +36,7 @@ impl Priority {
         }
     }
 
-    /// Get the Logseq property value
+    /// Get the Quilt property value
     pub fn as_property_value(&self) -> &'static str {
         match self {
             Priority::A => "A",

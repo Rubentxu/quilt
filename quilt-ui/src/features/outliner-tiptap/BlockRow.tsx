@@ -108,12 +108,12 @@ function findParentBlock(block: Block, allBlocks: Block[]): Block | null {
   return allBlocks.find(b => b.id === block.parentId) ?? null
 }
 
-// ──── Inline link search (Logseq parity) ──────────────────────────────
+// ──── Inline link search (Quilt parity) ──────────────────────────────
 //
 // When the user is in edit mode, the rendered wikilinks/tags/block-refs
 // are just plain text ([[Page]], #tag, ((block-id))). Pressing
 // Cmd/Ctrl+Enter should follow the link nearest to the cursor — that's
-// what Logseq does (`follow-link-under-cursor!` in
+// what Quilt does (`follow-link-under-cursor!` in
 // frontend.handler.editor).
 
 type NearestLink =
@@ -124,7 +124,7 @@ type NearestLink =
 
 /**
  * Find the link nearest to `cursorPos` in `text`.
- * Mirrors Logseq's `extract-nearest-link-from-text`: page-refs and
+ * Mirrors Quilt's `extract-nearest-link-from-text`: page-refs and
  * block-refs first, then tags. When the cursor sits inside a link
  * that link wins; otherwise we pick the closest one by absolute
  * distance to the cursor.
@@ -273,7 +273,7 @@ export function BlockRow({
   // ── Content save ──────────────────────────────────────────────
   const saveToApi = useCallback(
     async (text: string) => {
-      // Preserve the exact text the user typed. Logseq-style editors do not
+      // Preserve the exact text the user typed. Quilt-style editors do not
       // silently trim leading/trailing whitespace on blur.
       if (text === block.content) return
       try {
@@ -422,7 +422,7 @@ export function BlockRow({
 
   // ── Tag autocomplete select ──────────────────────────────────
   // Replaces the partial `#partial` with `#tagname` (no closing
-  // delimiter — Logseq tags are atomic and do not need a closing char).
+  // delimiter — Quilt tags are atomic and do not need a closing char).
   const handleTagAutocompleteSelect = useCallback(
     (tagName: string) => {
       const newContent = localContent.replace(/(?<!\S)#\w*$/, `#${tagName}`)
@@ -672,9 +672,9 @@ export function BlockRow({
         return
       }
 
-      // ── Cmd/Ctrl+Enter: follow link under cursor (Logseq parity) ──
+      // ── Cmd/Ctrl+Enter: follow link under cursor (Quilt parity) ──
       // While editing, the rendered [[Page]] / ((block)) / #tag is just
-      // plain text. Logseq's behavior: Cmd+Enter on a wikilink follows
+      // plain text. Quilt's behavior: Cmd+Enter on a wikilink follows
       // it; on a tag navigates; on a missing page, creates it on the
       // fly (same as clicking the rendered link in read mode).
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
@@ -686,7 +686,7 @@ export function BlockRow({
           // Save current edits first so navigation doesn't lose them
           saveToApi(text)
           if (link.type === 'page' || link.type === 'tag') {
-            // Tags are pages too (Logseq parity). The server stores
+            // Tags are pages too (Quilt parity). The server stores
             // page names in canonical form (lowercase + trimmed), so
             // we normalise before the existence check, the createPage
             // call, and the navigate URL — otherwise a user-typed
@@ -940,7 +940,7 @@ export function BlockRow({
           onMoveBlockUp(block.id)
           return
         }
-        // KBD-020: Alt+Up — extend selection upward (Logseq-style multi-select)
+        // KBD-020: Alt+Up — extend selection upward (Quilt-style multi-select)
         if (e.altKey) {
           e.preventDefault()
           onMultiSelect?.(block.id, 'up')
@@ -965,7 +965,7 @@ export function BlockRow({
           onMoveBlockDown(block.id)
           return
         }
-        // KBD-020: Alt+Down — extend selection downward (Logseq-style multi-select)
+        // KBD-020: Alt+Down — extend selection downward (Quilt-style multi-select)
         if (e.altKey) {
           e.preventDefault()
           onMultiSelect?.(block.id, 'down')

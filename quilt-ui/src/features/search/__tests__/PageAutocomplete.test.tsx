@@ -111,7 +111,7 @@ describe('PageAutocomplete', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
-  // ──── Keyboard navigation (Logseq parity) ──────────────────────
+  // ──── Keyboard navigation (Quilt parity) ──────────────────────
 
   it('ArrowDown moves the selection to the next page', async () => {
     render(

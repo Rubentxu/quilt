@@ -7,7 +7,7 @@ import { test, expect, type Page } from "@playwright/test";
  *   1. Full server running on port 3737 (just build-all && just server-dev)
  *   2. BASE_URL env or default http://localhost:3737
  *
- * These tests verify the Logseq-style bullet component:
+ * These tests verify the Quilt-style bullet component:
  * - DOM structure: .bullet-container > .bullet-grip + .bullet-link-wrap > .bullet
  * - Click toggles collapse for parent blocks
  * - Click selects leaf blocks

@@ -1,4 +1,4 @@
-// Pest grammar for Markdown import files (Logseq/Quilt format).
+// Pest grammar for Markdown import files (Quilt format).
 //
 // Markdown import files are markdown files with optional YAML frontmatter.
 // Block content uses indentation (2 spaces) to indicate hierarchy.

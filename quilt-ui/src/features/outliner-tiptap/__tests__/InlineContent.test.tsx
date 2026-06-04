@@ -240,7 +240,7 @@ describe('InlineContent', () => {
     expect(screen.getByText('plain fallback')).toBeInTheDocument()
   })
 
-  // ──── Create-on-click (Logseq parity) ──────────────────────────
+  // ──── Create-on-click (Quilt parity) ──────────────────────────
   //
   // G2 from the wikilinks audit: clicking a [[Page]] link for a
   // page that doesn't exist should create the page on the fly
@@ -494,7 +494,7 @@ describe('InlineContent', () => {
 
   // ──── Navigation: #tag click ─────────────────────────────────────
 
-  it('navigates to the tag page on #tag click (Logseq parity)', async () => {
+  it('navigates to the tag page on #tag click (Quilt parity)', async () => {
     mockParseInline.mockReturnValue({
       segments: [{ type: 'tag', value: 'project' }],
     })
@@ -599,7 +599,7 @@ describe('InlineContent', () => {
     expect(onParentClick).not.toHaveBeenCalled()
   })
 
-  // ──── Case insensitivity (Logseq + server convention) ─────────────
+  // ──── Case insensitivity (Quilt + server convention) ─────────────
   //
   // The server normalises page names to lowercase on insert (see
   // Page::normalize_name in crates/quilt-domain/src/entities/page.rs).

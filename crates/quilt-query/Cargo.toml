@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
-description = "Query DSL - parser, AST, and executor for Logseq-style queries"
+description = "Query DSL - parser, AST, and executor for Quilt-style queries"
 
 [dependencies]
 pest = "2.7"

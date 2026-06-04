@@ -1,6 +1,6 @@
 //! Markdown import parser.
 //!
-//! Parses Markdown files (Logseq/Quilt-flavored) into a tree of blocks
+//! Parses Markdown files (Quilt-flavored) into a tree of blocks
 //! with optional YAML frontmatter.
 
 use thiserror::Error;

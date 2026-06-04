@@ -637,7 +637,7 @@ impl CognitiveHandler for DefaultCognitiveHandler {
     #[instrument(skip(self))]
     async fn resource_arguments(&self, uri: &str) -> HandlerResult {
         let page_name = uri
-            .strip_prefix("logseq://cognitive/arguments/")
+            .strip_prefix("quilt://cognitive/arguments/")
             .ok_or_else(|| "Invalid arguments resource URI".to_string())?;
 
         let cartographer = self

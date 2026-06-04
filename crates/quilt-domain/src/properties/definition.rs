@@ -11,7 +11,7 @@ use crate::value_objects::Uuid;
 pub struct PropertyDefinition {
     /// Unique identifier
     pub id: Uuid,
-    /// Database identifier (e.g., "logseq.property/status")
+    /// Database identifier (e.g., "quilt.property/status")
     pub db_ident: String,
     /// Display title
     pub title: String,

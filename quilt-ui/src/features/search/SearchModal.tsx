@@ -16,7 +16,7 @@ const BLOCK_LIMIT = 10
 /**
  * One row in the unified result list. The modal flattens page and block
  * results into a single array so arrow-key navigation feels natural
- * (Logseq parity). Section headers are non-navigable dividers that the
+ * (Quilt parity). Section headers are non-navigable dividers that the
  * keyboard skips.
  */
 type ResultItem =

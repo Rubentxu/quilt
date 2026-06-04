@@ -5,7 +5,7 @@ use std::fmt;
 
 /// PropertyValue represents a typed property value.
 ///
-/// Logseq properties can have different types:
+/// Quilt properties can have different types:
 /// - String: plain text
 /// - Boolean: true/false
 /// - Integer: whole numbers
@@ -140,7 +140,7 @@ impl Default for PropertyValue {
     }
 }
 
-/// Normalize a property name according to Logseq rules:
+/// Normalize a property name according to Quilt rules:
 /// - Convert to lowercase
 /// - Replace `/` with `-`
 /// - Replace spaces with `-`

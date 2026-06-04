@@ -1,6 +1,6 @@
 // ──── Page name normalization ─────────────────────────────────────────
 //
-// The Quilt server normalises page names on insert (mirroring Logseq):
+// The Quilt server normalises page names on insert (mirroring Quilt):
 //
 //     crates/quilt-domain/src/entities/page.rs
 //       pub fn normalize_name(name: &str) -> Result<String, DomainError> {

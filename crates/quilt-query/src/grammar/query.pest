@@ -1,4 +1,4 @@
-// Query grammar for Logseq-style queries
+// Query grammar for Quilt-style queries
 
 query = { SOI ~ expr ~ EOI }
 

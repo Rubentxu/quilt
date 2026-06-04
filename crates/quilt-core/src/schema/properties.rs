@@ -392,7 +392,7 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
     props.push(
         PropertyDefinition::new(
             make_uuid("a1000001-0000-0000-0000-000000000000"),
-            "logseq.property/status",
+            "quilt.property/status",
             "Status",
             PropertyType::Text,
         )
@@ -417,7 +417,7 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
     props.push(
         PropertyDefinition::new(
             make_uuid("a1000002-0000-0000-0000-000000000000"),
-            "logseq.property/priority",
+            "quilt.property/priority",
             "Priority",
             PropertyType::Text,
         )
@@ -431,7 +431,7 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
     props.push(
         PropertyDefinition::new(
             make_uuid("a1000003-0000-0000-0000-000000000000"),
-            "logseq.property/deadline",
+            "quilt.property/deadline",
             "Deadline",
             PropertyType::Date,
         )
@@ -444,7 +444,7 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
     props.push(
         PropertyDefinition::new(
             make_uuid("a1000004-0000-0000-0000-000000000000"),
-            "logseq.property/scheduled",
+            "quilt.property/scheduled",
             "Scheduled",
             PropertyType::Date,
         )
@@ -457,7 +457,7 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
     props.push(
         PropertyDefinition::new(
             make_uuid("a1000005-0000-0000-0000-000000000000"),
-            "logseq.property/url",
+            "quilt.property/url",
             "URL",
             PropertyType::Url,
         )
@@ -698,23 +698,23 @@ mod tests {
     fn test_builtin_properties_exist() {
         let props = builtin_properties();
         let idents: Vec<&str> = props.iter().map(|p| p.db_ident.as_str()).collect();
-        assert!(idents.contains(&"logseq.property/status"));
-        assert!(idents.contains(&"logseq.property/priority"));
-        assert!(idents.contains(&"logseq.property/deadline"));
-        assert!(idents.contains(&"logseq.property/scheduled"));
-        assert!(idents.contains(&"logseq.property/url"));
+        assert!(idents.contains(&"quilt.property/status"));
+        assert!(idents.contains(&"quilt.property/priority"));
+        assert!(idents.contains(&"quilt.property/deadline"));
+        assert!(idents.contains(&"quilt.property/scheduled"));
+        assert!(idents.contains(&"quilt.property/url"));
     }
 
     #[test]
     fn test_get_builtin_property() {
-        let status = get_builtin_property("logseq.property/status").unwrap();
+        let status = get_builtin_property("quilt.property/status").unwrap();
         assert_eq!(status.property_type, PropertyType::Text);
         assert!(status.has_closed_values());
     }
 
     #[test]
     fn test_builtin_priority_values() {
-        let priority = get_builtin_property("logseq.property/priority").unwrap();
+        let priority = get_builtin_property("quilt.property/priority").unwrap();
         assert!(priority.is_value_allowed("A"));
         assert!(priority.is_value_allowed("B"));
         assert!(priority.is_value_allowed("C"));

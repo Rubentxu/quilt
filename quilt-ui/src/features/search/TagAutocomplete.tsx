@@ -15,7 +15,7 @@ interface TagAutocompleteProps {
 /**
  * Default tag suggestions shown when the user types `#` in a block.
  *
- * Logseq ships a small built-in set (todo, bug, urgent, wip, idea,
+ * Quilt ships a small built-in set (todo, bug, urgent, wip, idea,
  * question, important, done) and we mirror that for the MVP. A future
  * `api.listTags()` can replace this list with the user's actual tag
  * vocabulary (counts by usage) without changing this component's

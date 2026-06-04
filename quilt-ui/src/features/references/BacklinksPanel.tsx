@@ -12,7 +12,7 @@ interface BacklinksPanelProps {
    * Whether the inner content (filter, sort, list) is expanded.
    * Defaults to false — the panel shows the header with count and
    * keeps the content collapsed until the user clicks it open.
-   * This matches the Logseq behaviour of "backlinks appear at the
+   * This matches the Quilt behaviour of "backlinks appear at the
    * bottom of every page automatically", where the reference list
    * is collapsed by default and only the count is visible.
    */

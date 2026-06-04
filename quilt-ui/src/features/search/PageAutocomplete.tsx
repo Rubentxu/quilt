@@ -49,7 +49,7 @@ export function PageAutocomplete({ position, query, onSelect, onClose }: PageAut
   }, [position, onClose])
 
   // Keyboard navigation — ArrowUp/Down to move, Enter to select, Esc to close.
-  // Logseq parity: typing `[[foo` + Enter selects the first match.
+  // Quilt parity: typing `[[foo` + Enter selects the first match.
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (!position) return

@@ -642,7 +642,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     e.preventDefault()
     if (e.shiftKey) {
       // TODO: Open in sidebar (sidebar not yet implemented in Quilt).
-      // Logseq opens the linked page/block in a sidebar panel here.
+      // Quilt opens the linked page/block in a sidebar panel here.
       return
     }
 
@@ -660,7 +660,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     const canonical = normalizePageName(target)
     if (!canonical) return
 
-    // Logseq behavior: if the page doesn't exist, create it on the fly
+    // Quilt behavior: if the page doesn't exist, create it on the fly
     // when the user clicks the link. The client-side `pageMap` is the
     // source of truth for "does it exist"; if it's stale (e.g. the
     // page was created in another tab), the server's UNIQUE constraint
@@ -688,7 +688,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     navigate({ to: '/page/$name', params: { name: canonical } })
   }, [navigate, openTab, pageMap])
 
-  // Block-ref click. Logseq opens the block in the sidebar (not the
+  // Block-ref click. Quilt opens the block in the sidebar (not the
   // main content area) — see handler/editor.cljs open-block-in-sidebar!.
   // Quilt has no sidebar yet, so we navigate to the block's parent
   // page. TODO: once a sidebar exists, add `e.shiftKey` to open there.
@@ -705,7 +705,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     navigate({ to: '/page/$name', params: { name: canonical } })
   }, [navigate, openTab])
 
-  // #tag click. Logseq treats tags as pages (#tag → navigate to that
+  // #tag click. Quilt treats tags as pages (#tag → navigate to that
   // page; creates the page if it doesn't exist).
   const handleTagClick = useCallback(async (tagName: string, e: React.MouseEvent) => {
     e.stopPropagation()

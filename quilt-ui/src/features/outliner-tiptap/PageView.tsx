@@ -1394,7 +1394,7 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
   }, [handleUndo, handleRedo])
 
   // ── Selection (multi-block) ───────────────────────────────────────
-  // KBD-020: Alt+Up/Down — multi-select blocks (Logseq-style)
+  // KBD-020: Alt+Up/Down — multi-select blocks (Quilt-style)
   const handleSelectBlock = useCallback(
     (blockId: string, direction: 'up' | 'down') => {
       if (!selectionAnchor) {
