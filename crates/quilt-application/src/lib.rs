@@ -24,6 +24,9 @@ pub mod use_cases;
 // Template extension types (G6 schema packs, F15 reapply)
 pub mod templates;
 
+// Query execution (F18)
+pub mod query;
+
 // Re-exports
 pub use bootstrap::AppServices;
 pub use errors::ApplicationError;
