@@ -6,16 +6,17 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use quilt_cognitive::{
-    AgentMemory, ArgumentCartographer, CognitiveMirror, CounterfactualExplorer,
-    KnowledgeEvolutionTracker, MentalModelGardener, MorningBriefing, SerendipityEngine,
-};
+use quilt_application::use_cases::{BlockUseCases, PageUseCases, SearchUseCases};
 use quilt_domain::repositories::SettingsRepository;
 use quilt_domain::services::TimezoneService;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations, DbPool};
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqliteDeepLinkRepository, SqliteJournalRepository, SqlitePageRepository,
     SqliteSettingsRepository, SqliteTagRepository,
+};
+use quilt_mcp::handlers::{
+    BlockToolHandler, GraphHandler, PageHandler, QueryHandler, ResourceHandler, RetrievalHandler,
+    TemplateHandler, TemporalHandler,
 };
 use quilt_mcp::McpServer;
 use quilt_search::SearchService;
@@ -87,101 +88,58 @@ pub async fn create_db_pool(db_path: &PathBuf) -> Result<DbPool, VaultError> {
     Ok(pool)
 }
 
-/// Initialize MCP server with all cognitive engines
+/// Initialize MCP server with standard handlers
 ///
-/// This creates the full MCP server setup including:
-/// - All repositories (blocks, pages, tags, deep_links, settings, journal)
-/// - Search service
-/// - Timezone service
-/// - AI client and all cognitive engines
-/// - Morning briefing aggregation
+/// This creates the MCP server setup including:
+/// - Block, page, graph, query handlers
+/// - Search and retrieval handlers
+/// - Template and temporal handlers
 pub async fn init_mcp_server(
     pool: DbPool,
 ) -> Result<Arc<McpServer>, Box<dyn std::error::Error + Send + Sync>> {
     // Create repositories
-    let block_repo = Arc::new(SqliteBlockRepository::new(pool.clone()));
-    let page_repo = Arc::new(SqlitePageRepository::new(pool.clone()));
-    let tag_repo = Arc::new(SqliteTagRepository::new(pool.clone()));
-    let deep_link_repo = Arc::new(SqliteDeepLinkRepository::new(pool.clone()));
+    let block_repo: Arc<dyn quilt_domain::repositories::BlockRepository> =
+        Arc::new(SqliteBlockRepository::new(pool.clone()));
+    let page_repo: Arc<dyn quilt_domain::repositories::PageRepository> =
+        Arc::new(SqlitePageRepository::new(pool.clone()));
+    let tag_repo: Arc<dyn quilt_domain::repositories::TagRepository> =
+        Arc::new(SqliteTagRepository::new(pool.clone()));
+    let deep_link_repo: Arc<dyn quilt_domain::repositories::DeepLinkRepository> =
+        Arc::new(SqliteDeepLinkRepository::new(pool.clone()));
     let search_service = Arc::new(SearchService::new(pool.clone()));
-    let settings_repo = Arc::new(SqliteSettingsRepository::new(pool.clone()));
-    let journal_repo = Arc::new(SqliteJournalRepository::new(pool.clone()));
+    let settings_repo: Arc<dyn quilt_domain::repositories::SettingsRepository> =
+        Arc::new(SqliteSettingsRepository::new(pool.clone()));
+    let journal_repo: Arc<dyn quilt_domain::repositories::JournalRepository> =
+        Arc::new(SqliteJournalRepository::new(pool.clone()));
 
-    // Create timezone service from user settings (fallback to UTC)
-    let user_settings = settings_repo.get_user_settings().await.unwrap_or_default();
-    let timezone_service = Arc::new(
-        TimezoneService::from_tz_string(&user_settings.timezone)
-            .unwrap_or_else(|_| TimezoneService::from_tz_string("UTC").unwrap()),
-    );
+    // Create use cases
+    let block_use_cases: Arc<dyn BlockUseCases> = block_repo.clone();
+    let page_use_cases: Arc<dyn PageUseCases> = page_repo.clone();
+    let search_use_cases: Arc<dyn SearchUseCases> = search_service.clone();
 
-    // Create AI client for cognitive engines using default config
-    let ai_config = quilt_cognitive::AIConfig::default();
-    let ai_client: Arc<dyn quilt_cognitive::AIClient> =
-        Arc::from(quilt_cognitive::create_ai_client(&ai_config));
+    // Create handlers
+    let block_handler = BlockToolHandler::new(block_use_cases);
+    let page_handler = PageHandler::new(page_use_cases);
+    let graph_handler = GraphHandler::new(block_repo.clone());
+    let query_handler = QueryHandler::new(search_use_cases.clone());
+    let retrieval_handler = RetrievalHandler::new(search_use_cases);
+    let resource_handler = ResourceHandler::new(block_repo.clone(), page_repo.clone());
+    let template_handler = TemplateHandler::new();
+    let temporal_handler = TemporalHandler::new(journal_repo.clone());
 
-    // Create AgentMemory first (needed by MentalModelGardener)
-    let agent_memory = Arc::new(AgentMemory::new(block_repo.clone(), ai_client.clone()));
-
-    // Create all cognitive engines
-    let cognitive_mirror = Arc::new(CognitiveMirror::new(block_repo.clone(), ai_client.clone()));
-    let serendipity_engine = Arc::new(SerendipityEngine::new(
-        block_repo.clone(),
-        ai_client.clone(),
+    // Create MCP server
+    let mcp_server = Arc::new(McpServer::new(
+        vec![
+            Box::new(block_handler),
+            Box::new(page_handler),
+            Box::new(graph_handler),
+            Box::new(query_handler),
+            Box::new(retrieval_handler),
+            Box::new(template_handler),
+            Box::new(temporal_handler),
+        ],
+        vec![Box::new(resource_handler)],
     ));
-    let argument_cartographer = Arc::new(ArgumentCartographer::new(
-        block_repo.clone(),
-        ai_client.clone(),
-    ));
-    let counterfactual_explorer = Arc::new(CounterfactualExplorer::new(
-        block_repo.clone(),
-        ai_client.clone(),
-    ));
-    let knowledge_evolution_tracker = Arc::new(KnowledgeEvolutionTracker::new(
-        block_repo.clone(),
-        ai_client.clone(),
-    ));
-    let mental_model_gardener = Arc::new(MentalModelGardener::new(
-        block_repo.clone(),
-        agent_memory.clone(),
-        ai_client.clone(),
-    ));
-
-    // Create MorningBriefing service (aggregates all cognitive engines)
-    let cognitive_services: Arc<dyn quilt_cognitive::MorningBriefingServices> =
-        Arc::new(quilt_cognitive::DefaultMorningBriefingServices::new(
-            cognitive_mirror.clone(),
-            serendipity_engine.clone(),
-            knowledge_evolution_tracker.clone(),
-        ));
-    let morning_briefing = Arc::new(MorningBriefing::new(
-        cognitive_services,
-        Some(page_repo.clone()),
-        Some(block_repo.clone()),
-    ));
-
-    // Create MCP server with cognitive engines
-    let mcp_server = Arc::new(
-        McpServer::new(
-            block_repo,
-            page_repo.clone(),
-            tag_repo,
-            deep_link_repo,
-            search_service,
-            timezone_service,
-        )
-        .with_cognitive(
-            Some(cognitive_mirror),
-            Some(serendipity_engine),
-            Some(agent_memory),
-            Some(argument_cartographer),
-            Some(mental_model_gardener),
-            Some(counterfactual_explorer),
-            Some(knowledge_evolution_tracker),
-        )
-        .with_morning_briefing(morning_briefing)
-        .with_journal_repo(journal_repo)
-        .with_settings_repo(settings_repo),
-    );
 
     tracing::info!("MCP server initialized");
 

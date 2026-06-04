@@ -24,8 +24,6 @@ mod state;
 use crate::handlers::metrics;
 use crate::state::AppState;
 use quilt_application::services::ref_service::RefService;
-#[cfg(feature = "cognitive")]
-use quilt_cognitive::AIClient;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
 
@@ -117,20 +115,7 @@ async fn main() -> Result<()> {
     };
     middleware::auth::init(api_key);
 
-    // Build state — with or without AI client depending on feature flag
-    #[cfg(feature = "cognitive")]
-    let ai_client: Arc<dyn AIClient> = Arc::new(quilt_cognitive::ai_client::MockAIClient::new());
-
-    let state = {
-        #[cfg(feature = "cognitive")]
-        {
-            AppState::with_ai_client(pool, search_index, ai_client, ref_service)
-        }
-        #[cfg(not(feature = "cognitive"))]
-        {
-            AppState::new(pool, search_index, ref_service)
-        }
-    };
+    let state = AppState::new(pool, search_index, ref_service);
 
     // Create router
     let app = routes::create_app(state);

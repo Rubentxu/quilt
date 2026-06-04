@@ -187,6 +187,19 @@ impl Default for SourceAuthority {
     }
 }
 
+/// Indicates whether an agent should create a duplicate resource.
+/// Part of the Evidence contract (Q018) — prevents agents from
+/// blindly creating duplicate pages/blocks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CreateSafety {
+    /// The resource already exists — do NOT create
+    Exists,
+    /// The resource probably exists — verify before creating
+    Probable,
+    /// Unknown whether the resource exists — safe to create
+    Unknown,
+}
+
 /// Provenance metadata attached to every MCP tool/resource response.
 ///
 /// `is_error: true` indicates the handler returned an error; in that
@@ -221,6 +234,9 @@ pub struct Evidence {
     /// Source authority ranking (G2). None when not derivable.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_authority: Option<SourceAuthority>,
+    /// Create safety hint (Q018). None when not applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub create_safety: Option<CreateSafety>,
 }
 
 impl Default for Evidence {
@@ -235,6 +251,7 @@ impl Default for Evidence {
             query_ast: None,
             matched_terms: Vec::new(),
             source_authority: None,
+            create_safety: None,
         }
     }
 }
@@ -303,7 +320,7 @@ mod tests {
 
     #[test]
     fn evidence_omits_none_options() {
-        // No page_name / page_updated_at / query_ast / source_authority
+        // No page_name / page_updated_at / query_ast / source_authority / create_safety
         // → those keys must NOT appear in the JSON output.
         let e = Evidence::universal_fallback("quilt_x");
         let v: serde_json::Value = serde_json::to_value(&e).unwrap();
@@ -311,6 +328,7 @@ mod tests {
         assert!(v.get("page_updated_at").is_none());
         assert!(v.get("query_ast").is_none());
         assert!(v.get("source_authority").is_none());
+        assert!(v.get("create_safety").is_none());
         assert_eq!(v["tool_name"], "quilt_x");
         assert_eq!(v["is_error"], false);
         assert!(v["block_ids"].as_array().unwrap().is_empty());
@@ -331,6 +349,7 @@ mod tests {
             query_ast: Some("AST".into()),
             matched_terms: vec!["foo".into()],
             source_authority: Some(SourceAuthority::Manual),
+            create_safety: Some(CreateSafety::Exists),
         };
         let v: serde_json::Value = serde_json::to_value(&e).unwrap();
         assert_eq!(v["page_name"], "P");
@@ -338,6 +357,7 @@ mod tests {
         assert_eq!(v["query_ast"], "AST");
         assert_eq!(v["source_authority"], "Manual");
         assert_eq!(v["matched_terms"][0], "foo");
+        assert_eq!(v["create_safety"], "Exists");
     }
 
     #[test]

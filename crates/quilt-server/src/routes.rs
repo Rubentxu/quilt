@@ -53,13 +53,6 @@ pub fn create_app(state: AppState) -> Router {
             axum::routing::get(handlers::frontend::serve_assets),
         );
 
-    // Cognitive routes — only nest when the feature is enabled
-    #[cfg(feature = "cognitive")]
-    let router = router
-        .nest("/api/v1/ai-config", handlers::ai_config::routes())
-        .nest("/api/v1/cognitive", handlers::cognitive::routes())
-        .nest("/api/v1/analysis", handlers::cognitive::analysis_routes());
-
     // Layers
     // Order (outermost → innermost):
     //   1. Extension(state)     — state available to all handlers

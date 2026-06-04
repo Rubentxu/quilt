@@ -77,8 +77,13 @@ echo "  ✓ Backend built"
 # ── 3. Build WASM (initial) ──────────────────────────────────────
 echo ""
 echo "▶ Building WASM..."
-wasm-pack build "$ROOT/crates/quilt-core" --target web --out-dir "$WASM_PKG_DIR" --dev 2>&1 | tail -3
-echo "  ✓ WASM built"
+if wasm-pack build "$ROOT/crates/quilt-core" --target web --out-dir "$WASM_PKG_DIR" --dev 2>&1 | tail -3; then
+    echo "  ✓ WASM built"
+else
+    echo "  ⚠ WASM build failed (known issue: mio 1.2.0 incompatible with wasm32)"
+    echo "    React dev server works without WASM via REST API."
+    echo "    See: https://github.com/tokio-rs/mio/issues/1603"
+fi
 
 # ── 4. Initial frontend build + sync into wasm_assets ───────────
 # This guarantees the server (port 3737) and any container/quadlet
@@ -117,13 +122,17 @@ else
 fi
 
 # ── 7. Start WASM watcher (Rust → JS) ─────────────────────────────
-cargo watch \
-    --watch "$ROOT/crates/quilt-core/src" \
-    --watch "$ROOT/crates/quilt-core/Cargo.toml" \
-    --shell "wasm-pack build crates/quilt-core --target web --out-dir '$WASM_PKG_DIR' --dev 2>/dev/null && echo '✅ WASM rebuilt' || echo '❌ WASM build failed'" \
-    > "$QUILT_DIR/wasm-watch.log" 2>&1 &
-WATCH_PID=$!
-echo "  ✓ WASM watcher — auto-rebuild on Rust changes (PID $WATCH_PID)"
+if command -v cargo-watch > /dev/null 2>&1; then
+    cargo watch \
+        --watch "$ROOT/crates/quilt-core/src" \
+        --watch "$ROOT/crates/quilt-core/Cargo.toml" \
+        --shell "wasm-pack build crates/quilt-core --target web --out-dir '$WASM_PKG_DIR' --dev 2>/dev/null && echo '✅ WASM rebuilt' || echo '⚠ WASM build skipped (mio incompatible)'" \
+        > "$QUILT_DIR/wasm-watch.log" 2>&1 &
+    WATCH_PID=$!
+    echo "  ✓ WASM watcher — auto-rebuild on Rust changes (PID $WATCH_PID)"
+else
+    echo "  ⚠ cargo-watch not installed, skipping WASM watcher"
+fi
 
 # ── 8. Start Node-based asset watcher (frontend → wasm_assets) ────
 # Watches quilt-ui/src/ for changes and triggers a fresh `vite build` +

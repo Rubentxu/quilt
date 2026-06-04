@@ -20,8 +20,8 @@ pub enum Mark {
     Code,
     /// Highlighted text with a color
     Highlight {
-        /// The highlight color (e.g., "#ffff00" for yellow)
-        color: String,
+        /// The highlight color (e.g., "#ffff00" for yellow), or None for default highlight
+        color: Option<String>,
     },
     /// A hyperlink
     Link {
@@ -56,7 +56,7 @@ mod tests {
         assert!(Mark::Italic.is_formatting_only());
         assert!(Mark::Strikethrough.is_formatting_only());
         assert!(Mark::Code.is_formatting_only());
-        assert!(!Mark::Highlight { color: "#ffff00".to_string() }.is_formatting_only());
+        assert!(!Mark::Highlight { color: Some("#ffff00".to_string()) }.is_formatting_only());
         assert!(!Mark::Link { url: "http://example.com".to_string(), label: None }.is_formatting_only());
     }
 }

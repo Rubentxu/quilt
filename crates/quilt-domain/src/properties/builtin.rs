@@ -166,6 +166,30 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         .with_read_only(true);
         map.insert("updated_at".to_string(), updated_at);
 
+        // tags property — free-text tags associated with a block (Cardinality::Many)
+        let tags = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "quilt.property/tags",
+            "Tags",
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::Many)
+        .with_view_context(ViewContext::Page)
+        .with_visibility(true, true, false);
+        map.insert("quilt.property/tags".to_string(), tags);
+
+        // created_by property — agent or user who created this block (Cardinality::One)
+        let created_by = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "quilt.property/created_by",
+            "Created By",
+            PropertyType::Text,
+        )
+        .with_cardinality(Cardinality::One)
+        .with_view_context(ViewContext::Page)
+        .with_visibility(true, true, false);
+        map.insert("quilt.property/created_by".to_string(), created_by);
+
         map
     })
 }
@@ -193,6 +217,8 @@ mod tests {
         assert!(props.contains_key("quilt.property/scheduled"));
         assert!(props.contains_key("quilt.property/url"));
         assert!(props.contains_key("template"));
+        assert!(props.contains_key("quilt.property/tags"));
+        assert!(props.contains_key("quilt.property/created_by"));
     }
 
     #[test]

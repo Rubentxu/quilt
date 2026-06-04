@@ -5,7 +5,6 @@
 //!
 //! Extracted from the duplicated implementations in:
 //! - `quilt-analysis/src/structural_mirror/graph.rs`
-//! - `quilt-cognitive/src/cognitive_mirror/graph.rs`
 
 use std::collections::{HashMap, HashSet};
 

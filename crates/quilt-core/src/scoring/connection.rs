@@ -3,7 +3,6 @@
 //! These functions operate on primitive types only (no `Block`, no repositories).
 //! They are extracted from the duplicated implementations in:
 //! - `quilt-analysis/src/connection_engine/engine.rs`
-//! - `quilt-cognitive/src/serendipity/engine.rs`
 //!
 //! # Usage
 //!
