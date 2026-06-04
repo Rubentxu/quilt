@@ -235,7 +235,9 @@ pub async fn query_blocks(
 
             // Generate SQL with proper parameterization
             let executor = quilt_query::QueryExecutor::new();
-            let (sql, sql_params) = executor.build_sql(&expr, limit);
+            let (sql, sql_params) = executor
+                .build_sql(&expr, limit)
+                .map_err(|e| AppError::BadRequest(format!("Query compile error: {}", e)))?;
 
             // Convert SqlParam values to strings for the repository
             let str_params: Vec<String> = sql_params.iter().map(|p| p.as_string()).collect();

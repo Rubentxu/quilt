@@ -155,7 +155,10 @@ impl SearchUseCases for SearchUseCasesImpl {
             .parse(dsl)
             .map_err(|e| ApplicationError::Validation(format!("Parse error: {}", e)))?;
 
-        let (sql, params) = self.executor.build_sql(&ast, limit);
+        let (sql, params) = self
+            .executor
+            .build_sql(&ast, limit)
+            .map_err(|e| ApplicationError::Validation(format!("Build SQL error: {}", e)))?;
         let param_strings: Vec<String> = params.iter().map(|p| p.as_string()).collect();
 
         let blocks = if let Some(ref repo) = self.block_repo {

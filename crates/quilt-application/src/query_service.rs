@@ -95,7 +95,10 @@ impl QueryService {
             .parse(dsl)
             .map_err(|e| format!("Parse error: {}", e))?;
 
-        let (sql, params) = self.executor.build_sql(&ast, limit);
+        let (sql, params) = self
+            .executor
+            .build_sql(&ast, limit)
+            .map_err(|e| format!("Compile error: {}", e))?;
 
         Ok(QueryResult {
             sql,

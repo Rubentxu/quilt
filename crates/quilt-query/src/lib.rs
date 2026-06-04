@@ -41,6 +41,7 @@
 //! ```
 
 pub mod ast;
+pub mod compiler;
 pub mod dialect;
 pub mod executor;
 pub mod parser;

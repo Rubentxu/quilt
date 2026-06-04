@@ -3,11 +3,12 @@
 //! This module converts [`QueryExpr`] AST nodes into SQL WHERE clauses
 //! with properly parameterized values for safe database queries.
 
+use crate::compiler::CompilerError;
 use crate::dialect::{SqlDialect, SqliteDialect};
 use crate::parser::{QueryExpr, QueryValue};
 
 /// SQL parameter type for safe query parameterization.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SqlParam {
     /// String parameter
     String(String),
@@ -66,7 +67,7 @@ pub enum AnalyzeError {
 /// let executor = QueryExecutor::new();
 ///
 /// let expr = parser.parse("(task todo)").unwrap();
-/// let (sql, params) = executor.build_sql(&expr, 100);
+/// let (sql, params) = executor.build_sql(&expr, 100).unwrap();
 /// ```
 #[derive(Debug, Clone)]
 pub struct QueryExecutor<D = SqliteDialect>
@@ -108,34 +109,50 @@ where
 
     /// Builds a SQL WHERE clause from a query expression.
     ///
+    /// Returns `Err(CompilerError::UnsupportedOperator { op })` for `Stats`
+    /// and `Analyze` variants — these are not WHERE-able operators and
+    /// must be compiled via `build_sql` / `build_analyze_sql` instead.
+    /// This replaces the two historical `panic!` calls (F1).
+    ///
     /// # Arguments
     ///
     /// * `expr` - The parsed query expression AST
     ///
     /// # Returns
     ///
-    /// A tuple of:
-    /// - The SQL WHERE clause string with `?` placeholders
-    /// - The parameter values to be bound to the query
-    pub fn build_where(&self, expr: &QueryExpr) -> (String, Vec<SqlParam>) {
+    /// `Ok((sql, params))` on success, `Err(CompilerError)` if the
+    /// expression contains a top-level operator that `build_where`
+    /// cannot compile (e.g., `Stats`, `Analyze`).
+    pub fn build_where(
+        &self,
+        expr: &QueryExpr,
+    ) -> Result<(String, Vec<SqlParam>), CompilerError> {
         match expr {
             QueryExpr::And(exprs) => {
-                let clauses: Vec<_> = exprs.iter().map(|e| self.build_where(e)).collect();
-                let sqls: Vec<_> = clauses.iter().map(|(s, _)| format!("({})", s)).collect();
-                let params: Vec<_> = clauses.iter().flat_map(|(_, p)| p.clone()).collect();
-                (sqls.join(" AND "), params)
+                let mut sqls = Vec::with_capacity(exprs.len());
+                let mut params = Vec::new();
+                for e in exprs {
+                    let (s, mut p) = self.build_where(e)?;
+                    sqls.push(format!("({})", s));
+                    params.append(&mut p);
+                }
+                Ok((sqls.join(" AND "), params))
             }
 
             QueryExpr::Or(exprs) => {
-                let clauses: Vec<_> = exprs.iter().map(|e| self.build_where(e)).collect();
-                let sqls: Vec<_> = clauses.iter().map(|(s, _)| format!("({})", s)).collect();
-                let params: Vec<_> = clauses.iter().flat_map(|(_, p)| p.clone()).collect();
-                (sqls.join(" OR "), params)
+                let mut sqls = Vec::with_capacity(exprs.len());
+                let mut params = Vec::new();
+                for e in exprs {
+                    let (s, mut p) = self.build_where(e)?;
+                    sqls.push(format!("({})", s));
+                    params.append(&mut p);
+                }
+                Ok((sqls.join(" OR "), params))
             }
 
             QueryExpr::Not(inner) => {
-                let (sql, params) = self.build_where(inner);
-                (format!("NOT ({})", sql), params)
+                let (sql, params) = self.build_where(inner)?;
+                Ok((format!("NOT ({})", sql), params))
             }
 
             QueryExpr::Task(markers) => {
@@ -145,7 +162,7 @@ where
                     .iter()
                     .map(|m| SqlParam::String(m.to_lowercase()))
                     .collect();
-                (sql, params)
+                Ok((sql, params))
             }
 
             QueryExpr::Priority(priorities) => {
@@ -155,34 +172,34 @@ where
                     .iter()
                     .map(|p| SqlParam::String(p.to_lowercase()))
                     .collect();
-                (sql, params)
+                Ok((sql, params))
             }
 
             QueryExpr::Page(name) => {
                 // Use a correlated subquery with proper alias reference
                 let sql = "EXISTS (SELECT 1 FROM pages p WHERE p.id = b.page_id AND p.name = ?)"
                     .to_string();
-                (sql, vec![SqlParam::String(name.to_lowercase())])
+                Ok((sql, vec![SqlParam::String(name.to_lowercase())]))
             }
 
             QueryExpr::BlockContent(query) => {
                 // Use IN pattern for FTS5 search without alias
                 let sql =
                     "b.rowid IN (SELECT rowid FROM blocks_fts WHERE content MATCH ?)".to_string();
-                (sql, vec![SqlParam::String(query.clone())])
+                Ok((sql, vec![SqlParam::String(query.clone())]))
             }
 
             QueryExpr::PageRef(name) => {
                 let sql = "content LIKE ?".to_string();
                 let param = format!("%[[{}]]%", name);
-                (sql, vec![SqlParam::String(param)])
+                Ok((sql, vec![SqlParam::String(param)]))
             }
 
-            QueryExpr::SelfRef => ("1 = 1".to_string(), vec![]),
+            QueryExpr::SelfRef => Ok(("1 = 1".to_string(), vec![])),
 
             QueryExpr::Sample(_n) => {
                 // Mark that we want random ordering
-                (String::new(), vec![])
+                Ok((String::new(), vec![]))
             }
 
             QueryExpr::Between { field, start, end } => {
@@ -195,25 +212,25 @@ where
                     field.clone()
                 };
                 let sql = format!("{} BETWEEN ? AND ?", qualified_field);
-                (sql, vec![start_val, end_val])
+                Ok((sql, vec![start_val, end_val]))
             }
 
             QueryExpr::Property { key, value } => {
                 let val = self.value_to_param(value);
                 let sql = format!("{} = ?", self.dialect.property_path(key));
-                (sql, vec![val])
+                Ok((sql, vec![val]))
             }
 
             QueryExpr::Tags(tag) => {
                 let sql = "tags LIKE ?".to_string();
                 let param = format!("%\"{} \"%", tag);
-                (sql, vec![SqlParam::String(param)])
+                Ok((sql, vec![SqlParam::String(param)]))
             }
 
             QueryExpr::Aggregate {
                 inner, group_by, ..
             } => {
-                let (inner_where, params) = self.build_where(inner);
+                let (inner_where, params) = self.build_where(inner)?;
                 let prop_path = self.dialect.property_path(group_by);
                 let null_check = format!("{} IS NOT NULL", prop_path);
                 let where_clause = if inner_where.is_empty() {
@@ -221,21 +238,19 @@ where
                 } else {
                     format!("{} AND {}", inner_where, null_check)
                 };
-                (
+                Ok((
                     format!("{} AND {} GROUP BY {}", where_clause, prop_path, prop_path),
                     params,
-                )
+                ))
             }
 
-            // Stats is handled in build_sql(), not build_where()
-            // build_where() cannot handle Stats because aggregate functions
-            // cannot appear in WHERE clauses
-            QueryExpr::Stats { .. } => {
-                panic!("Stats variant cannot be used in build_where(); use build_sql() instead")
-            }
+            // F1 — Stats is handled in `build_sql`, not `build_where`.
+            // Returning `Err` instead of `panic!` makes the executor
+            // panic-free in the runtime paths.
+            QueryExpr::Stats { .. } => Err(CompilerError::UnsupportedOperator { op: "Stats" }),
 
             QueryExpr::GroupBy { inner, property } => {
-                let (inner_where, params) = self.build_where(inner);
+                let (inner_where, params) = self.build_where(inner)?;
                 let prop_path = self.dialect.property_path(property);
                 let null_check = format!("{} IS NOT NULL", prop_path);
                 let where_clause = if inner_where.is_empty() {
@@ -243,16 +258,17 @@ where
                 } else {
                     format!("{} AND {}", inner_where, null_check)
                 };
-                (
+                Ok((
                     format!("{} AND {} GROUP BY {}", where_clause, prop_path, prop_path),
                     params,
-                )
+                ))
             }
 
-            // Analyze is handled in build_analyze_sql(), not build_where()
-            // Analyze is a top-level only operator that cannot be nested
+            // F1 — Analyze is handled in `build_analyze_sql`, not
+            // `build_where`. Returning `Err` instead of `panic!` makes
+            // the executor panic-free in the runtime paths.
             QueryExpr::Analyze { .. } => {
-                panic!("Analyze variant cannot be used in build_where(); use build_analyze_sql() instead")
+                Err(CompilerError::UnsupportedOperator { op: "Analyze" })
             }
         }
     }
@@ -282,13 +298,17 @@ where
     /// let executor = QueryExecutor::new();
     ///
     /// let expr = parser.parse("(task todo)").unwrap();
-    /// let (sql, params) = executor.build_sql(&expr, 100);
+    /// let (sql, params) = executor.build_sql(&expr, 100).unwrap();
     ///
     /// assert!(sql.contains("SELECT"));
     /// assert!(sql.contains("WHERE"));
     /// assert!(sql.contains("LIMIT 100"));
     /// ```
-    pub fn build_sql(&self, expr: &QueryExpr, limit: usize) -> (String, Vec<SqlParam>) {
+    pub fn build_sql(
+        &self,
+        expr: &QueryExpr,
+        limit: usize,
+    ) -> Result<(String, Vec<SqlParam>), CompilerError> {
         // Handle aggregate variants with special SQL generation
         match expr {
             QueryExpr::Aggregate {
@@ -296,7 +316,7 @@ where
                 group_by,
                 aggregate_fn,
             } => {
-                let (inner_where, params) = self.build_where(inner);
+                let (inner_where, params) = self.build_where(inner)?;
                 let prop_path = self.dialect.property_path(group_by);
                 let fn_sql = self.dialect.aggregate_fn(aggregate_fn.clone(), &prop_path);
                 let null_check = format!("{} IS NOT NULL", prop_path);
@@ -313,7 +333,7 @@ where
                      GROUP BY {}",
                     prop_path, fn_sql, where_clause, prop_path
                 );
-                (sql, params)
+                Ok((sql, params))
             }
 
             QueryExpr::Stats { property, compute } => {
@@ -326,11 +346,11 @@ where
                      WHERE {} IS NOT NULL",
                     fn_sql, prop_path
                 );
-                (sql, vec![])
+                Ok((sql, vec![]))
             }
 
             QueryExpr::GroupBy { inner, property } => {
-                let (inner_where, params) = self.build_where(inner);
+                let (inner_where, params) = self.build_where(inner)?;
                 let prop_path = self.dialect.property_path(property);
                 let null_check = format!("{} IS NOT NULL", prop_path);
                 let where_clause = if inner_where.is_empty() {
@@ -345,11 +365,11 @@ where
                      WHERE {}",
                     prop_path, where_clause
                 );
-                (sql, params)
+                Ok((sql, params))
             }
 
             _ => {
-                let (where_clause, params) = self.build_where(expr);
+                let (where_clause, params) = self.build_where(expr)?;
 
                 let mut sql = String::from(
                     "SELECT b.*, p.name as page_name \
@@ -367,7 +387,7 @@ where
 
                 sql.push_str(&format!(" LIMIT {}", limit));
 
-                (sql, params)
+                Ok((sql, params))
             }
         }
     }
@@ -390,10 +410,10 @@ where
     pub fn build_analyze_sql(
         &self,
         expr: &QueryExpr,
-    ) -> Result<(String, Vec<SqlParam>), crate::parser::ParseError> {
+    ) -> Result<(String, Vec<SqlParam>), CompilerError> {
         match expr {
             QueryExpr::Analyze { inner, .. } => {
-                let (where_clause, params) = self.build_where(inner);
+                let (where_clause, params) = self.build_where(inner)?;
                 let sql = if where_clause.is_empty() {
                     format!(
                         "SELECT b.* FROM blocks b JOIN pages p ON b.page_id = p.id LIMIT {}",
@@ -411,7 +431,7 @@ where
                 };
                 Ok((sql, params))
             }
-            _ => Err(crate::parser::ParseError::Invalid(
+            _ => Err(CompilerError::Invalid(
                 "Expected Analyze expression".to_string(),
             )),
         }
@@ -426,7 +446,7 @@ mod tests {
     fn test_simple_task_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Task(vec!["todo".to_string()]);
-        let (sql, params) = executor.build_sql(&expr, 100);
+        let (sql, params) = executor.build_sql(&expr, 100).unwrap();
 
         assert!(sql.contains("marker IN"));
         assert!(sql.contains("LIMIT 100"));
@@ -437,7 +457,7 @@ mod tests {
     fn test_page_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Page("Test Page".to_string());
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("EXISTS"));
         assert!(sql.contains("pages"));
@@ -452,7 +472,7 @@ mod tests {
             QueryExpr::Task(vec!["todo".to_string()]),
             QueryExpr::Priority(vec!["a".to_string()]),
         ]);
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("AND"));
         assert_eq!(params.len(), 2);
@@ -466,7 +486,7 @@ mod tests {
             start: QueryValue::Integer(1000),
             end: QueryValue::Integer(2000),
         };
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("BETWEEN ? AND ?"));
         assert_eq!(params.len(), 2);
@@ -479,7 +499,7 @@ mod tests {
             QueryExpr::Task(vec!["todo".to_string()]),
             QueryExpr::Task(vec!["done".to_string()]),
         ]);
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains(" OR "));
         assert!(sql.contains("marker IN"));
@@ -490,7 +510,7 @@ mod tests {
     fn test_not_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Not(Box::new(QueryExpr::Task(vec!["done".to_string()])));
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("NOT"));
         assert!(sql.contains("marker IN"));
@@ -501,7 +521,7 @@ mod tests {
     fn test_page_ref_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::PageRef("TestPage".to_string());
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("content LIKE"));
         assert_eq!(params.len(), 1);
@@ -512,7 +532,7 @@ mod tests {
     fn test_block_content_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::BlockContent("hello world".to_string());
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("blocks_fts"));
         assert!(sql.contains("MATCH"));
@@ -524,7 +544,7 @@ mod tests {
     fn test_tags_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Tags("important".to_string());
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("tags LIKE"));
         assert_eq!(params.len(), 1);
@@ -536,7 +556,7 @@ mod tests {
     fn test_self_ref_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::SelfRef;
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert_eq!(sql, "1 = 1");
         assert!(params.is_empty());
@@ -546,7 +566,7 @@ mod tests {
     fn test_sample_query() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Sample(5);
-        let (where_sql, params) = executor.build_where(&expr);
+        let (where_sql, params) = executor.build_where(&expr).unwrap();
 
         // Sample returns empty WHERE clause
         assert!(where_sql.is_empty());
@@ -557,7 +577,7 @@ mod tests {
     fn test_sample_query_full_sql() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Sample(10);
-        let (sql, params) = executor.build_sql(&expr, 10);
+        let (sql, params) = executor.build_sql(&expr, 10).unwrap();
 
         assert!(sql.contains("ORDER BY RANDOM()"));
         assert!(sql.contains("LIMIT 10"));
@@ -571,7 +591,7 @@ mod tests {
             key: "author".to_string(),
             value: QueryValue::String("John".to_string()),
         };
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));
         assert!(sql.contains("$.author"));
@@ -585,7 +605,7 @@ mod tests {
             key: "count".to_string(),
             value: QueryValue::Integer(42),
         };
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));
         assert_eq!(params.len(), 1);
@@ -599,7 +619,7 @@ mod tests {
             key: "active".to_string(),
             value: QueryValue::Boolean(true),
         };
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("json_extract"));
         assert_eq!(params.len(), 1);
@@ -613,7 +633,7 @@ mod tests {
             QueryExpr::Not(Box::new(QueryExpr::Task(vec!["done".to_string()]))),
             QueryExpr::Priority(vec!["a".to_string()]),
         ]);
-        let (sql, params) = executor.build_where(&expr);
+        let (sql, params) = executor.build_where(&expr).unwrap();
 
         assert!(sql.contains("NOT"));
         assert!(sql.contains("AND"));
@@ -625,7 +645,7 @@ mod tests {
     fn test_build_sql_has_right_structure() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Task(vec!["todo".to_string()]);
-        let (sql, params) = executor.build_sql(&expr, 100);
+        let (sql, params) = executor.build_sql(&expr, 100).unwrap();
 
         assert!(sql.contains("SELECT b.*"));
         assert!(sql.contains("FROM blocks b"));
@@ -643,7 +663,7 @@ mod tests {
             QueryExpr::Priority(vec!["a".to_string()]),
             QueryExpr::Page("Test".to_string()),
         ]);
-        let (_, params) = executor.build_where(&expr);
+        let (_, params) = executor.build_where(&expr).unwrap();
 
         // 1 param for task + 1 for priority + 1 for page
         assert_eq!(params.len(), 3);
@@ -653,7 +673,7 @@ mod tests {
     fn test_page_name_lowercased() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Page("MyPage".to_string());
-        let (_, params) = executor.build_where(&expr);
+        let (_, params) = executor.build_where(&expr).unwrap();
 
         assert_eq!(params.len(), 1);
         assert_eq!(params[0].as_string(), "mypage");
@@ -663,7 +683,7 @@ mod tests {
     fn test_priority_lowercased() {
         let executor = QueryExecutor::new();
         let expr = QueryExpr::Priority(vec!["A".to_string(), "B".to_string()]);
-        let (_, params) = executor.build_where(&expr);
+        let (_, params) = executor.build_where(&expr).unwrap();
 
         assert_eq!(params.len(), 2);
         assert_eq!(params[0].as_string(), "a");
@@ -678,7 +698,7 @@ mod tests {
             start: QueryValue::Integer(1000),
             end: QueryValue::Integer(2000),
         };
-        let (sql, params) = executor.build_sql(&expr, 50);
+        let (sql, params) = executor.build_sql(&expr, 50).unwrap();
 
         assert!(sql.contains("SELECT b.*"));
         assert!(sql.contains("WHERE b.created_at BETWEEN ? AND ?"));
@@ -727,5 +747,44 @@ mod tests {
         let expr = QueryExpr::Task(vec!["todo".to_string()]);
         let result = executor.build_analyze_sql(&expr);
         assert!(result.is_err());
+    }
+
+    // F1 — panic→Result conversion tests.
+    //
+    // Before F1, `build_where` panicked for `Stats` and `Analyze` variants.
+    // After F1, it returns `Err(CompilerError::UnsupportedOperator { op })`.
+
+    #[test]
+    fn test_build_where_stats_returns_unsupported_operator_error() {
+        use crate::compiler::CompilerError;
+        let executor = QueryExecutor::new();
+        let expr = QueryExpr::Stats {
+            property: "count".to_string(),
+            compute: crate::parser::StatsFn::Stddev,
+        };
+        let result = executor.build_where(&expr);
+        match result {
+            Err(CompilerError::UnsupportedOperator { op }) => {
+                assert_eq!(op, "Stats");
+            }
+            other => panic!("expected UnsupportedOperator(Stats), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_build_where_analyze_returns_unsupported_operator_error() {
+        use crate::compiler::CompilerError;
+        let executor = QueryExecutor::new();
+        let expr = QueryExpr::Analyze {
+            inner: Box::new(QueryExpr::Task(vec!["todo".to_string()])),
+            kind: crate::parser::AnalyzeKind::StructuralMirror,
+        };
+        let result = executor.build_where(&expr);
+        match result {
+            Err(CompilerError::UnsupportedOperator { op }) => {
+                assert_eq!(op, "Analyze");
+            }
+            other => panic!("expected UnsupportedOperator(Analyze), got {:?}", other),
+        }
     }
 }
