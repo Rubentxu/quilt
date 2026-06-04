@@ -83,16 +83,39 @@ impl McpServer {
         let result = self.execute_tool(&params.name, &params.arguments).await;
 
         match result {
-            Ok(text) => McpResponse::ToolsCall(ToolsCallResult {
-                content: vec![ContentBlock::Text { text }],
-                is_error: Some(false),
-                _meta: None,
-            }),
-            Err(e) => McpResponse::ToolsCall(ToolsCallResult {
-                content: vec![ContentBlock::Text { text: e }],
-                is_error: Some(true),
-                _meta: None,
-            }),
+            Ok((text, handler)) => {
+                // Parse the handler's JSON output so we can pass it to
+                // tool_evidence. If parsing fails, fall back to empty
+                // object — the handler is allowed to return non-JSON,
+                // in which case custom evidence can't be derived.
+                let result_value: serde_json::Value =
+                    serde_json::from_str(&text).unwrap_or_else(|_| serde_json::Value::Null);
+
+                // T-08: handler override (Option B) OR universal fallback.
+                let evidence = handler
+                    .tool_evidence(&params.name, &params.arguments, &result_value)
+                    .unwrap_or_else(|| Evidence::universal_fallback(&params.name));
+
+                McpResponse::ToolsCall(ToolsCallResult {
+                    content: vec![ContentBlock::Text { text }],
+                    is_error: Some(false),
+                    _meta: Some(MetaEnvelope {
+                        evidence: Some(evidence),
+                    }),
+                })
+            }
+            Err(e) => {
+                // T-09: error fallback. Agents need to know which tool
+                // failed and when, so we ALWAYS inject minimal evidence.
+                let evidence = Evidence::error_fallback(&params.name);
+                McpResponse::ToolsCall(ToolsCallResult {
+                    content: vec![ContentBlock::Text { text: e }],
+                    is_error: Some(true),
+                    _meta: Some(MetaEnvelope {
+                        evidence: Some(evidence),
+                    }),
+                })
+            }
         }
     }
 
@@ -108,32 +131,55 @@ impl McpServer {
 
     async fn handle_read_resource(&self, params: ReadResourceParams) -> McpResponse {
         match self.read_resource(&params.uri).await {
-            Ok(text) => McpResponse::ResourcesRead(ResourceReadResult {
-                contents: vec![ResourceContent {
-                    uri: params.uri,
-                    mime_type: "application/json".to_string(),
-                    text: Some(text),
-                }],
-                _meta: None,
-            }),
-            Err(e) => McpResponse::ResourcesRead(ResourceReadResult {
-                contents: vec![ResourceContent {
-                    uri: params.uri,
-                    mime_type: "text/plain".to_string(),
-                    text: Some(e),
-                }],
-                _meta: None,
-            }),
+            Ok((text, provider)) => {
+                // T-10: provider override (Option B) OR universal fallback.
+                let result_value: serde_json::Value =
+                    serde_json::from_str(&text).unwrap_or_else(|_| serde_json::Value::Null);
+                let evidence = provider
+                    .resource_evidence(&params.uri, &result_value)
+                    .unwrap_or_else(|| Evidence::universal_fallback(&params.uri));
+                McpResponse::ResourcesRead(ResourceReadResult {
+                    contents: vec![ResourceContent {
+                        uri: params.uri,
+                        mime_type: "application/json".to_string(),
+                        text: Some(text),
+                    }],
+                    _meta: Some(MetaEnvelope {
+                        evidence: Some(evidence),
+                    }),
+                })
+            }
+            Err(e) => {
+                let evidence = Evidence::error_fallback(&params.uri);
+                McpResponse::ResourcesRead(ResourceReadResult {
+                    contents: vec![ResourceContent {
+                        uri: params.uri,
+                        mime_type: "text/plain".to_string(),
+                        text: Some(e),
+                    }],
+                    _meta: Some(MetaEnvelope {
+                        evidence: Some(evidence),
+                    }),
+                })
+            }
         }
     }
 
     // ── Tool execution ────────────────────────────────────────────────
 
-    async fn execute_tool(&self, name: &str, args: &serde_json::Value) -> Result<String, String> {
+    /// Execute a tool, returning both the serialized text output and a
+    /// reference to the handler that produced it. The handler reference
+    /// is needed for `tool_evidence` derivation (Option B signature).
+    async fn execute_tool<'a>(
+        &'a self,
+        name: &str,
+        args: &serde_json::Value,
+    ) -> Result<(String, &'a dyn ToolHandler), String> {
         for handler in &self.tool_handlers {
             let tools = handler.tools();
             if tools.iter().any(|t| t.name == name) {
-                return handler.execute(name, args).await;
+                let text = handler.execute(name, args).await?;
+                return Ok((text, handler.as_ref()));
             }
         }
         Err(format!("Unknown tool: {}", name))
@@ -141,11 +187,17 @@ impl McpServer {
 
     // ── Resource reading ─────────────────────────────────────────────
 
-    async fn read_resource(&self, uri: &str) -> Result<String, String> {
+    /// Read a resource, returning both the serialized text output and a
+    /// reference to the provider that produced it.
+    async fn read_resource<'a>(
+        &'a self,
+        uri: &str,
+    ) -> Result<(String, &'a dyn ResourceProvider), String> {
         for provider in &self.resource_providers {
             let resources = provider.resources();
             if resources.iter().any(|r| r.uri == uri) {
-                return provider.read(uri).await;
+                let text = provider.read(uri).await?;
+                return Ok((text, provider.as_ref()));
             }
         }
         Err(format!("Unknown resource: {}", uri))
@@ -425,5 +477,113 @@ mod tests {
         // (confirms the Arc<dyn BlockRepository/PageRepository> APIs work)
         let _page_trait = page_repo.as_trait();
         let _block_trait = block_repo.as_trait();
+    }
+
+    // ── Evidence Contract v1: server-level injection (T-08, T-09, T-10) ──
+
+    // T-08: successful tool call carries _meta.evidence with universal
+    // fallback (no handler override on quilt_list_pages).
+    #[tokio::test]
+    async fn test_call_tool_injects_universal_fallback_evidence() {
+        let (server, _pool) = setup_server().await;
+
+        let response = server
+            .handle_request(McpRequest::CallTool {
+                params: CallToolParams {
+                    name: "quilt_list_pages".to_string(),
+                    arguments: serde_json::json!({}),
+                },
+            })
+            .await;
+
+        match response {
+            McpResponse::ToolsCall(result) => {
+                assert!(!result.is_error.unwrap());
+                let meta = result
+                    ._meta
+                    .as_ref()
+                    .expect("Ok response MUST carry _meta envelope");
+                let ev = meta
+                    .evidence
+                    .as_ref()
+                    .expect("Ok response MUST carry _meta.evidence");
+                assert_eq!(ev.tool_name, "quilt_list_pages");
+                assert!(!ev.is_error);
+                assert!(ev.block_ids.is_empty());
+                assert!(ev.page_name.is_none());
+                assert!(ev.query_ast.is_none());
+                assert!(ev.matched_terms.is_empty());
+                assert!(ev.timestamp.timestamp() > 0);
+            }
+            _ => panic!("Expected ToolsCall response"),
+        }
+    }
+
+    // T-09: error path injects is_error: true with minimal evidence.
+    #[tokio::test]
+    async fn test_call_tool_injects_error_fallback_evidence() {
+        let (server, _pool) = setup_server().await;
+
+        // quilt_get_template_schema without 'name' arg → Err.
+        let response = server
+            .handle_request(McpRequest::CallTool {
+                params: CallToolParams {
+                    name: "quilt_get_template_schema".to_string(),
+                    arguments: serde_json::json!({}),
+                },
+            })
+            .await;
+
+        match response {
+            McpResponse::ToolsCall(result) => {
+                assert!(result.is_error.unwrap());
+                let meta = result
+                    ._meta
+                    .as_ref()
+                    .expect("Err response MUST carry _meta envelope");
+                let ev = meta
+                    .evidence
+                    .as_ref()
+                    .expect("Err response MUST carry _meta.evidence");
+                assert_eq!(ev.tool_name, "quilt_get_template_schema");
+                assert!(ev.is_error);
+                assert!(ev.block_ids.is_empty());
+                assert!(ev.page_name.is_none());
+                assert!(ev.query_ast.is_none());
+            }
+            _ => panic!("Expected ToolsCall response"),
+        }
+    }
+
+    // T-10: resource read carries _meta.evidence (fallback tier).
+    #[tokio::test]
+    async fn test_read_resource_injects_evidence() {
+        let (server, _pool) = setup_server().await;
+
+        let response = server
+            .handle_request(McpRequest::ReadResource {
+                params: ReadResourceParams {
+                    uri: "quilt://graph".to_string(),
+                },
+            })
+            .await;
+
+        match response {
+            McpResponse::ResourcesRead(result) => {
+                let meta = result
+                    ._meta
+                    .as_ref()
+                    .expect("Resource read MUST carry _meta envelope");
+                let ev = meta
+                    .evidence
+                    .as_ref()
+                    .expect("Resource read MUST carry _meta.evidence");
+                // GraphResourceProvider does not override resource_evidence,
+                // so we get universal fallback. tool_name = uri for resources.
+                assert_eq!(ev.tool_name, "quilt://graph");
+                assert!(!ev.is_error);
+            }
+            _ => panic!("Expected ResourcesRead response"),
+        }
     }
 }
