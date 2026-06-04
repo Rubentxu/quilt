@@ -1,6 +1,6 @@
 //! Migration-related HTTP handlers
 //!
-//! Endpoints for importing Logseq markdown files into Quilt.
+//! Endpoints for importing Markdown files into Quilt.
 
 use axum::{
     Json,
@@ -21,11 +21,11 @@ use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository,
 };
 
-/// Request body for POST /api/v1/migration/logseq
+/// Request body for POST /api/v1/migration/md
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MigrateLogseqRequest {
-    /// Path to the directory containing Logseq markdown files
+pub struct ImportMdRequest {
+    /// Path to the directory containing Markdown files
     pub path: String,
 }
 
@@ -44,7 +44,7 @@ pub struct ImportResultDto {
 /// Response for the migration endpoint
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct MigrateLogseqResponse {
+pub struct ImportMdResponse {
     /// Results for each file that was imported
     pub results: Vec<ImportResultDto>,
     /// Total pages created across all files
@@ -65,17 +65,17 @@ impl From<quilt_application::migration::ImportResult> for ImportResultDto {
     }
 }
 
-/// POST /api/v1/migration/logseq
+/// POST /api/v1/migration/md
 ///
-/// Import Logseq markdown files from a directory into Quilt.
+/// Import Markdown files from a directory into Quilt.
 ///
-/// The directory should contain `.md` files in Logseq format.
+/// The directory should contain `.md` files in Logseq/Quilt format.
 /// Each file becomes a page, and nested blocks are preserved.
 #[instrument(skip(state))]
-pub async fn migrate_logseq(
+pub async fn migrate_md_import(
     Extension(state): Extension<AppState>,
-    Json(body): Json<MigrateLogseqRequest>,
-) -> Result<(StatusCode, Json<MigrateLogseqResponse>), AppError> {
+    Json(body): Json<ImportMdRequest>,
+) -> Result<(StatusCode, Json<ImportMdResponse>), AppError> {
     // Validate path
     let path = PathBuf::from(&body.path);
     
@@ -120,7 +120,7 @@ pub async fn migrate_logseq(
     
     Ok((
         StatusCode::OK,
-        Json(MigrateLogseqResponse {
+        Json(ImportMdResponse {
             results: result_dtos,
             total_pages_created,
             total_blocks_created,
@@ -131,5 +131,5 @@ pub async fn migrate_logseq(
 
 /// Create router for /api/v1/migration
 pub fn routes() -> Router {
-    Router::new().route("/logseq", post(migrate_logseq))
+    Router::new().route("/md", post(migrate_md_import))
 }

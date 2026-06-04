@@ -1,8 +1,8 @@
 //! MigrationEngine - imports external data into Quilt.
 //!
-//! Currently supports Logseq-flavored markdown files.
+//! Currently supports Markdown-flavored files (Logseq/Quilt format).
 
-use crate::migration::{parse_logseq, Frontmatter, MigrationError as ParseMigrationError, RawBlock};
+use crate::migration::{parse_md_import, Frontmatter, MigrationError as ParseMigrationError, RawBlock};
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::properties::types::PropertyType;
@@ -55,7 +55,7 @@ impl<PR: PageRepository, BR: BlockRepository> MigrationEngine<PR, BR> {
         }
     }
 
-    /// Import a single Logseq markdown file.
+    /// Import a single Markdown file.
     #[instrument(skip(self, source))]
     pub async fn import_file(
         &self,
@@ -71,9 +71,9 @@ impl<PR: PageRepository, BR: BlockRepository> MigrationEngine<PR, BR> {
             });
         }
 
-        // Parse the Logseq markdown
+        // Parse the Markdown import
         let (frontmatter, raw_blocks) =
-            parse_logseq(source).map_err(|e| MigrationError::Import(e.to_string()))?;
+            parse_md_import(source).map_err(|e| MigrationError::Import(e.to_string()))?;
 
         // Create the page
         let page_id = Uuid::new_v4();
@@ -113,7 +113,7 @@ impl<PR: PageRepository, BR: BlockRepository> MigrationEngine<PR, BR> {
         })
     }
 
-    /// Import all Logseq markdown files from a directory.
+    /// Import all Markdown files from a directory.
     #[instrument(skip(self))]
     pub async fn import_directory(&self, dir_path: &Path) -> Result<Vec<ImportResult>, MigrationError> {
         let mut results = Vec::new();
@@ -199,7 +199,7 @@ async fn create_blocks_from_raw<BR: BlockRepository>(
 }
 
 /// Infer PropertyValue from a string value.
-/// Used internally during block creation from parsed Logseq content.
+/// Used internally during block creation from parsed Markdown content.
 pub fn infer_property_value(value: &str) -> PropertyValue {
     let trimmed = value.trim();
 
@@ -226,7 +226,7 @@ pub fn infer_property_value(value: &str) -> PropertyValue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::migration::parse_logseq;
+    use crate::migration::parse_md_import;
 
     #[test]
     fn infer_property_value_tests() {

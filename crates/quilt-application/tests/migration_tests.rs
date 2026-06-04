@@ -1,8 +1,8 @@
 //! Integration tests for the migration module
 //!
-//! Tests the Logseq parser and MigrationEngine with fixtures and property-based testing.
+//! Tests the Markdown parser and MigrationEngine with fixtures and property-based testing.
 
-use quilt_application::migration::{parse_logseq, Frontmatter, MigrationEngine, infer_property_value};
+use quilt_application::migration::{parse_md_import, Frontmatter, MigrationEngine, infer_property_value};
 use quilt_domain::repositories::PageRepository;
 use quilt_domain::value_objects::PropertyValue;
 use quilt_test_helpers::{InMemoryBlockRepo, InMemoryPageRepo};
@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 /// Helper to get path to a test fixture
 fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from("tests/fixtures/logseq").join(name)
+    PathBuf::from("tests/fixtures/md_import").join(name)
 }
 
 /// Helper to load a fixture file
@@ -25,7 +25,7 @@ fn load_fixture(name: &str) -> String {
 #[test]
 fn test_parse_simple_property_line() {
     let input = "title: My Page";
-    let result = parse_logseq(input).expect("Should parse");
+    let result = parse_md_import(input).expect("Should parse");
     assert!(result.0.properties.is_empty()); // No frontmatter
 }
 
@@ -35,7 +35,7 @@ fn test_parse_frontmatter_property_with_colon_in_value() {
 key: value: with: colons
 ---
 "#;
-    let (fm, _) = parse_logseq(input).expect("Should parse");
+    let (fm, _) = parse_md_import(input).expect("Should parse");
     assert_eq!(fm.properties.len(), 1);
     assert_eq!(fm.properties[0].key, "key");
     assert_eq!(fm.properties[0].value, "value: with: colons");
@@ -48,7 +48,7 @@ empty_key:
 another: with value
 ---
 "#;
-    let (fm, _) = parse_logseq(input).expect("Should parse");
+    let (fm, _) = parse_md_import(input).expect("Should parse");
     assert_eq!(fm.properties.len(), 2);
     assert_eq!(fm.properties[0].key, "empty_key");
     assert_eq!(fm.properties[0].value, "");
@@ -65,7 +65,7 @@ also_true: TRUE
 also_false: FALSE
 ---
 "#;
-    let (fm, _) = parse_logseq(input).expect("Should parse");
+    let (fm, _) = parse_md_import(input).expect("Should parse");
     assert_eq!(fm.properties.len(), 4);
     // Values remain strings at this level; type inference happens later
     assert_eq!(fm.properties[0].value, "true");
@@ -82,7 +82,7 @@ fn test_parse_single_level_indent() {
 - Top level
   - Nested
 ";
-    let (_, blocks) = parse_logseq(input).expect("Should parse");
+    let (_, blocks) = parse_md_import(input).expect("Should parse");
     assert_eq!(blocks.len(), 1);
     assert_eq!(blocks[0].indent_level, 0);
 }
@@ -94,7 +94,7 @@ fn test_parse_double_level_indent() {
   - Level 1
     - Level 2
 ";
-    let (_, blocks) = parse_logseq(input).expect("Should parse");
+    let (_, blocks) = parse_md_import(input).expect("Should parse");
     assert_eq!(blocks.len(), 1);
 }
 
@@ -105,7 +105,7 @@ fn test_parse_multiple_siblings_at_same_level() {
 - Block 2
 - Block 3
 ";
-    let (_, blocks) = parse_logseq(input).expect("Should parse");
+    let (_, blocks) = parse_md_import(input).expect("Should parse");
     assert_eq!(blocks.len(), 3);
 }
 
@@ -118,7 +118,7 @@ fn test_parse_deeply_nested_blocks() {
       - Level 3
         - Level 4
 ";
-    let (_, blocks) = parse_logseq(input).expect("Should parse");
+    let (_, blocks) = parse_md_import(input).expect("Should parse");
     // Parser should handle this gracefully
     assert!(!blocks.is_empty());
 }
@@ -129,7 +129,7 @@ fn test_parse_block_content_with_leading_spaces() {
 - Block with leading spaces in content
   - Nested block
 ";
-    let (_, blocks) = parse_logseq(input).expect("Should parse");
+    let (_, blocks) = parse_md_import(input).expect("Should parse");
     assert!(!blocks.is_empty());
 }
 
@@ -183,7 +183,7 @@ fn test_infer_date_like_strings_stay_as_strings() {
 #[test]
 fn test_parse_simple_fixture() {
     let content = load_fixture("simple.md");
-    let (fm, blocks) = parse_logseq(&content).expect("Should parse fixture");
+    let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
     
     assert_eq!(fm.properties.len(), 2);
     assert_eq!(fm.properties[0].key, "title");
@@ -194,7 +194,7 @@ fn test_parse_simple_fixture() {
 #[test]
 fn test_parse_with_properties_fixture() {
     let content = load_fixture("with_properties.md");
-    let (fm, blocks) = parse_logseq(&content).expect("Should parse fixture");
+    let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
     
     assert_eq!(fm.properties.len(), 4); // title, created, author, priority
     assert_eq!(fm.properties[0].key, "title");
@@ -207,7 +207,7 @@ fn test_parse_with_properties_fixture() {
 #[test]
 fn test_parse_nested_blocks_fixture() {
     let content = load_fixture("nested_blocks.md");
-    let (_, blocks) = parse_logseq(&content).expect("Should parse fixture");
+    let (_, blocks) = parse_md_import(&content).expect("Should parse fixture");
     
     assert!(!blocks.is_empty());
     // Check that we have at least 2 top-level blocks
@@ -217,7 +217,7 @@ fn test_parse_nested_blocks_fixture() {
 #[test]
 fn test_parse_numeric_properties_fixture() {
     let content = load_fixture("numeric_properties.md");
-    let (fm, _) = parse_logseq(&content).expect("Should parse fixture");
+    let (fm, _) = parse_md_import(&content).expect("Should parse fixture");
     
     assert_eq!(fm.properties.len(), 4); // title, count, price, percentage
     // The count property
@@ -229,7 +229,7 @@ fn test_parse_numeric_properties_fixture() {
 #[test]
 fn test_parse_boolean_properties_fixture() {
     let content = load_fixture("boolean_properties.md");
-    let (fm, _) = parse_logseq(&content).expect("Should parse fixture");
+    let (fm, _) = parse_md_import(&content).expect("Should parse fixture");
     
     assert_eq!(fm.properties.len(), 5); // title, enabled, disabled, active, inactive
     
@@ -243,7 +243,7 @@ fn test_parse_boolean_properties_fixture() {
 #[test]
 fn test_parse_complex_nested_fixture() {
     let content = load_fixture("complex_nested.md");
-    let (_, blocks) = parse_logseq(&content).expect("Should parse fixture");
+    let (_, blocks) = parse_md_import(&content).expect("Should parse fixture");
     
     assert!(!blocks.is_empty());
     // Root level blocks
@@ -253,7 +253,7 @@ fn test_parse_complex_nested_fixture() {
 #[test]
 fn test_parse_multiline_content_fixture() {
     let content = load_fixture("multiline_content.md");
-    let (fm, blocks) = parse_logseq(&content).expect("Should parse fixture");
+    let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
     
     assert_eq!(fm.properties.len(), 2); // title, description
     assert_eq!(fm.properties[0].key, "title");
@@ -264,7 +264,7 @@ fn test_parse_multiline_content_fixture() {
 #[test]
 fn test_parse_no_frontmatter_fixture() {
     let content = load_fixture("no_frontmatter.md");
-    let (fm, blocks) = parse_logseq(&content).expect("Should parse fixture");
+    let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
     
     assert!(fm.properties.is_empty());
     assert!(!blocks.is_empty());
@@ -275,7 +275,7 @@ fn test_parse_no_frontmatter_fixture() {
 #[test]
 fn test_parse_date_properties_fixture() {
     let content = load_fixture("date_properties.md");
-    let (fm, _) = parse_logseq(&content).expect("Should parse fixture");
+    let (fm, _) = parse_md_import(&content).expect("Should parse fixture");
     
     assert_eq!(fm.properties.len(), 3);
     let created = fm.properties.iter().find(|p| p.key == "created");
@@ -382,7 +382,7 @@ async fn test_migration_engine_import_directory_with_files() {
     let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone());
     
     // Use the fixtures directory
-    let fixtures_dir = PathBuf::from("tests/fixtures/logseq");
+    let fixtures_dir = PathBuf::from("tests/fixtures/md_import");
     let result = engine.import_directory(&fixtures_dir).await;
     
     assert!(result.is_ok());
@@ -422,7 +422,7 @@ multiple: [values, here]
     ];
     
     for input in inputs {
-        let result = std::panic::catch_unwind(|| parse_logseq(input));
+        let result = std::panic::catch_unwind(|| parse_md_import(input));
         assert!(result.is_ok(), "Parser panicked on input: {:?}", input);
     }
 }

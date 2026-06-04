@@ -1,6 +1,6 @@
-//! Logseq markdown parser.
+//! Markdown import parser.
 //!
-//! Parses Logseq-flavored markdown files into a tree of blocks
+//! Parses Markdown files (Logseq/Quilt-flavored) into a tree of blocks
 //! with optional YAML frontmatter.
 
 use thiserror::Error;
@@ -31,7 +31,7 @@ pub struct RawBlock {
     pub children: Vec<RawBlock>,
 }
 
-/// Errors that can occur during Logseq markdown parsing.
+/// Errors that can occur during Markdown parsing.
 #[derive(Debug, Error, PartialEq)]
 pub enum MigrationError {
     #[error("Unclosed frontmatter: missing closing '---'")]
@@ -41,8 +41,8 @@ pub enum MigrationError {
     ParseError { line: usize, message: String },
 }
 
-/// Parse a Logseq markdown string into frontmatter and blocks.
-pub fn parse_logseq(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), MigrationError> {
+/// Parse a Markdown import string into frontmatter and blocks.
+pub fn parse_md_import(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), MigrationError> {
     let mut frontmatter = Frontmatter::default();
     let mut blocks: Vec<RawBlock> = Vec::new();
     
@@ -178,7 +178,7 @@ title: My Page
 tags: [tag1, tag2]
 ---
 "#;
-        let (fm, _blocks) = parse_logseq(input).unwrap();
+        let (fm, _blocks) = parse_md_import(input).unwrap();
         assert_eq!(fm.properties.len(), 2);
         assert_eq!(fm.properties[0].key, "title");
         assert_eq!(fm.properties[0].value, "My Page");
@@ -187,7 +187,7 @@ tags: [tag1, tag2]
     #[test]
     fn parse_page_without_frontmatter() {
         let input = "Just some content without frontmatter.";
-        let (fm, blocks) = parse_logseq(input).unwrap();
+        let (fm, blocks) = parse_md_import(input).unwrap();
         assert!(fm.properties.is_empty());
         assert!(!blocks.is_empty() || input.is_empty());
     }
@@ -197,7 +197,7 @@ tags: [tag1, tag2]
         let input = r#"---
 title: My Page
 "#;
-        let result = parse_logseq(input);
+        let result = parse_md_import(input);
         assert!(matches!(result, Err(MigrationError::UnclosedFrontmatter)));
     }
 
@@ -208,7 +208,7 @@ title: My Page
   - Level 1
     - Level 2
 ";
-        let (_, blocks) = parse_logseq(input).unwrap();
+        let (_, blocks) = parse_md_import(input).unwrap();
         
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].content, "- Root");
@@ -226,7 +226,7 @@ title: My Page
 - Block 2
 - Block 3
 ";
-        let (_, blocks) = parse_logseq(input).unwrap();
+        let (_, blocks) = parse_md_import(input).unwrap();
         
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].content, "- Block 1");
@@ -243,7 +243,7 @@ title: My Page
 - Root 2
   - Child 2.1
 ";
-        let (_, blocks) = parse_logseq(input).unwrap();
+        let (_, blocks) = parse_md_import(input).unwrap();
         
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].content, "- Root 1");

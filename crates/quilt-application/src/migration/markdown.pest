@@ -1,6 +1,6 @@
-// Pest grammar for Logseq markdown files.
+// Pest grammar for Markdown import files (Logseq/Quilt format).
 //
-// Logseq pages are markdown files with optional YAML frontmatter.
+// Markdown import files are markdown files with optional YAML frontmatter.
 // Block content uses indentation (2 spaces) to indicate hierarchy.
 //
 // Example structure:
@@ -17,9 +17,9 @@
 //
 // More content outside blocks.
 
-grammar Logseq;
+grammar MarkdownImport;
 
-logseq_file = { SOI ~ frontmatter? ~ block* ~ EOI }
+md_file = { SOI ~ frontmatter? ~ block* ~ EOI }
 
 // ── Frontmatter ──────────────────────────────────────────────────
 
