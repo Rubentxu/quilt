@@ -3,8 +3,15 @@
 //! Re-applies template properties to an existing block with conflict detection.
 //! V1 modes: `OverrideAll` (LWW) and `PreserveManual` (timestamp-based).
 
+use crate::errors::ApplicationError;
+use crate::use_cases::TemplateUseCases;
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use quilt_domain::value_objects::Uuid;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use thiserror::Error;
+use tracing::instrument;
 
 /// Reapplication mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -62,11 +69,173 @@ pub enum ReapplyError {
 
     #[error("Invalid mode: {0}")]
     InvalidMode(String),
+
+    #[error("Infrastructure error: {0}")]
+    Infrastructure(String),
 }
+
+// ── ReapplyTemplateUseCase trait ────────────────────────────────────────────────
+
+/// Hidden property key for tracking when a template was last applied.
+pub const TEMPLATE_APPLIED_AT_KEY: &str = "_template_applied_at";
+
+/// Use case for reapplying a template to an existing block.
+#[async_trait]
+pub trait ReapplyTemplateUseCase: Send + Sync {
+    /// Reapply the named template's properties to the given block.
+    ///
+    /// **OverrideAll mode**: overwrites ALL template properties on the block,
+    /// regardless of manual edits. Sets `_template_applied_at` to now.
+    ///
+    /// **PreserveManual mode**: only overwrites properties that have NOT been
+    /// manually edited since the last template application.
+    /// A manual edit is detected when `block.updated_at > _template_applied_at`.
+    /// If `_template_applied_at` is missing (T0 state), all properties are
+    /// considered "manual" and preserved.
+    async fn reapply(
+        &self,
+        template_name: &str,
+        block_id: Uuid,
+        mode: ReapplyMode,
+    ) -> Result<ReapplyResult, ReapplyError>;
+}
+
+// ── Implementation ─────────────────────────────────────────────────────────────
+
+/// Concrete implementation backed by TemplateUseCases + BlockRepository.
+pub struct ReapplyTemplateUseCaseImpl<TC: TemplateUseCases, BR> {
+    template_use_cases: Arc<TC>,
+    block_repo: Arc<BR>,
+}
+
+impl<TC: TemplateUseCases, BR> ReapplyTemplateUseCaseImpl<TC, BR> {
+    pub fn new(template_use_cases: Arc<TC>, block_repo: Arc<BR>) -> Self {
+        Self {
+            template_use_cases,
+            block_repo,
+        }
+    }
+}
+
+#[async_trait]
+impl<TC: TemplateUseCases + 'static, BR: quilt_domain::repositories::BlockRepository + 'static>
+    ReapplyTemplateUseCase for ReapplyTemplateUseCaseImpl<TC, BR>
+{
+    #[instrument(skip(self))]
+    async fn reapply(
+        &self,
+        template_name: &str,
+        block_id: Uuid,
+        mode: ReapplyMode,
+    ) -> Result<ReapplyResult, ReapplyError> {
+        // 1. Fetch the template schema
+        let schema = self
+            .template_use_cases
+            .get_template_schema(template_name)
+            .await
+            .map_err(|_e| ReapplyError::TemplateNotFound(template_name.to_string()))?
+            .ok_or(ReapplyError::TemplateNotFound(template_name.to_string()))?;
+
+        // 2. Fetch the block
+        let block = self
+            .block_repo
+            .get_by_id(block_id)
+            .await
+            .map_err(|e| ReapplyError::Infrastructure(format!("block repo: {e}")))?
+            .ok_or(ReapplyError::BlockNotFound(block_id.to_string()))?;
+
+        // 3. Determine the template-applied-at timestamp from block properties
+        let template_applied_at = block
+            .properties
+            .get(TEMPLATE_APPLIED_AT_KEY)
+            .and_then(|v| {
+                if let quilt_domain::value_objects::PropertyValue::String(s) = v {
+                    DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.with_timezone(&Utc))
+                } else {
+                    None
+                }
+            });
+
+        // 4. Build the new properties map
+        let now = Utc::now();
+        let mut applied = Vec::new();
+        let mut preserved = Vec::new();
+        let mut overwritten = Vec::new();
+        let mut new_properties = block.properties.clone();
+
+        for template_prop in &schema.properties {
+            let key = &template_prop.key;
+
+            // Skip reserved keys
+            if matches!(key.as_str(), "template" | "type" | "collapsed") {
+                continue;
+            }
+
+            let is_manual_edit = if let Some(applied_at) = template_applied_at {
+                // If block was updated AFTER template application, it's a manual edit
+                block.updated_at > applied_at
+            } else {
+                // No timestamp = T0 state = all properties are "manual"
+                true
+            };
+
+            match mode {
+                ReapplyMode::OverrideAll => {
+                    // LWW: always apply the template value
+                    let prop_value =
+                        quilt_domain::value_objects::PropertyValue::String(template_prop.value.clone());
+                    new_properties.insert(key.clone(), prop_value);
+                    applied.push(key.clone());
+                    if block.properties.contains_key(key) {
+                        overwritten.push(key.clone());
+                    }
+                }
+                ReapplyMode::PreserveManual => {
+                    if is_manual_edit {
+                        // Keep the manual edit
+                        preserved.push(key.clone());
+                    } else {
+                        // Apply template value
+                        let prop_value =
+                            quilt_domain::value_objects::PropertyValue::String(template_prop.value.clone());
+                        new_properties.insert(key.clone(), prop_value);
+                        applied.push(key.clone());
+                    }
+                }
+            }
+        }
+
+        // 5. Update _template_applied_at timestamp
+        new_properties.insert(
+            TEMPLATE_APPLIED_AT_KEY.to_string(),
+            quilt_domain::value_objects::PropertyValue::String(now.to_rfc3339()),
+        );
+
+        // 6. Persist the updated block
+        let mut updated_block = block;
+        updated_block.properties = new_properties;
+        updated_block.updated_at = now;
+        self.block_repo
+            .update(&updated_block)
+            .await
+            .map_err(|e| ReapplyError::Infrastructure(format!("block update: {e}")))?;
+
+        Ok(ReapplyResult {
+            applied,
+            preserved,
+            overwritten,
+        })
+    }
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Note: Integration tests for OverrideAll/PreserveManual with real repos
+    // are in crates/quilt-application/tests/reapply_template_tests.rs
 
     #[test]
     fn reapply_mode_serde_override_all() {
@@ -127,5 +296,7 @@ mod tests {
         assert_eq!(format!("{}", e), "Block not found: block-123");
         let e = ReapplyError::InvalidMode("bad".to_string());
         assert_eq!(format!("{}", e), "Invalid mode: bad");
+        let e = ReapplyError::Infrastructure("connection failed".to_string());
+        assert_eq!(format!("{}", e), "Infrastructure error: connection failed");
     }
 }
