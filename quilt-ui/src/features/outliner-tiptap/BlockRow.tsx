@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
 import { api } from '@core/api-client'
 import { setCursorAt, getCursorPosition, isCursorAtStart, isCursorAtEnd } from '@shared/hooks/useCursor'
+import { useTemplateCreation } from '@shared/hooks/useTemplateCreation'
 import type { Block, BlockType, TaskMarker, Priority, Page } from '@shared/types/api'
 import { useTabs } from '@shared/contexts/TabsContext'
 import { InlineContent } from './InlineContent'
@@ -13,9 +14,20 @@ import { CommentRow } from '@features/comments/CommentRow'
 import { BlockContextMenu } from './BlockContextMenu'
 import { buildCommentTree } from '@shared/utils/blockProperties'
 import { normalizePageName } from '@shared/utils/pageName'
+import { blockKeyboardHandler } from './blockKeyboardHandler'
 // Type-only import — keeps the type for handleSlashSelect without
 // pulling the (large) SlashCommandMenu module into the eager bundle.
 import type { SlashMenuItem } from './SlashCommandMenu'
+// Registry + SlashContext. The registry is the single source of
+// truth for slash actions — adding a new one is one `register()`
+// call, not three file edits.
+import { defaultRegistry, type SlashContext } from './slashRegistry'
+
+// Re-export findNearestLink for backward compatibility — BlockRow.test.tsx
+// (and any external consumer) imports it from this module. The actual
+// implementation lives next to the pure handler so the regex set stays
+// in one place.
+export { findNearestLink } from './blockKeyboardHandler'
 
 // Heavy overlays that only render on user action. Pulling them in via
 // React.lazy means the page bundle stays small even though every
@@ -110,73 +122,10 @@ function findParentBlock(block: Block, allBlocks: Block[]): Block | null {
 
 // ──── Inline link search (Quilt parity) ──────────────────────────────
 //
-// When the user is in edit mode, the rendered wikilinks/tags/block-refs
-// are just plain text ([[Page]], #tag, ((block-id))). Pressing
-// Cmd/Ctrl+Enter should follow the link nearest to the cursor — that's
-// what Quilt does (`follow-link-under-cursor!` in
-// frontend.handler.editor).
-
-type NearestLink =
-  | { type: 'page'; target: string }
-  | { type: 'block'; target: string }
-  | { type: 'tag'; target: string }
-  | null
-
-/**
- * Find the link nearest to `cursorPos` in `text`.
- * Mirrors Quilt's `extract-nearest-link-from-text`: page-refs and
- * block-refs first, then tags. When the cursor sits inside a link
- * that link wins; otherwise we pick the closest one by absolute
- * distance to the cursor.
- */
-export function findNearestLink(text: string, cursorPos: number): NearestLink {
-  const candidates: Array<{ start: number; end: number; link: NearestLink }> = []
-
-  // [[Page]] or [[Page|alias]]  — strip optional |alias
-  const pageRe = /\[\[([^\]\|]+)(?:\|[^\]]*)?\]\]/g
-  let m: RegExpExecArray | null
-  while ((m = pageRe.exec(text)) !== null) {
-    candidates.push({
-      start: m.index,
-      end: m.index + m[0].length,
-      link: { type: 'page', target: m[1].trim() },
-    })
-  }
-
-  // ((block-uuid))  — block reference
-  const blockRe = /\(\(([^\)]+)\)\)/g
-  while ((m = blockRe.exec(text)) !== null) {
-    candidates.push({
-      start: m.index,
-      end: m.index + m[0].length,
-      link: { type: 'block', target: m[1].trim() },
-    })
-  }
-
-  // #tag  — preceded by start, whitespace, or punctuation so #1.5 isn't a tag
-  const tagRe = /(?:^|[\s\(\[])#([A-Za-z0-9_\-]+)/g
-  while ((m = tagRe.exec(text)) !== null) {
-    // Adjust start: the match includes the leading boundary char.
-    const matchStart = m.index + m[0].indexOf('#')
-    candidates.push({
-      start: matchStart,
-      end: matchStart + (m[1].length + 1),
-      link: { type: 'tag', target: m[1] },
-    })
-  }
-
-  if (candidates.length === 0) return null
-
-  // Prefer links that contain the cursor; otherwise pick the one with
-  // the smallest distance to the cursor.
-  const containing = candidates.find(c => cursorPos >= c.start && cursorPos <= c.end)
-  if (containing) return containing.link
-
-  const closest = candidates
-    .map(c => ({ c, dist: Math.min(Math.abs(cursorPos - c.start), Math.abs(cursorPos - c.end)) }))
-    .sort((a, b) => a.dist - b.dist)[0]
-  return closest.c.link
-}
+// `findNearestLink` lives in `./blockKeyboardHandler` next to the pure
+// keyboard handler so the regex set stays in one place. We re-export
+// it from the top of this file for backward compatibility with
+// existing tests and any external consumer.
 
 // ──── Component ──────────────────────────────────────────────────────
 
@@ -232,6 +181,10 @@ export function BlockRow({
   const contentRef = useRef<HTMLDivElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rowRef = useRef<HTMLDivElement>(null)
+  // Holds the latest `handleInsertTemplate` so `handleSlashSelect` can
+  // dispatch into it without a declaration-order coupling (the
+  // useCallback lives further down the file).
+  const templateInsertRef = useRef<(originalContent: string) => Promise<void> | void>(() => {})
 
   const { openTab } = useTabs()
   const navigate = useNavigate()
@@ -435,131 +388,105 @@ export function BlockRow({
   )
 
   // ── Slash command select ──────────────────────────────────────
+  // Replaces the legacy 100-line `switch (prefix)` on `item.action.split(':')`
+  // with a single dispatch through the default registry. The action
+  // handlers are pure SlashContext consumers; the React layer adapts
+  // local state + DOM refs + debounced-save into a plain object.
+  //
+  // The `template:insert` flow needs to keep the original block
+  // content (so cancel can restore it). We snapshot here, clear
+  // upfront for every other action, and forward the snapshot to
+  // the handler via `ctx.originalContent`.
   const handleSlashSelect = useCallback(
     (item: SlashMenuItem) => {
       setSlashCommand(null)
 
-      // Snapshot the original block content (with the leading "/") so
-      // the `template:insert` path can restore it on cancel. Other
-      // actions replace or extend the content, so they clear upfront.
       const originalContent = localContent
-      const isTemplateInsert = item.action === 'template:insert'
+      // `id === 'insert-template'` is the only action that preserves
+      // the leading "/" so the user can keep editing. Everything
+      // else replaces the content.
+      const preserveContent = item.id === 'insert-template'
 
-      if (!isTemplateInsert) {
+      if (!preserveContent) {
         // Clear the "/" text from the block (only for mutating actions)
         const newContent = ''
         setLocalContent(newContent)
         if (contentRef.current) contentRef.current.textContent = newContent
       }
 
-      if (item.blockType) {
-        // Existing behavior: change block type
-        api.updateBlock(block.id, { blockType: item.blockType as BlockType }).then(updated => {
-          onUpdate(updated)
-        }).catch(() => {
-          toast.error('Failed to change block type')
-        })
-        return
+      // Adapters that lift the slash-handler surface into the
+      // React component's local state + DOM ref + debounced save.
+      // Handlers stay React-free; the component owns the side effects.
+      const setContent = (text: string) => {
+        setLocalContent(text)
+        if (contentRef.current) contentRef.current.textContent = text
+        debouncedSave(text)
+      }
+      const setContentAtEnd = (text: string) => {
+        setLocalContent(text)
+        if (contentRef.current) contentRef.current.textContent = text
+        // Place cursor after the inserted text on the next frame so
+        // the DOM has time to settle.
+        setTimeout(() => {
+          if (contentRef.current) setCursorAt(contentRef.current, 'end')
+        }, 0)
+        debouncedSave(text)
       }
 
-      if (item.action) {
-        const [prefix, value] = item.action.split(':')
+      const ctx: SlashContext = {
+        block,
+        allBlocks,
+        api,
+        toast,
+        navigate,
+        setContent,
+        setContentAtEnd,
+        onUpdate,
+        originalContent,
+        onAddComment,
+        // Read from the ref so the slash dispatcher doesn't need to
+        // know where `handleInsertTemplate` is declared.
+        templateInsert: templateInsertRef.current,
+      }
 
-        switch (prefix) {
-          case 'status': {
-            // Map lowercase action values to TaskMarker casing; 'Doing' cast needed
-            const statusMap: Record<string, TaskMarker> = {
-              todo: 'Todo',
-              doing: 'Doing' as TaskMarker,
-              done: 'Done',
-              now: 'Now',
-              later: 'Later',
-              cancelled: 'Cancelled',
-            }
-            const marker = statusMap[value]
-            if (marker) {
-              api.updateBlock(block.id, { marker }).then(onUpdate).catch(() => {
-                toast.error('Failed to set status')
-              })
-            }
-            break
-          }
-
-          case 'priority': {
-            const priority = value as Priority
-            api.updateBlock(block.id, { priority }).then(onUpdate).catch(() => {
-              toast.error('Failed to set priority')
-            })
-            break
-          }
-
-          case 'date': {
-            const today = new Date().toISOString().split('T')[0]
-            const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
-            const dateStr = value === 'today' ? today : value === 'tomorrow' ? tomorrow : today
-            setLocalContent(dateStr)
-            if (contentRef.current) contentRef.current.textContent = dateStr
-            debouncedSave(dateStr)
-            break
-          }
-
-          case 'property': {
-            // Insert property syntax (e.g. "deadline:: ")
-            const propStr = `${value}:: `
-            setLocalContent(propStr)
-            if (contentRef.current) contentRef.current.textContent = propStr
-            // Place cursor after the inserted text
-            setTimeout(() => {
-              if (contentRef.current) setCursorAt(contentRef.current, 'end')
-            }, 0)
-            debouncedSave(propStr)
-            break
-          }
-
-          case 'ref': {
-            if (value === 'page') {
-              // Trigger [[ autocomplete
-              setLocalContent('[[')
-              if (contentRef.current) contentRef.current.textContent = '[['
-              setTimeout(() => {
-                if (contentRef.current) setCursorAt(contentRef.current, 'end')
-              }, 0)
-            } else if (value === 'block') {
-              // Trigger (( autocomplete
-              setLocalContent('((')
-              if (contentRef.current) contentRef.current.textContent = '(('
-              setTimeout(() => {
-                if (contentRef.current) setCursorAt(contentRef.current, 'end')
-              }, 0)
-            }
-            break
-          }
-
-          case 'template': {
-            // New from Template — create a new page from a `template/...` page.
-            // ADR-0003: templates define structure + types for human-agent collab.
-            // Pass the snapshot so cancel paths can restore the original content
-            // (R1 in quilt-fase2-ux-templates-discoverability spec).
-            if (value === 'insert') {
-              handleInsertTemplate(originalContent)
-            }
-            break
-          }
-        }
-
-        return
+      const handler = defaultRegistry.getHandler(item.id)
+      if (handler) {
+        // Fire-and-forget — the legacy code didn't await handlers
+        // either, and most are synchronous. Async errors are
+        // handled inside each handler (try/catch + toast).
+        void handler(ctx, item)
       }
     },
-    [block.id, localContent, debouncedSave, navigate],
+    [
+      block,
+      allBlocks,
+      onUpdate,
+      debouncedSave,
+      navigate,
+      localContent,
+      onAddComment,
+    ],
   )
 
   // ── Keyboard handling ─────────────────────────────────────────
+  //
+  // This is the ADAPTER layer. The decision logic — "what should
+  // happen when the user presses key X with mods Y at cursor Z" —
+  // lives in `blockKeyboardHandler.ts` as a pure function. Here we:
+  //   1. Intercept menu-driven keys (slash / autocomplete menus own
+  //      their own Escape / Enter / Arrow keys)
+  //   2. Gather DOM facts (cursor position, text selection)
+  //   3. Delegate to the pure handler
+  //   4. Switch on the returned action to apply DOM / state changes
+  //
+  // The split keeps React-state and DOM manipulation in this file
+  // while moving the testable rules to a pure module.
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       const el = contentRef.current
       if (!el) return
 
-      // ── Inline formatting helper ──────────────────────────────
+      // ── Inline formatting helper (DOM-coupled — stays local) ──
       const toggleInlineMark = (marker: string) => {
         const sel = window.getSelection()
         if (!sel || sel.rangeCount === 0) return
@@ -610,60 +537,17 @@ export function BlockRow({
         saveToApi(newText)
       }
 
-      // ── Slash menu is open: intercept keys so the menu handles them ──
-      if (slashCommand) {
+      // ── Menu interception: when any autocomplete / slash menu is
+      //    open, those menus own Escape / Enter / ArrowUp / ArrowDown.
+      //    We just consume the events so the editor doesn't double-handle.
+      const menuOpen = slashCommand ?? blockAutocomplete ?? tagAutocomplete ?? autocomplete
+      if (menuOpen) {
         if (e.key === 'Escape') {
           e.preventDefault()
-          setSlashCommand(null)
-          return
-        }
-        // Enter, ArrowUp, ArrowDown handled by the menu's document listener
-        if (['Enter', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-          e.preventDefault()
-          return
-        }
-        return // Let other keys through (typing continues to filter)
-      }
-
-      // ── Block autocomplete is open: intercept keys so the menu handles them ──
-      if (blockAutocomplete) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          setBlockAutocomplete(null)
-          return
-        }
-        // Enter, ArrowUp, ArrowDown handled by the menu's document listener
-        if (['Enter', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-          e.preventDefault()
-          return
-        }
-        return // Let other keys through (typing continues to filter)
-      }
-
-      // ── Tag autocomplete is open: intercept keys so the menu handles them ──
-      if (tagAutocomplete) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          setTagAutocomplete(null)
-          return
-        }
-        // Enter, ArrowUp, ArrowDown handled by the menu's document listener
-        if (['Enter', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
-          e.preventDefault()
-          return
-        }
-        return // Let other keys through (typing continues to filter)
-      }
-
-      // ── Page autocomplete is open: intercept keys so the menu handles them ──
-      // The page autocomplete ([[..) handles keyboard nav via its own document
-      // listener (PageAutocomplete.tsx), but we MUST prevent the editor from
-      // also handling Enter (which would create a new block) and ArrowUp/Down
-      // (which would move the cursor).
-      if (autocomplete) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          setAutocomplete(null)
+          if (slashCommand) setSlashCommand(null)
+          if (blockAutocomplete) setBlockAutocomplete(null)
+          if (tagAutocomplete) setTagAutocomplete(null)
+          if (autocomplete) setAutocomplete(null)
           return
         }
         if (['Enter', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
@@ -673,28 +557,127 @@ export function BlockRow({
         return // Let other keys through (typing continues to filter)
       }
 
-      // ── Escape: exit editing mode (autocomplete menus are handled above) ──
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        if (contentRef.current) {
-          contentRef.current.blur()
-        }
-        return
-      }
+      // ── Gather DOM facts (the only DOM access in this branch) ──
+      const sel = window.getSelection()
+      const hasTextSelection = !!(sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed)
+      const currentText = localContent || el.textContent || ''
 
-      // ── Cmd/Ctrl+Enter: follow link under cursor (Quilt parity) ──
-      // While editing, the rendered [[Page]] / ((block)) / #tag is just
-      // plain text. Quilt's behavior: Cmd+Enter on a wikilink follows
-      // it; on a tag navigates; on a missing page, creates it on the
-      // fly (same as clicking the rendered link in read mode).
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        const text = localContent || el.textContent || ''
-        const cursorPos = getCursorPosition(el)
-        const link = findNearestLink(text, cursorPos)
-        if (link) {
+      // ── Pure decision ──
+      const action = blockKeyboardHandler({
+        block,
+        allBlocks,
+        content: currentText,
+        key: e.key,
+        mods: {
+          mod: e.ctrlKey || e.metaKey,
+          shift: e.shiftKey,
+          alt: e.altKey,
+        },
+        cursor: {
+          offset: getCursorPosition(el),
+          atStart: isCursorAtStart(el),
+          atEnd: isCursorAtEnd(el),
+        },
+        hasTextSelection,
+      })
+
+      // ── Apply action ──
+      switch (action.type) {
+        case 'None':
+          return
+
+        case 'Blur':
+          e.preventDefault()
+          el.blur()
+          return
+
+        case 'Undo':
+          e.preventDefault()
+          onUndo()
+          return
+
+        case 'Redo':
+          e.preventDefault()
+          onRedo()
+          return
+
+        case 'ToggleInlineMark':
+          e.preventDefault()
+          toggleInlineMark(action.marker)
+          return
+
+        case 'SelectParent':
+          e.preventDefault()
+          onSelectParent?.(block.id, block.parentId)
+          return
+
+        case 'SelectAll':
+          e.preventDefault()
+          onSelectAll?.()
+          return
+
+        case 'CopyBlock':
+          e.preventDefault()
+          navigator.clipboard.writeText(currentText).catch(() => {})
+          toast.success('Block copied')
+          return
+
+        case 'CutBlock':
+          e.preventDefault()
+          navigator.clipboard.writeText(currentText).catch(() => {})
+          onDeleteBlock(block.id)
+          toast.success('Block cut')
+          return
+
+        case 'PasteAsNewBlock':
+          e.preventDefault()
+          navigator.clipboard.readText().then(clipText => {
+            if (clipText) onCreateBlock(block.id, clipText, block.parentId)
+          }).catch(() => {})
+          return
+
+        case 'InsertText': {
+          e.preventDefault()
+          if (!sel || sel.rangeCount === 0) return
+          const range = sel.getRangeAt(0)
+          const newNode = document.createTextNode(action.text)
+          range.deleteContents()
+          range.insertNode(newNode)
+          range.setStartAfter(newNode)
+          range.setEndAfter(newNode)
+          sel.removeAllRanges()
+          sel.addRange(range)
+          setTimeout(() => {
+            const text = el.textContent || ''
+            setLocalContent(text)
+            debouncedSave(text)
+          }, 0)
+          return
+        }
+
+        case 'ToggleDone': {
+          e.preventDefault()
+          // Match WASM CycleMarker: None → Todo → Done → None
+          const CYCLE: (TaskMarker | null)[] = [null, 'Todo', 'Done']
+          const currentIdx = CYCLE.indexOf(block.marker ?? null)
+          const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % CYCLE.length : 0
+          const nextMarker = CYCLE[nextIdx]
+          onUpdate({ ...block, marker: nextMarker })
+          api.updateBlock(block.id, { marker: nextMarker }).catch(() => {
+            toast.error('Failed to cycle marker')
+          })
+          return
+        }
+
+        case 'FollowLink': {
           e.preventDefault()
           // Save current edits first so navigation doesn't lose them
-          saveToApi(text)
+          saveToApi(currentText)
+          // Narrow out `null` explicitly — the discriminated union
+          // includes null, but in this branch the pure handler has
+          // already verified the link is non-null. Re-bind to a
+          // non-nullable variable so TypeScript narrows correctly.
+          const link = action.link!
           if (link.type === 'page' || link.type === 'tag') {
             // Tags are pages too (Quilt parity). The server stores
             // page names in canonical form (lowercase + trimmed), so
@@ -725,275 +708,88 @@ export function BlockRow({
           }
           return
         }
-        // No link near cursor — let the default Enter handler run
-        // (creates a new block, etc.)
-      }
 
-      // ── Ctrl+Z: Undo ──
-      if (e.key === 'z' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        e.preventDefault()
-        onUndo()
-        return
-      }
-
-      // ── Ctrl+Shift+Z / Ctrl+Y: Redo ──
-      if (
-        (e.key === 'z' && (e.ctrlKey || e.metaKey) && e.shiftKey) ||
-        (e.key === 'y' && (e.ctrlKey || e.metaKey))
-      ) {
-        e.preventDefault()
-        onRedo()
-        return
-      }
-
-      // ── Ctrl+B / Ctrl+I / Ctrl+`: Inline formatting ──
-      if (e.key === 'b' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        e.preventDefault()
-        toggleInlineMark('**')
-        return
-      }
-      if (e.key === 'i' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        e.preventDefault()
-        toggleInlineMark('*')
-        return
-      }
-      if (e.key === '`' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault()
-        toggleInlineMark('`')
-        return
-      }
-
-      // ── Mod+A / Mod+Shift+A: Select parent / Select all ──
-      if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault()
-        if (e.shiftKey) {
-          // Mod+Shift+A — select all blocks
-          onSelectAll?.()
-        } else {
-          // Mod+A — select parent (all siblings of current block)
-          onSelectParent?.(block.id, block.parentId)
-        }
-        return
-      }
-
-      // ── Ctrl+C: Copy (block-level if no text selection) ──
-      if (e.key === 'c' && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
-        const sel = window.getSelection()
-        if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
-          // Text selection: let browser handle native copy
-          return
-        }
-        e.preventDefault()
-        const text = localContent || el.textContent || ''
-        navigator.clipboard.writeText(text).catch(() => {})
-        toast.success('Block copied')
-        return
-      }
-
-      // ── Ctrl+X: Cut block ──
-      if (e.key === 'x' && (e.ctrlKey || e.metaKey)) {
-        const sel = window.getSelection()
-        if (sel && sel.rangeCount > 0 && !sel.getRangeAt(0).collapsed) {
-          // Text selection: let browser handle native cut
-          return
-        }
-        e.preventDefault()
-        const text = localContent || el.textContent || ''
-        navigator.clipboard.writeText(text).catch(() => {})
-        onDeleteBlock(block.id)
-        toast.success('Block cut')
-        return
-      }
-
-      // ── Ctrl+V: Paste creates new block ──
-      if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault()
-        navigator.clipboard.readText().then(clipText => {
-          if (clipText) {
-            onCreateBlock(block.id, clipText, block.parentId)
-          }
-        }).catch(() => {})
-        return
-      }
-
-      // ── Shift+Enter: Soft newline within block ──
-      if (e.key === 'Enter' && e.shiftKey) {
-        e.preventDefault()
-        const sel = window.getSelection()
-        if (!sel || sel.rangeCount === 0) return
-
-        const range = sel.getRangeAt(0)
-        const newNode = document.createTextNode('\n')
-        range.deleteContents()
-        range.insertNode(newNode)
-
-        // Move cursor after the inserted newline
-        range.setStartAfter(newNode)
-        range.setEndAfter(newNode)
-        sel.removeAllRanges()
-        sel.addRange(range)
-
-        // Defer state update to let DOM settle
-        setTimeout(() => {
-          const text = el.textContent || ''
-          setLocalContent(text)
-          debouncedSave(text)
-        }, 0)
-        return
-      }
-
-      // ── Mod+Enter: Cycle marker (None → Todo → Done → None) ──
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault()
-
-        // Match WASM CycleMarker: None → Todo → Done → None
-        const CYCLE: (TaskMarker | null)[] = [null, 'Todo', 'Done']
-        const currentIdx = CYCLE.indexOf(block.marker ?? null)
-        const nextIdx = currentIdx >= 0
-          ? (currentIdx + 1) % CYCLE.length
-          : 0
-        const nextMarker = CYCLE[nextIdx]
-
-        // Optimistic update
-        onUpdate({ ...block, marker: nextMarker })
-
-        // Persist
-        api.updateBlock(block.id, { marker: nextMarker }).catch(() => {
-          toast.error('Failed to cycle marker')
-        })
-        return
-      }
-
-      // ── Enter: Split block or create sibling ──
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        const cursorPos = getCursorPosition(el)
-        const fullText = el.textContent ?? ''
-
-        // Case 1: Empty block → create empty sibling below
-        if (!fullText.trim()) {
+        case 'CreateEmptySibling':
+          e.preventDefault()
           onCreateBlock(block.id, '', block.parentId)
           return
-        }
 
-        // Case 2: Cursor at end of non-empty block → create empty sibling below
-        if (cursorPos >= fullText.length) {
-          onCreateBlock(block.id, '', block.parentId)
+        case 'Split': {
+          e.preventDefault()
+          const fullText = el.textContent ?? ''
+          const beforeCursor = fullText.slice(0, action.at)
+          const afterCursor = fullText.slice(action.at)
+          el.textContent = beforeCursor
+          setLocalContent(beforeCursor)
+          if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+          saveToApi(beforeCursor)
+          setCursorAt(el, 'end')
+          onCreateBlock(block.id, afterCursor, block.parentId)
           return
         }
 
-        // Case 3: Cursor in middle → split block at cursor position
-        const beforeCursor = fullText.slice(0, cursorPos)
-        const afterCursor = fullText.slice(cursorPos)
-
-        // Update current block with content before cursor
-        el.textContent = beforeCursor
-        setLocalContent(beforeCursor)
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-        saveToApi(beforeCursor)
-
-        // Position cursor at end of updated content
-        setCursorAt(el, 'end')
-
-        // Create new block with content after cursor
-        onCreateBlock(block.id, afterCursor, block.parentId)
-        return
-      }
-
-      // ── Backspace at start: Merge with prev ──
-      if (e.key === 'Backspace' && isCursorAtStart(el)) {
-        e.preventDefault()
-        const prev = findPrevSibling(block, allBlocks)
-        if (!prev) {
-          // No previous sibling → outdent instead (if has parent)
-          if (block.parentId) {
-            handleOutdent()
+        case 'MergeWithPrev': {
+          e.preventDefault()
+          const prev = findPrevSibling(block, allBlocks)
+          if (!prev) {
+            if (block.parentId) handleOutdent()
+            return
           }
+          const mergedContent = prev.content + currentText
+          api.updateBlock(prev.id, { content: mergedContent }).then(updated => onUpdate(updated))
+          api.deleteBlock(block.id).then(() => onDeleteBlock(block.id))
+          onFocusBlock(prev.id, 'end')
+          onUpdate({ ...prev, content: mergedContent })
           return
         }
 
-        const currentText = el.textContent ?? ''
-        const mergedContent = prev.content + currentText
+        case 'Outdent':
+          e.preventDefault()
+          handleOutdent()
+          return
 
-        // Update previous block with merged content
-        api.updateBlock(prev.id, { content: mergedContent }).then(updated => onUpdate(updated))
-        // Delete current block
-        api.deleteBlock(block.id).then(() => onDeleteBlock(block.id))
+        case 'Indent':
+          e.preventDefault()
+          handleIndent()
+          return
 
-        // Focus previous block at join point
-        onFocusBlock(prev.id, 'end')
+        case 'MoveCursor': {
+          e.preventDefault()
+          if (action.to === 'prev') {
+            const prev = findPrevSibling(block, allBlocks)
+            if (prev) onFocusBlock(prev.id, 'end')
+          } else if (action.to === 'next') {
+            const next = findNextSibling(block, allBlocks)
+            if (next) onFocusBlock(next.id, 'start')
+          }
+          // 'up' / 'down' reserved for future use
+          return
+        }
 
-        // Update previous block's content optimistically in local state
-        onUpdate({ ...prev, content: mergedContent })
-        return
-      }
+        case 'ExtendSelection':
+          e.preventDefault()
+          onMultiSelect?.(block.id, action.direction)
+          return
 
-      // ── Tab: Indent ──
-      if (e.key === 'Tab' && !e.shiftKey) {
-        e.preventDefault()
-        handleIndent()
-        return
-      }
-
-      // ── Shift+Tab: Outdent ──
-      if (e.key === 'Tab' && e.shiftKey) {
-        e.preventDefault()
-        handleOutdent()
-        return
-      }
-
-      // ── ArrowUp: Alt+Shift+Up (move), Alt+Up (multi-select), or default ──
-      if (e.key === 'ArrowUp') {
-        // KBD-014: Alt+Shift+Up — move block up
-        if (e.altKey && e.shiftKey) {
+        case 'MoveBlockUp':
           e.preventDefault()
           onMoveBlockUp(block.id)
           return
-        }
-        // KBD-020: Alt+Up — extend selection upward (Quilt-style multi-select)
-        if (e.altKey) {
-          e.preventDefault()
-          onMultiSelect?.(block.id, 'up')
-          return
-        }
-        // Default: ArrowUp at start — focus previous block
-        if (isCursorAtStart(el)) {
-          e.preventDefault()
-          const prev = findPrevSibling(block, allBlocks)
-          if (prev) {
-            onFocusBlock(prev.id, 'end')
-          }
-        }
-        return
-      }
 
-      // ── ArrowDown: Alt+Shift+Down (move), Alt+Down (multi-select), or default ──
-      if (e.key === 'ArrowDown') {
-        // KBD-015: Alt+Shift+Down — move block down
-        if (e.altKey && e.shiftKey) {
+        case 'MoveBlockDown':
           e.preventDefault()
           onMoveBlockDown(block.id)
           return
-        }
-        // KBD-020: Alt+Down — extend selection downward (Quilt-style multi-select)
-        if (e.altKey) {
-          e.preventDefault()
-          onMultiSelect?.(block.id, 'down')
+
+        // Reserved actions — no keyboard binding in the editor yet.
+        case 'SetPriority':
+        case 'SetMarker':
+        case 'MergeWithNext':
           return
-        }
-        // Default: ArrowDown at end — focus next block
-        if (isCursorAtEnd(el)) {
-          e.preventDefault()
-          const next = findNextSibling(block, allBlocks)
-          if (next) {
-            onFocusBlock(next.id, 'start')
-          }
-        }
-        return
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [block, allBlocks, pageName, autocomplete, blockAutocomplete, tagAutocomplete, slashCommand, saveToApi, onUpdate, onCreateBlock, onDeleteBlock, onFocusBlock, onMoveBlockUp, onMoveBlockDown, onMultiSelect, onSelectAll, onSelectParent, onUndo, onRedo],
+    [block, allBlocks, autocomplete, blockAutocomplete, tagAutocomplete, slashCommand, saveToApi, debouncedSave, onUpdate, onCreateBlock, onDeleteBlock, onFocusBlock, onMoveBlockUp, onMoveBlockDown, onMultiSelect, onSelectAll, onSelectParent, onUndo, onRedo, navigate, pageMap, localContent],
   )
 
   // ── Indent / Outdent ──────────────────────────────────────────
@@ -1079,88 +875,39 @@ export function BlockRow({
 
   // ── Insert Template (ADR-0003) ────────────────────────────────────
   //
-  // The slash command's "Insert Template" action invokes this. The flow is:
-  //   1. Ask the user for the new page's name.
-  //   2. Fetch the list of pages and filter for `template/...` templates.
-  //   3. If none, bail with a toast. If exactly one, use it. If several,
-  //      prompt the user to pick one by name or title.
-  //   4. POST /api/v1/pages/from-template — the server clones the
-  //      template's block tree, substitutes `{{title}}` / `{{date}}` /
-  //      `{{name}}` placeholders, and returns the new page id.
-  //   5. Navigate to the freshly created page.
-  //
-  // This is deliberately a thin orchestration layer: a richer template
-  // picker UI is left as a follow-up. The browser-native `prompt` keeps
-  // the change minimal until the picker component lands.
-  const handleInsertTemplate = useCallback(async (originalContent: string) => {
-    // Helper: restore the original block content on cancel/error paths
-    // so the user's typing (including the leading "/") is preserved.
-    const restore = () => {
+  // The slash command's "Insert Template" action invokes this. The
+  // multi-step wizard (list templates → prompt for choice → call API →
+  // navigate) is owned by `useTemplateCreation` (architecture review
+  // candidate #5). This wrapper just (a) asks the user for the new
+  // page's name and (b) hands the hook a restore callback so it can
+  // put back the original block content (including the leading "/")
+  // on every cancel / error path.
+  const { createFromTemplate } = useTemplateCreation({
+    onRestore: (originalContent: string) => {
       setLocalContent(originalContent)
       if (contentRef.current) contentRef.current.textContent = originalContent
-    }
+    },
+  })
 
-    const newPageName = window.prompt('New page name:')
-    if (!newPageName || !newPageName.trim()) {
-      restore()
-      return
-    }
-
-    const trimmed = newPageName.trim()
-
-    try {
-      // 1. Use the proper templates API (R2) — returns TemplateSummary[]
-      // with name (short), full_name (template/<name>), icon, card_shape, etc.
-      const templates = await api.listTemplates()
-
-      if (templates.length === 0) {
-        toast.error('No templates found. Create one in the Plantillas section first.')
-        restore()
+  const handleInsertTemplate = useCallback(
+    async (originalContent: string) => {
+      const newPageName = window.prompt('New page name:')
+      if (!newPageName || !newPageName.trim()) {
+        setLocalContent(originalContent)
+        if (contentRef.current) contentRef.current.textContent = originalContent
         return
       }
+      await createFromTemplate(newPageName, originalContent)
+    },
+    [createFromTemplate],
+  )
 
-      // 2. Pick a template (auto-pick if only one)
-      let template = templates[0]
-      if (templates.length > 1) {
-        const labels = templates.map(t => t.name).join(', ')
-        const choice = window.prompt(
-          `Choose template (${labels}):`,
-          templates[0].name,
-        )
-        if (!choice || !choice.trim()) {
-          restore()
-          return
-        }
-        const picked = templates.find(t => t.name === choice.trim())
-        if (!picked) {
-          toast.error(`Template not found: ${choice}`)
-          restore()
-          return
-        }
-        template = picked
-      }
-
-      // 3. Call the server endpoint to clone the template's blocks.
-      // Use template.full_name (NOT short name) per CreatePageFromTemplateRequest
-      // contract at api.ts:100 — server requires the template/ prefix.
-      const result = await api.createPageFromTemplate({
-        templateName: template.full_name,
-        pageName: trimmed,
-        title: trimmed,
-      })
-
-      toast.success(
-        `Created from template "${template.name}" (${result.blocksCreated} blocks)`,
-      )
-
-      // 4. Navigate to the new page (block content becomes irrelevant)
-      navigate({ to: '/page/$name', params: { name: result.page.name } })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      toast.error(`Failed to create from template: ${message}`)
-      restore()
-    }
-  }, [navigate])
+  // Keep `templateInsertRef` pointed at the latest `handleInsertTemplate`
+  // closure so the slash dispatcher (which can't reference this
+  // `useCallback` due to declaration order) can call it.
+  useEffect(() => {
+    templateInsertRef.current = handleInsertTemplate
+  }, [handleInsertTemplate])
 
   // ── Render ────────────────────────────────────────────────────
   const stripeLines = indent > 0 && (

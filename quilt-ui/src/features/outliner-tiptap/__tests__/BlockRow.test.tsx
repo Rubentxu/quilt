@@ -35,6 +35,8 @@ function clickToEdit() {
 
 const mockUpdateBlock = vi.fn()
 const mockListPages = vi.fn().mockResolvedValue([])
+const mockListTemplates = vi.fn().mockResolvedValue([])
+const mockCreatePageFromTemplate = vi.fn()
 const mockWriteText = vi.fn().mockResolvedValue(undefined)
 const mockParseInline = vi.fn()
 
@@ -42,6 +44,12 @@ vi.mock('@core/api-client', () => ({
   api: {
     updateBlock: (...args: any[]) => mockUpdateBlock(...args),
     listPages: () => mockListPages(),
+    // useTemplateCreation (architecture review #5) calls these on mount
+    // / on submit. The BlockRow tests don't exercise the template
+    // wizard, but the hook still mounts and fetches on first render,
+    // so we have to stub the methods it touches.
+    listTemplates: () => mockListTemplates(),
+    createPageFromTemplate: (...args: any[]) => mockCreatePageFromTemplate(...args),
   },
 }))
 
