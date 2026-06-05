@@ -553,7 +553,7 @@ pub fn schema_validate_class(
 
 // ── Internal ──────────────────────────────────────────────────────
 
-fn compute_hash(blocks: &[BlockDto]) -> u64 {
+fn compute_hash(blocks: &[BlockDto]) -> String {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     blocks.len().hash(&mut hasher);
@@ -563,7 +563,13 @@ fn compute_hash(blocks: &[BlockDto]) -> u64 {
         b.parent_id.hash(&mut hasher);
         b.order.to_bits().hash(&mut hasher);
     }
-    hasher.finish()
+    // Returned as a String (not u64) because the 64-bit hash overflows
+    // JavaScript's safe integer range (Number.MAX_SAFE_INTEGER = 2^53-1).
+    // Serialising the u64 directly would surface as a number that throws
+    // "X can't be represented as a JavaScript number" when wasm-bindgen
+    // marshals it across the boundary. String form is safe to compare
+    // and the JS side never does arithmetic on it.
+    hasher.finish().to_string()
 }
 
 fn apply_command(blocks: &mut Vec<BlockDto>, cmd: &OutlinerCommand) -> Result<(), String> {
