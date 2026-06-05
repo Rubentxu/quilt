@@ -44,10 +44,12 @@ export const SLASH_MENU_ITEMS: SlashMenuItem[] = [
   { id: 'ref-block', label: 'Block Embed', description: 'Embed a block', icon: <Hash size={18} />, action: 'ref:block', keywords: ['block', 'embed', '(('], category: 'References' },
 
   // ── Templates (ADR-0003) ──
-  // Inserts a new page created from a template. Templates are regular
-  // pages whose name starts with `template/` (e.g. `template/daily-note`).
-  // The handler in BlockRow triggers a `POST /api/v1/pages/from-template`.
-  { id: 'insert-template', label: 'Insert Template', description: 'Create a new page from a template', icon: <FilePlus size={18} />, action: 'template:insert', keywords: ['template', 'tpl', 'new from template', 'create from template'], category: 'Templates' },
+  // Creates a new page from a template. Templates are regular pages
+  // whose name starts with `template/` (e.g. `template/daily-note`).
+  // Label "New from Template" distinguishes this PAGE-creation action
+  // from the future "Apply template" BLOCK-creation action (deferred
+  // to PR 2 of quilt-fase2-ux-templates-discoverability).
+  { id: 'insert-template', label: 'New from Template', description: 'Create a new page from a template', icon: <FilePlus size={18} />, action: 'template:insert', keywords: ['template', 'tpl', 'new from template', 'create from template'], category: 'Templates' },
 
   // ── Actions ──
   { id: 'add-comment', label: 'Add Comment', description: 'Add a comment to this block', icon: <MessageCircle size={18} />, action: 'comment:add', keywords: ['comment', 'discussion', 'note', 'feedback'], category: 'Actions' },

@@ -439,10 +439,18 @@ export function BlockRow({
     (item: SlashMenuItem) => {
       setSlashCommand(null)
 
-      // Clear the "/" text from the block
-      const newContent = ''
-      setLocalContent(newContent)
-      if (contentRef.current) contentRef.current.textContent = newContent
+      // Snapshot the original block content (with the leading "/") so
+      // the `template:insert` path can restore it on cancel. Other
+      // actions replace or extend the content, so they clear upfront.
+      const originalContent = localContent
+      const isTemplateInsert = item.action === 'template:insert'
+
+      if (!isTemplateInsert) {
+        // Clear the "/" text from the block (only for mutating actions)
+        const newContent = ''
+        setLocalContent(newContent)
+        if (contentRef.current) contentRef.current.textContent = newContent
+      }
 
       if (item.blockType) {
         // Existing behavior: change block type
@@ -528,10 +536,12 @@ export function BlockRow({
           }
 
           case 'template': {
-            // Insert Template — create a new page from a `template/...` page.
+            // New from Template — create a new page from a `template/...` page.
             // ADR-0003: templates define structure + types for human-agent collab.
+            // Pass the snapshot so cancel paths can restore the original content
+            // (R1 in quilt-fase2-ux-templates-discoverability spec).
             if (value === 'insert') {
-              handleInsertTemplate()
+              handleInsertTemplate(originalContent)
             }
             break
           }
@@ -540,7 +550,7 @@ export function BlockRow({
         return
       }
     },
-    [block.id, onUpdate, debouncedSave, navigate],
+    [block.id, localContent, debouncedSave, navigate],
   )
 
   // ── Keyboard handling ─────────────────────────────────────────
@@ -1082,57 +1092,73 @@ export function BlockRow({
   // This is deliberately a thin orchestration layer: a richer template
   // picker UI is left as a follow-up. The browser-native `prompt` keeps
   // the change minimal until the picker component lands.
-  const handleInsertTemplate = useCallback(async () => {
+  const handleInsertTemplate = useCallback(async (originalContent: string) => {
+    // Helper: restore the original block content on cancel/error paths
+    // so the user's typing (including the leading "/") is preserved.
+    const restore = () => {
+      setLocalContent(originalContent)
+      if (contentRef.current) contentRef.current.textContent = originalContent
+    }
+
     const newPageName = window.prompt('New page name:')
-    if (!newPageName || !newPageName.trim()) return
+    if (!newPageName || !newPageName.trim()) {
+      restore()
+      return
+    }
 
     const trimmed = newPageName.trim()
 
     try {
-      // 1. List pages and filter for templates (names starting with `template/`)
-      const pages = await api.listPages()
-      const templates = pages.filter(p => p.name.startsWith('template/'))
+      // 1. Use the proper templates API (R2) — returns TemplateSummary[]
+      // with name (short), full_name (template/<name>), icon, card_shape, etc.
+      const templates = await api.listTemplates()
 
       if (templates.length === 0) {
-        toast.error('No templates found. Create a page whose name starts with "template/".')
+        toast.error('No templates found. Create one in the Plantillas section first.')
+        restore()
         return
       }
 
       // 2. Pick a template (auto-pick if only one)
       let template = templates[0]
       if (templates.length > 1) {
-        const labels = templates.map(t => t.title || t.name).join(', ')
+        const labels = templates.map(t => t.name).join(', ')
         const choice = window.prompt(
           `Choose template (${labels}):`,
-          templates[0].title || templates[0].name,
+          templates[0].name,
         )
-        if (!choice || !choice.trim()) return
-        const picked = templates.find(
-          t => t.name === choice.trim() || t.title === choice.trim(),
-        )
+        if (!choice || !choice.trim()) {
+          restore()
+          return
+        }
+        const picked = templates.find(t => t.name === choice.trim())
         if (!picked) {
           toast.error(`Template not found: ${choice}`)
+          restore()
           return
         }
         template = picked
       }
 
-      // 3. Call the server endpoint to clone the template's blocks
+      // 3. Call the server endpoint to clone the template's blocks.
+      // Use template.full_name (NOT short name) per CreatePageFromTemplateRequest
+      // contract at api.ts:100 — server requires the template/ prefix.
       const result = await api.createPageFromTemplate({
-        templateName: template.name,
+        templateName: template.full_name,
         pageName: trimmed,
         title: trimmed,
       })
 
       toast.success(
-        `Created from template "${template.title || template.name}" (${result.blocksCreated} blocks)`,
+        `Created from template "${template.name}" (${result.blocksCreated} blocks)`,
       )
 
-      // 4. Navigate to the new page
+      // 4. Navigate to the new page (block content becomes irrelevant)
       navigate({ to: '/page/$name', params: { name: result.page.name } })
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       toast.error(`Failed to create from template: ${message}`)
+      restore()
     }
   }, [navigate])
 
