@@ -14,9 +14,97 @@ use crate::tools::Tool;
 use crate::use_cases::TemplateUseCases;
 use async_trait::async_trait;
 use quilt_application::templates::reapply::{ReapplyMode, ReapplyTemplateUseCase};
+use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
+
+// ── Local wire-format DTOs ────────────────────────────────────────
+//
+// These mirror the existing `serde_json::json!({ ... })` shapes used
+// by the handler responses. The DTOs live alongside the handler so
+// the wire format stays in one place and we avoid hand-rolling JSON
+// in the response path. Domain DTOs (e.g. `TemplateSummary`,
+// `TemplateSchema`, `ReapplyResult`) are reused when their serialized
+// shape matches the wire format exactly; the local DTOs are only for
+// cases where we need a derived field (`block_count`) or a different
+// blocks serializer (`block_to_json` vs `Block`).
+
+/// Wire shape for a single template entry in `quilt_list_templates`.
+///
+/// `metadata_block_ids` is stringified (matches the previous
+/// `json!()` behavior). Owns its strings so the wrapper can collect
+/// owned items without lifetime gymnastics.
+#[derive(Serialize)]
+struct TemplateSummaryWire {
+    name: String,
+    full_name: String,
+    block_count: usize,
+    card_shape: String,
+    icon: Option<String>,
+    cssclass: Option<String>,
+    metadata_block_ids: Vec<String>,
+}
+
+/// Wire shape for the `quilt_list_templates` outer response.
+#[derive(Serialize)]
+struct TemplateListResponse {
+    count: usize,
+    templates: Vec<TemplateSummaryWire>,
+}
+
+/// Wire shape for one property entry in `quilt_get_template_schema`.
+///
+/// Mirrors the previous `json!({"key", "value", "type"})` shape
+/// exactly — `property_type` is intentionally absent to keep the
+/// response lean and stable.
+#[derive(Serialize)]
+struct TemplatePropertyWire {
+    key: String,
+    value: String,
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+/// Wire shape for `quilt_get_template_schema` — same fields as
+/// `TemplateSchema` plus a derived `block_count` and blocks rendered
+/// via `block_to_json` (the domain DTO serializes `Block` directly
+/// which yields a different shape).
+#[derive(Serialize)]
+struct TemplateSchemaResponse {
+    name: String,
+    full_name: String,
+    card_shape: String,
+    icon: Option<String>,
+    cssclass: Option<String>,
+    block_count: usize,
+    blocks: Vec<Value>,
+    properties: Vec<TemplatePropertyWire>,
+}
+
+/// Wire shape for the `quilt_get_template_schema` not-found error.
+#[derive(Serialize)]
+struct TemplateNotFound {
+    error: &'static str,
+    name: String,
+    message: String,
+}
+
+/// Wire shape for `quilt_reapply_template` invalid-argument error.
+#[derive(Serialize)]
+struct InvalidArgument {
+    is_error: bool,
+    error: &'static str,
+    message: String,
+}
+
+/// Wire shape for `quilt_get_template_schema_pack` (both `Some` and
+/// `None` branches — the option serializes to `null` naturally).
+#[derive(Serialize)]
+struct SchemaPackResponse<'a> {
+    name: &'a str,
+    schema_pack: Option<&'a quilt_application::templates::schema_pack::SchemaPack>,
+}
 
 /// Template tool handler.
 pub struct TemplateToolHandler {
@@ -134,26 +222,28 @@ impl ToolHandler for TemplateToolHandler {
                     .await
                     .map_err(|e| e.to_string())?;
 
-                let summaries: Vec<serde_json::Value> = templates
+                let summaries: Vec<TemplateSummaryWire> = templates
                     .iter()
-                    .map(|t| {
-                        serde_json::json!({
-                            "name": t.name,
-                            "full_name": t.full_name,
-                            "block_count": t.block_count,
-                            "card_shape": t.card_shape,
-                            "icon": t.icon,
-                            "cssclass": t.cssclass,
-                            "metadata_block_ids": t.metadata_block_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
-                        })
+                    .map(|t| TemplateSummaryWire {
+                        name: t.name.clone(),
+                        full_name: t.full_name.clone(),
+                        block_count: t.block_count,
+                        card_shape: t.card_shape.clone(),
+                        icon: t.icon.clone(),
+                        cssclass: t.cssclass.clone(),
+                        metadata_block_ids: t
+                            .metadata_block_ids
+                            .iter()
+                            .map(|id| id.to_string())
+                            .collect(),
                     })
                     .collect();
 
-                Ok(serde_json::to_string_pretty(&serde_json::json!({
-                    "count": summaries.len(),
-                    "templates": summaries,
-                }))
-                .unwrap_or_else(|e| e.to_string()))
+                let response = TemplateListResponse {
+                    count: summaries.len(),
+                    templates: summaries,
+                };
+                Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
             }
             "quilt_get_template_schema" => {
                 let name = args
@@ -169,36 +259,47 @@ impl ToolHandler for TemplateToolHandler {
 
                 match schema {
                     Some(s) => {
-                        let properties: Vec<serde_json::Value> = s
+                        let properties: Vec<TemplatePropertyWire> = s
                             .properties
                             .iter()
-                            .map(|p| {
-                                serde_json::json!({
-                                    "key": p.key,
-                                    "value": p.value,
-                                    "type": p.r#type,
-                                })
+                            .map(|p| TemplatePropertyWire {
+                                key: p.key.clone(),
+                                value: p.value.clone(),
+                                kind: p.r#type.clone(),
                             })
                             .collect();
 
-                        Ok(serde_json::to_string_pretty(&serde_json::json!({
-                            "name": s.name,
-                            "full_name": s.full_name,
-                            "card_shape": s.card_shape,
-                            "icon": s.icon,
-                            "cssclass": s.cssclass,
-                            "block_count": s.blocks.len(),
-                            "blocks": s.blocks.iter().map(crate::serialization::block_to_json).collect::<Vec<_>>(),
-                            "properties": properties,
-                        }))
-                        .unwrap_or_else(|e| e.to_string()))
+                        let blocks: Vec<Value> = s
+                            .blocks
+                            .iter()
+                            .map(crate::serialization::block_to_json)
+                            .collect();
+
+                        let response = TemplateSchemaResponse {
+                            name: s.name,
+                            full_name: s.full_name,
+                            card_shape: s.card_shape,
+                            icon: s.icon,
+                            cssclass: s.cssclass,
+                            block_count: s.blocks.len(),
+                            blocks,
+                            properties,
+                        };
+                        Ok(serde_json::to_string_pretty(&response)
+                            .unwrap_or_else(|e| e.to_string()))
                     }
-                    None => Ok(serde_json::to_string_pretty(&serde_json::json!({
-                        "error": "template_not_found",
-                        "name": name,
-                        "message": format!("No template page found with name `template/{}`.", name),
-                    }))
-                    .unwrap_or_else(|e| e.to_string())),
+                    None => {
+                        let response = TemplateNotFound {
+                            error: "template_not_found",
+                            name: name.to_string(),
+                            message: format!(
+                                "No template page found with name `template/{}`.",
+                                name
+                            ),
+                        };
+                        Ok(serde_json::to_string_pretty(&response)
+                            .unwrap_or_else(|e| e.to_string()))
+                    }
                 }
             }
             "quilt_reapply_template" => {
@@ -221,11 +322,14 @@ impl ToolHandler for TemplateToolHandler {
                     "override_all" => ReapplyMode::OverrideAll,
                     "preserve_manual" => ReapplyMode::PreserveManual,
                     _ => {
-                        let err = serde_json::json!({
-                            "is_error": true,
-                            "error": "InvalidArgument",
-                            "message": format!("Invalid mode '{}'. Must be 'override_all' or 'preserve_manual'.", mode_str),
-                        });
+                        let err = InvalidArgument {
+                            is_error: true,
+                            error: "InvalidArgument",
+                            message: format!(
+                                "Invalid mode '{}'. Must be 'override_all' or 'preserve_manual'.",
+                                mode_str
+                            ),
+                        };
                         return Ok(serde_json::to_string_pretty(&err).unwrap_or_default());
                     }
                 };
@@ -236,12 +340,9 @@ impl ToolHandler for TemplateToolHandler {
                     .await
                     .map_err(|e| e.to_string())?;
 
-                Ok(serde_json::to_string_pretty(&serde_json::json!({
-                    "applied": result.applied,
-                    "preserved": result.preserved,
-                    "overwritten": result.overwritten,
-                }))
-                .unwrap_or_else(|e| e.to_string()))
+                // ReapplyResult already derives Serialize with the exact
+                // field shape we want — reuse the domain DTO directly.
+                Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|e| e.to_string()))
             }
             "quilt_get_template_schema_pack" => {
                 let name = args
@@ -255,18 +356,11 @@ impl ToolHandler for TemplateToolHandler {
                     .await
                     .map_err(|e| e.to_string())?;
 
-                match pack {
-                    Some(p) => Ok(serde_json::to_string_pretty(&serde_json::json!({
-                        "name": name,
-                        "schema_pack": p,
-                    }))
-                    .unwrap_or_else(|e| e.to_string())),
-                    None => Ok(serde_json::to_string_pretty(&serde_json::json!({
-                        "name": name,
-                        "schema_pack": serde_json::Value::Null,
-                    }))
-                    .unwrap_or_else(|e| e.to_string())),
-                }
+                let response = SchemaPackResponse {
+                    name,
+                    schema_pack: pack.as_ref(),
+                };
+                Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
             }
             _ => Err(format!("Unknown tool: {}", name)),
         }

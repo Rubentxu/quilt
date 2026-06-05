@@ -8,8 +8,67 @@ use async_trait::async_trait;
 use quilt_domain::entities::{DeepLink, DeepLinkCreate, LinkSourceType, LinkType};
 use quilt_domain::repositories::DeepLinkRepository;
 use quilt_domain::value_objects::Uuid;
+use serde::Serialize;
 use std::sync::Arc;
 use tracing::instrument;
+
+// ── Local wire-format DTOs ────────────────────────────────────────
+//
+// These mirror the existing `serde_json::json!({ ... })` shapes used
+// by the handler responses. Link enums are serialized via the same
+// `format!("{:?}", x).to_lowercase()` lowercase Debug format the
+// previous `json!()` calls used, so the wire format is preserved.
+
+/// Wire shape for a `create_deep_link` response — a snapshot of the
+/// link as it was just inserted.
+#[derive(Serialize)]
+struct CreateDeepLinkResponse {
+    id: String,
+    source_id: String,
+    source_type: String,
+    target_id: Option<String>,
+    target_page_name: Option<String>,
+    link_type: String,
+    external_url: Option<String>,
+    link_text: Option<String>,
+    context: Option<String>,
+}
+
+/// Wire shape for a `get_deep_links` empty-filter result.
+#[derive(Serialize)]
+struct EmptyDeepLinksResponse<'a> {
+    deep_links: Vec<()>,
+    count: usize,
+    note: &'a str,
+}
+
+/// Wire shape for one deep-link entry in `get_deep_links`.
+#[derive(Serialize)]
+struct DeepLinkEntryWire {
+    id: String,
+    source_id: String,
+    source_type: String,
+    target_id: Option<String>,
+    target_page_name: Option<String>,
+    link_type: String,
+    external_url: Option<String>,
+    link_text: Option<String>,
+    context: Option<String>,
+}
+
+/// Wire shape for the `get_deep_links` outer response.
+#[derive(Serialize)]
+struct DeepLinksListResponse {
+    deep_links: Vec<DeepLinkEntryWire>,
+    count: usize,
+}
+
+/// Wire shape for the `delete_deep_link` response.
+#[derive(Serialize)]
+struct DeleteDeepLinkResponse {
+    status: &'static str,
+    id: String,
+}
 
 /// Default implementation of [`DeepLinkHandler`].
 pub struct DefaultDeepLinkHandler {
@@ -67,18 +126,19 @@ impl DeepLinkHandler for DefaultDeepLinkHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "id": deep_link.id.to_string(),
-            "source_id": source_id.to_string(),
-            "source_type": source_type,
-            "target_id": target_id.map(|id| id.to_string()),
-            "target_page_name": target_page_name,
-            "link_type": link_type,
-            "external_url": external_url,
-            "link_text": link_text,
-            "context": context,
-        }))
-        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+        let response = CreateDeepLinkResponse {
+            id: deep_link.id.to_string(),
+            source_id: source_id.to_string(),
+            source_type,
+            target_id: target_id.map(|id| id.to_string()),
+            target_page_name,
+            link_type,
+            external_url,
+            link_text,
+            context,
+        };
+        Ok(serde_json::to_string_pretty(&response)
+            .unwrap_or_else(|e| format!("Serialization error: {}", e)))
     }
 
     #[instrument(skip(self))]
@@ -117,36 +177,36 @@ impl DeepLinkHandler for DefaultDeepLinkHandler {
                 .map_err(|e| e.to_string())?
         } else {
             // No filter provided - return empty result with guidance
-            return Ok(serde_json::to_string_pretty(&serde_json::json!({
-                "deep_links": [],
-                "count": 0,
-                "note": "Provide target_id, link_type, or source_id to filter deep links"
-            }))
-            .unwrap_or_else(|e| format!("Serialization error: {}", e)));
+            let response = EmptyDeepLinksResponse {
+                deep_links: vec![],
+                count: 0,
+                note: "Provide target_id, link_type, or source_id to filter deep links",
+            };
+            return Ok(serde_json::to_string_pretty(&response)
+                .unwrap_or_else(|e| format!("Serialization error: {}", e)));
         };
 
-        let items: Vec<serde_json::Value> = links
+        let items: Vec<DeepLinkEntryWire> = links
             .iter()
-            .map(|l| {
-                serde_json::json!({
-                    "id": l.id.to_string(),
-                    "source_id": l.source_id.to_string(),
-                    "source_type": format!("{:?}", l.source_type).to_lowercase(),
-                    "target_id": l.target_id.map(|id| id.to_string()),
-                    "target_page_name": l.target_page_name,
-                    "link_type": format!("{:?}", l.link_type).to_lowercase(),
-                    "external_url": l.external_url,
-                    "link_text": l.link_text,
-                    "context": l.context,
-                })
+            .map(|l| DeepLinkEntryWire {
+                id: l.id.to_string(),
+                source_id: l.source_id.to_string(),
+                source_type: format!("{:?}", l.source_type).to_lowercase(),
+                target_id: l.target_id.map(|id| id.to_string()),
+                target_page_name: l.target_page_name.clone(),
+                link_type: format!("{:?}", l.link_type).to_lowercase(),
+                external_url: l.external_url.clone(),
+                link_text: l.link_text.clone(),
+                context: l.context.clone(),
             })
             .collect();
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "deep_links": items,
-            "count": items.len(),
-        }))
-        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+        let response = DeepLinksListResponse {
+            count: items.len(),
+            deep_links: items,
+        };
+        Ok(serde_json::to_string_pretty(&response)
+            .unwrap_or_else(|e| format!("Serialization error: {}", e)))
     }
 
     #[instrument(skip(self))]
@@ -156,10 +216,10 @@ impl DeepLinkHandler for DefaultDeepLinkHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::json!({
-            "status": "deleted",
-            "id": id.to_string(),
-        })
-        .to_string())
+        let response = DeleteDeepLinkResponse {
+            status: "deleted",
+            id: id.to_string(),
+        };
+        serde_json::to_string(&response).map_err(|e| e.to_string())
     }
 }

@@ -12,8 +12,104 @@ use quilt_cognitive::{
     TaskScheduler, TreeRagEngine,
 };
 use quilt_domain::value_objects::Uuid;
+use serde::Serialize;
+use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
+
+// ── Local wire-format DTOs ────────────────────────────────────────
+//
+// These mirror the existing `serde_json::json!({ ... })` shapes used
+// by the handler responses. The DTOs are local to this module —
+// they isolate the wire format from the engine return types so adding
+// fields to either side does not silently change the other.
+
+/// Wire shape for a single cluster in `explore_topic`.
+#[derive(Serialize)]
+struct ExploreClusterWire {
+    label: String,
+    summary: String,
+    block_ids: Vec<String>,
+    relevance: f32,
+}
+
+/// Wire shape for the `explore_topic` outer response.
+#[derive(Serialize)]
+struct ExploreTopicResponse {
+    topic: String,
+    cluster_count: usize,
+    total_blocks: usize,
+    clusters: Vec<ExploreClusterWire>,
+}
+
+/// Wire shape for `build_tree` and `query_tree` (identical envelope).
+#[derive(Serialize)]
+struct TreeEnvelope {
+    page_id: String,
+    page_name: String,
+    total_blocks: usize,
+    root: Value,
+}
+
+/// Wire shape for `assemble_report`.
+#[derive(Serialize)]
+struct AssembleReportResponse {
+    title: String,
+    description: String,
+    markdown: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pdf_size_bytes: Option<usize>,
+    citations_count: usize,
+}
+
+/// Wire shape for `tree_status` — `coverage_percent` is derived.
+#[derive(Serialize)]
+struct TreeStatusResponse {
+    total_blocks: u64,
+    indexed_blocks: u64,
+    pending_blocks: u64,
+    coverage_percent: u32,
+}
+
+/// Wire shape for `save_block_summary` and `rebuild_tree_index`
+/// (small status envelopes).
+#[derive(Serialize)]
+struct SaveBlockSummaryResponse {
+    status: &'static str,
+    block_id: String,
+}
+
+#[derive(Serialize)]
+struct RebuildStartedResponse {
+    status: &'static str,
+}
+
+/// Wire shape for `schedule_task`.
+#[derive(Serialize)]
+struct ScheduleTaskResponse<'a> {
+    scheduled: &'a str,
+    cron: &'a str,
+}
+
+/// Wire shape for one task in `list_tasks` (dates formatted to RFC3339).
+#[derive(Serialize)]
+struct ScheduledTaskWire {
+    name: String,
+    cron_expr: String,
+    enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_run: Option<String>,
+    next_run: String,
+}
+
+/// Wire shape for `resource_cognitive_map`.
+#[derive(Serialize)]
+struct CognitiveMapSummary {
+    total_clusters: usize,
+    total_frontiers: usize,
+    total_gaps: usize,
+    pages_analyzed: usize,
+}
 
 /// Default implementation of [`CognitiveHandler`] that wraps all cognitive engines.
 ///
@@ -305,25 +401,24 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        let json_clusters: Vec<serde_json::Value> = clusters
+        let cluster_wires: Vec<ExploreClusterWire> = clusters
             .iter()
-            .map(|c| {
-                serde_json::json!({
-                    "label": c.label,
-                    "summary": c.summary,
-                    "block_ids": c.block_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
-                    "relevance": c.relevance,
-                })
+            .map(|c| ExploreClusterWire {
+                label: c.label.clone(),
+                summary: c.summary.clone(),
+                block_ids: c.block_ids.iter().map(|id| id.to_string()).collect(),
+                relevance: c.relevance,
             })
             .collect();
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "topic": topic,
-            "cluster_count": clusters.len(),
-            "total_blocks": clusters.iter().map(|c| c.block_ids.len()).sum::<usize>(),
-            "clusters": json_clusters,
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let total_blocks: usize = clusters.iter().map(|c| c.block_ids.len()).sum();
+        let response = ExploreTopicResponse {
+            topic: topic.to_string(),
+            cluster_count: clusters.len(),
+            total_blocks,
+            clusters: cluster_wires,
+        };
+        Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
     }
 
     #[instrument(skip(self))]
@@ -338,13 +433,13 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "page_id": tree.page_id.to_string(),
-            "page_name": tree.page_name,
-            "total_blocks": tree.total_blocks,
-            "root": tree.root,
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let response = TreeEnvelope {
+            page_id: tree.page_id.to_string(),
+            page_name: tree.page_name,
+            total_blocks: tree.total_blocks,
+            root: tree.root,
+        };
+        Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
     }
 
     #[instrument(skip(self))]
@@ -359,13 +454,13 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "page_id": tree.page_id.to_string(),
-            "page_name": tree.page_name,
-            "total_blocks": tree.total_blocks,
-            "root": tree.root,
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let response = TreeEnvelope {
+            page_id: tree.page_id.to_string(),
+            page_name: tree.page_name,
+            total_blocks: tree.total_blocks,
+            root: tree.root,
+        };
+        Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
     }
 
     #[instrument(skip(self))]
@@ -455,14 +550,14 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .flat_map(|s| s.source_block_ids.iter())
             .collect::<Vec<_>>();
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "title": title,
-            "description": description,
-            "markdown": markdown,
-            "pdf_size_bytes": pdf_bytes.as_ref().map(|b| b.len()),
-            "citations_count": citations.len(),
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let response = AssembleReportResponse {
+            title: title.to_string(),
+            description: description.to_string(),
+            markdown,
+            pdf_size_bytes: pdf_bytes.as_ref().map(|b| b.len()),
+            citations_count: citations.len(),
+        };
+        Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
     }
 
     #[instrument(skip(self))]
@@ -474,15 +569,19 @@ impl CognitiveHandler for DefaultCognitiveHandler {
 
         let status = engine.status().await.map_err(|e| e.to_string())?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "total_blocks": status.total_blocks,
-            "indexed_blocks": status.indexed_blocks,
-            "pending_blocks": status.pending_blocks,
-            "coverage_percent": if status.total_blocks > 0 {
-                (status.indexed_blocks as f64 / status.total_blocks as f64 * 100.0) as u32
-            } else { 0 },
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let coverage_percent = if status.total_blocks > 0 {
+            (status.indexed_blocks as f64 / status.total_blocks as f64 * 100.0) as u32
+        } else {
+            0
+        };
+
+        let response = TreeStatusResponse {
+            total_blocks: status.total_blocks,
+            indexed_blocks: status.indexed_blocks,
+            pending_blocks: status.pending_blocks,
+            coverage_percent,
+        };
+        Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
     }
 
     #[instrument(skip(self))]
@@ -497,11 +596,11 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::json!({
-            "status": "saved",
-            "block_id": block_id.to_string(),
-        })
-        .to_string())
+        let response = SaveBlockSummaryResponse {
+            status: "saved",
+            block_id: block_id.to_string(),
+        };
+        serde_json::to_string(&response).map_err(|e| e.to_string())
     }
 
     #[instrument(skip(self))]
@@ -520,10 +619,10 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::json!({
-            "status": "rebuild_started",
-        })
-        .to_string())
+        let response = RebuildStartedResponse {
+            status: "rebuild_started",
+        };
+        serde_json::to_string(&response).map_err(|e| e.to_string())
     }
 
     #[instrument(skip(self))]
@@ -545,11 +644,11 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "scheduled": name,
-            "cron": cron_expr,
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let response = ScheduleTaskResponse {
+            scheduled: name,
+            cron: cron_expr,
+        };
+        Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
     }
 
     #[instrument(skip(self))]
@@ -561,16 +660,14 @@ impl CognitiveHandler for DefaultCognitiveHandler {
 
         let tasks = scheduler.list_tasks().await?;
 
-        let json_tasks: Vec<serde_json::Value> = tasks
+        let json_tasks: Vec<ScheduledTaskWire> = tasks
             .iter()
-            .map(|t| {
-                serde_json::json!({
-                    "name": t.name,
-                    "cron_expr": t.cron_expr,
-                    "enabled": t.enabled,
-                    "last_run": t.last_run.map(|d| d.to_rfc3339()),
-                    "next_run": t.next_run.to_rfc3339(),
-                })
+            .map(|t| ScheduledTaskWire {
+                name: t.name.clone(),
+                cron_expr: t.cron_expr.clone(),
+                enabled: t.enabled,
+                last_run: t.last_run.map(|d| d.to_rfc3339()),
+                next_run: t.next_run.to_rfc3339(),
             })
             .collect();
 
@@ -601,13 +698,13 @@ impl CognitiveHandler for DefaultCognitiveHandler {
             }
         }
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "total_clusters": total_clusters,
-            "total_frontiers": total_frontiers,
-            "total_gaps": total_gaps,
-            "pages_analyzed": pages_count,
-        }))
-        .unwrap_or_else(|e| e.to_string()))
+        let response = CognitiveMapSummary {
+            total_clusters,
+            total_frontiers,
+            total_gaps,
+            pages_analyzed: pages_count,
+        };
+        Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
     }
 
     #[instrument(skip(self))]

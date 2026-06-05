@@ -6,8 +6,34 @@
 use super::{HandlerResult, SettingsHandler as SettingsHandlerTrait};
 use async_trait::async_trait;
 use quilt_domain::repositories::SettingsRepository;
+use serde::Serialize;
 use std::sync::Arc;
 use tracing::instrument;
+
+// ── Local wire-format DTOs ────────────────────────────────────────
+//
+// These mirror the existing `serde_json::json!({ ... })` shapes used
+// by the handler responses. The `preferred_format` field is rendered
+// via `format!("{:?}", ...)` (lowercase Debug) to preserve the
+// previous wire-format string (e.g. `markdown`, `org_mode`).
+
+/// Wire shape for the `get_settings` response. `UserSettings` itself
+/// has `#[derive(Serialize)]`, but the previous handler also stringified
+/// `preferred_format` via `format!("{:?}", ...).to_lowercase()` — this
+/// DTO preserves that exact rendering.
+#[derive(Serialize)]
+struct GetSettingsResponse {
+    timezone: String,
+    journal_format: String,
+    start_of_week: u8,
+    preferred_format: String,
+}
+
+/// Wire shape for the `update_settings` response.
+#[derive(Serialize)]
+struct UpdateSettingsResponse {
+    status: &'static str,
+}
 
 /// Default implementation of [`SettingsHandler`].
 pub struct DefaultSettingsHandler {
@@ -31,13 +57,14 @@ impl SettingsHandlerTrait for DefaultSettingsHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
-            "timezone": settings.timezone,
-            "journal_format": settings.journal_format,
-            "start_of_week": settings.start_of_week,
-            "preferred_format": format!("{:?}", settings.preferred_format),
-        }))
-        .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+        let response = GetSettingsResponse {
+            timezone: settings.timezone,
+            journal_format: settings.journal_format,
+            start_of_week: settings.start_of_week,
+            preferred_format: format!("{:?}", settings.preferred_format),
+        };
+        Ok(serde_json::to_string_pretty(&response)
+            .unwrap_or_else(|e| format!("Serialization error: {}", e)))
     }
 
     #[instrument(skip(self))]
@@ -76,9 +103,7 @@ impl SettingsHandlerTrait for DefaultSettingsHandler {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::json!({
-            "status": "updated",
-        })
-        .to_string())
+        let response = UpdateSettingsResponse { status: "updated" };
+        serde_json::to_string(&response).map_err(|e| e.to_string())
     }
 }
