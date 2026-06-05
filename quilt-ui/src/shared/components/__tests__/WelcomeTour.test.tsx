@@ -52,23 +52,67 @@ describe('WelcomeTour — F3 of quilt-fase2-ux-empty-states', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders all four feature cards with their titles', () => {
+  it('renders all six feature cards with their titles', () => {
     const onClose = vi.fn()
     render(<WelcomeTour onClose={onClose} />)
 
     // Each card has a data-testid of the form
     // `welcome-tour-card-<title-lowercased>` and contains a heading
     // with the card title.
+    // Spec: F1 of `quilt-fase4-onboarding-advanced` extends the
+    // four-card tour with two advanced cards: Cognitive and MCP
+    // tools.
     expect(screen.getByTestId('welcome-tour-card-plantillas')).toBeInTheDocument()
     expect(screen.getByTestId('welcome-tour-card-recientes')).toBeInTheDocument()
     expect(screen.getByTestId('welcome-tour-card-slash command')).toBeInTheDocument()
     expect(screen.getByTestId('welcome-tour-card-properties')).toBeInTheDocument()
+    expect(screen.getByTestId('welcome-tour-card-cognitive')).toBeInTheDocument()
+    expect(screen.getByTestId('welcome-tour-card-mcp tools')).toBeInTheDocument()
 
     // The card titles are inside the testid nodes as plain text —
-    // checking by testid is enough to prove the four cards are
+    // checking by testid is enough to prove the six cards are
     // present.
     expect(screen.getByTestId('welcome-tour-card-plantillas')).toHaveTextContent('Plantillas')
     expect(screen.getByTestId('welcome-tour-card-recientes')).toHaveTextContent('Recientes')
+    expect(screen.getByTestId('welcome-tour-card-cognitive')).toHaveTextContent('Cognitive')
+    expect(screen.getByTestId('welcome-tour-card-mcp tools')).toHaveTextContent('MCP tools')
+  })
+
+  it('renders the Cognitive card explaining the agent activity panel', () => {
+    // Spec: F1 of `quilt-fase4-onboarding-advanced` — the Cognitive
+    // card tells new users about the Agent Activity panel in the
+    // sidebar. Body text must mention the panel and how to open it.
+    const onClose = vi.fn()
+    render(<WelcomeTour onClose={onClose} />)
+
+    const card = screen.getByTestId('welcome-tour-card-cognitive')
+    expect(card).toBeInTheDocument()
+    // Title present (proves the card was rendered, not just an
+    // empty <div>).
+    expect(card).toHaveTextContent('Cognitive')
+    // Body text contains the sidebar hint (case-insensitive — the
+    // exact casing of the entry-point label may evolve).
+    expect(card.textContent?.toLowerCase()).toContain('agent activity')
+    expect(card.textContent?.toLowerCase()).toContain('sidebar')
+  })
+
+  it('renders the MCP tools card explaining Model Context Protocol exposure', () => {
+    // Spec: F1 of `quilt-fase4-onboarding-advanced` — the MCP
+    // tools card tells new users that Quilt exposes itself to AI
+    // agents via the Model Context Protocol. Body must mention
+    // both the protocol and where to read the full tool list.
+    const onClose = vi.fn()
+    render(<WelcomeTour onClose={onClose} />)
+
+    const card = screen.getByTestId('welcome-tour-card-mcp tools')
+    expect(card).toBeInTheDocument()
+    // Title present.
+    expect(card).toHaveTextContent('MCP tools')
+    // Body mentions Model Context Protocol (the canonical name
+    // of the standard the card is describing) and that agents can
+    // call tools.
+    expect(card.textContent?.toLowerCase()).toContain('model context protocol')
+    expect(card.textContent?.toLowerCase()).toContain('agent')
   })
 
   it('the "Got it" button sets the WELCOME_SEEN flag and calls onClose', async () => {
@@ -260,5 +304,99 @@ describe('WelcomeTour — F2 (focus trap)', () => {
 
     // Cleanup
     document.body.removeChild(trigger)
+  })
+})
+
+// ─── B of quilt-fase4-cross-device-tour — server-synced dismissal ────
+//
+// The localStorage flag is the fast cache; the server is the source
+// of truth so a dismissal on desktop also hides the tour on mobile.
+// These tests pin the wire-level contract: on every dismiss path
+// (Got it, X button, Escape, backdrop) the component MUST call
+// `api.dismissTour('welcome')` AND continue to set the localStorage
+// flag. The server call is fire-and-forget — a network blip must
+// not block the UI or the in-memory state.
+
+import { api } from '@core/api-client'
+
+describe('WelcomeTour — B of quilt-fase4-cross-device-tour (server sync)', () => {
+  let dismissSpy: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    dismissSpy = vi
+      .spyOn(api, 'dismissTour')
+      .mockResolvedValue({ dismissed: ['welcome'] })
+  })
+
+  it('"Got it" calls api.dismissTour("welcome") and sets the localStorage flag', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<WelcomeTour onClose={onClose} />)
+
+    await user.click(screen.getByTestId('welcome-tour-got-it'))
+
+    expect(dismissSpy).toHaveBeenCalledWith('welcome')
+    expect(dismissSpy).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem(STORAGE_KEYS.WELCOME_SEEN)).toBe('1')
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('X close button calls api.dismissTour("welcome")', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<WelcomeTour onClose={onClose} />)
+
+    await user.click(screen.getByTestId('welcome-tour-close'))
+
+    expect(dismissSpy).toHaveBeenCalledWith('welcome')
+    expect(localStorage.getItem(STORAGE_KEYS.WELCOME_SEEN)).toBe('1')
+  })
+
+  it('Escape keypress calls api.dismissTour("welcome")', () => {
+    const onClose = vi.fn()
+    render(<WelcomeTour onClose={onClose} />)
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+
+    expect(dismissSpy).toHaveBeenCalledWith('welcome')
+    expect(localStorage.getItem(STORAGE_KEYS.WELCOME_SEEN)).toBe('1')
+  })
+
+  it('backdrop click calls api.dismissTour("welcome")', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<WelcomeTour onClose={onClose} />)
+
+    const dialog = screen.getByRole('dialog')
+    const backdrop = dialog.parentElement
+    expect(backdrop).toBeTruthy()
+    fireEvent.click(backdrop!, { target: backdrop } as unknown as MouseEvent)
+
+    await waitFor(() => {
+      expect(dismissSpy).toHaveBeenCalledWith('welcome')
+    })
+  })
+
+  it('still calls onClose when the server call fails (network blip)', async () => {
+    // The server call is fire-and-forget. A 500 from the server
+    // must NOT crash the UI or block the dismissal — the
+    // localStorage write still hides the tour for this device.
+    dismissSpy.mockRejectedValue(new Error('network down'))
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    render(<WelcomeTour onClose={onClose} />)
+    await user.click(screen.getByTestId('welcome-tour-got-it'))
+
+    // The dialog unmounts (onClose fires) even though the server
+    // POST failed.
+    expect(onClose).toHaveBeenCalledTimes(1)
+    // The localStorage flag is still set — the user shouldn't see
+    // the tour again on this device.
+    expect(localStorage.getItem(STORAGE_KEYS.WELCOME_SEEN)).toBe('1')
+    // The failure was logged so devs can notice in the console.
+    expect(consoleSpy).toHaveBeenCalled()
+    consoleSpy.mockRestore()
   })
 })

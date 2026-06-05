@@ -259,3 +259,97 @@ describe('getEventsUrl', () => {
     vi.unstubAllEnvs()
   })
 })
+
+// ── Tour state (B of quilt-fase4-cross-device-tour) ─────────────────
+//
+// Server-stored dismissal state. localStorage is the fast cache; the
+// server is the source of truth. The two methods on `api` are thin
+// wrappers around the new REST endpoints — the goal of these tests is
+// to lock in the wire format (path, method, body shape) so the
+// frontend doesn't accidentally drift from what the server expects.
+
+describe('getTourState', () => {
+  it('GETs /api/v1/user/tour-state and returns the response', async () => {
+    const body = { dismissed: ['cognitive', 'welcome'] }
+    mockResponse(200, body)
+
+    const result = await api.getTourState()
+    expect(result).toEqual(body)
+    // fetchJson sends headers but doesn't pin a method for GETs
+    // (the default is GET, no need to set it explicitly).
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/user/tour-state',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+
+  it('returns an empty list for a first-time user', async () => {
+    mockResponse(200, { dismissed: [] })
+    const result = await api.getTourState()
+    expect(result.dismissed).toEqual([])
+  })
+
+  it('propagates 401 when the api key is missing or wrong', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: () => Promise.resolve({ code: 'UNAUTHORIZED', error: 'Unauthorized' }),
+    })
+    await expect(api.getTourState()).rejects.toThrow(QuiltApiError)
+  })
+})
+
+describe('dismissTour', () => {
+  it('POSTs { tour } to /api/v1/user/tour-state/dismiss', async () => {
+    const body = { dismissed: ['welcome'] }
+    mockResponse(200, body)
+
+    const result = await api.dismissTour('welcome')
+    expect(result).toEqual(body)
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/user/tour-state/dismiss',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ tour: 'welcome' }),
+      }),
+    )
+  })
+
+  it('sends the tour name as-is (server trims and validates)', async () => {
+    mockResponse(200, { dismissed: ['welcome'] })
+    await api.dismissTour('  welcome  ')
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/user/tour-state/dismiss',
+      expect.objectContaining({
+        body: JSON.stringify({ tour: '  welcome  ' }),
+      }),
+    )
+  })
+
+  it('propagates 400 when the tour name is invalid', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () =>
+        Promise.resolve({
+          code: 'BAD_REQUEST',
+          error: 'tour name must not be empty',
+        }),
+    })
+    try {
+      await api.dismissTour('')
+      expect.fail('should have thrown')
+    } catch (err) {
+      expect(err).toBeInstanceOf(QuiltApiError)
+      expect((err as QuiltApiError).status).toBe(400)
+    }
+  })
+
+  it('returns the full updated list so the caller can refresh in one round-trip', async () => {
+    mockResponse(200, { dismissed: ['cognitive', 'mcp', 'welcome'] })
+    const result = await api.dismissTour('welcome')
+    expect(result.dismissed).toEqual(['cognitive', 'mcp', 'welcome'])
+  })
+})

@@ -246,10 +246,7 @@ mod tests {
         let repo = MockPropertyRepository::new().with_property(custom_status_def());
         let resolver = PropertyKeyResolver::new(Arc::new(repo));
 
-        let result = resolver
-            .resolve("  quilt.property/status  ")
-            .await
-            .unwrap();
+        let result = resolver.resolve("  quilt.property/status  ").await.unwrap();
         assert_eq!(result.title, "Custom Status");
     }
 }

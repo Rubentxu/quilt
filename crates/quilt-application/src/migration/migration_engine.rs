@@ -2,7 +2,7 @@
 //!
 //! Currently supports Markdown-flavored files (Quilt format).
 
-use crate::migration::{parse_md_import, RawBlock};
+use crate::migration::{RawBlock, parse_md_import};
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::properties::resolver::PropertyKeyResolver;
 use quilt_domain::repositories::{BlockRepository, PageRepository, PropertyRepository};
@@ -46,7 +46,9 @@ pub struct MigrationEngine<PR: PageRepository, BR: BlockRepository, PropR: Prope
     property_repo: Arc<PropR>,
 }
 
-impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> MigrationEngine<PR, BR, PropR> {
+impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository>
+    MigrationEngine<PR, BR, PropR>
+{
     pub fn new(page_repo: Arc<PR>, block_repo: Arc<BR>, property_repo: Arc<PropR>) -> Self {
         Self {
             page_repo,
@@ -90,8 +92,7 @@ impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> Migrati
             file_id: None,
             properties: std::collections::HashMap::new(),
         };
-        let page = Page::new(page_create)
-            .map_err(|e| MigrationError::Import(e.to_string()))?;
+        let page = Page::new(page_create).map_err(|e| MigrationError::Import(e.to_string()))?;
 
         self.page_repo
             .insert(&page)
@@ -100,13 +101,9 @@ impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> Migrati
 
         // Create blocks from parsed raw blocks
         let resolver = PropertyKeyResolver::new(self.property_repo.clone());
-        let blocks_created = create_blocks_from_raw(
-            self.block_repo.as_ref(),
-            &resolver,
-            &raw_blocks,
-            page_id,
-        )
-        .await?;
+        let blocks_created =
+            create_blocks_from_raw(self.block_repo.as_ref(), &resolver, &raw_blocks, page_id)
+                .await?;
 
         Ok(ImportResult {
             pages_created: 1,
@@ -117,11 +114,13 @@ impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> Migrati
 
     /// Import all Markdown files from a directory.
     #[instrument(skip(self))]
-    pub async fn import_directory(&self, dir_path: &Path) -> Result<Vec<ImportResult>, MigrationError> {
+    pub async fn import_directory(
+        &self,
+        dir_path: &Path,
+    ) -> Result<Vec<ImportResult>, MigrationError> {
         let mut results = Vec::new();
 
-        let entries = std::fs::read_dir(dir_path)
-            .map_err(|e| MigrationError::Io(e))?;
+        let entries = std::fs::read_dir(dir_path).map_err(|e| MigrationError::Io(e))?;
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -132,8 +131,7 @@ impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> Migrati
                     .unwrap_or("untitled")
                     .to_string();
 
-                let source = std::fs::read_to_string(&path)
-                    .map_err(|e| MigrationError::Io(e))?;
+                let source = std::fs::read_to_string(&path).map_err(|e| MigrationError::Io(e))?;
 
                 match self.import_file(&source, &file_name).await {
                     Ok(result) => results.push(result),
@@ -161,10 +159,10 @@ async fn create_blocks_from_raw<BR: BlockRepository, PropR: PropertyRepository>(
     page_id: Uuid,
 ) -> Result<usize, MigrationError> {
     let mut blocks_created = 0;
-    
+
     // Work stack: (raw_blocks, parent_id, start_order)
     let mut stack: Vec<(&[RawBlock], Option<Uuid>, u32)> = vec![(raw_blocks, None, 0)];
-    
+
     while let Some((blocks, parent_id, mut order)) = stack.pop() {
         for raw in blocks {
             // Convert raw properties to PropertyValue map
@@ -189,10 +187,11 @@ async fn create_blocks_from_raw<BR: BlockRepository, PropR: PropertyRepository>(
                 format: BlockFormat::Markdown,
                 properties,
             };
-            let block = Block::new(block_create)
-                .map_err(|e| MigrationError::Import(e.to_string()))?;
+            let block =
+                Block::new(block_create).map_err(|e| MigrationError::Import(e.to_string()))?;
 
-            block_repo.insert(&block)
+            block_repo
+                .insert(&block)
                 .await
                 .map_err(|e| MigrationError::Import(e.to_string()))?;
             blocks_created += 1;
@@ -256,11 +255,25 @@ mod tests {
 
     #[test]
     fn infer_property_value_tests() {
-        assert!(matches!(infer_property_value("true"), PropertyValue::Boolean(true)));
-        assert!(matches!(infer_property_value("TRUE"), PropertyValue::Boolean(true)));
-        assert!(matches!(infer_property_value("false"), PropertyValue::Boolean(false)));
-        assert!(matches!(infer_property_value("123"), PropertyValue::Integer(123)));
-        assert!(matches!(infer_property_value("3.14"), PropertyValue::Float(f) if (f - 3.14).abs() < 0.001));
+        assert!(matches!(
+            infer_property_value("true"),
+            PropertyValue::Boolean(true)
+        ));
+        assert!(matches!(
+            infer_property_value("TRUE"),
+            PropertyValue::Boolean(true)
+        ));
+        assert!(matches!(
+            infer_property_value("false"),
+            PropertyValue::Boolean(false)
+        ));
+        assert!(matches!(
+            infer_property_value("123"),
+            PropertyValue::Integer(123)
+        ));
+        assert!(
+            matches!(infer_property_value("3.14"), PropertyValue::Float(f) if (f - 3.14).abs() < 0.001)
+        );
         assert!(matches!(infer_property_value("hello"), PropertyValue::String(s) if s == "hello"));
     }
 
@@ -307,11 +320,17 @@ mod tests {
 
         #[async_trait]
         impl PropertyRepository for MockPropertyRepo {
-            async fn get_by_id(&self, _id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
+            async fn get_by_id(
+                &self,
+                _id: Uuid,
+            ) -> Result<Option<PropertyDefinition>, DomainError> {
                 Ok(None)
             }
 
-            async fn get_by_db_ident(&self, ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+            async fn get_by_db_ident(
+                &self,
+                ident: &str,
+            ) -> Result<Option<PropertyDefinition>, DomainError> {
                 self.consult_count.fetch_add(1, Ordering::SeqCst);
                 Ok(self.properties.get(ident).cloned())
             }
@@ -331,7 +350,8 @@ mod tests {
             async fn get_closed_values(
                 &self,
                 _property_id: Uuid,
-            ) -> Result<Vec<quilt_domain::properties::types::ClosedValue>, DomainError> {
+            ) -> Result<Vec<quilt_domain::properties::types::ClosedValue>, DomainError>
+            {
                 Ok(Vec::new())
             }
 

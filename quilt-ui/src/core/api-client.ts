@@ -14,6 +14,8 @@ import type {
   SearchResult,
   TemplateSummary,
   TemplateSchema,
+  TourStateResponse,
+  DismissTourRequest,
 } from '@shared/types/api';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
@@ -332,6 +334,39 @@ export const api = {
    */
   getAnalysisGardener: () =>
     fetchJson<GardenerDto>('/analysis/gardener'),
+
+  // ─── Tour state (B of quilt-fase4-cross-device-tour) ────────────────
+  //
+  // Server-stored dismissal state for first-run product tours. The
+  // localStorage flag remains a fast-render cache; the server is the
+  // source of truth so a dismissal on desktop also hides the tour on
+  // mobile. The api key (Authorization: Bearer) is the user
+  // identifier for V1.
+  //
+  // Names are short slugs ("welcome", "cognitive", "mcp") — the same
+  // shape used by the SQLite `tour_dismissals` table on the server.
+
+  /**
+   * GET /api/v1/user/tour-state
+   * Returns the alphabetically-sorted list of tour names the current
+   * user has dismissed. Empty array for a first-time visitor.
+   */
+  getTourState: () => fetchJson<TourStateResponse>('/user/tour-state'),
+
+  /**
+   * POST /api/v1/user/tour-state/dismiss
+   * Marks a tour as dismissed for the current user. Idempotent —
+   * the server returns the updated dismissed-list so the caller
+   * doesn't have to re-fetch.
+   *
+   * Throws `QuiltApiError(400)` if the tour name is empty, too long,
+   * or contains whitespace / control characters.
+   */
+  dismissTour: (tourName: string) =>
+    fetchJson<TourStateResponse>('/user/tour-state/dismiss', {
+      method: 'POST',
+      body: JSON.stringify({ tour: tourName } satisfies DismissTourRequest),
+    }),
 };
 
 // ─── Analysis DTOs ──────────────────────────────────────────────────────

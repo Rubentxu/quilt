@@ -117,8 +117,10 @@ impl<TC: TemplateUseCases + ?Sized, BR> ReapplyTemplateUseCaseImpl<TC, BR> {
 }
 
 #[async_trait]
-impl<TC: TemplateUseCases + ?Sized + 'static, BR: quilt_domain::repositories::BlockRepository + 'static>
-    ReapplyTemplateUseCase for ReapplyTemplateUseCaseImpl<TC, BR>
+impl<
+    TC: TemplateUseCases + ?Sized + 'static,
+    BR: quilt_domain::repositories::BlockRepository + 'static,
+> ReapplyTemplateUseCase for ReapplyTemplateUseCaseImpl<TC, BR>
 {
     #[instrument(skip(self))]
     async fn reapply(

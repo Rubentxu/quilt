@@ -3,7 +3,9 @@
 //! Tests the Markdown parser and MigrationEngine with fixtures and property-based testing.
 
 use async_trait::async_trait;
-use quilt_application::migration::{parse_md_import, Frontmatter, MigrationEngine, infer_property_value};
+use quilt_application::migration::{
+    Frontmatter, MigrationEngine, infer_property_value, parse_md_import,
+};
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::types::ClosedValue;
@@ -26,7 +28,10 @@ impl PropertyRepository for InMemoryPropertyRepo {
         Ok(None)
     }
 
-    async fn get_by_db_ident(&self, ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+    async fn get_by_db_ident(
+        &self,
+        ident: &str,
+    ) -> Result<Option<PropertyDefinition>, DomainError> {
         Ok(self.properties.get(ident).cloned())
     }
 
@@ -182,45 +187,95 @@ fn test_parse_block_content_with_leading_spaces() {
 
 #[test]
 fn test_infer_integer_from_string() {
-    assert!(matches!(infer_property_value("0"), PropertyValue::Integer(0)));
-    assert!(matches!(infer_property_value("-1"), PropertyValue::Integer(-1)));
-    assert!(matches!(infer_property_value("999999"), PropertyValue::Integer(999999)));
+    assert!(matches!(
+        infer_property_value("0"),
+        PropertyValue::Integer(0)
+    ));
+    assert!(matches!(
+        infer_property_value("-1"),
+        PropertyValue::Integer(-1)
+    ));
+    assert!(matches!(
+        infer_property_value("999999"),
+        PropertyValue::Integer(999999)
+    ));
 }
 
 #[test]
 fn test_infer_float_from_string() {
     assert!(matches!(infer_property_value("0.0"), PropertyValue::Float(f) if f == 0.0));
-    assert!(matches!(infer_property_value("-3.14"), PropertyValue::Float(f) if (f + 3.14).abs() < 0.001));
-    assert!(matches!(infer_property_value("1e10"), PropertyValue::Float(_)));
+    assert!(
+        matches!(infer_property_value("-3.14"), PropertyValue::Float(f) if (f + 3.14).abs() < 0.001)
+    );
+    assert!(matches!(
+        infer_property_value("1e10"),
+        PropertyValue::Float(_)
+    ));
 }
 
 #[test]
 fn test_infer_boolean_from_string() {
-    assert!(matches!(infer_property_value("true"), PropertyValue::Boolean(true)));
-    assert!(matches!(infer_property_value("false"), PropertyValue::Boolean(false)));
-    assert!(matches!(infer_property_value("TRUE"), PropertyValue::Boolean(true)));
-    assert!(matches!(infer_property_value("FALSE"), PropertyValue::Boolean(false)));
-    assert!(matches!(infer_property_value("True"), PropertyValue::Boolean(true)));
-    assert!(matches!(infer_property_value("False"), PropertyValue::Boolean(false)));
+    assert!(matches!(
+        infer_property_value("true"),
+        PropertyValue::Boolean(true)
+    ));
+    assert!(matches!(
+        infer_property_value("false"),
+        PropertyValue::Boolean(false)
+    ));
+    assert!(matches!(
+        infer_property_value("TRUE"),
+        PropertyValue::Boolean(true)
+    ));
+    assert!(matches!(
+        infer_property_value("FALSE"),
+        PropertyValue::Boolean(false)
+    ));
+    assert!(matches!(
+        infer_property_value("True"),
+        PropertyValue::Boolean(true)
+    ));
+    assert!(matches!(
+        infer_property_value("False"),
+        PropertyValue::Boolean(false)
+    ));
 }
 
 #[test]
 fn test_infer_string_when_not_numeric_or_boolean() {
     assert!(matches!(infer_property_value("hello"), PropertyValue::String(s) if s == "hello"));
     assert!(matches!(infer_property_value(""), PropertyValue::String(s) if s.is_empty()));
-    assert!(matches!(infer_property_value("trueish"), PropertyValue::String(_)));
-    assert!(matches!(infer_property_value("falsey"), PropertyValue::String(_)));
+    assert!(matches!(
+        infer_property_value("trueish"),
+        PropertyValue::String(_)
+    ));
+    assert!(matches!(
+        infer_property_value("falsey"),
+        PropertyValue::String(_)
+    ));
 }
 
 #[test]
 fn test_infer_date_like_strings_as_dates() {
     // Date-like strings ARE automatically parsed as dates (F21.2 fix)
-    assert!(matches!(infer_property_value("2024-01-15"), PropertyValue::Date(_)));
-    assert!(matches!(infer_property_value("2024-12-31"), PropertyValue::Date(_)));
+    assert!(matches!(
+        infer_property_value("2024-01-15"),
+        PropertyValue::Date(_)
+    ));
+    assert!(matches!(
+        infer_property_value("2024-12-31"),
+        PropertyValue::Date(_)
+    ));
     // DateTime strings are also parsed as dates
-    assert!(matches!(infer_property_value("2024-01-15T10:30:00"), PropertyValue::Date(_)));
+    assert!(matches!(
+        infer_property_value("2024-01-15T10:30:00"),
+        PropertyValue::Date(_)
+    ));
     // Invalid dates fall back to string
-    assert!(matches!(infer_property_value("not-a-date"), PropertyValue::String(_)));
+    assert!(matches!(
+        infer_property_value("not-a-date"),
+        PropertyValue::String(_)
+    ));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -231,7 +286,7 @@ fn test_infer_date_like_strings_as_dates() {
 fn test_parse_simple_fixture() {
     let content = load_fixture("simple.md");
     let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert_eq!(fm.properties.len(), 2);
     assert_eq!(fm.properties[0].key, "title");
     assert_eq!(fm.properties[0].value, "Simple Test Page");
@@ -242,11 +297,11 @@ fn test_parse_simple_fixture() {
 fn test_parse_with_properties_fixture() {
     let content = load_fixture("with_properties.md");
     let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert_eq!(fm.properties.len(), 4); // title, created, author, priority
     assert_eq!(fm.properties[0].key, "title");
     assert_eq!(fm.properties[0].value, "Page With Properties");
-    
+
     // Should have blocks
     assert!(!blocks.is_empty());
 }
@@ -255,7 +310,7 @@ fn test_parse_with_properties_fixture() {
 fn test_parse_nested_blocks_fixture() {
     let content = load_fixture("nested_blocks.md");
     let (_, blocks) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert!(!blocks.is_empty());
     // Check that we have at least 2 top-level blocks
     assert!(blocks.len() >= 2);
@@ -265,7 +320,7 @@ fn test_parse_nested_blocks_fixture() {
 fn test_parse_numeric_properties_fixture() {
     let content = load_fixture("numeric_properties.md");
     let (fm, _) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert_eq!(fm.properties.len(), 4); // title, count, price, percentage
     // The count property
     let count_prop = fm.properties.iter().find(|p| p.key == "count");
@@ -277,12 +332,12 @@ fn test_parse_numeric_properties_fixture() {
 fn test_parse_boolean_properties_fixture() {
     let content = load_fixture("boolean_properties.md");
     let (fm, _) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert_eq!(fm.properties.len(), 5); // title, enabled, disabled, active, inactive
-    
+
     let enabled = fm.properties.iter().find(|p| p.key == "enabled");
     assert_eq!(enabled.unwrap().value, "true");
-    
+
     let disabled = fm.properties.iter().find(|p| p.key == "disabled");
     assert_eq!(disabled.unwrap().value, "false");
 }
@@ -291,7 +346,7 @@ fn test_parse_boolean_properties_fixture() {
 fn test_parse_complex_nested_fixture() {
     let content = load_fixture("complex_nested.md");
     let (_, blocks) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert!(!blocks.is_empty());
     // Root level blocks
     assert!(blocks.len() >= 2);
@@ -301,7 +356,7 @@ fn test_parse_complex_nested_fixture() {
 fn test_parse_multiline_content_fixture() {
     let content = load_fixture("multiline_content.md");
     let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert_eq!(fm.properties.len(), 2); // title, description
     assert_eq!(fm.properties[0].key, "title");
     assert_eq!(fm.properties[1].key, "description");
@@ -312,7 +367,7 @@ fn test_parse_multiline_content_fixture() {
 fn test_parse_no_frontmatter_fixture() {
     let content = load_fixture("no_frontmatter.md");
     let (fm, blocks) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert!(fm.properties.is_empty());
     assert!(!blocks.is_empty());
     // 4 blocks: "No frontmatter...", "Block one", "Block two" (with child), "Block three"
@@ -323,7 +378,7 @@ fn test_parse_no_frontmatter_fixture() {
 fn test_parse_date_properties_fixture() {
     let content = load_fixture("date_properties.md");
     let (fm, _) = parse_md_import(&content).expect("Should parse fixture");
-    
+
     assert_eq!(fm.properties.len(), 3);
     let created = fm.properties.iter().find(|p| p.key == "created");
     assert_eq!(created.unwrap().value, "2024-03-15");
@@ -339,10 +394,10 @@ async fn test_migration_engine_import_simple_file() {
     let block_repo = InMemoryBlockRepo::new();
     let property_repo = Arc::new(InMemoryPropertyRepo::default());
     let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
-    
+
     let content = load_fixture("simple.md");
     let result = engine.import_file(&content, "Test Page").await;
-    
+
     assert!(result.is_ok());
     let import_result = result.unwrap();
     assert_eq!(import_result.pages_created, 1);
@@ -355,14 +410,14 @@ async fn test_migration_engine_import_no_duplicate_page() {
     let block_repo = InMemoryBlockRepo::new();
     let property_repo = Arc::new(InMemoryPropertyRepo::default());
     let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
-    
+
     let content = load_fixture("simple.md");
-    
+
     // First import should succeed
     let result1 = engine.import_file(&content, "Test Page").await;
     assert!(result1.is_ok());
     assert_eq!(result1.unwrap().pages_created, 1);
-    
+
     // Second import should be skipped with warning
     let result2 = engine.import_file(&content, "Test Page").await;
     assert!(result2.is_ok());
@@ -377,15 +432,15 @@ async fn test_migration_engine_import_with_properties() {
     let block_repo = InMemoryBlockRepo::new();
     let property_repo = Arc::new(InMemoryPropertyRepo::default());
     let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
-    
+
     let content = load_fixture("with_properties.md");
     let result = engine.import_file(&content, "Properties Test").await;
-    
+
     assert!(result.is_ok());
     let import_result = result.unwrap();
     assert_eq!(import_result.pages_created, 1);
     assert!(import_result.blocks_created > 0);
-    
+
     // Verify page was created
     let page = page_repo.get_by_name("Properties Test").await.unwrap();
     assert!(page.is_some());
@@ -397,10 +452,10 @@ async fn test_migration_engine_import_nested_blocks() {
     let block_repo = InMemoryBlockRepo::new();
     let property_repo = Arc::new(InMemoryPropertyRepo::default());
     let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
-    
+
     let content = load_fixture("complex_nested.md");
     let result = engine.import_file(&content, "Nested Test").await;
-    
+
     assert!(result.is_ok());
     let import_result = result.unwrap();
     assert_eq!(import_result.pages_created, 1);
@@ -414,11 +469,11 @@ async fn test_migration_engine_import_directory_empty_dir() {
     let block_repo = InMemoryBlockRepo::new();
     let property_repo = Arc::new(InMemoryPropertyRepo::default());
     let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
-    
+
     // Use the root directory which likely has no .md files
     let temp_dir = std::env::temp_dir();
     let result = engine.import_directory(&temp_dir).await;
-    
+
     assert!(result.is_ok());
     // Empty directory or directory with no .md files returns empty results
     let results = result.unwrap();
@@ -433,16 +488,16 @@ async fn test_migration_engine_import_directory_with_files() {
     let block_repo = InMemoryBlockRepo::new();
     let property_repo = Arc::new(InMemoryPropertyRepo::default());
     let engine = MigrationEngine::new(page_repo.clone(), block_repo.clone(), property_repo);
-    
+
     // Use the fixtures directory
     let fixtures_dir = PathBuf::from("tests/fixtures/md_import");
     let result = engine.import_directory(&fixtures_dir).await;
-    
+
     assert!(result.is_ok());
     let results = result.unwrap();
     // Should have imported multiple files
     assert!(results.len() >= 5);
-    
+
     // Check that total pages created is correct
     let total_pages: usize = results.iter().map(|r| r.pages_created).sum();
     assert!(total_pages >= 5);
@@ -473,7 +528,7 @@ multiple: [values, here]
 ---
 "#,
     ];
-    
+
     for input in inputs {
         let result = std::panic::catch_unwind(|| parse_md_import(input));
         assert!(result.is_ok(), "Parser panicked on input: {:?}", input);

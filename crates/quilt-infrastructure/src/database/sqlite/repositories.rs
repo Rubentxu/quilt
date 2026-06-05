@@ -36,7 +36,7 @@ use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
     BlockRepository, PageRepository, PropertyRepository, RefRepository, RefRow, SettingsRepository,
-    TagRepository,
+    TagRepository, TourStateRepository,
 };
 use quilt_domain::value_objects::{
     BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
@@ -1361,6 +1361,66 @@ impl SettingsRepository for SqliteSettingsRepository {
     }
 }
 
+// ── SqliteTourStateRepository ──────────────────────────────────────
+
+/// SQLite implementation of the [`TourStateRepository`] trait.
+///
+/// Persists tour-dismissal state in the `tour_dismissals` table added
+/// by [`connection::run_migrations`]. The user identifier is an opaque
+/// string (V1: the api key from the `Authorization` header) — we do
+/// not validate it here because the auth middleware has already
+/// accepted it by the time we get a request.
+#[derive(Clone)]
+pub struct SqliteTourStateRepository {
+    pool: DbPool,
+}
+
+impl SqliteTourStateRepository {
+    /// Creates a new `SqliteTourStateRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl TourStateRepository for SqliteTourStateRepository {
+    async fn get_dismissed_tours(&self, user_id: &str) -> Result<Vec<String>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT tour_name FROM tour_dismissals WHERE user_id = ? ORDER BY tour_name",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_dismissed_tours: {}", e)))?;
+
+        Ok(rows
+            .iter()
+            .map(|r| r.get::<String, _>("tour_name"))
+            .collect())
+    }
+
+    async fn dismiss_tour(&self, user_id: &str, tour_name: &str) -> Result<(), DomainError> {
+        // `INSERT OR REPLACE` makes the operation idempotent. The
+        // composite primary key `(user_id, tour_name)` is what makes
+        // the conflict detection work — a second dismissal of the
+        // same pair updates the `dismissed_at` timestamp rather than
+        // raising a constraint error.
+        sqlx::query(
+            "INSERT INTO tour_dismissals (user_id, tour_name, dismissed_at) \
+             VALUES (?, ?, unixepoch('now')) \
+             ON CONFLICT(user_id, tour_name) DO UPDATE SET \
+             dismissed_at = excluded.dismissed_at",
+        )
+        .bind(user_id)
+        .bind(tour_name)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("dismiss_tour: {}", e)))?;
+
+        Ok(())
+    }
+}
+
 // ── Integration Tests ────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -2009,5 +2069,121 @@ mod tests {
         // Sync with empty list — should clear
         repo.sync_refs(source_id, &[]).await.unwrap();
         assert!(repo.get_forward_refs(source_id).await.unwrap().is_empty());
+    }
+
+    // ── TourStateRepository Tests ─────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_tour_state_empty_for_new_user() {
+        let pool = setup_test_db().await;
+        let repo = SqliteTourStateRepository::new(pool);
+        let tours = repo.get_dismissed_tours("api-key-1").await.unwrap();
+        assert!(tours.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_tour_state_dismiss_then_get_round_trips() {
+        let pool = setup_test_db().await;
+        let repo = SqliteTourStateRepository::new(pool);
+        repo.dismiss_tour("api-key-1", "welcome").await.unwrap();
+        let tours = repo.get_dismissed_tours("api-key-1").await.unwrap();
+        assert_eq!(tours, vec!["welcome".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_tour_state_dismiss_is_idempotent_at_sql_level() {
+        let pool = setup_test_db().await;
+        let repo = SqliteTourStateRepository::new(pool.clone());
+        // Dismiss the same tour four times. The composite primary
+        // key (user_id, tour_name) plus ON CONFLICT DO UPDATE means
+        // the row count after every call is exactly one.
+        repo.dismiss_tour("api-key-1", "welcome").await.unwrap();
+        repo.dismiss_tour("api-key-1", "welcome").await.unwrap();
+        repo.dismiss_tour("api-key-1", "welcome").await.unwrap();
+        repo.dismiss_tour("api-key-1", "welcome").await.unwrap();
+
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM tour_dismissals WHERE user_id = ?")
+                .bind("api-key-1")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 1);
+
+        let tours = repo.get_dismissed_tours("api-key-1").await.unwrap();
+        assert_eq!(tours, vec!["welcome".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_tour_state_multiple_tours_per_user() {
+        let pool = setup_test_db().await;
+        let repo = SqliteTourStateRepository::new(pool);
+        repo.dismiss_tour("u", "welcome").await.unwrap();
+        repo.dismiss_tour("u", "cognitive").await.unwrap();
+        repo.dismiss_tour("u", "mcp").await.unwrap();
+
+        // The query orders by `tour_name` so the assertion is
+        // stable across runs.
+        let tours = repo.get_dismissed_tours("u").await.unwrap();
+        assert_eq!(
+            tours,
+            vec![
+                "cognitive".to_string(),
+                "mcp".to_string(),
+                "welcome".to_string()
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tour_state_users_are_isolated() {
+        let pool = setup_test_db().await;
+        let repo = SqliteTourStateRepository::new(pool);
+        repo.dismiss_tour("alice", "welcome").await.unwrap();
+        let bob = repo.get_dismissed_tours("bob").await.unwrap();
+        assert!(bob.is_empty(), "bob's tour list must not see alice's rows");
+    }
+
+    #[tokio::test]
+    async fn test_tour_state_user_id_with_special_chars() {
+        // The api key is a UUIDv4 today, but the column is TEXT. A
+        // future migration could switch to a real user id with
+        // arbitrary characters; the repo must not choke on them.
+        let pool = setup_test_db().await;
+        let repo = SqliteTourStateRepository::new(pool);
+        let weird = "user/with spaces & symbols:😀=42";
+        repo.dismiss_tour(weird, "welcome").await.unwrap();
+        let tours = repo.get_dismissed_tours(weird).await.unwrap();
+        assert_eq!(tours, vec!["welcome".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn test_tour_state_redismiss_updates_timestamp() {
+        // Sleeping 1s in a test is annoying, but sqlite's
+        // `unixepoch('now')` is second-precision so a 1.1s wait is
+        // the smallest reliable gap. We only check that the second
+        // call's timestamp is >= the first one, which is enough to
+        // prove ON CONFLICT DO UPDATE ran.
+        let pool = setup_test_db().await;
+        let repo = SqliteTourStateRepository::new(pool.clone());
+        repo.dismiss_tour("u", "welcome").await.unwrap();
+        let first: i64 =
+            sqlx::query_scalar("SELECT dismissed_at FROM tour_dismissals WHERE user_id = ?")
+                .bind("u")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+        repo.dismiss_tour("u", "welcome").await.unwrap();
+        let second: i64 =
+            sqlx::query_scalar("SELECT dismissed_at FROM tour_dismissals WHERE user_id = ?")
+                .bind("u")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert!(
+            second > first,
+            "second dismiss should refresh the timestamp"
+        );
     }
 }

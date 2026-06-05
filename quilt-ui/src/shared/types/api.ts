@@ -55,6 +55,26 @@ export interface ApiError {
   code: AppErrorCode;
 }
 
+/**
+ * Response body for `GET /api/v1/user/tour-state` and the
+ * `POST /api/v1/user/tour-state/dismiss` happy-path response
+ * (B of `quilt-fase4-cross-device-tour`).
+ *
+ * `dismissed` is the alphabetically-sorted list of tour-name slugs
+ * (`"welcome"`, `"cognitive"`, `"mcp"`, ...) that the current user
+ * has dismissed on at least one device. The server treats the
+ * `Authorization: Bearer <key>` token as the user identifier for V1.
+ */
+export interface TourStateResponse {
+  dismissed: string[];
+}
+
+/** Body of `POST /api/v1/user/tour-state/dismiss`. */
+export interface DismissTourRequest {
+  /** Short slug for the tour to dismiss (e.g. `"welcome"`). */
+  tour: string;
+}
+
 // ──── Pages ─────────────────────────────────────────────────────
 
 export interface Page {

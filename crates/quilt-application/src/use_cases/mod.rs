@@ -19,6 +19,7 @@ pub mod page;
 pub mod resource;
 pub mod search;
 pub mod template;
+pub mod tour_state;
 
 // Re-exports for convenience
 pub use block::{BlockTree, BlockUseCases, BlockUseCasesImpl};
@@ -28,3 +29,4 @@ pub use resource::{
 };
 pub use search::{QueryPlan, SearchResult, SearchUseCases, SearchUseCasesImpl};
 pub use template::{TemplateSchema, TemplateSummary, TemplateUseCases, TemplateUseCasesImpl};
+pub use tour_state::{TourStateUseCases, TourStateUseCasesImpl};

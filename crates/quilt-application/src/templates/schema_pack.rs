@@ -279,7 +279,9 @@ mod tests {
     #[test]
     fn schema_pack_value_type_accepts_legacy_json_types() {
         // Legacy JSON-ish type names should still be accepted
-        let type_names = ["string", "boolean", "number", "integer", "float", "date", "array", "object"];
+        let type_names = [
+            "string", "boolean", "number", "integer", "float", "date", "array", "object",
+        ];
         for type_name in type_names {
             let json = format!(
                 r#"{{"default_properties":[{{"key":"status","value_type":"{}","default":"todo"}}]}}"#,

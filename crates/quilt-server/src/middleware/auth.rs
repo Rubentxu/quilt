@@ -151,10 +151,7 @@ pub async fn auth_middleware(request: Request, next: Next) -> Response {
         request
             .uri()
             .query()
-            .and_then(|q| {
-                q.split('&')
-                    .find_map(|kv| kv.strip_prefix("api_key="))
-            })
+            .and_then(|q| q.split('&').find_map(|kv| kv.strip_prefix("api_key=")))
             .is_some_and(|token| token == expected)
     } else {
         false

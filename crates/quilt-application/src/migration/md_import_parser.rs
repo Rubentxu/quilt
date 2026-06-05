@@ -45,14 +45,14 @@ pub enum MigrationError {
 pub fn parse_md_import(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), MigrationError> {
     let mut frontmatter = Frontmatter::default();
     let mut blocks: Vec<RawBlock> = Vec::new();
-    
+
     let mut lines = input.lines().peekable();
-    
+
     // Check for frontmatter
     if let Some(first) = lines.peek() {
         if first.trim() == "---" {
             lines.next();
-            
+
             let mut in_frontmatter = true;
             while let Some(line) = lines.next() {
                 let trimmed = line.trim();
@@ -64,39 +64,41 @@ pub fn parse_md_import(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), Migr
                     continue;
                 }
                 if let Some((key, value)) = parse_property_line(trimmed) {
-                    frontmatter.properties.push(FrontmatterProperty { key, value });
+                    frontmatter
+                        .properties
+                        .push(FrontmatterProperty { key, value });
                 }
             }
-            
+
             if in_frontmatter {
                 return Err(MigrationError::UnclosedFrontmatter);
             }
         }
     }
-    
+
     // Parse blocks using indent-based tree building
     // We track where to add children at each indent level
     // parent_at_indent[indent] = index in blocks (or children of some block)
     let mut parent_at_indent: Vec<(usize, usize)> = Vec::new(); // (indent, index in parent's children or blocks)
-    
+
     for line in lines {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        
+
         // Calculate indent level (2 spaces = 1 level)
         let indent = line.len() - line.trim_start().len();
         let indent_level = indent / 2;
-        
+
         // Skip property lines
         if parse_property_line(trimmed).is_some() {
             continue;
         }
-        
+
         // Adjust parent stack - remove entries for deeper indents than current
         parent_at_indent.truncate(indent_level);
-        
+
         // Create new block
         let new_block = RawBlock {
             indent_level,
@@ -104,7 +106,7 @@ pub fn parse_md_import(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), Migr
             properties: Vec::new(),
             children: Vec::new(),
         };
-        
+
         // Find where to add based on indent level
         if indent_level == 0 {
             // Top-level block - add directly to blocks
@@ -124,12 +126,15 @@ pub fn parse_md_import(input: &str) -> Result<(Frontmatter, Vec<RawBlock>), Migr
             }
         }
     }
-    
+
     Ok((frontmatter, blocks))
 }
 
 /// Get a mutable reference to a block by following the parent_at_indent path
-fn get_block_mut<'a>(blocks: &'a mut Vec<RawBlock>, path: &[(usize, usize)]) -> Option<&'a mut RawBlock> {
+fn get_block_mut<'a>(
+    blocks: &'a mut Vec<RawBlock>,
+    path: &[(usize, usize)],
+) -> Option<&'a mut RawBlock> {
     if path.is_empty() {
         return None;
     }
@@ -153,17 +158,17 @@ fn parse_property_line(line: &str) -> Option<(String, String)> {
     }
     let key = parts[0].trim();
     let value = parts[1].trim();
-    
+
     if key.is_empty() {
         return None;
     }
-    
+
     // Must have exactly one colon (single colon for frontmatter)
     // If there are more colons, check it's not a double-colon property
     if line.contains("::") {
         return None;
     }
-    
+
     Some((key.to_string(), value.to_string()))
 }
 
@@ -209,7 +214,7 @@ title: My Page
     - Level 2
 ";
         let (_, blocks) = parse_md_import(input).unwrap();
-        
+
         assert_eq!(blocks.len(), 1);
         assert_eq!(blocks[0].content, "- Root");
         assert_eq!(blocks[0].children.len(), 1);
@@ -227,7 +232,7 @@ title: My Page
 - Block 3
 ";
         let (_, blocks) = parse_md_import(input).unwrap();
-        
+
         assert_eq!(blocks.len(), 3);
         assert_eq!(blocks[0].content, "- Block 1");
         assert_eq!(blocks[1].content, "- Block 2");
@@ -244,7 +249,7 @@ title: My Page
   - Child 2.1
 ";
         let (_, blocks) = parse_md_import(input).unwrap();
-        
+
         assert_eq!(blocks.len(), 2);
         assert_eq!(blocks[0].content, "- Root 1");
         assert_eq!(blocks[0].children.len(), 2);

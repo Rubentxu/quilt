@@ -12,6 +12,7 @@ import { useResponsive } from '@shared/hooks/useResponsive'
 import { useConnection } from '@shared/contexts/ConnectionContext'
 import { usePerformance } from '@shared/hooks/usePerformance'
 import { STORAGE_KEYS } from '@features/sidebar/storage-keys'
+import { api } from '@core/api-client'
 
 // SearchModal is only mounted when the user opens the command palette
 // (Ctrl+K). Keeping it out of the initial bundle saves ~3 KB and the
@@ -431,13 +432,15 @@ export function AppShell() {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [helpExpanded, setHelpExpanded] = useState(false)
-  // F3 of quilt-fase2-ux-empty-states — first-run welcome tour.
+  // F3 of quilt-fase2-ux-empty-states + B of
+  // quilt-fase4-cross-device-tour — first-run welcome tour.
   // `null` = "haven't checked yet" (avoids a flash of the dialog
   // during hydration). After the effect runs, the value is `true`
-  // when the user has already dismissed the tour and `false`
-  // otherwise. The flag itself is read lazily because
-  // `localStorage` is not available during SSR-style module
-  // evaluation.
+  // when the user has already dismissed the tour (on this device
+  // OR on any other device, via the server) and `false`
+  // otherwise. The localStorage flag is the fast cache for instant
+  // render; the server is the source of truth so a dismissal on
+  // desktop also hides the tour on mobile.
   const [tourDismissed, setTourDismissed] = useState<boolean | null>(null)
   const { isMobile, isTablet } = useResponsive()
   const { tabs, activeTabId, closeTab, openTab, switchTab } = useTabs()
@@ -445,13 +448,59 @@ export function AppShell() {
   const { leaderKey } = useGlobalShortcuts()
 
   useEffect(() => {
+    // 1. Fast path: read the localStorage cache. This avoids a
+    //    flash of the dialog on hard refreshes for users who have
+    //    already seen it on this device.
+    let fromCache = false
     try {
-      setTourDismissed(localStorage.getItem(STORAGE_KEYS.WELCOME_SEEN) === '1')
+      fromCache = localStorage.getItem(STORAGE_KEYS.WELCOME_SEEN) === '1'
+      if (fromCache) {
+        setTourDismissed(true)
+      }
     } catch {
-      // localStorage unavailable (private mode / quota) — treat as
-      // "not yet seen" so the user at least gets the tour once
-      // for this session. Subsequent reloads will retry.
-      setTourDismissed(false)
+      // localStorage unavailable (private mode / quota) — fall
+      // through to the server check, which will be the only
+      // signal we have.
+    }
+
+    // 2. Authoritative path: ask the server. The api key in the
+    //    Authorization header is the user identifier, so a
+    //    dismissal on any other device of the same user is
+    //    visible here. We always issue the request — even when
+    //    the cache said "dismissed" — so cross-device sync works
+    //    in both directions.
+    let cancelled = false
+    api
+      .getTourState()
+      .then((state) => {
+        if (cancelled) return
+        const dismissed = state.dismissed.includes('welcome')
+        // Reconcile the cache with the server. If the server
+        // says "dismissed" and the cache didn't, write through so
+        // the next mount takes the fast path.
+        if (dismissed && !fromCache) {
+          try {
+            localStorage.setItem(STORAGE_KEYS.WELCOME_SEEN, '1')
+          } catch {
+            // localStorage may still be unavailable; the
+            // in-memory state is correct for this session.
+          }
+        }
+        setTourDismissed(dismissed)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        // Server unreachable — fall back to the cache value. If
+        // the cache was empty (false), the user will see the
+        // tour, which is the right behavior for a first visit.
+        // If the cache was true, stay dismissed.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to fetch tour state, using local cache:', err)
+        setTourDismissed(fromCache)
+      })
+
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -953,14 +1002,17 @@ export function AppShell() {
         }
       />
 
-      {/* ─── Welcome tour (F3 of quilt-fase2-ux-empty-states) ───
+      {/* ─── Welcome tour (F3 of quilt-fase2-ux-empty-states + ──
+          ─── B of quilt-fase4-cross-device-tour) ────────────
           Mounts a portal-rendered modal the FIRST time a user
           opens Quilt. The dialog persists `quilt-welcome-seen`
-          to localStorage on close, so re-mounts after the initial
-          dismissal are a no-op. The `tourDismissed === null`
-          branch (pre-effect) does NOT render the dialog, which
-          avoids a flash of the tour on hard refreshes where the
-          user has already dismissed it. */}
+          to localStorage on close (fast cache) AND calls
+          `api.dismissTour('welcome')` (server source of truth),
+          so re-mounts after the initial dismissal are a no-op
+          on every device the user owns. The
+          `tourDismissed === null` branch (pre-effect) does NOT
+          render the dialog, which avoids a flash of the tour on
+          hard refreshes where the user has already dismissed it. */}
       {tourDismissed === false && (
         <WelcomeTour onClose={() => setTourDismissed(true)} />
       )}

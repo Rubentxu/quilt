@@ -13,4 +13,5 @@ pub mod query;
 pub mod search;
 pub mod settings;
 pub mod templates;
+pub mod tour_state;
 pub mod websocket;

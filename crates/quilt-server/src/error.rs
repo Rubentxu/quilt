@@ -25,6 +25,15 @@ pub enum AppError {
     #[error("Conflict: {0}")]
     Conflict(String),
 
+    /// 401 Unauthorized — the request could not be authenticated or
+    /// the auth context could not be derived (e.g. missing or
+    /// malformed `Authorization` header on a handler that needs the
+    /// user identity). The auth middleware normally catches this
+    /// earlier, so reaching this variant from a handler is a
+    /// programming error.
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
     #[error("Internal server error: {0}")]
     Internal(String),
 }
@@ -35,6 +44,7 @@ impl IntoResponse for AppError {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "NOT_FOUND", msg.clone()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg.clone()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg.clone()),
+            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", msg.clone()),
             AppError::Internal(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",

@@ -1,4 +1,4 @@
-// ─── WelcomeTour — first-run product tour (F3) ────────────────────
+// ─── WelcomeTour — first-run product tour (F3 + B) ─────────────────
 //
 // Modal that appears the first time a user lands on Quilt. Explains
 // the four key primitives in 4 cards:
@@ -8,20 +8,25 @@
 //   3. Slash command — `/` at the start of a block
 //   4. Properties — typed block properties
 //
-// The "seen" state is persisted to `STORAGE_KEYS.WELCOME_SEEN`
-// (`'quilt-welcome-seen'`). Once dismissed, the modal does not
-// re-appear unless the user manually clears the flag. Mounting the
-// component is a no-op when the flag is already set — `AppShell`
-// gates on it and never re-renders the dialog.
+// Dismissal state is synced across the user's devices via the
+// server (`POST /api/v1/user/tour-state/dismiss`). The localStorage
+// flag (`STORAGE_KEYS.WELCOME_SEEN`) is kept as a fast-render cache
+// so the dialog doesn't flash on cold mounts — but the server is
+// the source of truth (B of `quilt-fase4-cross-device-tour`).
 //
-// Spec: F3 of `quilt-fase2-ux-empty-states`. Single PR, no
-// chained work. Design follows DESIGN.md §9.10 / §15 (empty
-// state principles applied to a "what now?" first-run state).
+// `AppShell` decides when to mount this component based on the
+// combined localStorage + server state. Once mounted, the dialog
+// is in charge of writing the dismissal back to BOTH places.
+//
+// Spec: F3 of `quilt-fase2-ux-empty-states` (initial tour) +
+// B of `quilt-fase4-cross-device-tour` (cross-device sync).
+// Design follows DESIGN.md §9.10 / §15.
 
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { FileText, Clock, Terminal, Settings, X, Sparkles } from 'lucide-react'
+import { FileText, Clock, Terminal, Settings, X, Sparkles, Brain, Cpu } from 'lucide-react'
 import { STORAGE_KEYS } from '@features/sidebar/storage-keys'
+import { api } from '@core/api-client'
 
 interface WelcomeTourProps {
   /** Called once the user dismisses the tour. */
@@ -134,6 +139,21 @@ export function WelcomeTour({ onClose }: WelcomeTourProps) {
       // session — the user can re-clear by reloading without the
       // flag.
     }
+    // Fire-and-forget server sync. The localStorage write above is
+    // the fast cache that hides the dialog NOW; the server is the
+    // cross-device source of truth and can take a few ms without
+    // blocking the dismissal animation. Failures are swallowed —
+    // the user can still dismiss and re-dismiss; a failed POST
+    // just means the tour will appear on the next device until
+    // they dismiss it once there.
+    api
+      .dismissTour('welcome')
+      .catch((err) => {
+        // Don't crash the UI on a network blip. Log so devs can
+        // notice in the console.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to persist welcome tour dismissal:', err)
+      })
     onClose()
   }
 
@@ -171,7 +191,11 @@ export function WelcomeTour({ onClose }: WelcomeTourProps) {
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: '640px',
+          // F4 of `quilt-fase4-onboarding-advanced` — bumped from
+          // 640px to 760px so the 3-column grid fits comfortably on
+          // standard viewports (200px min card + 2×12px gap × 3 =
+          // ~636px of card real estate plus padding).
+          maxWidth: '760px',
           maxHeight: 'calc(100vh - var(--space-8))',
           overflow: 'auto',
           background: 'var(--color-surface-elevated)',
@@ -244,14 +268,20 @@ export function WelcomeTour({ onClose }: WelcomeTourProps) {
           className="type-body"
           style={{ margin: 0, color: 'var(--color-text-secondary)' }}
         >
-          Four things to know before you start writing.
+          {/* F1 of `quilt-fase4-onboarding-advanced` — copy updated
+              from "Four things…" to "Six things…" to match the new
+              card count. */}
+          Six things to know before you start writing.
         </p>
 
-        {/* Four feature cards */}
+        {/* Six feature cards — 3×2 grid. minmax(200px, 1fr) so a
+            760px-wide dialog fits three columns (3×200 + 2×12 = 624)
+            with room to spare. auto-fit still collapses to fewer
+            columns on narrow viewports. */}
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
             gap: 'var(--space-3)',
           }}
         >
@@ -274,6 +304,27 @@ export function WelcomeTour({ onClose }: WelcomeTourProps) {
             icon={<Settings size={16} aria-hidden="true" />}
             title="Properties"
             body="Right-click any block to add typed properties. Properties power Kanban views, filters and the graph."
+          />
+          {/* F1 of `quilt-fase4-onboarding-advanced` — Cognitive
+              card. Tells the user about the agent activity panel
+              hidden in the sidebar (ADR-0003). The Brain icon
+              pairs naturally with the existing "Bot" icon used
+              inside the panel itself. */}
+          <FeatureCard
+            icon={<Brain size={16} aria-hidden="true" />}
+            title="Cognitive"
+            body="See what your AI agents are doing — block authorship, last edits, and an agent activity timeline. Open the sidebar's Agent Activity section to audit agent-authored blocks."
+          />
+          {/* F1 of `quilt-fase4-onboarding-advanced` — MCP tools
+              card. Tells the user Quilt exposes itself to AI
+              agents via the Model Context Protocol (the standard
+              for tool use across Claude, GPT, Gemini, etc.). Cpu
+              icon chosen over Bot to disambiguate from the
+              Cognitive card. */}
+          <FeatureCard
+            icon={<Cpu size={16} aria-hidden="true" />}
+            title="MCP tools"
+            body="Quilt exposes itself to AI agents via the Model Context Protocol. Agents can list pages, read templates, search, and call sidebar tools. See docs/mcp/ for the full list."
           />
         </div>
 

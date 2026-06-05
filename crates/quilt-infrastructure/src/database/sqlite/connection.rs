@@ -380,5 +380,32 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Create tour_dismissals table (B of quilt-fase4-cross-device-tour).
+    // Keyed by the opaque `user_id` (V1: the api key from the
+    // Authorization header) and a short tour-name slug. The composite
+    // primary key is idempotent — dismissing the same tour twice
+    // updates the timestamp rather than creating a duplicate row.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS tour_dismissals (
+            user_id TEXT NOT NULL,
+            tour_name TEXT NOT NULL,
+            dismissed_at INTEGER NOT NULL DEFAULT (unixepoch('now')),
+            PRIMARY KEY (user_id, tour_name)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Index by user_id for the common "list my dismissed tours" query.
+    // The PK already covers the lookup (it starts with user_id), so
+    // the index is implicit; we still add it explicitly for the
+    // post-dismissal `WHERE user_id = ?` reads in case the optimizer
+    // ever changes its mind.
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_tour_dismissals_user ON tour_dismissals(user_id)")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }

@@ -432,10 +432,7 @@ mod tests {
     #[test]
     fn property_type_to_domain_string() {
         // "string" maps to Text
-        assert_eq!(
-            property_type_to_domain("string"),
-            Some(PropertyType::Text)
-        );
+        assert_eq!(property_type_to_domain("string"), Some(PropertyType::Text));
     }
 
     #[test]
@@ -445,18 +442,12 @@ mod tests {
             property_type_to_domain("integer"),
             Some(PropertyType::Number)
         );
-        assert_eq!(
-            property_type_to_domain("float"),
-            Some(PropertyType::Number)
-        );
+        assert_eq!(property_type_to_domain("float"), Some(PropertyType::Number));
     }
 
     #[test]
     fn property_type_to_domain_date() {
-        assert_eq!(
-            property_type_to_domain("date"),
-            Some(PropertyType::Date)
-        );
+        assert_eq!(property_type_to_domain("date"), Some(PropertyType::Date));
     }
 
     #[test]
@@ -469,10 +460,7 @@ mod tests {
 
     #[test]
     fn property_type_to_domain_ref() {
-        assert_eq!(
-            property_type_to_domain("ref"),
-            Some(PropertyType::Node)
-        );
+        assert_eq!(property_type_to_domain("ref"), Some(PropertyType::Node));
     }
 
     #[test]
@@ -534,8 +522,8 @@ mod tests {
 
     #[test]
     fn template_property_serializes_without_property_type_when_none() {
-        use serde_json;
         use quilt_domain::properties::types::PropertyType;
+        use serde_json;
 
         // TemplateProperty with property_type = None should NOT serialize property_type field
         let prop = TemplateProperty {
@@ -551,8 +539,8 @@ mod tests {
 
     #[test]
     fn template_property_serializes_property_type_when_some() {
-        use serde_json;
         use quilt_domain::properties::types::PropertyType;
+        use serde_json;
 
         let prop = TemplateProperty {
             key: "status".to_string(),

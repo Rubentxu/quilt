@@ -1830,6 +1830,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "parking_lot",
  "pest",
  "pest_derive",
  "proptest",

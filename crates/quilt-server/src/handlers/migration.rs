@@ -2,14 +2,8 @@
 //!
 //! Endpoints for importing Markdown files into Quilt.
 
-use axum::{
-    Json,
-    extract::Extension,
-    http::StatusCode,
-    Router,
-    routing::post,
-};
 use async_trait::async_trait;
+use axum::{Json, Router, extract::Extension, http::StatusCode, routing::post};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -38,7 +32,10 @@ impl PropertyRepository for EmptyPropertyRepo {
         Ok(None)
     }
 
-    async fn get_by_db_ident(&self, _ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+    async fn get_by_db_ident(
+        &self,
+        _ident: &str,
+    ) -> Result<Option<PropertyDefinition>, DomainError> {
         Ok(None)
     }
 
@@ -120,39 +117,41 @@ pub async fn migrate_md_import(
 ) -> Result<(StatusCode, Json<ImportMdResponse>), AppError> {
     // Validate path
     let path = PathBuf::from(&body.path);
-    
+
     if !path.exists() {
         return Err(AppError::BadRequest(format!(
             "Path does not exist: {}",
             body.path
         )));
     }
-    
+
     if !path.is_dir() {
         return Err(AppError::BadRequest(format!(
             "Path is not a directory: {}",
             body.path
         )));
     }
-    
+
     // Create repositories and migration engine
     let page_repo = SqlitePageRepository::new(state.pool.clone());
     let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let property_repo = EmptyPropertyRepo::default();
-    let engine = MigrationEngine::new(Arc::new(page_repo), Arc::new(block_repo), Arc::new(property_repo));
-    
+    let engine = MigrationEngine::new(
+        Arc::new(page_repo),
+        Arc::new(block_repo),
+        Arc::new(property_repo),
+    );
+
     // Import all files from directory
     let results = engine
         .import_directory(&path)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
-    
+
     // Convert results to DTOs
-    let result_dtos: Vec<ImportResultDto> = results
-        .into_iter()
-        .map(ImportResultDto::from)
-        .collect();
-    
+    let result_dtos: Vec<ImportResultDto> =
+        results.into_iter().map(ImportResultDto::from).collect();
+
     // Calculate totals
     let total_pages_created: usize = result_dtos.iter().map(|r| r.pages_created).sum();
     let total_blocks_created: usize = result_dtos.iter().map(|r| r.blocks_created).sum();
@@ -160,7 +159,7 @@ pub async fn migrate_md_import(
         .iter()
         .flat_map(|r| r.warnings.clone())
         .collect();
-    
+
     Ok((
         StatusCode::OK,
         Json(ImportMdResponse {
