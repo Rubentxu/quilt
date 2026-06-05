@@ -147,3 +147,118 @@ describe('WelcomeTour — F3 of quilt-fase2-ux-empty-states', () => {
     setItemSpy.mockRestore()
   })
 })
+
+// ─── F2 of quilt-fase3-backlog-small-fixes — focus trap ───────────
+//
+// The dialog has two focusable elements (close button, "Got it"
+// CTA). The 4 feature cards are divs, not focusable. The focus
+// trap keeps keyboard users inside the dialog by wrapping Tab
+// from the last element back to the first, and Shift+Tab from
+// the first back to the last.
+//
+// We test the trap by dispatching keyboard events on the focus
+// target we expect to wrap from. The component's handler then
+// moves `document.activeElement` to the wrapped target.
+
+describe('WelcomeTour — F2 (focus trap)', () => {
+  it('Tab on the last focusable element (Got it) wraps to the first (close button)', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<WelcomeTour onClose={onClose} />)
+
+    // Move focus to "Got it" — the last focusable element. We
+    // .focus() it directly; the component auto-focuses the close
+    // button on mount, and a programmatic focus is what a Tab
+    // keypress would have landed us on in a real browser.
+    const gotIt = screen.getByTestId('welcome-tour-got-it')
+    gotIt.focus()
+    expect(document.activeElement).toBe(gotIt)
+
+    // Press Tab — without the trap, focus would move to
+    // document.body or to a sibling of the dialog. With the
+    // trap, it must wrap to the close button.
+    await user.keyboard('{Tab}')
+
+    const closeBtn = screen.getByTestId('welcome-tour-close')
+    expect(document.activeElement).toBe(closeBtn)
+    // The trap did NOT dismiss the dialog.
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('Shift+Tab on the first focusable element (close button) wraps to the last (Got it)', async () => {
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<WelcomeTour onClose={onClose} />)
+
+    // The component auto-focuses the close button on mount.
+    const closeBtn = screen.getByTestId('welcome-tour-close')
+    expect(document.activeElement).toBe(closeBtn)
+
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+
+    const gotIt = screen.getByTestId('welcome-tour-got-it')
+    expect(document.activeElement).toBe(gotIt)
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('Tab from outside the dialog pulls focus back inside the dialog', async () => {
+    // Simulate the edge case: focus has somehow escaped the
+    // dialog (e.g. via a programmatic .focus() to a sibling
+    // element). The next Tab should pull focus back into the
+    // dialog rather than letting the user tab into the
+    // underlying app.
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<WelcomeTour onClose={onClose} />)
+
+    // Create a focusable sibling OUTSIDE the dialog and move
+    // focus there. This simulates a real-world bug where the
+    // initial render race let focus escape.
+    const outsideButton = document.createElement('button')
+    outsideButton.textContent = 'Outside the dialog'
+    outsideButton.setAttribute('data-testid', 'outside-button')
+    document.body.appendChild(outsideButton)
+    outsideButton.focus()
+    expect(document.activeElement).toBe(outsideButton)
+
+    // Verify it really is outside the dialog.
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.contains(outsideButton)).toBe(false)
+
+    await user.keyboard('{Tab}')
+
+    // Focus must now be on a focusable element INSIDE the dialog.
+    expect(dialog.contains(document.activeElement)).toBe(true)
+    expect(onClose).not.toHaveBeenCalled()
+
+    // Cleanup
+    document.body.removeChild(outsideButton)
+  })
+
+  it('restores focus to the previously-focused element on unmount', async () => {
+    // Set up an element outside the dialog to be the focus
+    // "owner" — the kebab menu in the top bar, in real usage.
+    const trigger = document.createElement('button')
+    trigger.textContent = 'Kebab menu'
+    trigger.setAttribute('data-testid', 'external-trigger')
+    document.body.appendChild(trigger)
+    trigger.focus()
+    expect(document.activeElement).toBe(trigger)
+
+    const onClose = vi.fn()
+    const { unmount } = render(<WelcomeTour onClose={onClose} />)
+
+    // The component auto-focuses the close button on mount.
+    const closeBtn = screen.getByTestId('welcome-tour-close')
+    expect(document.activeElement).toBe(closeBtn)
+
+    // Dismount the dialog (e.g. user clicks Got it).
+    unmount()
+
+    // Focus must be restored to the original trigger.
+    expect(document.activeElement).toBe(trigger)
+
+    // Cleanup
+    document.body.removeChild(trigger)
+  })
+})

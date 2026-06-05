@@ -338,6 +338,84 @@ export function TopbarMenu({ onRefresh, onToggleSidebar, onOpenHelp }: TopbarMen
   )
 }
 
+/**
+ * Top-bar user avatar. F3 of quilt-fase3-backlog-small-fixes.
+ *
+ * Replaces the prior static `<div>A</div>` with a real `<button>`
+ * that:
+ *   - has an `aria-label` + `title` ("User menu") for a11y
+ *   - shows the user's initial letter (from `quilt:user-name`
+ *     or the legacy `quilt:author` localStorage key, with "U" as
+ *     the fallback)
+ *   - calls `onClick` when activated — the parent decides what
+ *     that means (V1: navigate to /settings).
+ *
+ * Exported so the F3 tests can mount it without rendering the
+ * full AppShell (the shell pulls in WASM, SSE, tabs, the whole
+ * kitchen sink).
+ */
+export interface UserAvatarProps {
+  onClick: () => void
+}
+
+export function UserAvatar({ onClick }: UserAvatarProps) {
+  // "U" is the safe fallback — the first letter of "User". It
+  // matches the existing design language (the sidebar's "Q" mark
+  // for Quilt) and reads as a placeholder when the user has
+  // not set a name.
+  const [initial, setInitial] = useState('U')
+
+  useEffect(() => {
+    try {
+      const name =
+        localStorage.getItem('quilt:user-name') ||
+        localStorage.getItem('quilt:author')
+      if (name && name.trim()) {
+        const trimmed = name.trim()
+        // Take the first non-whitespace character. `charAt` is
+        // safe for surrogate pairs; the trim above guarantees we
+        // don't surface a leading space.
+        const first = trimmed.charAt(0).toUpperCase()
+        setInitial(first || 'U')
+      }
+    } catch {
+      // localStorage unavailable (private mode / quota) — leave
+      // the placeholder "U" in place. The user can still click
+      // the avatar; only the letter is wrong.
+    }
+  }, [])
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label="User menu"
+      title="User menu"
+      data-testid="user-avatar"
+      className="topbar-action"
+      style={{
+        width: '32px',
+        height: '32px',
+        borderRadius: '999px',
+        background: 'linear-gradient(180deg, #4F7BFF 0%, #355CFF 100%)',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '14px',
+        fontWeight: 700,
+        boxShadow: '0 6px 18px rgba(79, 123, 255, 0.16)',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        fontFamily: 'inherit',
+      }}
+    >
+      {initial}
+    </button>
+  )
+}
+
 export function AppShell() {
   // Surface any unexpectedly slow mount of the app shell itself.
   usePerformance('AppShell mount', 32)
@@ -696,25 +774,13 @@ export function AppShell() {
           {/* Connection status indicator */}
           <ConnectionStatus />
 
-          {/* User avatar */}
-          <div
-            aria-label="User avatar"
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '999px',
-              background: 'linear-gradient(180deg, #4F7BFF 0%, #355CFF 100%)',
-              color: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '14px',
-              fontWeight: 700,
-              boxShadow: '0 6px 18px rgba(79, 123, 255, 0.16)',
-            }}
-          >
-            A
-          </div>
+          {/* User avatar — F3 of quilt-fase3-backlog-small-fixes.
+              Previously a non-interactive <div>A</div>; now a
+              real <button> with a11y labels and an onClick that
+              navigates to /settings. The full user menu
+              (dropdown with profile / logout / theme) is a
+              follow-up. */}
+          <UserAvatar onClick={() => navigate({ to: '/settings' })} />
         </header>
 
         {/* ─── Tabs ─── */}

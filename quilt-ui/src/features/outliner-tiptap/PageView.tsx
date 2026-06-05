@@ -78,12 +78,29 @@ function inferDefaultCardForTemplate(shortName: string): BlockCard {
 // ──── JournalDateHeader (DESIGN.md §9.4) ────────────────────────────
 // Big date (display-sm: 36px bold), calendar icon, horizontal line
 
-function JournalDateHeader({ pageName, format }: { pageName: string; format?: string }) {
+export function JournalDateHeader({ pageName, format }: { pageName: string; format?: string }) {
   const navigate = useNavigate()
   const dateSegments = pageName.split('/').pop()
   const dateStr = dateSegments ?? pageName
 
   let displayDate = dateStr
+
+  // F1 of quilt-fase3-backlog-small-fixes — the "Hoy" (today)
+  // button was a dead button with no onClick handler. It now
+  // navigates to today's journal using the same YYYY-MM-DD route
+  // format that the existing `executeGoTo` shortcut uses
+  // (see AppShell.tsx) and that the `/journal/$date` route
+  // contract accepts. We intentionally do NOT use the
+  // `settings.journalFormat` here — that setting controls the
+  // *display* format of journal headers, not the URL parameter.
+  function navigateToToday() {
+    const today = new Date()
+    const y = today.getFullYear()
+    const m = String(today.getMonth() + 1).padStart(2, '0')
+    const d = String(today.getDate()).padStart(2, '0')
+    const date = `${y}-${m}-${d}`
+    navigate({ to: '/journal/$date', params: { date } })
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     try {
       const d = new Date(dateStr + 'T00:00:00')
@@ -150,6 +167,8 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
           type="button"
           aria-label="Today"
           title="Today"
+          onClick={navigateToToday}
+          data-testid="nav-today"
           className="type-body"
           style={{
             height: '36px',

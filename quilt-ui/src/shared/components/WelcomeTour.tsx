@@ -47,18 +47,74 @@ export function WelcomeTour({ onClose }: WelcomeTourProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
 
+  // Selector for focusable elements inside the dialog. Limited
+  // to elements the WelcomeTour actually renders: buttons (the
+  // close X and the "Got it" CTA). The 4 feature cards are
+  // non-interactive divs and must NOT be in the cycle.
+  const FOCUSABLE_SELECTOR =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
   useEffect(() => {
+    // F2 of quilt-fase3-backlog-small-fixes — focus trap. Save
+    // the element that had focus before the dialog opened so we
+    // can restore it on unmount. In real usage this is the
+    // kebab-menu button in the top bar; in tests it's whatever
+    // the test had focused.
+    const previouslyFocusedElement = document.activeElement as HTMLElement | null
+
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault()
         handleClose()
+        return
+      }
+
+      // Focus trap: keep Tab / Shift+Tab inside the dialog.
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+        )
+        if (focusable.length === 0) return
+
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        const active = document.activeElement as HTMLElement | null
+        const insideDialog = active !== null && dialogRef.current.contains(active)
+
+        if (e.shiftKey) {
+          // Shift+Tab: if we're on the first element OR focus
+          // has somehow escaped, wrap to the last.
+          if (!insideDialog || active === first) {
+            e.preventDefault()
+            last.focus()
+          }
+        } else {
+          // Tab: if we're on the last element OR focus has
+          // somehow escaped, wrap to the first.
+          if (!insideDialog || active === last) {
+            e.preventDefault()
+            first.focus()
+          }
+        }
       }
     }
     document.addEventListener('keydown', handleKey)
     // Auto-focus the close button on mount so keyboard users can
     // dismiss the dialog without tabbing through the cards.
     closeButtonRef.current?.focus()
-    return () => document.removeEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('keydown', handleKey)
+      // Restore focus to the element that had it before the
+      // dialog opened. Falls through silently if the original
+      // element is gone (e.g. unmounted during the same tick).
+      if (
+        previouslyFocusedElement &&
+        typeof previouslyFocusedElement.focus === 'function' &&
+        document.contains(previouslyFocusedElement)
+      ) {
+        previouslyFocusedElement.focus()
+      }
+    }
     // handleClose is stable (it depends on `onClose` and the
     // localStorage shim, both of which are stable for the
     // lifetime of the dialog). Including it would re-install the

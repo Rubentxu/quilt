@@ -214,6 +214,71 @@ describe('Sidebar — F1 (Páginas: cap at 5 + "Ver todas" link)', () => {
     const labels = items.map(li => li.textContent?.trim() ?? '')
     expect(labels).toEqual(['alpha', 'bravo', 'charlie', 'delta', 'echo'])
   })
+
+  // F4 of quilt-fase3-backlog-small-fixes — regression test.
+  // The Páginas section must filter out journal pages even when
+  // they outnumber non-journal pages in the response. (PR 3 of
+  // `quilt-fase2-ux-empty-states` said yes, the filter was in
+  // place; this test pins that down so a future refactor can't
+  // silently break it.)
+  it('excludes journal pages from the Páginas list even when they dominate the response', async () => {
+    const journalPage = (id: string, name: string, daysAgo: number) => ({
+      ...makePage(id, name, daysAgo),
+      journal: true,
+    })
+
+    // We need > 5 regular pages so the "Ver todas" link
+    // surfaces AND so the journals (7 of them) are also the
+    // most-recent entries that would otherwise be the visible
+    // top-5 — the most aggressive filter failure mode.
+    const pages = [
+      // 7 journal pages — these must all be filtered out.
+      // Sorted newest-first so they would dominate the
+      // `createdAt` desc sort if the filter were broken.
+      journalPage('j1', '2026-06-05', 0),
+      journalPage('j2', '2026-06-04', 1),
+      journalPage('j3', '2026-06-03', 2),
+      journalPage('j4', '2026-06-02', 3),
+      journalPage('j5', '2026-06-01', 4),
+      journalPage('j6', '2026-05-31', 5),
+      journalPage('j7', '2026-05-30', 6),
+      // 7 regular pages — these are the only ones that should
+      // appear in the Páginas list (capped at the 5 most
+      // recent by the cap-at-5 logic).
+      makePage('r1', 'alpha', 7),
+      makePage('r2', 'bravo', 8),
+      makePage('r3', 'charlie', 9),
+      makePage('r4', 'delta', 10),
+      makePage('r5', 'echo', 11),
+      makePage('r6', 'foxtrot', 12),
+      makePage('r7', 'golf', 13),
+    ]
+    await renderSidebarWith(pages)
+
+    // The 5 most-recent regular pages must be in the DOM.
+    expect(await screen.findByText('alpha')).toBeInTheDocument()
+    expect(screen.getByText('bravo')).toBeInTheDocument()
+    expect(screen.getByText('charlie')).toBeInTheDocument()
+    expect(screen.getByText('delta')).toBeInTheDocument()
+    expect(screen.getByText('echo')).toBeInTheDocument()
+
+    // The 2 oldest regular pages are hidden by the cap-at-5,
+    // not by the journal filter — confirm.
+    expect(screen.queryByText('foxtrot')).not.toBeInTheDocument()
+    expect(screen.queryByText('golf')).not.toBeInTheDocument()
+
+    // None of the 7 journal pages must leak into the Páginas
+    // list. We assert by date string because that's what the
+    // journal page names look like in this test fixture.
+    for (const name of ['2026-06-05', '2026-06-04', '2026-06-03', '2026-06-02', '2026-06-01', '2026-05-31', '2026-05-30']) {
+      expect(screen.queryByText(name)).not.toBeInTheDocument()
+    }
+
+    // The "Ver todas (N)" link must show 7 (the regular page
+    // count), not 14 (the total response count).
+    const seeAll = screen.getByTestId('pages-see-all')
+    expect(seeAll).toHaveTextContent(/Ver todas \(7\)/)
+  })
 })
 
 // ── F2 tests ────────────────────────────────────────────────────────
