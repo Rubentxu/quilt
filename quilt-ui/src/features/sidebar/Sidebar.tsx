@@ -44,6 +44,7 @@ import { SidebarItem } from './sections/SidebarItem'
 import { SidebarSkeleton } from './sections/SidebarSkeleton'
 import { STORAGE_KEYS } from './storage-keys'
 import { RecentsSection } from './sections/RecentsSection'
+import { TemplateSection } from './sections/TemplateSection'
 export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
   const [pages, setPages] = useState<Page[]>([])
   const [loading, setLoading] = useState(true)
@@ -424,6 +425,9 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
             </ul>
           )}
         </section>
+
+        {/* Templates — sidebar-template-ux (PR 3) */}
+        <TemplateSection collapsed={collapsed} />
 
         {/* Recents — sidebar-recents (PR 2) */}
         <RecentsSection collapsed={collapsed} />
