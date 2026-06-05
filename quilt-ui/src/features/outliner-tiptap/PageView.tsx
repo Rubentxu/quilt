@@ -148,6 +148,8 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
 
         <button
           type="button"
+          aria-label="Today"
+          title="Today"
           className="type-body"
           style={{
             height: '36px',
@@ -209,6 +211,7 @@ function JournalDateHeader({ pageName, format }: { pageName: string; format?: st
             type="button"
             className="ghost-icon-button"
             aria-label="More day actions"
+            title="More day actions"
             style={{
               width: '34px',
               height: '34px',

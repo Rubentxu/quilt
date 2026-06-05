@@ -16,6 +16,13 @@ export const STORAGE_KEYS = {
   FAVORITES: 'quilt-favorites',
   /** Most recently visited pages, capped at 5, newest first. */
   RECENTS: 'quilt-recents',
+  /**
+   * "1" when the user has dismissed the first-run welcome tour. The
+   * tour explains the four key Quilt primitives (Plantillas, Recents,
+   * Slash command, Properties) and only re-appears if the user
+   * clears this flag. Quilt fase 2 empty-states fix.
+   */
+  WELCOME_SEEN: 'quilt-welcome-seen',
 } as const
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]

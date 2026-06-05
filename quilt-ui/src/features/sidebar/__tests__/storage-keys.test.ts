@@ -21,17 +21,30 @@ describe('STORAGE_KEYS', () => {
     expect(STORAGE_KEYS.RECENTS).toBe('quilt-recents')
   })
 
+  it('exposes WELCOME_SEEN with `quilt-welcome-seen`', () => {
+    // Tracks dismissal of the first-run welcome tour
+    // (F3 of quilt-fase2-ux-empty-states). The literal value
+    // is part of the localStorage wire contract — once a user
+    // dismisses the tour, they should not see it again even
+    // after a refactor that renames the constant.
+    expect(STORAGE_KEYS.WELCOME_SEEN).toBe('quilt-welcome-seen')
+  })
+
   it('is frozen / readonly via `as const` (TypeScript enforces this at compile time)', () => {
     // Runtime check that the values are strings (the `as const` type
     // assertion means the keys are string literal types, not widened
     // to plain `string`).
     expect(typeof STORAGE_KEYS.FAVORITES).toBe('string')
     expect(typeof STORAGE_KEYS.RECENTS).toBe('string')
+    expect(typeof STORAGE_KEYS.WELCOME_SEEN).toBe('string')
   })
 
-  it('keeps the FAVORITES and RECENTS values distinct', () => {
-    // Sanity guard: a copy-paste typo would collapse both into the
-    // same key and break the sidebar.
+  it('keeps the FAVORITES, RECENTS and WELCOME_SEEN values distinct', () => {
+    // Sanity guard: a copy-paste typo would collapse multiple keys
+    // into the same value and break the corresponding feature
+    // (sidebar favorites, recents, or welcome-tour dismissal).
     expect(STORAGE_KEYS.FAVORITES).not.toBe(STORAGE_KEYS.RECENTS)
+    expect(STORAGE_KEYS.FAVORITES).not.toBe(STORAGE_KEYS.WELCOME_SEEN)
+    expect(STORAGE_KEYS.RECENTS).not.toBe(STORAGE_KEYS.WELCOME_SEEN)
   })
 })

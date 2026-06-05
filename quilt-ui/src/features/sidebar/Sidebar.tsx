@@ -342,60 +342,82 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
           </div>
         </section>
 
-        {/* Favorites — DESIGN.md §4.1 */}
-        {!collapsed && favoritePages.length > 0 && (
+        {/* Favorites — DESIGN.md §4.1, F2 of quilt-fase2-ux-empty-states */}
+        {!collapsed && (
           <section>
             <GroupHeader label="Favoritos" />
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '2px',
-              }}
-            >
-              {favoritePages.map((page) => (
-                <li key={page.id} style={{ position: 'relative' }}>
-                  <SidebarItem
-                    icon={<Star size={18} style={{ color: 'var(--color-warning)' }} fill="currentColor" />}
-                    label={page.title || page.name}
-                    href={`/page/${encodeURIComponent(page.name)}`}
-                    collapsed={collapsed}
-                  />
-                  <button
-                    onClick={() => toggleFavorite(page.name)}
-                    aria-label={`Remove ${page.name} from favorites`}
-                    title="Remove from favorites"
-                    style={{
-                      position: 'absolute',
-                      right: 'var(--space-2)',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      background: 'transparent',
-                      border: 'none',
-                      cursor: 'pointer',
-                      color: 'var(--color-text-disabled)',
-                      padding: '2px 4px',
-                      borderRadius: 'var(--radius-sm)',
-                      fontSize: '11px',
-                      opacity: 0,
-                      transition: 'opacity var(--motion-fast) var(--ease-standard)',
-                    }}
-                    className="favorite-remove-btn"
-                    onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.opacity = '0' }}
-                  >
-                    <X size={12} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {favoritePages.length === 0 ? (
+              // F2: previously the section was HIDDEN when empty,
+              // leaving the user with no signal that favorites even
+              // exist. Now we show a friendly message explaining how
+              // to add one (star button on any page header).
+              <p
+                data-testid="favorites-empty"
+                style={{
+                  padding: '0 var(--space-2)',
+                  fontSize: '12px',
+                  color: 'var(--color-text-disabled)',
+                  fontStyle: 'italic',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                }}
+              >
+                <Star size={14} style={{ flexShrink: 0 }} aria-hidden="true" />
+                <span>Click the star on any page to favorite it</span>
+              </p>
+            ) : (
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '2px',
+                }}
+              >
+                {favoritePages.map((page) => (
+                  <li key={page.id} style={{ position: 'relative' }}>
+                    <SidebarItem
+                      icon={<Star size={18} style={{ color: 'var(--color-warning)' }} fill="currentColor" />}
+                      label={page.title || page.name}
+                      href={`/page/${encodeURIComponent(page.name)}`}
+                      collapsed={collapsed}
+                    />
+                    <button
+                      onClick={() => toggleFavorite(page.name)}
+                      aria-label={`Remove ${page.name} from favorites`}
+                      title="Remove from favorites"
+                      style={{
+                        position: 'absolute',
+                        right: 'var(--space-2)',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--color-text-disabled)',
+                        padding: '2px 4px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontSize: '11px',
+                        opacity: 0,
+                        transition: 'opacity var(--motion-fast) var(--ease-standard)',
+                      }}
+                      className="favorite-remove-btn"
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = '0' }}
+                    >
+                      <X size={12} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
         )}
 
-        {/* Pages */}
+        {/* Pages — F1 of quilt-fase2-ux-empty-states */}
         <section>
           <GroupHeader label="Páginas" collapsed={collapsed} />
 
@@ -404,38 +426,85 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
           ) : regularPages.length === 0 ? (
             !collapsed && (
               <p
+                data-testid="pages-empty"
                 style={{
                   padding: '0 var(--space-2)',
                   fontSize: '12px',
                   color: 'var(--color-text-disabled)',
                   fontStyle: 'italic',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--space-1)',
                 }}
               >
-                No hay páginas todavía
+                <span>No hay páginas todavía</span>
+                <Link
+                  to="/pages"
+                  data-testid="pages-empty-see-all"
+                  style={{
+                    fontSize: '12px',
+                    color: 'var(--color-primary)',
+                    textDecoration: 'none',
+                  }}
+                  className="sidebar-item"
+                >
+                  Ver todas
+                </Link>
               </p>
             )
           ) : (
-            <ul
-              style={{
-                listStyle: 'none',
-                margin: 0,
-                padding: 0,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: collapsed ? 'var(--space-1)' : '2px',
-              }}
-            >
-              {regularPages.map((page) => (
-                <li key={page.id}>
-                  <SidebarItem
-                    icon={<FileText size={18} />}
-                    label={page.title || page.name}
-                    href={`/page/${encodeURIComponent(page.name)}`}
-                    collapsed={collapsed}
-                  />
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul
+                style={{
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: collapsed ? 'var(--space-1)' : '2px',
+                }}
+              >
+                {/* F1: when there are more than 5 pages, only show
+                    the 5 most recent ones and add a "Ver todas"
+                    link at the bottom. Recent = newest by
+                    `createdAt` desc. Below the threshold we just
+                    show them all — the link would be noise. */}
+                {regularPages
+                  .slice()
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .slice(0, regularPages.length > 5 ? 5 : regularPages.length)
+                  .map((page) => (
+                    <li key={page.id}>
+                      <SidebarItem
+                        icon={<FileText size={18} />}
+                        label={page.title || page.name}
+                        href={`/page/${encodeURIComponent(page.name)}`}
+                        collapsed={collapsed}
+                      />
+                    </li>
+                  ))}
+              </ul>
+              {regularPages.length > 5 && !collapsed && (
+                <Link
+                  to="/pages"
+                  data-testid="pages-see-all"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-1)',
+                    marginTop: 'var(--space-1)',
+                    padding: '0 var(--space-2)',
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: 'var(--color-primary)',
+                    textDecoration: 'none',
+                  }}
+                  className="sidebar-item"
+                >
+                  Ver todas ({regularPages.length})
+                </Link>
+              )}
+            </>
           )}
         </section>
 

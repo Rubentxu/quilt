@@ -6,10 +6,12 @@ import { Sidebar } from '@features/sidebar/Sidebar'
 import { BacklinksPanel } from '@features/references/BacklinksPanel'
 import { TabsBar } from './TabsBar'
 import { FloatingHelpButton } from './FloatingHelpButton'
+import { WelcomeTour } from './WelcomeTour'
 import { useTabs } from '@shared/contexts/TabsContext'
 import { useResponsive } from '@shared/hooks/useResponsive'
 import { useConnection } from '@shared/contexts/ConnectionContext'
 import { usePerformance } from '@shared/hooks/usePerformance'
+import { STORAGE_KEYS } from '@features/sidebar/storage-keys'
 
 // SearchModal is only mounted when the user opens the command palette
 // (Ctrl+K). Keeping it out of the initial bundle saves ~3 KB and the
@@ -351,10 +353,29 @@ export function AppShell() {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [helpExpanded, setHelpExpanded] = useState(false)
+  // F3 of quilt-fase2-ux-empty-states — first-run welcome tour.
+  // `null` = "haven't checked yet" (avoids a flash of the dialog
+  // during hydration). After the effect runs, the value is `true`
+  // when the user has already dismissed the tour and `false`
+  // otherwise. The flag itself is read lazily because
+  // `localStorage` is not available during SSR-style module
+  // evaluation.
+  const [tourDismissed, setTourDismissed] = useState<boolean | null>(null)
   const { isMobile, isTablet } = useResponsive()
   const { tabs, activeTabId, closeTab, openTab, switchTab } = useTabs()
   const navigate = useNavigate()
   const { leaderKey } = useGlobalShortcuts()
+
+  useEffect(() => {
+    try {
+      setTourDismissed(localStorage.getItem(STORAGE_KEYS.WELCOME_SEEN) === '1')
+    } catch {
+      // localStorage unavailable (private mode / quota) — treat as
+      // "not yet seen" so the user at least gets the tour once
+      // for this session. Subsequent reloads will retry.
+      setTourDismissed(false)
+    }
+  }, [])
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -865,6 +886,18 @@ export function AppShell() {
           </div>
         }
       />
+
+      {/* ─── Welcome tour (F3 of quilt-fase2-ux-empty-states) ───
+          Mounts a portal-rendered modal the FIRST time a user
+          opens Quilt. The dialog persists `quilt-welcome-seen`
+          to localStorage on close, so re-mounts after the initial
+          dismissal are a no-op. The `tourDismissed === null`
+          branch (pre-effect) does NOT render the dialog, which
+          avoids a flash of the tour on hard refreshes where the
+          user has already dismissed it. */}
+      {tourDismissed === false && (
+        <WelcomeTour onClose={() => setTourDismissed(true)} />
+      )}
     </div>
   )
 }
