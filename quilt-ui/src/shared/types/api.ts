@@ -66,6 +66,24 @@ export interface Page {
   createdAt: string;
 }
 
+// ──── Sidebar Recents ─────────────────────────────
+
+/**
+ * One entry in the recent-pages sidebar list (PR 2 of
+ * `quilt-fase1-sidebar-mcp-templates`). Tracked client-side and
+ * persisted to `localStorage` under `STORAGE_KEYS.RECENTS`.
+ *
+ * - `name` is the canonical page name (case-preserving).
+ * - `url` is the route (e.g. `/page/foo`) — captured at visit time.
+ * - `visitedAt` is a Unix timestamp in milliseconds, refreshed on
+ *   every re-visit (move-to-top).
+ */
+export interface RecentPage {
+  name: string;
+  url: string;
+  visitedAt: number;
+}
+
 export interface CreatePageRequest {
   name: string;
   title?: string;
