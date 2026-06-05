@@ -6,11 +6,10 @@ import { api } from '@core/api-client'
 import type { Page } from '@shared/types/api'
 import { AgentActivityPanel } from '@features/cognitive/AgentActivityPanel'
 
-const FAVORITES_KEY = 'quilt-favorites'
 
 function readFavorites(): string[] {
   try {
-    const raw = localStorage.getItem(FAVORITES_KEY)
+    const raw = localStorage.getItem(STORAGE_KEYS.FAVORITES)
     if (!raw) return []
     const parsed = JSON.parse(raw)
     return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
@@ -39,119 +38,11 @@ function formatToday(): { url: string; label: string } {
   return { url, label }
 }
 
-function SidebarSkeleton() {
-  return (
-    <div style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          style={{
-            height: '16px',
-            width: `${60 + Math.random() * 30}%`,
-            background: 'var(--color-surface-subtle)',
-            borderRadius: 'var(--radius-sm)',
-            animation: 'pulse 1.5s ease-in-out infinite',
-          }}
-        />
-      ))}
-    </div>
-  )
-}
 
-// ─── SidebarItem ─────────────────────────────────────────────
-// States per DESIGN.md §9.1:
-// Default: text-secondary, no background
-// Hover: bg-surface-subtle
-// Active: bg-primary-container, text-primary, **left border** (NOT color-only)
-// Focus: ring-primary
-// §9.1 explicitly requires active state to be evident WITHOUT color alone.
-
-interface SidebarItemProps {
-  icon: React.ReactNode
-  label: string
-  href: string
-  active?: boolean
-  collapsed?: boolean
-  dataTestId?: string
-}
-
-function SidebarItem({ icon, label, href, active, collapsed, dataTestId }: SidebarItemProps) {
-  // Layout note: the left border is rendered as a 3px-wide absolutely-positioned
-  // element so it doesn't shift the rest of the row's padding when active.
-  return (
-    <Link
-      to={href as any}
-      title={collapsed ? label : undefined}
-      data-testid={dataTestId}
-      data-active={active ? 'true' : undefined}
-      aria-current={active ? 'page' : undefined}
-      style={{
-        position: 'relative',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--space-2)',
-        padding: '10px var(--space-3)',
-        paddingLeft: collapsed ? 'var(--space-2)' : 'calc(var(--space-2) + 3px)',
-        borderRadius: '12px',
-        textDecoration: 'none',
-        fontSize: '13px',
-        fontWeight: active ? 600 : 400,
-        color: active ? 'var(--color-primary)' : 'var(--color-text-secondary)',
-        background: active ? 'var(--color-primary-container)' : 'transparent',
-        minHeight: '40px',
-        transition: 'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
-        overflow: 'hidden',
-        whiteSpace: 'nowrap',
-        textOverflow: 'ellipsis',
-      }}
-      className="sidebar-item"
-    >
-      {/* Active indicator — visible border on the left edge (§9.1: must not depend on color only) */}
-      {active && (
-        <span
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: '4px',
-            bottom: '4px',
-            width: '3px',
-            borderRadius: 'var(--radius-pill)',
-            background: 'var(--color-primary)',
-          }}
-        />
-      )}
-      <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-        {icon}
-      </span>
-      {!collapsed && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>}
-    </Link>
-  )
-}
-
-// ─── Group header ─────────────────────────────────────────────
-
-function GroupHeader({ label, collapsed }: { label: string; collapsed?: boolean }) {
-  if (collapsed) return null
-  return (
-    <h3
-      style={{
-        fontSize: '11px',
-        fontWeight: 600,
-        textTransform: 'uppercase' as const,
-        letterSpacing: '0.05em',
-        color: 'var(--color-text-muted)',
-        padding: '0 var(--space-3)',
-        marginBottom: 'var(--space-2)',
-      }}
-    >
-      {label}
-    </h3>
-  )
-}
-
-// ─── Sidebar ──────────────────────────────────────────────────
-
+import { GroupHeader } from './sections/GroupHeader'
+import { SidebarItem } from './sections/SidebarItem'
+import { SidebarSkeleton } from './sections/SidebarSkeleton'
+import { STORAGE_KEYS } from './storage-keys'
 export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
   const [pages, setPages] = useState<Page[]>([])
   const [loading, setLoading] = useState(true)
@@ -168,7 +59,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
       const next = prev.includes(name)
         ? prev.filter((n) => n !== name)
         : [...prev, name]
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next))
+      localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(next))
       return next
     })
   }
