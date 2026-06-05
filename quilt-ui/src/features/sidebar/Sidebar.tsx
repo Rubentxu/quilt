@@ -43,6 +43,7 @@ import { GroupHeader } from './sections/GroupHeader'
 import { SidebarItem } from './sections/SidebarItem'
 import { SidebarSkeleton } from './sections/SidebarSkeleton'
 import { STORAGE_KEYS } from './storage-keys'
+import { RecentsSection } from './sections/RecentsSection'
 export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
   const [pages, setPages] = useState<Page[]>([])
   const [loading, setLoading] = useState(true)
@@ -424,26 +425,8 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
           )}
         </section>
 
-        {/* Recents placeholder */}
-        {!collapsed && (
-          <section>
-            <GroupHeader label="Recientes" />
-            <div
-              style={{
-                padding: '0 var(--space-2)',
-                fontSize: '12px',
-                color: 'var(--color-text-disabled)',
-                fontStyle: 'italic',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--space-2)',
-              }}
-            >
-              <Clock size={14} />
-              <span>Las páginas recientes aparecerán aquí</span>
-            </div>
-          </section>
-        )}
+        {/* Recents — sidebar-recents (PR 2) */}
+        <RecentsSection collapsed={collapsed} />
 
         {/* ADR-0003 — Agent Activity (cognitive feature, opt-in view) */}
         {!collapsed && showAgentActivity && (
