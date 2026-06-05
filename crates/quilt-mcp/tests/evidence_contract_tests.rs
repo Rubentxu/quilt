@@ -11,10 +11,13 @@
 //!    `_meta.evidence` populated** — same pattern.
 //! 4. **Error responses carry `is_error: true` in evidence.**
 //!
-//! The test iterates all 17 live tools via the server's `ListTools`
-//! and `ListResources` (per design auto-grill #4: 17 tools).
-//! The spec's aspirational fallback tier for `settings_*` and
-//! `quilt_*_cognitive` is documented but not exercised.
+//! The test iterates all 20 live tools via the server's `ListTools`
+//! and `ListResources` (per design auto-grill #4: contract is exercised
+//! for every registered tool in the focused subset used by this test).
+//! The full server in `src/server.rs` registers 22 tools (adds
+//! SystemToolHandler on top of this subset). The spec's aspirational
+//! fallback tier for `settings_*` and `quilt_*_cognitive` is documented
+//! but not exercised.
 
 use std::sync::Arc;
 
@@ -34,6 +37,7 @@ use quilt_mcp::handlers::page::PageToolHandler;
 use quilt_mcp::handlers::query::QueryToolHandler;
 use quilt_mcp::handlers::resource::GraphResourceProvider;
 use quilt_mcp::handlers::retrieval::RetrievalToolHandler;
+use quilt_mcp::handlers::sidebar::SidebarToolHandler;
 use quilt_mcp::handlers::template::TemplateToolHandler;
 use quilt_mcp::handlers::temporal::TemporalToolHandler;
 use quilt_mcp::protocol::McpRequest;
@@ -82,6 +86,12 @@ async fn setup_server() -> (McpServer, SqlitePool) {
     let graph_handler = GraphToolHandler::new(block_use_cases.clone());
     let template_handler =
         TemplateToolHandler::new(template_use_cases.clone(), reapply_use_cases.clone());
+    // mcp-sidebar-state: append SidebarToolHandler at the end of the
+    // handler list. This contract test uses a focused subset of handlers
+    // (no SystemToolHandler) so the tool count is 20 here, while the
+    // full server in src/server.rs uses 22. The sidebar tool is
+    // exercised by the contract tests below just like every other tool.
+    let sidebar_handler = SidebarToolHandler::new(template_use_cases.clone());
     let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
     let server = McpServer::new(
@@ -93,6 +103,7 @@ async fn setup_server() -> (McpServer, SqlitePool) {
             Box::new(temporal_handler),
             Box::new(graph_handler),
             Box::new(template_handler),
+            Box::new(sidebar_handler),
         ],
         vec![Box::new(resource_provider)],
     );
@@ -113,7 +124,7 @@ async fn test_no_handler_serializes_top_level_evidence_key() {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 19, "Expected exactly 19 live tools (14 base + 3 retrieval-graph + 2 template)");
+    assert_eq!(tools.len(), 20, "Expected exactly 20 live tools (14 base + 3 retrieval-graph + 2 template + 1 sidebar)");
 
     // For each tool, call it (with safe empty args) and inspect the
     // JSON text. Failures are aggregated.
@@ -184,7 +195,7 @@ async fn test_every_response_carries_meta_evidence() {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 19);
+    assert_eq!(tools.len(), 20);
 
     let mut missing = Vec::new();
     for tool in &tools {
