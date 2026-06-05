@@ -109,6 +109,40 @@ impl PropertyValue {
             _ => None,
         }
     }
+
+    /// Returns a `(display_string, type_hint)` tuple suitable for
+    /// serialisation. The type hint uses the same naming as
+    /// `type_name()` so downstream type resolution stays consistent.
+    ///
+    /// Moved from `quilt-application/src/use_cases/template.rs`,
+    /// where it previously lived as a free function. Now callers
+    /// everywhere can access it through the entity.
+    /// (quilt-architecture-review candidate #6)
+    pub fn to_display_string(&self) -> (String, String) {
+        let stringified = match self {
+            PropertyValue::String(s) => s.clone(),
+            PropertyValue::Boolean(b) => b.to_string(),
+            PropertyValue::Integer(i) => i.to_string(),
+            PropertyValue::Float(f) => f.to_string(),
+            PropertyValue::Date(d) => d.to_rfc3339(),
+            PropertyValue::Ref(s) => s.clone(),
+            PropertyValue::Array(arr) => {
+                let parts: Vec<String> = arr
+                    .iter()
+                    .map(|v| v.to_display_string())
+                    .map(|(s, _)| s)
+                    .collect();
+                format!("[{}]", parts.join(", "))
+            }
+        };
+        let type_hint = self.type_name().to_string();
+        (stringified, type_hint)
+    }
+
+    /// Convenience: returns only the display string without the type hint.
+    pub fn as_display_string(&self) -> String {
+        self.to_display_string().0
+    }
 }
 
 impl fmt::Display for PropertyValue {

@@ -281,9 +281,9 @@ fn summarize_template(page: &Page, blocks: &[Block]) -> TemplateSummary {
         // A block is "metadata" if it carries at least one of the
         // card-shape / icon / cssclass properties. Dedupe by id
         // so a block that has all three counts only once.
-        let shape = block.properties.get("card-shape").and_then(string_value);
-        let ic = block.properties.get("icon").and_then(string_value);
-        let cc = block.properties.get("cssclass").and_then(string_value);
+        let shape = block.properties.get("card-shape").and_then(|v| Some(v.as_display_string()));
+        let ic = block.properties.get("icon").and_then(|v| Some(v.as_display_string()));
+        let cc = block.properties.get("cssclass").and_then(|v| Some(v.as_display_string()));
         if shape.is_none() && ic.is_none() && cc.is_none() {
             continue;
         }
@@ -329,7 +329,7 @@ fn collect_properties(blocks: &[Block]) -> Vec<TemplateProperty> {
             if matches!(key.as_str(), "template" | "type" | "collapsed") {
                 continue;
             }
-            let (stringified, type_hint) = property_value_to_string(value);
+            let (stringified, type_hint) = value.to_display_string();
             out.push(TemplateProperty {
                 key: key.clone(),
                 value: stringified,
@@ -352,34 +352,6 @@ fn strip_template_prefix(name: &str) -> String {
         return name.to_string();
     }
     name.to_string()
-}
-
-fn string_value(value: &quilt_domain::value_objects::PropertyValue) -> Option<String> {
-    property_value_to_string(value).0.into()
-}
-
-fn property_value_to_string(
-    value: &quilt_domain::value_objects::PropertyValue,
-) -> (String, String) {
-    use quilt_domain::value_objects::PropertyValue;
-    let stringified = match value {
-        PropertyValue::String(s) => s.clone(),
-        PropertyValue::Boolean(b) => b.to_string(),
-        PropertyValue::Integer(i) => i.to_string(),
-        PropertyValue::Float(f) => f.to_string(),
-        PropertyValue::Date(d) => d.to_rfc3339(),
-        PropertyValue::Ref(s) => s.clone(),
-        PropertyValue::Array(arr) => {
-            let parts: Vec<String> = arr
-                .iter()
-                .map(property_value_to_string)
-                .map(|(s, _)| s)
-                .collect();
-            format!("[{}]", parts.join(", "))
-        }
-    };
-    let type_hint = value.type_name().to_string();
-    (stringified, type_hint)
 }
 
 /// Maps a legacy type hint string (from `PropertyValue.type_name()`)
