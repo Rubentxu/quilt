@@ -45,6 +45,7 @@ import { SidebarSkeleton } from './sections/SidebarSkeleton'
 import { STORAGE_KEYS } from './storage-keys'
 import { RecentsSection } from './sections/RecentsSection'
 import { TemplateSection } from './sections/TemplateSection'
+import { FAVORITES_CHANGED_EVENT } from '@features/favorites/favoritesStore'
 export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
   const [pages, setPages] = useState<Page[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,6 +87,18 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
         }
       })
     return () => { cancelled = true }
+  }, [])
+
+  // F2 of quilt-fase2-ux-dead-buttons — when the page header's
+  // star button toggles a favorite (or another tab does), re-read
+  // from localStorage so the Sidebar's Favorites section stays in
+  // sync without a full reload.
+  useEffect(() => {
+    function onFavoritesChanged() {
+      setFavorites(readFavorites())
+    }
+    window.addEventListener(FAVORITES_CHANGED_EVENT, onFavoritesChanged)
+    return () => window.removeEventListener(FAVORITES_CHANGED_EVENT, onFavoritesChanged)
   }, [])
 
   const regularPages = pages.filter((p) => !p.journal)
@@ -484,11 +497,18 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
         </button>
 
         {/* ADR-0003 — Agent Activity toggle */}
+        {/* F5 of quilt-fase2-ux-dead-buttons: relabeled the toggle
+            from "Show / Hide agent activity" to a stable
+            "Agent activity" with a tooltip that explains what it
+            does. The previous labels changed on click, which was
+            disorienting — the button moved around the layout when
+            the text length changed. */}
         {!collapsed && (
           <button
             onClick={() => setShowAgentActivity(!showAgentActivity)}
             data-testid="agent-activity-toggle"
             aria-pressed={showAgentActivity}
+            title="Show recent agent-authored blocks in the sidebar"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -512,7 +532,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
             className="sidebar-item"
           >
             <Bot size={14} style={{ flexShrink: 0 }} />
-            {showAgentActivity ? 'Hide agent activity' : 'Show agent activity'}
+            Agent activity
           </button>
         )}
       </div>

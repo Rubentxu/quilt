@@ -144,4 +144,49 @@ describe('BlockContextMenu — DESIGN.md §11.3', () => {
     expect(deleteBtn.style.color).toBe('var(--color-danger)')
     anchor.remove()
   })
+
+  // ── F3 of quilt-fase2-ux-dead-buttons ───────────────────────────
+  // The Properties action is the discoverable entry point for the
+  // BlockPropertiesPanel (which was previously only reachable via
+  // a hover-revealed Settings2 button on the row).
+
+  it('does not render a Properties item when onShowProperties is omitted', () => {
+    const anchor = makeAnchor()
+    render(
+      <BlockContextMenu open={true} anchorEl={anchor} onClose={vi.fn()} actions={ACTIONS} />,
+    )
+    // Sanity: only the original 6 items are present.
+    expect(screen.queryByRole('menuitem', { name: /^Properties$/ })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('menuitem')).toHaveLength(6)
+    anchor.remove()
+  })
+
+  it('renders a Properties item that calls onShowProperties and closes the menu', async () => {
+    const user = userEvent.setup()
+    const onShowProperties = vi.fn()
+    const onClose = vi.fn()
+    const anchor = makeAnchor()
+    const actionsWithProps: BlockContextMenuActions = {
+      ...ACTIONS,
+      onShowProperties,
+    }
+    render(
+      <BlockContextMenu
+        open={true}
+        anchorEl={anchor}
+        onClose={onClose}
+        actions={actionsWithProps}
+      />,
+    )
+    const propsBtn = screen.getByRole('menuitem', { name: /^Properties$/ })
+    expect(propsBtn).toBeInTheDocument()
+    // Total item count grows by exactly one.
+    expect(screen.getAllByRole('menuitem')).toHaveLength(7)
+
+    await user.click(propsBtn)
+    expect(onShowProperties).toHaveBeenCalledTimes(1)
+    // Same auto-close contract as the other actions.
+    expect(onClose).toHaveBeenCalledTimes(1)
+    anchor.remove()
+  })
 })

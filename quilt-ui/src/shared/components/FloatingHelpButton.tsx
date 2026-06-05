@@ -20,18 +20,40 @@ interface FloatingHelpButtonProps {
   label?: string
   /** Optional panel to render when expanded (controlled by internal state). */
   panel?: ReactNode
+  /**
+   * When provided, the open/closed state becomes controlled by the
+   * parent. The button still updates via `onExpandedChange`. Useful
+   * for letting other parts of the UI (a top-bar kebab menu, a
+   * keyboard shortcut) toggle the help panel.
+   */
+  expanded?: boolean
+  onExpandedChange?: (next: boolean) => void
 }
 
 export function FloatingHelpButton({
   onClick,
   label = 'Help & shortcuts',
   panel,
+  expanded: expandedProp,
+  onExpandedChange,
 }: FloatingHelpButtonProps) {
-  const [expanded, setExpanded] = useState(false)
+  const [internalExpanded, setInternalExpanded] = useState(false)
+  // Controlled vs uncontrolled: prefer the prop when given, otherwise
+  // fall back to local state. This keeps the existing call sites
+  // (which never set `expanded`) working without any change.
+  const isControlled = expandedProp !== undefined
+  const expanded = isControlled ? expandedProp : internalExpanded
+  const setExpanded = (next: boolean) => {
+    if (isControlled) {
+      onExpandedChange?.(next)
+    } else {
+      setInternalExpanded(next)
+    }
+  }
 
   function handleClick() {
     if (panel) {
-      setExpanded((v) => !v)
+      setExpanded(!expanded)
     } else {
       onClick?.()
     }

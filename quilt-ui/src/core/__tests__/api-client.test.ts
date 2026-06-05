@@ -3,7 +3,7 @@
  * QuiltApiError, auth headers, 204 handling, and block normalization.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { api, QuiltApiError } from '@core/api-client'
+import { api, QuiltApiError, getEventsUrl } from '@core/api-client'
 import type { Block } from '@shared/types/api'
 
 // ── Fetch mock setup ────────────────────────────────────────
@@ -214,5 +214,48 @@ describe('204 handling', () => {
     // setBlockProperty returns fetchJson<void>, 204 means success
     const result = await api.setBlockProperty('b1', 'key', 'value')
     expect(result).toBeUndefined()
+  })
+})
+
+// ── getEventsUrl — SSE auth (F4 of quilt-fase2-ux-dead-buttons) ──
+//
+// The browser's EventSource cannot set custom request headers, so
+// the token is passed as `?api_key=...` and the server accepts the
+// query param only on `/api/v1/events`.
+//
+// The Vite env var is read at module-load time, so we exercise both
+// branches by importing a fresh copy of the module after stubbing
+// `import.meta.env`. Vitest's `vi.resetModules()` + dynamic
+// `await import(...)` does the trick.
+
+describe('getEventsUrl', () => {
+  it('appends ?api_key=<token> when VITE_QUILT_API_KEY is set', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_QUILT_API_KEY', 'test-token-abc')
+    const mod = await import('@core/api-client')
+    expect(mod.getEventsUrl()).toBe('/api/v1/events?api_key=test-token-abc')
+    vi.unstubAllEnvs()
+  })
+
+  it('URL-encodes the token to handle special characters', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_QUILT_API_KEY', 'key with spaces/and/slashes=and=equals')
+    const mod = await import('@core/api-client')
+    const url = mod.getEventsUrl()
+    // Token must be percent-encoded so it survives the URL parser
+    // unchanged when the server's `?split('&').find_map(strip_prefix)`
+    // pulls it back out.
+    expect(url).toBe(
+      '/api/v1/events?api_key=key%20with%20spaces%2Fand%2Fslashes%3Dand%3Dequals',
+    )
+    vi.unstubAllEnvs()
+  })
+
+  it('returns plain /api/v1/events when no API key is configured', async () => {
+    vi.resetModules()
+    vi.stubEnv('VITE_QUILT_API_KEY', '')
+    const mod = await import('@core/api-client')
+    expect(mod.getEventsUrl()).toBe('/api/v1/events')
+    vi.unstubAllEnvs()
   })
 })

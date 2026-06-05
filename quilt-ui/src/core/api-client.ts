@@ -23,6 +23,27 @@ const API_BASE = '/api/v1';
 /** Auth token loaded from environment — all API calls include `Authorization: Bearer <token>` */
 const API_KEY = import.meta.env.VITE_QUILT_API_KEY || '';
 
+/**
+ * Returns the full URL for the SSE events endpoint, with the API
+ * key passed as a `?api_key=` query parameter when one is configured.
+ *
+ * Why a query param and not a header? The browser's `EventSource`
+ * API has no API to set custom request headers, so SSE must pass
+ * the token in the URL. The server's auth middleware accepts the
+ * `api_key` query param only on `/api/v1/events` — every other
+ * `/api/v1/*` route still requires the `Authorization: Bearer`
+ * header.
+ *
+ * Exported separately (rather than built inside the `api` object) so
+ * `useSSE` can be a generic hook that doesn't have to import the
+ * whole client. Returns the plain `/api/v1/events` URL when no API
+ * key is set (e.g. local dev with auth disabled).
+ */
+export function getEventsUrl(): string {
+  if (!API_KEY) return '/api/v1/events'
+  return `/api/v1/events?api_key=${encodeURIComponent(API_KEY)}`
+}
+
 // ──── Error class ───────────────────────────────────────────────
 
 export class QuiltApiError extends Error {

@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal, FileText, Link, LayoutGrid, List } from 'lucide-react'
+import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal, FileText, Link, LayoutGrid, List, Star } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
 import { DndContext, closestCenter, useDndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useWasm, ensureWasmLoaded } from '@core/wasm-bridge/WasmProvider'
-import { api, QuiltApiError } from '@core/api-client'
+import { api, QuiltApiError, getEventsUrl } from '@core/api-client'
+import { favoritesStore, FAVORITES_CHANGED_EVENT } from '@features/favorites/favoritesStore'
 import { PageSkeleton } from '@shared/components/Skeleton'
 import { BlockRow } from './BlockRow'
 import { CardRenderer, type BlockCard } from './CardRenderer'
@@ -538,6 +539,42 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
 
   // Kanban view state
   const [view, setView] = useState<'list' | 'kanban'>('list')
+
+  // F2 of quilt-fase2-ux-dead-buttons — favorite state for the
+  // current page. Initialised from the same localStorage key the
+  // sidebar reads (`quilt-favorites`). When another tab/window
+  // toggles a favorite, the cross-component `quilt:favorites-changed`
+  // event keeps this view in sync without a full reload.
+  const [isFav, setIsFav] = useState<boolean>(() => favoritesStore.isFavorite(pageName))
+
+  useEffect(() => {
+    function onFavoritesChanged(e: Event) {
+      // Only re-read when the event names this page (or no detail,
+      // in case a different write happened) — this avoids a storage
+      // round-trip on every unrelated change.
+      const detail = (e as CustomEvent<{ name: string }>).detail
+      if (!detail || detail.name === pageName) {
+        setIsFav(favoritesStore.isFavorite(pageName))
+      }
+    }
+    window.addEventListener(FAVORITES_CHANGED_EVENT, onFavoritesChanged)
+    return () => window.removeEventListener(FAVORITES_CHANGED_EVENT, onFavoritesChanged)
+  }, [pageName])
+
+  // Also re-read when the pageName changes (navigating to a
+  // different page) so the star is correct without a click.
+  useEffect(() => {
+    setIsFav(favoritesStore.isFavorite(pageName))
+  }, [pageName])
+
+  const handleToggleFavorite = useCallback(() => {
+    favoritesStore.toggle(pageName)
+    // The event listener above will call setIsFav; we don't need to
+    // set it here. But for snappier UI (no round-trip through the
+    // listener) we set the optimistic value inline.
+    setIsFav(v => !v)
+  }, [pageName])
+
   const navigate = useNavigate()
 
   // Determine if Kanban view is available based on block properties
@@ -642,9 +679,12 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
 
   // ── SSE + Polling sync ────────────────────────────────────────────
 
-  // SSE connection — tries to connect, falls back to polling
+  // SSE connection — tries to connect, falls back to polling.
+  // The URL is built by `getEventsUrl()` so the auth token is
+  // included as `?api_key=...` (the EventSource API cannot set
+  // custom headers).
   const { connected: sseConnected } = useSSE({
-    url: `${api.baseUrl}/api/v1/events`,
+    url: getEventsUrl(),
     onEvent: (event) => {
       switch (event.type) {
         case 'block_updated':
@@ -1543,11 +1583,45 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: 'var(--space-6)',
+            gap: 'var(--space-3)',
           }}
         >
-          <h1 className="type-display-sm" style={{ margin: 0 }}>
-            {pageName}
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', minWidth: 0 }}>
+            <h1 className="type-display-sm" style={{ margin: 0, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {pageName}
+            </h1>
+
+            {/* F2 of quilt-fase2-ux-dead-buttons: star button to
+                add/remove the current page from favorites. The
+                filled vs outlined star shows the current state. The
+                click handler persists to localStorage and fires
+                `quilt:favorites-changed` so the sidebar's Favorites
+                section re-renders without a reload. */}
+            <button
+              type="button"
+              onClick={handleToggleFavorite}
+              data-testid="page-favorite-toggle"
+              aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+              aria-pressed={isFav}
+              title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: isFav ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                padding: 'var(--space-1)',
+                borderRadius: 'var(--radius-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-subtle)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <Star size={20} fill={isFav ? 'currentColor' : 'none'} aria-hidden="true" />
+            </button>
+          </div>
 
           {/* View toggle — only visible when Kanban grouping is available */}
           {kanbanGrouping.isValid && (

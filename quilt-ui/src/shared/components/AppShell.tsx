@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState, useEffect, useRef } from 'react'
 import { Outlet, useLocation, Link, useNavigate } from '@tanstack/react-router'
 import { Toaster } from 'react-hot-toast'
-import { Menu, Sun, Moon, Settings, Link2, X, PanelRight, Search, RefreshCw, Hash, EyeOff, Bell, HelpCircle } from 'lucide-react'
+import { Menu, Sun, Moon, Settings, Link2, X, PanelRight, MoreVertical, RefreshCw, Keyboard, Sidebar as SidebarIcon } from 'lucide-react'
 import { Sidebar } from '@features/sidebar/Sidebar'
 import { BacklinksPanel } from '@features/references/BacklinksPanel'
 import { TabsBar } from './TabsBar'
@@ -188,6 +188,154 @@ function useGlobalShortcuts() {
   return { leaderKey }
 }
 
+/**
+ * Kebab (three-dots) menu that lives in the top-bar. Replaces the
+ * 6 dead buttons that previously sat in the quick-actions cluster
+ * — every entry here is wired to a real action.
+ *
+ * Exported so it can be unit-tested in isolation (the cluster
+ * styling and dropdown geometry are not interesting to tests).
+ */
+export interface TopbarMenuAction {
+  key: string
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+}
+
+interface TopbarMenuProps {
+  onRefresh: () => void
+  onToggleSidebar: () => void
+  onOpenHelp: () => void
+}
+
+export function TopbarMenu({ onRefresh, onToggleSidebar, onOpenHelp }: TopbarMenuProps) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+
+  // Close on outside click and Escape — matches the BlockContextMenu
+  // pattern (DESIGN.md §11.3). Keeping it consistent means users
+  // only have to learn the dismiss behaviour once.
+  useEffect(() => {
+    if (!open) return
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as Node
+      if (wrapperRef.current && !wrapperRef.current.contains(target)) {
+        setOpen(false)
+      }
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [open])
+
+  const actions: TopbarMenuAction[] = [
+    {
+      key: 'refresh',
+      label: 'Refresh page',
+      icon: <RefreshCw size={14} aria-hidden="true" />,
+      onClick: () => { onRefresh(); setOpen(false) },
+    },
+    {
+      key: 'toggle-sidebar',
+      label: 'Toggle sidebar',
+      icon: <SidebarIcon size={14} aria-hidden="true" />,
+      onClick: () => { onToggleSidebar(); setOpen(false) },
+    },
+    {
+      key: 'shortcuts',
+      label: 'Keyboard shortcuts',
+      icon: <Keyboard size={14} aria-hidden="true" />,
+      onClick: () => { onOpenHelp(); setOpen(false) },
+    },
+  ]
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        data-testid="topbar-kebab"
+        className="ghost-icon-button topbar-action"
+        style={{
+          width: '32px',
+          height: '32px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          color: 'var(--color-text-secondary)',
+        }}
+      >
+        <MoreVertical size={17} />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Top bar actions"
+          data-testid="topbar-menu"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            right: 0,
+            minWidth: '200px',
+            background: 'var(--color-surface-elevated)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-md)',
+            boxShadow: 'var(--shadow-md)',
+            padding: 'var(--space-1)',
+            zIndex: 100,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '2px',
+          }}
+        >
+          {actions.map(action => (
+            <button
+              key={action.key}
+              role="menuitem"
+              data-testid={`topbar-menu-${action.key}`}
+              onClick={action.onClick}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+                width: '100%',
+                padding: 'var(--space-2) var(--space-3)',
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--color-text-primary)',
+                fontSize: '13px',
+                fontWeight: 400,
+                textAlign: 'left',
+                cursor: 'pointer',
+                borderRadius: 'var(--radius-sm)',
+                fontFamily: 'inherit',
+                lineHeight: 1.2,
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-surface-subtle)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            >
+              {action.icon}
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AppShell() {
   // Surface any unexpectedly slow mount of the app shell itself.
   usePerformance('AppShell mount', 32)
@@ -202,6 +350,7 @@ export function AppShell() {
   const currentPageName = deriveCurrentPageName(location.pathname)
 
   const [searchOpen, setSearchOpen] = useState(false)
+  const [helpExpanded, setHelpExpanded] = useState(false)
   const { isMobile, isTablet } = useResponsive()
   const { tabs, activeTabId, closeTab, openTab, switchTab } = useTabs()
   const navigate = useNavigate()
@@ -411,38 +560,28 @@ export function AppShell() {
           {/* Spacer */}
           <div style={{ flex: 1 }} />
 
-          {/* Quick actions cluster */}
+          {/* F1 of quilt-fase2-ux-dead-buttons: the previous
+              "quick actions cluster" rendered 6 buttons (Search,
+              Refresh, Hash, EyeOff, Bell, Help) with no onClick
+              handlers — a 6-mystery-button anti-pattern. Replaced
+              with a single kebab menu whose entries are all real
+              actions. */}
           {!isMobile && (
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
                 padding: '4px',
                 marginLeft: 'var(--space-2)',
                 background: 'var(--color-surface-subtle)',
                 borderRadius: '12px',
               }}
             >
-              {[Search, RefreshCw, Hash, EyeOff, Bell, HelpCircle].map((Icon, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className="ghost-icon-button topbar-action"
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                  aria-label="Toolbar action"
-                >
-                  <Icon size={17} />
-                </button>
-              ))}
+              <TopbarMenu
+                onRefresh={() => window.location.reload()}
+                onToggleSidebar={() => setSidebarOpen(v => !v)}
+                onOpenHelp={() => setHelpExpanded(true)}
+              />
             </div>
           )}
 
@@ -674,6 +813,8 @@ export function AppShell() {
       {/* ─── Floating help button — DESIGN.md §9.10 ─── */}
       <FloatingHelpButton
         label="Help & keyboard shortcuts"
+        expanded={helpExpanded}
+        onExpandedChange={setHelpExpanded}
         panel={
           <div>
             <h3

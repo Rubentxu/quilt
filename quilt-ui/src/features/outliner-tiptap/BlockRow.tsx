@@ -1607,6 +1607,12 @@ export function BlockRow({
           onConvertToTask: handleConvertToTask,
           onCopyLink: handleCopyBlockLink,
           onDelete: () => onDeleteBlock(block.id),
+          // F3 of quilt-fase2-ux-dead-buttons — the discoverable
+          // way to open the BlockPropertiesPanel. The hover-revealed
+          // Settings2 button on the row itself still works, but
+          // the context menu is always reachable and matches the
+          // design intent for "block properties".
+          onShowProperties: () => setShowProperties(true),
         }}
       />
     </div>

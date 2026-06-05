@@ -132,14 +132,35 @@ pub async fn auth_middleware(request: Request, next: Next) -> Response {
     // ---- Auth check ----
     let expected = API_KEY.get().expect("auth::init not called");
 
-    let valid = request
+    // The header path is the primary mechanism. SSE (`/api/v1/events`)
+    // is the one exception: the browser's `EventSource` API cannot
+    // set custom request headers, so we also accept the token in the
+    // URL as `?api_key=<token>`. The query-param fallback is scoped
+    // to the events endpoint only — every other `/api/v1/*` route
+    // still requires the header. This keeps the REST surface
+    // log-clean (query strings often end up in access logs) while
+    // unblocking real-time event streams.
+    let header_valid = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .and_then(parse_auth_header)
         .is_some_and(|scheme| scheme.token() == expected);
 
-    if valid {
+    let query_valid = if path == "/api/v1/events" {
+        request
+            .uri()
+            .query()
+            .and_then(|q| {
+                q.split('&')
+                    .find_map(|kv| kv.strip_prefix("api_key="))
+            })
+            .is_some_and(|token| token == expected)
+    } else {
+        false
+    };
+
+    if header_valid || query_valid {
         next.run(request).await
     } else {
         warn!("Unauthorized request: {method} {path}");
@@ -429,7 +450,10 @@ mod tests {
 
     #[tokio::test]
     async fn token_in_query_param_returns_401() {
-        // Query parameters are NOT a valid auth mechanism — only the header is checked.
+        // Query parameters are NOT a valid auth mechanism for the REST
+        // surface — only the header is checked there. The one exception
+        // is `/api/v1/events` (SSE), covered by the dedicated tests
+        // below.
         let res = test_app()
             .oneshot(
                 Request::builder()
@@ -440,6 +464,95 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ---------------------------------------------------------------------------
+    // SSE auth — `?api_key=` query-param fallback for `/api/v1/events`
+    //
+    // The browser's `EventSource` API cannot set custom request headers,
+    // so SSE clients must pass the token in the URL. We accept the
+    // `api_key` query param only for this endpoint, and the header-only
+    // rule still applies to every other `/api/v1/*` route.
+    // ---------------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn sse_events_with_correct_api_key_query_param_succeeds() {
+        let res = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/events?api_key=test-key-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        // 200 (handler ran) — there's no `/api/v1/events` route in the
+        // test router, but importantly it's NOT 401.
+        assert_ne!(
+            res.status(),
+            StatusCode::UNAUTHORIZED,
+            "SSE endpoint should accept ?api_key= for browsers that cannot set headers",
+        );
+    }
+
+    #[tokio::test]
+    async fn sse_events_with_wrong_api_key_query_param_returns_401() {
+        let res = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/events?api_key=wrong-key")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn sse_events_with_no_auth_at_all_returns_401() {
+        let res = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/events")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn sse_events_header_still_works_alongside_query_param() {
+        // Either auth mechanism should be accepted — they don't conflict.
+        let res = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/events")
+                    .header(header::AUTHORIZATION, "Bearer test-key-123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(res.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn sse_events_query_param_with_other_query_params_succeeds() {
+        // Defensive: real clients may pass `?api_key=...&something=else`.
+        // The substring check must not be confused by other params.
+        let res = test_app()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/events?api_key=test-key-123&since=0")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(res.status(), StatusCode::UNAUTHORIZED);
     }
 
     // ----- RFC 7235 §2.1 — case-insensitive scheme -----

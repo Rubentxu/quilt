@@ -6,6 +6,9 @@
  *   - Mover arriba
  *   - Mover abajo
  *   - Convertir en tarea
+ *   - Properties (F3 of quilt-fase2-ux-dead-buttons — surfaces the
+ *     BlockPropertiesPanel via the existing `showProperties` toggle
+ *     in BlockRow)
  *   - Copiar enlace al bloque
  *   - Eliminar
  *
@@ -17,7 +20,7 @@
  */
 
 import { useEffect, useRef, type CSSProperties } from 'react'
-import { Plus, ArrowUp, ArrowDown, CheckSquare, Link2, Trash2 } from 'lucide-react'
+import { Plus, ArrowUp, ArrowDown, CheckSquare, Link2, Trash2, Settings2 } from 'lucide-react'
 
 export interface BlockContextMenuActions {
   onAddChild: () => void
@@ -26,6 +29,14 @@ export interface BlockContextMenuActions {
   onConvertToTask: () => void
   onCopyLink: () => void
   onDelete: () => void
+  /**
+   * F3 of quilt-fase2-ux-dead-buttons — opens the
+   * `BlockPropertiesPanel` for this block. BlockRow's `Settings2`
+   * hover-button already does this, but the discoverability there
+   * is poor (opacity: 0 until row hover). The context menu gives a
+   * second, always-visible path to the same feature.
+   */
+  onShowProperties?: () => void
 }
 
 interface BlockContextMenuProps {
@@ -139,6 +150,22 @@ export function BlockContextMenu({ open, anchorEl, onClose, actions }: BlockCont
         onClose()
       },
     },
+    // F3 — Properties action. Only rendered when the parent supplies
+    // a handler, so legacy callers (no `onShowProperties` yet) still
+    // see the same six items as before.
+    ...(actions.onShowProperties
+      ? [
+          {
+            key: 'properties',
+            label: 'Properties',
+            icon: <Settings2 size={14} aria-hidden="true" />,
+            onClick: () => {
+              actions.onShowProperties!()
+              onClose()
+            },
+          },
+        ]
+      : []),
     {
       key: 'copy-link',
       label: 'Copy block link',
