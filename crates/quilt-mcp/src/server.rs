@@ -211,7 +211,8 @@ mod tests {
     use crate::handlers::{
         block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
         query::QueryToolHandler, resource::GraphResourceProvider, retrieval::RetrievalToolHandler,
-        system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
+        sidebar::SidebarToolHandler, system::SystemToolHandler, template::TemplateToolHandler,
+        temporal::TemporalToolHandler,
     };
     use quilt_application::templates::reapply::{
         ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl,
@@ -280,6 +281,10 @@ mod tests {
         let template_handler =
             TemplateToolHandler::new(template_use_cases.clone(), reapply_use_cases.clone());
         let system_handler = SystemToolHandler::new();
+        // mcp-sidebar-state: append to END of handler list so existing
+        // tool indices 0..=20 are preserved (clients that cache tool
+        // indices keep working). SidebarToolHandler lands at index 21.
+        let sidebar_handler = SidebarToolHandler::new(template_use_cases.clone());
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -292,6 +297,7 @@ mod tests {
                 Box::new(graph_handler),
                 Box::new(template_handler),
                 Box::new(system_handler),
+                Box::new(sidebar_handler),
             ],
             vec![Box::new(resource_provider)],
         );
@@ -333,7 +339,7 @@ mod tests {
 
         match response {
             McpResponse::ToolsList(result) => {
-                // Core tools: 21 total
+                // Core tools: 22 total
                 // BlockToolHandler: quilt_create_block, quilt_delete_block, quilt_link_blocks,
                 //                   quilt_get_block_tree, quilt_get_backlinks, quilt_create_task,
                 //                   quilt_list_blocks_by_author (7) — ADR-0003 added the last
@@ -345,7 +351,10 @@ mod tests {
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                assert_eq!(result.tools.len(), 21);
+                // SidebarToolHandler: quilt_get_sidebar_state (1) — mcp-sidebar-state (PR 4 of
+                //                     quilt-fase1-sidebar-mcp-templates). Appended at index 21
+                //                     to preserve existing tool indices.
+                assert_eq!(result.tools.len(), 22);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(
@@ -393,6 +402,12 @@ mod tests {
                 assert!(result.tools.iter().any(|t| t.name == "quilt_graph_edges"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_list_property_types"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_get_query_capabilities"));
+                // F-order requirement: quilt_get_sidebar_state is appended
+                // at the end of the list, so its position is `len - 1` = 21.
+                assert_eq!(
+                    result.tools[21].name, "quilt_get_sidebar_state",
+                    "quilt_get_sidebar_state must be at tool index 21 (appended last)"
+                );
             }
             _ => panic!("Expected ToolsList response"),
         }

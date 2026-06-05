@@ -56,6 +56,7 @@ pub mod page;
 pub mod query;
 pub mod resource;
 pub mod retrieval;
+pub mod sidebar;
 pub mod system;
 pub mod template;
 pub mod temporal;
