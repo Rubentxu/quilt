@@ -33,6 +33,10 @@ const GraphViewPage = lazyRouteComponent(
   () => import('@pages/GraphViewPage'),
   'GraphViewPage',
 )
+const TablePage = lazyRouteComponent(
+  () => import('@pages/TablePage'),
+  'TablePage',
+)
 
 // ─── Route tree ─────────────────────────────────────────────────
 const rootRoute = createRootRoute({
@@ -75,6 +79,12 @@ const graphRoute = createRoute({
   component: GraphViewPage,
 })
 
+const tableRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/table',
+  component: TablePage,
+})
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   pageRoute,
@@ -82,6 +92,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   pagesRoute,
   graphRoute,
+  tableRoute,
 ])
 
 // ─── Router ──────────────────────────────────────────────────────

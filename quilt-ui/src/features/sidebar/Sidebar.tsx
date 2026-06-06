@@ -1,6 +1,7 @@
 import { useState, useEffect, type KeyboardEvent } from 'react'
 import { Link, useNavigate, useLocation } from '@tanstack/react-router'
 import { Search, Calendar, FileText, Plus, Clock, LayoutList, Network, X, Bot, Star, ChevronDown } from 'lucide-react'
+import { Table } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '@core/api-client'
 import type { Page } from '@shared/types/api'
