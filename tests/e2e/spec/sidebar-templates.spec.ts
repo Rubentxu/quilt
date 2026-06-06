@@ -165,7 +165,11 @@ test.describe('Sidebar — Recientes section @sidebar', () => {
     for (const name of pages) await createPage(page, name);
 
     // Visit each in turn so the recents hook fires three times
-    for (const name of pages) await visitPage(page, name);
+    for (const name of pages) {
+      await visitPage(page, name);
+      // Small delay for localStorage write to settle
+      await page.waitForTimeout(200);
+    }
 
     // Newest first
     const before = await readRecents(page);
@@ -188,7 +192,11 @@ test.describe('Sidebar — Recientes section @sidebar', () => {
     const pages = Array.from({ length: 6 }, (_, i) => `e2e-cap-${i}-${s}`);
     for (const name of pages) await createPage(page, name);
 
-    for (const name of pages) await visitPage(page, name);
+    for (const name of pages) {
+      await visitPage(page, name);
+      // Small delay for localStorage write to settle
+      await page.waitForTimeout(200);
+    }
 
     const recents = await readRecents(page);
     // The cap is 5 entries — pages[0] is the oldest and must be evicted
@@ -226,7 +234,7 @@ test.describe('Sidebar — Recientes section @sidebar', () => {
     // the spec requires graceful degradation without a crash
     const empty = page.locator('[data-testid="recents-empty"]');
     const groupHeader = page.getByText('Recientes', { exact: true });
-    await expect(empty.or(groupHeader)).toBeVisible({ timeout: 5_000 });
+    await expect(empty.or(groupHeader).first()).toBeVisible({ timeout: 5_000 });
   });
 });
 

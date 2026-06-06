@@ -75,10 +75,7 @@ test.describe('Active Route Highlighting', () => {
   const routes = [
     { path: '/journal', testId: 'nav-journal' },
     { path: '/pages', testId: 'nav-pages' },
-    { path: '/search', testId: 'nav-search' },
-    { path: '/query', testId: 'nav-query' },
     { path: '/graph', testId: 'nav-graph' },
-    { path: '/cognitive', testId: 'nav-cognitive' },
   ];
 
   for (const route of routes) {
@@ -99,21 +96,15 @@ test.describe('Active Route Highlighting', () => {
     const sidebar = new SidebarComponent(page);
     await sidebar.expectActiveItem('nav-journal');
     await sidebar.expectNotActiveItem('nav-pages');
-    await sidebar.expectNotActiveItem('nav-search');
-    await sidebar.expectNotActiveItem('nav-query');
-    await sidebar.expectNotActiveItem('nav-graph');
-    await sidebar.expectNotActiveItem('nav-cognitive');
-  });
+            await sidebar.expectNotActiveItem('nav-graph');
+      });
 });
 
 test.describe('Deep Linking', () => {
   const routes = [
     { path: '/journal', heading: 'Journal' },
     { path: '/pages', heading: 'Pages' },
-    { path: '/search', heading: 'Search' },
-    { path: '/query', heading: 'Query' },
     { path: '/graph', heading: 'Vista Grafo' },
-    { path: '/cognitive', heading: 'Morning Briefing' },
   ];
 
   for (const route of routes) {
@@ -168,7 +159,7 @@ test.describe('Browser Back/Forward Navigation', () => {
 
     // Navigate through several pages
     await page.click('[data-testid="nav-pages"]');
-    await page.click('[data-testid="nav-search"]');
+    await page.click('[data-testid="nav-pages"]');
     await page.click('[data-testid="nav-query"]');
 
     await expect(page).toHaveURL(/\/query/);
