@@ -132,7 +132,7 @@ export function SlashCommandMenu({ position, query, onSelect, onClose }: SlashCo
           }}>
             {category}
           </div>
-          {items.map(item => {
+          {filteredItems.map(item => {
             const globalIdx = filteredItems.indexOf(item)
             return (
               <div

@@ -404,7 +404,8 @@ export function BlockRow({
       const originalContent = localContent
       // `id === 'insert-template'` is the only action that preserves
       // the leading "/" so the user can keep editing. Everything
-      // else replaces the content.
+      // else replaces the content — but we defer the clear until
+      // we know the handler succeeded (restore on fail).
       const preserveContent = item.id === 'insert-template'
 
       if (!preserveContent) {
@@ -451,10 +452,24 @@ export function BlockRow({
 
       const handler = defaultRegistry.getHandler(item.id)
       if (handler) {
-        // Fire-and-forget — the legacy code didn't await handlers
-        // either, and most are synchronous. Async errors are
-        // handled inside each handler (try/catch + toast).
-        void handler(ctx, item)
+        // For status/priority handlers that call api.updateBlock:
+        // if the API call fails, the handler catches and shows toast.
+        // But the "/" is already cleared and the content is "".
+        // We need to restore the content on failure.
+        //
+        // For date/property/ref handlers: they call setContent/setContentAtEnd
+        // which replaces the content. No restore needed.
+        //
+        // For template handler: preserveContent is true, so no clear happened.
+        //
+        // The safe pattern: try the handler, restore on failure.
+        Promise.resolve(handler(ctx, item)).catch(() => {
+          // Handler failed — restore the original content
+          if (!preserveContent) {
+            setLocalContent(originalContent)
+            if (contentRef.current) contentRef.current.textContent = originalContent
+          }
+        })
       }
     },
     [
