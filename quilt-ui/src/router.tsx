@@ -37,6 +37,18 @@ const TablePage = lazyRouteComponent(
   () => import('@pages/TablePage'),
   'TablePage',
 )
+const KanbanPage = lazyRouteComponent(
+  () => import('@pages/KanbanPage'),
+  'KanbanPage',
+)
+const QueryPage = lazyRouteComponent(
+  () => import('@pages/QueryPage'),
+  'QueryPage',
+)
+const DashboardPage = lazyRouteComponent(
+  () => import('@pages/DashboardPage'),
+  'DashboardPage',
+)
 
 // ─── Route tree ─────────────────────────────────────────────────
 const rootRoute = createRootRoute({
@@ -85,6 +97,24 @@ const tableRoute = createRoute({
   component: TablePage,
 })
 
+const kanbanRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/kanban',
+  component: KanbanPage,
+})
+
+const queryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/query',
+  component: QueryPage,
+})
+
+const dashboardRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/dashboard',
+  component: DashboardPage,
+})
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   pageRoute,
@@ -93,6 +123,9 @@ const routeTree = rootRoute.addChildren([
   pagesRoute,
   graphRoute,
   tableRoute,
+  kanbanRoute,
+  queryRoute,
+  dashboardRoute,
 ])
 
 // ─── Router ──────────────────────────────────────────────────────
