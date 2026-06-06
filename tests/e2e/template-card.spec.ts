@@ -11,7 +11,7 @@
  */
 
 import { test, expect, type Page } from '@playwright/test'
-import { getAuthHeaders } from '../auth-state'
+import { getAuthHeaders } from './auth-state'
 
 const API_URL = process.env.API_BASE_URL || 'http://localhost:3737'
 const FRONTEND_URL = process.env.BASE_URL || 'http://localhost:5173'
