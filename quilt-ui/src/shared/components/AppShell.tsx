@@ -21,6 +21,13 @@ const SearchModal = lazy(() =>
   import('@features/search/SearchModal').then(m => ({ default: m.SearchModal })),
 )
 
+// CommandCenter is mounted only when the user opens the command
+// palette (Cmd/Ctrl+Shift+K). Same lazy-load rationale as
+// SearchModal: keeps the initial bundle lean.
+const CommandCenter = lazy(() =>
+  import('@features/command-center/CommandCenter').then(m => ({ default: m.CommandCenter })),
+)
+
 function formatPathTitle(pathname: string): string {
   if (pathname === '/') return 'Home'
   const segments = pathname.split('/').filter(Boolean)
@@ -431,6 +438,11 @@ export function AppShell() {
   const currentPageName = deriveCurrentPageName(location.pathname)
 
   const [searchOpen, setSearchOpen] = useState(false)
+  // Command palette state. Opened with Cmd/Ctrl+Shift+K (the
+  // SearchModal takes Cmd/Ctrl+K). Kept separate from
+  // `searchOpen` so the two palettes can never both be open at
+  // the same time — opening one closes the other.
+  const [commandCenterOpen, setCommandCenterOpen] = useState(false)
   const [helpExpanded, setHelpExpanded] = useState(false)
   // F3 of quilt-fase2-ux-empty-states + B of
   // quilt-fase4-cross-device-tour — first-run welcome tour.
@@ -507,6 +519,18 @@ export function AppShell() {
   // Global keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      // Cmd/Ctrl+Shift+K — Command palette (the one driven by
+      // CommandRegistry). Opens the new modal; closes the legacy
+      // search palette so they don't fight for the same screen
+      // real estate. Cmd/Ctrl+K without the Shift is the
+      // SearchModal.
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'K' || e.key === 'k')) {
+        e.preventDefault()
+        setCommandCenterOpen(prev => !prev)
+        setSearchOpen(false)
+        return
+      }
+
       // Ctrl+K — Search/Command palette
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
@@ -912,6 +936,20 @@ export function AppShell() {
       {searchOpen && (
         <Suspense fallback={null}>
           <SearchModal isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+        </Suspense>
+      )}
+
+      {/* ─── Command Center (Cmd/Ctrl+Shift+K) ───
+       *
+       * The Registry-driven command palette. Lazy-loaded for the
+       * same reason as SearchModal — keeps the initial bundle
+       * lean and pulls the new feature in on first invocation.
+       * The `CommandRegistryProvider` is mounted in `main.tsx`,
+       * so the modal just consumes `useCommandRegistry()`.
+       */}
+      {commandCenterOpen && (
+        <Suspense fallback={null}>
+          <CommandCenter isOpen={commandCenterOpen} onClose={() => setCommandCenterOpen(false)} />
         </Suspense>
       )}
 
