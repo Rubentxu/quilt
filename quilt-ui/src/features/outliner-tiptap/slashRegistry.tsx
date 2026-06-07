@@ -46,6 +46,7 @@ import {
   AlertTriangle, AlertCircle, Flag,
   Calendar, CalendarDays, CalendarX, CalendarClock,
   FileText, FilePlus, Hash, MessageCircle,
+  ListChecks, Terminal, LayoutTemplate,
 } from 'lucide-react'
 import type { Block, BlockType, TaskMarker, Priority, Page } from '@shared/types/api'
 import type { api as ApiClient } from '@core/api-client'
@@ -244,6 +245,40 @@ const makeRefHandler: (value: string) => SlashHandler = (value) => (ctx) => {
   }
 }
 
+/** Apply a list of property pairs to the block via
+ *  `api.setBlockProperty` and then refresh the block from the server
+ *  so the parent sees the updated `properties` array. Surfaces errors
+ *  via toast (consistent with the other builtin handlers).
+ *
+ *  Why `setBlockProperty` and not `api.updateBlock({ properties })`?
+ *  The Rust `UpdateBlockRequest` does NOT carry a `properties` field —
+ *  the only mutator for that column is `PUT /blocks/:id/properties`.
+ *  This matches how the rest of the codebase mutates properties
+ *  (`PageView.handleKanbanPropertyChange`, `KanbanPage`, the
+ *  `BlockPropertiesPanel`).
+ *
+ *  Why `getPageBlocks` after the writes? `setBlockProperty` returns
+ *  `void`, so the only way to hand the parent an up-to-date block
+ *  (with the new `properties` shape) is to re-fetch. We scope by
+ *  `block.pageName` to avoid a global reload. */
+const makeRolePropertiesHandler: (
+  pairs: ReadonlyArray<readonly [string, string]>,
+  errorMessage: string,
+) => SlashHandler = (pairs, errorMessage) => async (ctx) => {
+  try {
+    for (const [key, value] of pairs) {
+      await ctx.api.setBlockProperty(ctx.block.id, key, value)
+    }
+    if (ctx.block.pageName) {
+      const refreshed = await ctx.api.getPageBlocks(ctx.block.pageName)
+      const updated = refreshed.find(b => b.id === ctx.block.id)
+      if (updated) ctx.onUpdate(updated)
+    }
+  } catch {
+    ctx.toast.error(errorMessage)
+  }
+}
+
 /** Template insertion — delegates to the BlockRow-supplied wizard.
  *  The wizard (prompt → pick template → create → navigate) is too
  *  multi-step to live in a registry handler, so the component
@@ -345,6 +380,46 @@ export const defaultRegistry: SlashActionRegistry = (() => {
   reg.register(
     { id: 'add-comment', label: 'Add Comment', description: 'Add a comment to this block', icon: <MessageCircle size={18} />, action: 'comment:add', keywords: ['comment', 'discussion', 'note', 'feedback'], category: 'Actions' },
     defaultCommentHandler,
+  )
+
+  // ── Roles (T11/T12/T13) ──
+  // Property-only transforms. None of these declare a `blockType`, so
+  // the visual block-type picker is unaffected — a `task` role still
+  // renders as a paragraph (or whatever blockType the block already is).
+  reg.register(
+    { id: 'task-role', label: 'Task', description: 'Mark this block as a task (sets type:: task + status:: todo)', icon: <ListChecks size={18} />, action: 'role:task', keywords: ['task', 'todo', 'role', 'rol', 'tarea'], category: 'Roles' },
+    makeRolePropertiesHandler(
+      [['type', 'task'], ['status', 'todo']],
+      'Failed to set task role',
+    ),
+  )
+  reg.register(
+    { id: 'query-role', label: 'Query', description: 'Embed a DSL query (prompts for the query string)', icon: <Terminal size={18} />, action: 'role:query', keywords: ['query', 'dsl', 'search', 'filter', 'rol'], category: 'Roles' },
+    async (ctx) => {
+      const dsl = window.prompt('Enter a DSL query:')
+      if (!dsl || dsl.trim().length === 0) return
+      await makeRolePropertiesHandler(
+        [['type', 'query'], ['dsl', dsl.trim()]],
+        'Failed to set query role',
+      )(ctx, defaultRegistry.getItem('query-role')!)
+    },
+  )
+  reg.register(
+    { id: 'card-role', label: 'Card', description: 'Turn this block into a card (sets card-shape::)', icon: <LayoutTemplate size={18} />, action: 'role:card', keywords: ['card', 'shape', 'carta', 'tarjeta', 'rol'], category: 'Roles' },
+    async (ctx) => {
+      const CARD_SHAPES = ['content', 'reference', 'presentation', 'article', 'note'] as const
+      const raw = window.prompt(
+        `Card shape (one of: ${CARD_SHAPES.join(', ')}):`,
+        'content',
+      )
+      const shape = (CARD_SHAPES as readonly string[]).includes(raw ?? '')
+        ? (raw as string)
+        : 'content'
+      await makeRolePropertiesHandler(
+        [['card-shape', shape]],
+        'Failed to set card role',
+      )(ctx, defaultRegistry.getItem('card-role')!)
+    },
   )
 
   // ── Block Types (existing) ──

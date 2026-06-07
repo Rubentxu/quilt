@@ -262,3 +262,186 @@ describe('SlashCommandMenu — SLASH_MENU_ITEMS derives from the registry (T10)'
     expect(legacyIds).toEqual(registryIds)
   })
 })
+
+// ─── T11: /task role (sets type:: task + status:: todo) ───────────────
+//
+// `task-role` is a ROLE transform — it sets the block's semantic type
+// and default status as properties, not as `blockType`/`marker`. This
+// keeps the slash command orthogonal to the visual block-type picker:
+// a "task role" paragraph is still a paragraph block, but it behaves
+// as a task in queries, filters, and the agent layer.
+
+describe('SlashActionRegistry — /task role (T11)', () => {
+  it('registers a task-role item with the expected metadata', () => {
+    const item = defaultRegistry.getItem('task-role')
+    expect(item).toBeDefined()
+    expect(item?.label).toBe('Task')
+    expect(item?.description).toMatch(/task/i)
+    expect(item?.category).toBe('Roles')
+    expect(item?.keywords).toContain('task')
+    // Must NOT declare a `blockType` — this is a property transform.
+    expect(item?.blockType).toBeUndefined()
+  })
+
+  it('handler sets type:: task and status:: todo via setBlockProperty', async () => {
+    const setBlockProperty = vi.fn().mockResolvedValue(undefined)
+    const getPageBlocks = vi.fn().mockResolvedValue([])
+    const onUpdate = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-task', pageName: 'demo' }),
+      api: { setBlockProperty, getPageBlocks } as any,
+      onUpdate,
+    })
+    const handler = defaultRegistry.getHandler('task-role')!
+    const item = defaultRegistry.getItem('task-role')!
+    await handler(ctx, item)
+
+    expect(setBlockProperty).toHaveBeenCalledWith('b-task', 'type', 'task')
+    expect(setBlockProperty).toHaveBeenCalledWith('b-task', 'status', 'todo')
+  })
+
+  it('handler surfaces errors via toast and does not call onUpdate', async () => {
+    const setBlockProperty = vi.fn().mockRejectedValue(new Error('boom'))
+    const toast = { error: vi.fn(), success: vi.fn() }
+    const onUpdate = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-task', pageName: 'demo' }),
+      api: { setBlockProperty } as any,
+      toast: toast as any,
+      onUpdate,
+    })
+    const handler = defaultRegistry.getHandler('task-role')!
+    await handler(ctx, defaultRegistry.getItem('task-role')!)
+
+    expect(toast.error).toHaveBeenCalled()
+    expect(onUpdate).not.toHaveBeenCalled()
+  })
+})
+
+// ─── T12: /query role (prompts for DSL, sets type:: query + dsl::) ────
+//
+// `query-role` turns a paragraph into a query block. The user is
+// prompted for the DSL string via `window.prompt` (the same surface
+// the rest of the outliner uses for ad-hoc text entry — keeps the
+// flow zero-dep, no modal, no portal). On cancel, the handler is a
+// no-op so the user's "/" gets cleared without a half-built block.
+
+describe('SlashActionRegistry — /query role (T12)', () => {
+  it('registers a query-role item with the expected metadata', () => {
+    const item = defaultRegistry.getItem('query-role')
+    expect(item).toBeDefined()
+    expect(item?.label).toBe('Query')
+    expect(item?.description).toMatch(/query|dsl/i)
+    expect(item?.category).toBe('Roles')
+    expect(item?.keywords).toContain('query')
+    expect(item?.keywords).toContain('dsl')
+    expect(item?.blockType).toBeUndefined()
+  })
+
+  it('handler prompts for DSL and sets type:: query + dsl:: <input>', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('(and [todo] [a])')
+    const setBlockProperty = vi.fn().mockResolvedValue(undefined)
+    const getPageBlocks = vi.fn().mockResolvedValue([])
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-q', pageName: 'demo' }),
+      api: { setBlockProperty, getPageBlocks } as any,
+    })
+    const handler = defaultRegistry.getHandler('query-role')!
+    await handler(ctx, defaultRegistry.getItem('query-role')!)
+
+    expect(promptSpy).toHaveBeenCalled()
+    expect(setBlockProperty).toHaveBeenCalledWith('b-q', 'type', 'query')
+    expect(setBlockProperty).toHaveBeenCalledWith('b-q', 'dsl', '(and [todo] [a])')
+    promptSpy.mockRestore()
+  })
+
+  it('handler is a no-op when the user cancels the prompt', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(null)
+    const setBlockProperty = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-q', pageName: 'demo' }),
+      api: { setBlockProperty } as any,
+    })
+    const handler = defaultRegistry.getHandler('query-role')!
+    await handler(ctx, defaultRegistry.getItem('query-role')!)
+
+    expect(setBlockProperty).not.toHaveBeenCalled()
+    promptSpy.mockRestore()
+  })
+
+  it('handler is a no-op when the user submits an empty DSL string', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('   ')
+    const setBlockProperty = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-q', pageName: 'demo' }),
+      api: { setBlockProperty } as any,
+    })
+    const handler = defaultRegistry.getHandler('query-role')!
+    await handler(ctx, defaultRegistry.getItem('query-role')!)
+
+    expect(setBlockProperty).not.toHaveBeenCalled()
+    promptSpy.mockRestore()
+  })
+})
+
+// ─── T13: /card role (sets card-shape:: property) ─────────────────────
+//
+// `card-role` turns a block into a card by setting `card-shape::`.
+// We prompt for the shape with the canonical list as the default
+// suggestion; invalid input / cancel → falls back to `'content'`,
+// matching the spec ("defaults to 'content'").
+
+describe('SlashActionRegistry — /card role (T13)', () => {
+  it('registers a card-role item with the expected metadata', () => {
+    const item = defaultRegistry.getItem('card-role')
+    expect(item).toBeDefined()
+    expect(item?.label).toBe('Card')
+    expect(item?.description).toMatch(/card/i)
+    expect(item?.category).toBe('Roles')
+    expect(item?.keywords).toContain('card')
+    expect(item?.blockType).toBeUndefined()
+  })
+
+  it('handler sets card-shape:: <shape> via setBlockProperty', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('reference')
+    const setBlockProperty = vi.fn().mockResolvedValue(undefined)
+    const getPageBlocks = vi.fn().mockResolvedValue([])
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-c', pageName: 'demo' }),
+      api: { setBlockProperty, getPageBlocks } as any,
+    })
+    const handler = defaultRegistry.getHandler('card-role')!
+    await handler(ctx, defaultRegistry.getItem('card-role')!)
+
+    expect(setBlockProperty).toHaveBeenCalledWith('b-c', 'card-shape', 'reference')
+    promptSpy.mockRestore()
+  })
+
+  it('handler defaults to "content" when the user cancels the prompt', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(null)
+    const setBlockProperty = vi.fn().mockResolvedValue(undefined)
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-c', pageName: 'demo' }),
+      api: { setBlockProperty } as any,
+    })
+    const handler = defaultRegistry.getHandler('card-role')!
+    await handler(ctx, defaultRegistry.getItem('card-role')!)
+
+    expect(setBlockProperty).toHaveBeenCalledWith('b-c', 'card-shape', 'content')
+    promptSpy.mockRestore()
+  })
+
+  it('handler falls back to "content" for an unknown shape', async () => {
+    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('bogus-shape')
+    const setBlockProperty = vi.fn().mockResolvedValue(undefined)
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b-c', pageName: 'demo' }),
+      api: { setBlockProperty } as any,
+    })
+    const handler = defaultRegistry.getHandler('card-role')!
+    await handler(ctx, defaultRegistry.getItem('card-role')!)
+
+    expect(setBlockProperty).toHaveBeenCalledWith('b-c', 'card-shape', 'content')
+    promptSpy.mockRestore()
+  })
+})
