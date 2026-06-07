@@ -6,7 +6,7 @@ use crate::migration::{RawBlock, parse_md_import};
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::properties::resolver::PropertyKeyResolver;
 use quilt_domain::repositories::{BlockRepository, PageRepository, PropertyRepository};
-use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid};
 use std::path::Path;
 use std::sync::Arc;
 use thiserror::Error;
@@ -185,6 +185,7 @@ async fn create_blocks_from_raw<BR: BlockRepository, PropR: PropertyRepository>(
                 order: order as f64,
                 marker: None,
                 format: BlockFormat::Markdown,
+                block_type: BlockType::Paragraph,
                 properties,
             };
             let block =

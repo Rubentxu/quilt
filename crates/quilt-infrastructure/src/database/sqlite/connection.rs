@@ -119,6 +119,7 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
             order_index REAL NOT NULL DEFAULT 0,
             level INTEGER NOT NULL DEFAULT 1,
             format TEXT NOT NULL DEFAULT 'markdown',
+            block_type TEXT NOT NULL DEFAULT 'paragraph',
             marker TEXT,
             priority TEXT,
             content TEXT NOT NULL DEFAULT '',
@@ -138,6 +139,27 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Migration 007: add `block_type` column to `blocks` (P0 of
+    // `quilt-blocktype-persistence`). The column is `NOT NULL DEFAULT
+    // 'paragraph'` so existing rows backfill cleanly with the same
+    // default value the entity used to assume implicitly. The
+    // migration is idempotent: if the column already exists, this
+    // errors with "duplicate column" but we catch and ignore that case.
+    // Mirrors the pattern of migration 006 (F5: pages.properties).
+    match sqlx::query("ALTER TABLE blocks ADD COLUMN block_type TEXT NOT NULL DEFAULT 'paragraph'")
+        .execute(pool)
+        .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            // Ignore "duplicate column" error so the migration is idempotent.
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+        }
+    }
 
     sqlx::query(
         r#"

@@ -8,7 +8,7 @@
 use proptest::prelude::*;
 use quilt_domain::OrderCalculator;
 use quilt_domain::entities::Block;
-use quilt_domain::value_objects::{BlockFormat, Uuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, Uuid};
 
 /// Build a Block with a controllable `order` value. All other fields are
 /// filled with sensible defaults — the order algorithm only reads
@@ -21,6 +21,7 @@ fn make_block(order: f64) -> Block {
         order,
         level: 1,
         format: BlockFormat::Markdown,
+        block_type: BlockType::Paragraph,
         marker: None,
         priority: None,
         content: format!("block@{}", order),

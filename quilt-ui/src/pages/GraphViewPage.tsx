@@ -9,6 +9,20 @@ import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 
 // ──── Types ────────────────────────────────────────────────
 
+/**
+ * Returns whether the graph should be painted in dark colors.
+ *
+ * The active theme is signalled by the `data-theme` attribute on
+ * `<html>` (see `src/main.tsx` and the toggle in `AppShell.tsx`).
+ * The previous implementation read `classList.contains('dark')`,
+ * which never matched because the toggle never adds a `dark`
+ * class — so the graph was always painted with light colors
+ * regardless of the actual theme. Exported for unit testing.
+ */
+export function isDarkTheme(): boolean {
+  return document.documentElement.getAttribute('data-theme') === 'dark'
+}
+
 interface GraphNode {
   id: string
   label: string
@@ -226,7 +240,7 @@ export function GraphViewPage() {
       ctx.scale(zoom, zoom)
 
       // Canvas doesn't support CSS custom properties — detect theme
-      const isDark = document.documentElement.classList.contains('dark')
+      const isDark = isDarkTheme()
 
       // Draw edges
       ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'

@@ -219,8 +219,6 @@ impl QueryCompiler for SqliteCompiler {
     /// 1. Try FTS5 `term*` prefix search on `pages_fts`
     /// 2. If FTS5 returns fewer than `limit` results, fall back to LIKE on page names
     fn compile_page_fuzzy(&self, term: &str, limit: usize) -> Result<CompiledQuery, CompilerError> {
-        
-
         // FTS5 CTE: try prefix search first
         let fts_sql = format!(
             "WITH fts_results AS ( \

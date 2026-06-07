@@ -228,9 +228,7 @@ impl QueryParser {
 
     fn parse_task(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
-        Ok(QueryAst::Task(
-            args.iter().map(|s| s.to_string()).collect(),
-        ))
+        Ok(QueryAst::Task(args.iter().map(|s| s.to_string()).collect()))
     }
 
     fn parse_priority(&self, rest: &str) -> Result<QueryAst, ParseError> {

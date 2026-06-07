@@ -46,7 +46,8 @@ impl ToolHandler for SystemToolHandler {
             },
             Tool {
                 name: "quilt_get_query_capabilities".to_string(),
-                description: "Get the query and search capabilities supported by the system".to_string(),
+                description: "Get the query and search capabilities supported by the system"
+                    .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {}
@@ -88,25 +89,25 @@ impl SystemToolHandler {
                     Cardinality::Many => "Many",
                 };
 
-                let closed_values: Option<Vec<serde_json::Value>> =
-                    if def.closed_values.is_empty() {
-                        None
-                    } else {
-                        Some(
-                            def.closed_values
-                                .iter()
-                                .map(|cv| {
-                                    serde_json::json!({
-                                        "id": cv.id.to_string(),
-                                        "db_ident": cv.db_ident,
-                                        "value": cv.value,
-                                        "icon": cv.icon,
-                                        "order": cv.order,
-                                    })
+                let closed_values: Option<Vec<serde_json::Value>> = if def.closed_values.is_empty()
+                {
+                    None
+                } else {
+                    Some(
+                        def.closed_values
+                            .iter()
+                            .map(|cv| {
+                                serde_json::json!({
+                                    "id": cv.id.to_string(),
+                                    "db_ident": cv.db_ident,
+                                    "value": cv.value,
+                                    "icon": cv.icon,
+                                    "order": cv.order,
                                 })
-                                .collect(),
-                        )
-                    };
+                            })
+                            .collect(),
+                    )
+                };
 
                 serde_json::json!({
                     "id": def.id.to_string(),
@@ -400,13 +401,19 @@ mod tests {
         let tools = handler.tools();
         assert_eq!(tools.len(), 2);
         assert!(tools.iter().any(|t| t.name == "quilt_list_property_types"));
-        assert!(tools.iter().any(|t| t.name == "quilt_get_query_capabilities"));
+        assert!(
+            tools
+                .iter()
+                .any(|t| t.name == "quilt_get_query_capabilities")
+        );
     }
 
     #[tokio::test]
     async fn test_list_property_types() {
         let handler = create_handler();
-        let result = handler.execute("quilt_list_property_types", &serde_json::json!({})).await;
+        let result = handler
+            .execute("quilt_list_property_types", &serde_json::json!({}))
+            .await;
         assert!(result.is_ok());
         let json: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
         assert!(json.get("count").is_some());
@@ -428,12 +435,17 @@ mod tests {
     #[tokio::test]
     async fn test_list_property_types_builtin_props() {
         let handler = create_handler();
-        let result = handler.execute("quilt_list_property_types", &serde_json::json!({})).await.unwrap();
+        let result = handler
+            .execute("quilt_list_property_types", &serde_json::json!({}))
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
         let property_types = json["property_types"].as_array().unwrap();
 
         // Check that status property exists and has closed values
-        let status = property_types.iter().find(|p| p["db_ident"] == "quilt.property/status");
+        let status = property_types
+            .iter()
+            .find(|p| p["db_ident"] == "quilt.property/status");
         assert!(status.is_some());
         let status = status.unwrap();
         assert!(!status["closed_values"].is_null());
@@ -444,7 +456,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_query_capabilities() {
         let handler = create_handler();
-        let result = handler.execute("quilt_get_query_capabilities", &serde_json::json!({})).await;
+        let result = handler
+            .execute("quilt_get_query_capabilities", &serde_json::json!({}))
+            .await;
         assert!(result.is_ok());
         let json: serde_json::Value = serde_json::from_str(&result.unwrap()).unwrap();
 
@@ -477,7 +491,10 @@ mod tests {
     #[tokio::test]
     async fn test_get_query_capabilities_operators() {
         let handler = create_handler();
-        let result = handler.execute("quilt_get_query_capabilities", &serde_json::json!({})).await.unwrap();
+        let result = handler
+            .execute("quilt_get_query_capabilities", &serde_json::json!({}))
+            .await
+            .unwrap();
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
         let operators = json["query"]["operators"].as_array().unwrap();
 
@@ -498,7 +515,9 @@ mod tests {
     #[tokio::test]
     async fn test_unknown_tool() {
         let handler = create_handler();
-        let result = handler.execute("quilt_unknown_tool", &serde_json::json!({})).await;
+        let result = handler
+            .execute("quilt_unknown_tool", &serde_json::json!({}))
+            .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Unknown tool"));
     }

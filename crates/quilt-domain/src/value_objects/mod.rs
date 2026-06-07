@@ -3,6 +3,7 @@
 mod align;
 mod asset_type;
 mod block_format;
+mod block_type;
 mod journal_day;
 mod priority;
 mod property_value;
@@ -12,6 +13,7 @@ mod uuid;
 pub use align::Align;
 pub use asset_type::AssetType;
 pub use block_format::BlockFormat;
+pub use block_type::BlockType;
 pub use journal_day::JournalDay;
 pub use priority::Priority;
 pub use property_value::{PropertyValue, parse_properties};

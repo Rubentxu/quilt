@@ -79,6 +79,31 @@ pub trait BlockRepository: Send + Sync {
         value: &str,
         limit: usize,
     ) -> Result<Vec<Block>, DomainError>;
+
+    /// List distinct top-level property **keys** that appear in any
+    /// block's `properties` map, ordered lexicographically ascending.
+    ///
+    /// This is the backend for `GET /api/v1/properties/keys`. It is the
+    /// first cursor-paginated read in Quilt, so the convention set
+    /// here is project-wide:
+    ///
+    /// * `cursor == None` → return the smallest `limit` keys.
+    /// * `cursor == Some(s)` → return only keys that are **strictly
+    ///   greater** than `s` (lexicographic, byte-wise UTF-8).
+    /// * `limit` is the upper bound on how many keys to return. The
+    ///   handler is expected to validate `limit ∈ 1..=100` before
+    ///   calling this method — implementations trust the input.
+    /// * The result is `Vec<String>`, sorted ASC. Callers decide
+    ///   whether the page was the last one by comparing
+    ///   `keys.len() < limit`.
+    ///
+    /// Implementations must deduplicate — the same key can appear in
+    /// many blocks.
+    async fn list_distinct_keys(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<String>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods

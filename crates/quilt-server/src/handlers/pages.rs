@@ -525,6 +525,11 @@ pub async fn create_page_from_template(
             order: template_block.order,
             marker: template_block.marker,
             format: template_block.format,
+            // Preserve the template's block type. Default `Paragraph` only
+            // applies if the source block somehow has an unknown value,
+            // which the parse_block_type helper in the SQLite repo handles
+            // safely on read.
+            block_type: template_block.block_type,
             properties: template_block.properties.clone(),
         })
         .map_err(|e| AppError::Internal(e.to_string()))?;

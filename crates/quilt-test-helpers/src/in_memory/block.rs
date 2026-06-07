@@ -261,13 +261,41 @@ impl BlockRepository for InMemoryBlockRepo {
         }
         Ok(out)
     }
+
+    async fn list_distinct_keys(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<String>, DomainError> {
+        // Scan every block and collect distinct top-level keys.
+        // We then sort lexicographically and apply the cursor+limit
+        // slice. This mirrors the SQLite `json_each` + ORDER BY
+        // behavior at the contract level.
+        let repo = self.repo.read();
+        let mut keys: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for block in repo.values() {
+            for k in block.properties.keys() {
+                keys.insert(k.clone());
+            }
+        }
+
+        let mut out: Vec<String> = keys.into_iter().collect();
+        if let Some(c) = cursor {
+            // Strictly greater than cursor (per the trait contract).
+            out.retain(|k| k.as_str() > c);
+        }
+        // Truncate to `limit` (caller is responsible for bounds — the
+        // trait says implementations trust the input).
+        out.truncate(limit as usize);
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use quilt_domain::entities::{BlockCreate, PageCreate};
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, BlockType};
 
     fn make_block(page_id: Uuid, content: &str) -> Block {
         Block::new(BlockCreate {
@@ -277,6 +305,7 @@ mod tests {
             order: 1.0,
             marker: None,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties: std::collections::HashMap::new(),
         })
         .unwrap()
@@ -380,5 +409,197 @@ mod tests {
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), DomainError::InvalidData(_)));
+    }
+
+    // ── list_distinct_keys tests (T1 of property-keys-endpoint) ─────
+
+    /// Build a block with the given properties map.
+    fn make_block_with_properties(
+        page_id: Uuid,
+        content: &str,
+        properties: std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>,
+    ) -> Block {
+        Block::new(BlockCreate {
+            page_id,
+            content: content.to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
+            properties,
+        })
+        .unwrap()
+    }
+
+    fn props(
+        pairs: &[(&str, &str)],
+    ) -> std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue> {
+        pairs
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.to_string(),
+                    quilt_domain::value_objects::PropertyValue::string(*v),
+                )
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn test_list_distinct_keys_empty_db() {
+        let repo = InMemoryBlockRepo::new();
+        let keys = repo.list_distinct_keys(None, 50).await.unwrap();
+        assert!(keys.is_empty(), "empty DB should yield no keys");
+    }
+
+    #[tokio::test]
+    async fn test_list_distinct_keys_blocks_with_empty_properties() {
+        let page_id = Uuid::new_v4();
+        let blocks = vec![
+            make_block(page_id, "Block 1"),
+            make_block(page_id, "Block 2"),
+        ];
+        let repo = InMemoryBlockRepo::new().with_blocks(blocks);
+
+        let keys = repo.list_distinct_keys(None, 50).await.unwrap();
+        assert!(
+            keys.is_empty(),
+            "blocks with empty properties should yield no keys"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_distinct_keys_returns_distinct_keys_sorted() {
+        // GIVEN multiple blocks whose properties contain overlapping
+        // and unique keys, in non-alphabetical insertion order.
+        let page_id = Uuid::new_v4();
+        let blocks = vec![
+            make_block_with_properties(
+                page_id,
+                "B1",
+                props(&[("status", "Doing"), ("priority", "A")]),
+            ),
+            make_block_with_properties(
+                page_id,
+                "B2",
+                props(&[("status", "Done"), ("deadline", "2026-01-01")]),
+            ),
+            make_block_with_properties(page_id, "B3", props(&[("alpha", "x")])),
+        ];
+        let repo = InMemoryBlockRepo::new().with_blocks(blocks);
+
+        let keys = repo.list_distinct_keys(None, 50).await.unwrap();
+
+        // All 4 distinct keys, sorted lexicographically ASC.
+        assert_eq!(
+            keys,
+            vec![
+                "alpha".to_string(),
+                "deadline".to_string(),
+                "priority".to_string(),
+                "status".to_string(),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_distinct_keys_cursor_filters_strictly_greater() {
+        // GIVEN 5 distinct keys: a, b, c, d, e
+        // WHEN cursor = "b" → returns strictly c, d, e
+        let page_id = Uuid::new_v4();
+        let mut all_blocks = Vec::new();
+        for (i, k) in ["a", "b", "c", "d", "e"].iter().enumerate() {
+            all_blocks.push(make_block_with_properties(
+                page_id,
+                &format!("B{i}"),
+                props(&[(k, "v")]),
+            ));
+        }
+        let repo = InMemoryBlockRepo::new().with_blocks(all_blocks);
+
+        let keys = repo.list_distinct_keys(Some("b"), 50).await.unwrap();
+        assert_eq!(
+            keys,
+            vec!["c".to_string(), "d".to_string(), "e".to_string()],
+            "cursor must be strictly greater than"
+        );
+
+        // Cursor at first key returns the rest.
+        let keys = repo.list_distinct_keys(Some("a"), 50).await.unwrap();
+        assert_eq!(
+            keys,
+            vec![
+                "b".to_string(),
+                "c".to_string(),
+                "d".to_string(),
+                "e".to_string()
+            ]
+        );
+
+        // Cursor at the last key returns nothing.
+        let keys = repo.list_distinct_keys(Some("e"), 50).await.unwrap();
+        assert!(keys.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_distinct_keys_limit_slices() {
+        // GIVEN 10 distinct keys: k00, k01, ..., k09
+        let page_id = Uuid::new_v4();
+        let mut all_blocks = Vec::new();
+        for i in 0..10 {
+            let key = format!("k{i:02}");
+            all_blocks.push(make_block_with_properties(
+                page_id,
+                &format!("B{i}"),
+                props(&[(&key, "v")]),
+            ));
+        }
+        let repo = InMemoryBlockRepo::new().with_blocks(all_blocks);
+
+        // limit=3 → 3 smallest keys
+        let keys = repo.list_distinct_keys(None, 3).await.unwrap();
+        assert_eq!(
+            keys,
+            vec!["k00".to_string(), "k01".to_string(), "k02".to_string()]
+        );
+
+        // limit=10 → all 10
+        let keys = repo.list_distinct_keys(None, 10).await.unwrap();
+        assert_eq!(keys.len(), 10);
+
+        // limit=100 → still only 10 (no error on limit > total)
+        let keys = repo.list_distinct_keys(None, 100).await.unwrap();
+        assert_eq!(keys.len(), 10);
+    }
+
+    #[tokio::test]
+    async fn test_list_distinct_keys_utf8_cursor() {
+        // A real-world key with a `/` in it (URL-encoded on the wire).
+        // Confirms we don't accidentally split on `/` or other separators.
+        let page_id = Uuid::new_v4();
+        let blocks = vec![
+            make_block_with_properties(
+                page_id,
+                "B1",
+                props(&[("priority/level", "high"), ("status", "Doing")]),
+            ),
+            make_block_with_properties(page_id, "B2", props(&[("priority/level", "low")])),
+        ];
+        let repo = InMemoryBlockRepo::new().with_blocks(blocks);
+
+        // Without cursor → both keys, sorted: "priority/level" < "status"
+        let keys = repo.list_distinct_keys(None, 50).await.unwrap();
+        assert_eq!(
+            keys,
+            vec!["priority/level".to_string(), "status".to_string()]
+        );
+
+        // Cursor at "priority/level" → only "status" remains
+        let keys = repo
+            .list_distinct_keys(Some("priority/level"), 50)
+            .await
+            .unwrap();
+        assert_eq!(keys, vec!["status".to_string()]);
     }
 }

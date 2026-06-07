@@ -429,7 +429,7 @@ pub fn build_structure_map(blocks: &[Block]) -> StructureMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, BlockType};
     use std::collections::HashMap;
 
     fn make_block(id: Uuid, refs: Vec<Uuid>, page_id: Uuid) -> Block {
@@ -440,6 +440,7 @@ mod tests {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: format!("Block {}", id),

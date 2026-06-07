@@ -322,9 +322,7 @@ where
             }
 
             // G3 — Temporal is handled in compile_temporal hook, not build_where.
-            QueryAst::Temporal { .. } => {
-                Err(CompilerError::UnsupportedOperator { op: "Temporal" })
-            }
+            QueryAst::Temporal { .. } => Err(CompilerError::UnsupportedOperator { op: "Temporal" }),
 
             // F12 — VirtualSelect is handled in compile_virtual_select hook, not build_where.
             QueryAst::VirtualSelect { .. } => Err(CompilerError::UnsupportedOperator {

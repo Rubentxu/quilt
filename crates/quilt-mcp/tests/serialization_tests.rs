@@ -6,7 +6,7 @@
 
 use chrono::{TimeZone, Utc};
 use quilt_domain::entities::Block;
-use quilt_domain::value_objects::{BlockFormat, Priority, TaskMarker, Uuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, Priority, TaskMarker, Uuid};
 use quilt_mcp::serialization::block_to_json;
 use std::collections::HashMap;
 
@@ -33,6 +33,7 @@ fn make_block(
         order: 1.5,
         level: 2,
         format: BlockFormat::Markdown,
+        block_type: BlockType::Paragraph,
         marker,
         priority,
         content: content.to_string(),

@@ -1,7 +1,7 @@
 //! Block entity - the fundamental unit of content in Quilt
 
 use crate::errors::DomainError;
-use crate::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
+use crate::value_objects::{BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid};
 use std::collections::HashMap;
 
 /// Block is the fundamental unit of content in Quilt.
@@ -22,6 +22,10 @@ pub struct Block {
     pub level: u8,
     /// Content format
     pub format: BlockFormat,
+    /// Visual / semantic kind of this block (paragraph, heading, code,
+    /// etc.). Persisted on the wire and in SQLite as a lowercase string
+    /// matching the TypeScript `BlockType` union. See [`BlockType`].
+    pub block_type: BlockType,
     /// Task marker (if this block is a task)
     pub marker: Option<TaskMarker>,
     /// Priority level (A, B, C)
@@ -61,6 +65,9 @@ pub struct BlockCreate {
     pub order: f64,
     pub marker: Option<TaskMarker>,
     pub format: BlockFormat,
+    /// Visual / semantic kind of the new block. Defaults to
+    /// [`BlockType::Paragraph`] if not set on the struct literal.
+    pub block_type: BlockType,
     pub properties: HashMap<String, PropertyValue>,
 }
 
@@ -77,6 +84,10 @@ pub struct BlockUpdate {
     pub scheduled: Option<Option<chrono::DateTime<chrono::Utc>>>,
     pub deadline: Option<Option<chrono::DateTime<chrono::Utc>>>,
     pub collapsed: Option<bool>,
+    /// When `Some(t)`, the block's [`BlockType`] is set to `t`. The
+    /// outer `Option` lets callers distinguish "don't touch" from
+    /// "set to a value" — important for `PATCH` semantics.
+    pub block_type: Option<BlockType>,
 }
 
 impl Block {
@@ -90,6 +101,7 @@ impl Block {
             order: create.order,
             level: create.parent_id.map(|_| 2).unwrap_or(1),
             format: create.format,
+            block_type: create.block_type,
             marker: create.marker,
             priority: None,
             content: create.content,
@@ -145,6 +157,9 @@ impl Block {
         }
         if let Some(collapsed) = update.collapsed {
             self.collapsed = collapsed;
+        }
+        if let Some(block_type) = update.block_type {
+            self.block_type = block_type;
         }
         self.updated_at = chrono::Utc::now();
         Ok(())
@@ -251,6 +266,7 @@ mod tests {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: "Test block".to_string(),
@@ -278,6 +294,7 @@ mod tests {
             order: 1.0,
             marker: Some(TaskMarker::Todo),
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties: HashMap::new(),
         };
 
@@ -285,6 +302,7 @@ mod tests {
         assert_eq!(block.page_id, page_id);
         assert_eq!(block.content, "Hello");
         assert_eq!(block.marker, Some(TaskMarker::Todo));
+        assert_eq!(block.block_type, BlockType::Paragraph);
         assert!(!block.is_done());
     }
 
@@ -320,6 +338,7 @@ mod tests {
             order: 1.0,
             marker: None,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties: HashMap::new(),
         };
 
@@ -336,6 +355,135 @@ mod tests {
 
         assert!(block.logbook.is_some());
     }
+
+    // ── BlockType integration tests ──────────────────────────────
+    //
+    // These tests exercise the contract that the frontend relies on:
+    // the `block_type` field on the entity is set, round-trips through
+    // serde, and is mutable via `BlockUpdate` (the path the PATCH
+    // /blocks/:id handler uses).
+
+    /// A new block must default to `BlockType::Paragraph`. The TS
+    /// side assumes a missing `blockType` value is "paragraph".
+    #[test]
+    fn test_new_block_defaults_to_paragraph() {
+        let create = BlockCreate {
+            page_id: Uuid::new_v4(),
+            content: "Hello".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
+            properties: HashMap::new(),
+        };
+        let block = Block::new(create).unwrap();
+        assert_eq!(block.block_type, BlockType::Paragraph);
+    }
+
+    /// `BlockCreate::default()` must populate a `block_type` value
+    /// (the column is `NOT NULL` in SQLite). Using `..Default::default()`
+    /// must compile AND produce a usable block.
+    #[test]
+    fn test_block_create_default_has_paragraph_type() {
+        let create = BlockCreate::default();
+        assert_eq!(create.block_type, BlockType::Paragraph);
+    }
+
+    /// The frontend sends `blockType: "heading1"` via PATCH. The
+    /// server-side handler should call `block.update(BlockUpdate {
+    /// block_type: Some(BlockType::Heading1), .. })`. This test
+    /// exercises that path directly.
+    #[test]
+    fn test_block_update_changes_block_type() {
+        let create = BlockCreate {
+            page_id: Uuid::new_v4(),
+            content: "Old heading".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
+            properties: HashMap::new(),
+        };
+        let mut block = Block::new(create).unwrap();
+        assert_eq!(block.block_type, BlockType::Paragraph);
+
+        block
+            .update(BlockUpdate {
+                block_type: Some(BlockType::Heading1),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(block.block_type, BlockType::Heading1);
+
+        // And back again — the slash command registry calls this
+        // repeatedly as the user toggles kinds.
+        block
+            .update(BlockUpdate {
+                block_type: Some(BlockType::Code),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(block.block_type, BlockType::Code);
+    }
+
+    /// `block_type: None` in an update must be a no-op (the field
+    /// should not be touched). The PATCH handler distinguishes
+    /// "field absent" from "field present and value".
+    #[test]
+    fn test_block_update_omitted_block_type_is_noop() {
+        let create = BlockCreate {
+            page_id: Uuid::new_v4(),
+            content: "x".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            block_type: BlockType::Quote,
+            properties: HashMap::new(),
+        };
+        let mut block = Block::new(create).unwrap();
+        let original = block.block_type;
+
+        block
+            .update(BlockUpdate {
+                content: Some("new content".to_string()),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert_eq!(block.block_type, original);
+        assert_eq!(block.content, "new content");
+    }
+
+    /// `block_type` must survive a full JSON round-trip — the wire
+    /// path goes: SQLite TEXT → Block → JSON → TS. We only test the
+    /// Rust half here, but the JSON form must be the canonical
+    /// lowercase string.
+    #[test]
+    fn test_block_block_type_serializes_lowercase() {
+        let create = BlockCreate {
+            page_id: Uuid::new_v4(),
+            content: "Title".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            block_type: BlockType::Heading1,
+            properties: HashMap::new(),
+        };
+        let block = Block::new(create).unwrap();
+
+        let json = serde_json::to_string(&block).unwrap();
+        // The JSON must contain `"block_type":"heading1"`, not
+        // `"blockType"` (Rust's serde default) and not `"Heading1"`.
+        assert!(
+            json.contains("\"block_type\":\"heading1\""),
+            "expected block_type:\"heading1\" in JSON, got: {}",
+            json
+        );
+    }
 }
 
 impl Default for BlockCreate {
@@ -347,6 +495,7 @@ impl Default for BlockCreate {
             order: 1.0,
             marker: None,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties: HashMap::new(),
         }
     }
@@ -361,6 +510,7 @@ impl Default for Block {
             order: 0.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: String::new(),

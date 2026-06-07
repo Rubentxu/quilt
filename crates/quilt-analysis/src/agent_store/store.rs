@@ -4,7 +4,7 @@ use crate::AnalysisError;
 use crate::agent_store::types::MemoryEntry;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid as DomainUuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid as DomainUuid};
 use std::collections::HashMap;
 use thiserror::Error;
 use tracing::instrument;
@@ -96,6 +96,7 @@ fn entry_to_block(entry: &MemoryEntry) -> Result<Block, StoreError> {
         order: 1.0,
         level: 1,
         format: BlockFormat::Markdown,
+        block_type: BlockType::Paragraph,
         marker: None,
         priority: None,
         content,

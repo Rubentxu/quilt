@@ -244,7 +244,7 @@ mod tests {
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
     use quilt_domain::repositories::BlockRepository;
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, BlockType};
     use std::collections::HashMap;
 
     fn uuid_from_u8(i: u8) -> Uuid {
@@ -261,6 +261,7 @@ mod tests {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: format!("Block {}", id),
@@ -358,6 +359,16 @@ mod tests {
                 "list_by_property not supported in mock".to_string(),
             ))
         }
+
+        async fn list_distinct_keys(
+            &self,
+            _cursor: Option<&str>,
+            _limit: u32,
+        ) -> Result<Vec<String>, DomainError> {
+            Err(DomainError::Storage(
+                "list_distinct_keys not supported in mock".to_string(),
+            ))
+        }
     }
 
     #[test]
@@ -423,6 +434,7 @@ mod tests {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: "B".to_string(),

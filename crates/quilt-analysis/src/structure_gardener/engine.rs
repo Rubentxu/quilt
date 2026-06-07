@@ -383,7 +383,7 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, BlockType};
 
     fn make_block(
         id: Uuid,
@@ -398,6 +398,7 @@ mod tests {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: content.to_string(),
@@ -494,6 +495,16 @@ mod tests {
         ) -> Result<Vec<Block>, DomainError> {
             Err(DomainError::Storage(
                 "list_by_property not supported in mock".to_string(),
+            ))
+        }
+
+        async fn list_distinct_keys(
+            &self,
+            _cursor: Option<&str>,
+            _limit: u32,
+        ) -> Result<Vec<String>, DomainError> {
+            Err(DomainError::Storage(
+                "list_distinct_keys not supported in mock".to_string(),
             ))
         }
     }

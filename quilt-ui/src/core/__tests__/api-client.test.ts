@@ -353,3 +353,66 @@ describe('dismissTour', () => {
     expect(result.dismissed).toEqual(['cognitive', 'mcp', 'welcome'])
   })
 })
+
+// ── P0 fix: api surface must match mounted routes ──────────────────
+//
+// The frontend's `api` object must only expose methods whose target
+// route is registered in `crates/quilt-server/src/routes.rs`. Methods
+// for unmounted routes cause runtime 404s and unhandled promise
+// rejections, which is the P0 this test was added for.
+//
+// As of the fix, the following endpoints are NOT mounted on the
+// server and MUST NOT be re-added to the frontend until the matching
+// route is registered in `routes.rs`:
+//   - GET /api/v1/templates/:name/schema-pack
+//   - GET /api/v1/analysis/mirror
+//   - GET /api/v1/analysis/connections
+//   - GET /api/v1/analysis/gardener
+//   - GET /api/v1/events   (SSE — auth middleware has forward-compat
+//     code for `?api_key=` but no handler is mounted yet; callers
+//     must keep SSE disabled until the server route lands)
+
+describe('api surface (P0 — only mounted routes)', () => {
+  it('does not expose getSchemaPack (route /templates/:name/schema-pack not mounted)', () => {
+    expect(api).not.toHaveProperty('getSchemaPack')
+  })
+
+  it('does not expose getAnalysisMirror (route /analysis/mirror not mounted)', () => {
+    expect(api).not.toHaveProperty('getAnalysisMirror')
+  })
+
+  it('does not expose getAnalysisConnections (route /analysis/connections not mounted)', () => {
+    expect(api).not.toHaveProperty('getAnalysisConnections')
+  })
+
+  it('does not expose getAnalysisGardener (route /analysis/gardener not mounted)', () => {
+    expect(api).not.toHaveProperty('getAnalysisGardener')
+  })
+
+  it('exposes only the expected method set (locks the public surface)', () => {
+    // If this test fails, either:
+    //   (a) a method was removed and the change is intentional — update the list, or
+    //   (b) a new method was added — verify its target route is registered in
+    //       `crates/quilt-server/src/routes.rs` before updating the list.
+    const expected = [
+      'baseUrl',
+      // Pages
+      'listPages', 'getPage', 'createPage', 'createPageFromTemplate',
+      'getPageBlocks', 'getJournal', 'getPageBacklinks',
+      // Blocks
+      'createBlock', 'updateBlock', 'deleteBlock',
+      'searchBlocks', 'listBlocksByAuthor',
+      // Settings
+      'getSettings', 'updateSettings', 'getDateFormats',
+      // Block properties
+      'getBlockProperties', 'setBlockProperty', 'deleteBlockProperty',
+      // Templates
+      'listTemplates', 'getTemplateSchema',
+      // Query
+      'executeQuery',
+      // Tour state
+      'getTourState', 'dismissTour',
+    ].sort()
+    expect(Object.keys(api).sort()).toEqual(expected)
+  })
+})

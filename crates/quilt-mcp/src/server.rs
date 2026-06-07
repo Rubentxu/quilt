@@ -211,8 +211,7 @@ mod tests {
     use crate::handlers::{
         block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
         query::QueryToolHandler, resource::GraphResourceProvider, retrieval::RetrievalToolHandler,
-system::SystemToolHandler, template::TemplateToolHandler,
-        temporal::TemporalToolHandler,
+        system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
     use quilt_application::templates::reapply::{
         ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl,
@@ -225,9 +224,9 @@ system::SystemToolHandler, template::TemplateToolHandler,
     use quilt_infrastructure::database::sqlite::repositories::{
         SqliteBlockRepository, SqlitePageRepository, SqliteTagRepository,
     };
-    use std::sync::Arc;
     use quilt_search::SearchService;
     use sqlx::SqlitePool;
+    use std::sync::Arc;
 
     async fn setup_server() -> (McpServer, SqlitePool) {
         let pool = SqlitePool::connect("sqlite::memory:")
@@ -392,8 +391,18 @@ system::SystemToolHandler, template::TemplateToolHandler,
                         .any(|t| t.name == "quilt_query_temporal")
                 );
                 assert!(result.tools.iter().any(|t| t.name == "quilt_graph_edges"));
-                assert!(result.tools.iter().any(|t| t.name == "quilt_list_property_types"));
-                assert!(result.tools.iter().any(|t| t.name == "quilt_get_query_capabilities"));
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_list_property_types")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_get_query_capabilities")
+                );
             }
             _ => panic!("Expected ToolsList response"),
         }

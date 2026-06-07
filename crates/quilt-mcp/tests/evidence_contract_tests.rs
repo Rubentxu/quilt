@@ -119,7 +119,11 @@ async fn test_no_handler_serializes_top_level_evidence_key() {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 19, "Expected exactly 19 live tools (14 base + 3 retrieval-graph + 2 template)");
+    assert_eq!(
+        tools.len(),
+        19,
+        "Expected exactly 19 live tools (14 base + 3 retrieval-graph + 2 template)"
+    );
 
     // For each tool, call it (with safe empty args) and inspect the
     // JSON text. Failures are aggregated.

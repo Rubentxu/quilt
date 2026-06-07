@@ -46,7 +46,7 @@ mod tests {
     use quilt_domain::entities::Block;
     use quilt_domain::errors::DomainError;
     use quilt_domain::repositories::BlockRepository;
-    use quilt_domain::value_objects::{BlockFormat, Uuid};
+    use quilt_domain::value_objects::{BlockFormat, BlockType, Uuid};
     use std::collections::HashMap;
 
     fn make_block(id: Uuid, refs: Vec<Uuid>, page_id: Uuid) -> Block {
@@ -57,6 +57,7 @@ mod tests {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: format!("Block {}", id),
@@ -153,6 +154,16 @@ mod tests {
         ) -> Result<Vec<Block>, DomainError> {
             Err(DomainError::Storage(
                 "list_by_property not supported in mock".to_string(),
+            ))
+        }
+
+        async fn list_distinct_keys(
+            &self,
+            _cursor: Option<&str>,
+            _limit: u32,
+        ) -> Result<Vec<String>, DomainError> {
+            Err(DomainError::Storage(
+                "list_distinct_keys not supported in mock".to_string(),
             ))
         }
     }

@@ -26,5 +26,5 @@ pub use errors::DomainError;
 pub use references::{Ref, RefIndex, RefType};
 pub use services::OrderCalculator;
 pub use value_objects::{
-    Align, AssetType, BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
+    Align, AssetType, BlockFormat, BlockType, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
 };

@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use quilt_application::use_cases::{TemplateUseCases, TemplateUseCasesImpl};
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::value_objects::{BlockFormat, PropertyValue};
+use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue};
 use quilt_test_helpers::{InMemoryBlockRepo, InMemoryPageRepo};
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -48,6 +48,7 @@ fn make_block_with_properties(
         order: 1.0,
         marker: None,
         format: BlockFormat::Markdown,
+        block_type: BlockType::Paragraph,
         properties: props,
     })
     .unwrap()

@@ -59,6 +59,17 @@ interface BlockRowProps {
   onRedo: () => void
   indent: number
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }
+  /**
+   * Optional richer cut handler. When provided, `Cmd+X` on a block
+   * calls this with a snapshot of the block (id, content, properties,
+   * marker, priority, etc.) AND skips the default `onDeleteBlock` call.
+   * The parent is then responsible for: (1) pushing an undoable
+   * restore action, (2) deleting the block, and (3) updating local
+   * state. When NOT provided we fall back to the legacy flow
+   * (clipboard + `onDeleteBlock`) for backward compatibility with
+   * existing tests.
+   */
+  onCutBlock?: (snapshot: Block) => void
   selected?: boolean
   onMultiSelect?: (blockId: string, direction: 'up' | 'down') => void
   onSelectAll?: () => void
@@ -146,6 +157,7 @@ export function BlockRow({
   onRedo,
   indent,
   dragHandleProps,
+  onCutBlock,
   selected,
   onMultiSelect,
   onSelectAll,
@@ -640,7 +652,18 @@ export function BlockRow({
         case 'CutBlock':
           e.preventDefault()
           navigator.clipboard.writeText(currentText).catch(() => {})
-          onDeleteBlock(block.id)
+          if (onCutBlock) {
+            // Snapshot includes the latest *un-saved* text (e.g. user
+            // typed but hasn't blurred yet). The parent owns both the
+            // undo push and the delete — keeping the side effects
+            // atomic at the call site prevents a half-cut state
+            // (block gone from state but no undo entry) if the
+            // delete API call fails.
+            onCutBlock({ ...block, content: currentText })
+          } else {
+            // Legacy path: clipboard + delete, no undo support.
+            onDeleteBlock(block.id)
+          }
           toast.success('Block cut')
           return
 

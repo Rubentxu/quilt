@@ -3,7 +3,7 @@ use crate::agent_store::store::{self, find_by_key};
 use crate::agent_store::types::{InteractionProfile, MemoryEntry, MemoryQuery, ThinkingPattern};
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid as DomainUuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid as DomainUuid};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -192,6 +192,7 @@ impl AgentStore {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content,
@@ -345,6 +346,16 @@ mod tests {
         ) -> Result<Vec<Block>, DomainError> {
             Err(DomainError::Storage(
                 "list_by_property not supported in mock".to_string(),
+            ))
+        }
+
+        async fn list_distinct_keys(
+            &self,
+            _cursor: Option<&str>,
+            _limit: u32,
+        ) -> Result<Vec<String>, DomainError> {
+            Err(DomainError::Storage(
+                "list_distinct_keys not supported in mock".to_string(),
             ))
         }
     }

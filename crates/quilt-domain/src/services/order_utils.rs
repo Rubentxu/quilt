@@ -136,6 +136,7 @@ mod tests {
             order,
             level: 1,
             format: crate::value_objects::BlockFormat::Markdown,
+            block_type: crate::value_objects::BlockType::Paragraph,
             marker: None,
             priority: None,
             content: format!("Block at order {}", order),

@@ -14,7 +14,7 @@ use chrono::{TimeZone, Utc};
 use quilt_application::ApplicationError;
 use quilt_application::use_cases::{BlockTree, BlockUseCases};
 use quilt_domain::entities::Block;
-use quilt_domain::value_objects::{BlockFormat, PropertyValue, TaskMarker, Uuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, TaskMarker, Uuid};
 use quilt_mcp::handlers::ToolHandler;
 use quilt_mcp::handlers::block::BlockToolHandler;
 use serde_json::json;
@@ -53,6 +53,7 @@ impl MockBlockUseCases {
             order: 1.0,
             level: 1,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             marker: None,
             priority: None,
             content: content.to_string(),

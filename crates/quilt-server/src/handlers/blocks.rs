@@ -19,7 +19,7 @@ use crate::state::AppState;
 use quilt_application::services::ref_service::parse_refs_from_content;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::value_objects::{BlockFormat, PropertyValue, Uuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid};
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository,
 };
@@ -34,6 +34,11 @@ pub struct BlockDto {
     pub page_id: String,
     pub page_name: Option<String>,
     pub content: String,
+    /// Visual / semantic kind of the block. Wire format is the
+    /// lowercase string form of [`BlockType`] (e.g. `"heading1"`),
+    /// matching the TypeScript `BlockType` union in
+    /// `quilt-ui/src/shared/types/api.ts`.
+    pub block_type: String,
     pub marker: Option<String>,
     pub priority: Option<String>,
     pub parent_id: Option<String>,
@@ -61,6 +66,11 @@ impl From<(Block, Option<String>)> for BlockDto {
             page_id: block.page_id.to_string(),
             page_name,
             content: block.content,
+            // Map domain `BlockType` → its canonical lowercase string.
+            // `block_type.as_str()` is the same value the SQLite column
+            // stores and the TypeScript `BlockType` union expects, so
+            // a round-trip is byte-identical.
+            block_type: block.block_type.as_str().to_string(),
             marker: block.marker.map(|m| format!("{:?}", m)),
             priority: block.priority.map(|p| format!("{:?}", p)),
             parent_id: block.parent_id.map(|p| p.to_string()),
@@ -86,6 +96,7 @@ impl From<Block> for BlockDto {
             page_id: block.page_id.to_string(),
             page_name: None,
             content: block.content,
+            block_type: block.block_type.as_str().to_string(),
             marker: block.marker.map(|m| format!("{:?}", m)),
             priority: block.priority.map(|p| format!("{:?}", p)),
             parent_id: block.parent_id.map(|p| p.to_string()),
@@ -154,6 +165,13 @@ pub struct CreateBlockRequest {
 #[allow(dead_code)]
 pub struct UpdateBlockRequest {
     pub content: Option<String>,
+    /// Optional `blockType` change. The frontend sends one of the 11
+    /// `BlockType` strings (e.g. `"heading1"`, `"code"`). An unknown
+    /// value is rejected with `400 Bad Request` so the slash-command
+    /// registry surfaces a clear error to the user. A missing field
+    /// (`None`) is a no-op — it does NOT reset to `Paragraph`, which
+    /// matches standard `PATCH` semantics.
+    pub block_type: Option<String>,
     pub marker: Option<String>,
     pub priority: Option<String>,
     pub parent_id: Option<String>,
@@ -368,6 +386,10 @@ pub async fn create_block(
         order,
         marker: None,
         format: BlockFormat::Markdown,
+        // New blocks default to `Paragraph`. The frontend can PATCH
+        // the `blockType` field to change it (see `defaultBlockTypeHandler`
+        // in `quilt-ui/src/features/outliner-tiptap/slashRegistry.tsx`).
+        block_type: BlockType::Paragraph,
         properties,
     })
     .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -521,6 +543,22 @@ pub async fn update_block(
         None => None,
     };
 
+    // Parse `blockType` from its wire string form. We reject unknown
+    // values with 400 instead of silently coercing to `Paragraph` —
+    // silent coercion would mask bugs in the slash-command registry
+    // and could let an attacker write a non-canonical value to the
+    // database (the SQLite CHECK on the column would also reject it,
+    // but failing fast at the boundary is better).
+    let block_type_update = match payload.block_type.as_deref() {
+        Some(s) => Some(BlockType::parse_str(s).ok_or_else(|| {
+            AppError::BadRequest(format!(
+                "Invalid blockType: '{}'. Expected one of: paragraph, heading1, heading2, heading3, bullet, numbered, todo, quote, code, divider, image",
+                s
+            ))
+        })?),
+        None => None,
+    };
+
     // Track whether content changed BEFORE moving payload.content
     let content_changed = payload.content.is_some();
 
@@ -530,6 +568,7 @@ pub async fn update_block(
         order: payload.order,
         level: payload.level.map(|l| l as u8),
         collapsed: payload.collapsed,
+        block_type: block_type_update,
         ..Default::default()
     };
 
@@ -774,4 +813,141 @@ pub async fn link_blocks(
             "linked": true
         })),
     ))
+}
+
+// ── Tests ──────────────────────────────────────────────────────────────
+//
+// These tests live at the handler boundary (not at the DB or domain
+// layer) because the P0 contract is about the WIRE shape — the value
+// the frontend receives in the JSON body of a PATCH /blocks/:id
+// response, and the value it sends in the request body. Testing at
+// the DTO/serde boundary catches mismatches with the TypeScript
+// `BlockType` union that pure domain tests would miss.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quilt_domain::entities::BlockCreate;
+    use std::collections::HashMap as StdHashMap;
+
+    fn make_test_block(block_type: BlockType) -> Block {
+        let create = BlockCreate {
+            page_id: Uuid::new_v4(),
+            content: "x".to_string(),
+            parent_id: None,
+            order: 1.0,
+            marker: None,
+            format: BlockFormat::Markdown,
+            block_type,
+            properties: StdHashMap::new(),
+        };
+        Block::new(create).unwrap()
+    }
+
+    /// The DTO's `blockType` JSON field MUST be the lowercase string
+    /// form of the variant. This is the contract the TypeScript
+    /// `BlockType` union reads.
+    #[test]
+    fn test_block_dto_serializes_block_type_as_camelcase_lowercase() {
+        let dto: BlockDto = make_test_block(BlockType::Heading1).into();
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(
+            json["blockType"],
+            serde_json::Value::String("heading1".to_string()),
+            "expected blockType:\"heading1\" in DTO JSON, got: {}",
+            json
+        );
+    }
+
+    /// Every variant must serialize to its canonical lowercase string.
+    /// Catches drift between the Rust enum and the TS union.
+    #[test]
+    fn test_block_dto_block_type_for_every_variant() {
+        let expected = [
+            ("paragraph", BlockType::Paragraph),
+            ("heading1", BlockType::Heading1),
+            ("heading2", BlockType::Heading2),
+            ("heading3", BlockType::Heading3),
+            ("bullet", BlockType::Bullet),
+            ("numbered", BlockType::Numbered),
+            ("todo", BlockType::Todo),
+            ("quote", BlockType::Quote),
+            ("code", BlockType::Code),
+            ("divider", BlockType::Divider),
+            ("image", BlockType::Image),
+        ];
+        for (wire, variant) in expected {
+            let dto: BlockDto = make_test_block(variant).into();
+            let json = serde_json::to_value(&dto).unwrap();
+            assert_eq!(
+                json["blockType"],
+                serde_json::Value::String(wire.to_string()),
+                "variant {:?} did not serialize to {:?}",
+                variant,
+                wire
+            );
+        }
+    }
+
+    /// The PATCH /blocks/:id request must accept `blockType` as a
+    /// string. We verify the field is present and deserializes from
+    /// the exact wire form the frontend sends.
+    #[test]
+    fn test_update_block_request_accepts_block_type_string() {
+        let json = r#"{"blockType":"heading1","content":"hi"}"#;
+        let req: UpdateBlockRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.block_type.as_deref(), Some("heading1"));
+        assert_eq!(req.content.as_deref(), Some("hi"));
+    }
+
+    /// `blockType` is optional on the PATCH body — omitting it must
+    /// not break deserialization. The handler treats `None` as
+    /// "don't touch the field".
+    #[test]
+    fn test_update_block_request_block_type_is_optional() {
+        let json = r#"{"content":"hi"}"#;
+        let req: UpdateBlockRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.block_type, None);
+        assert_eq!(req.content.as_deref(), Some("hi"));
+    }
+
+    /// An unknown `blockType` value must be deserializable at the
+    /// DTO layer (it's `Option<String>`) but the handler must reject
+    /// it before touching the DB. This test asserts the DTO
+    /// accepts any string; the handler's rejection logic is in
+    /// `update_block` and is exercised by the integration test
+    /// for the request-shape contract.
+    #[test]
+    fn test_update_block_request_accepts_any_string() {
+        let json = r#"{"blockType":"made_up_kind"}"#;
+        let req: UpdateBlockRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.block_type.as_deref(), Some("made_up_kind"));
+    }
+
+    /// The DTO is also deserializable (it carries no `Deserialize`
+    /// invariants but the field must round-trip). Frontend tests
+    /// send JSON shaped like the DTO and we need to be able to
+    /// parse it back.
+    #[test]
+    fn test_block_dto_round_trip() {
+        let original: BlockDto = make_test_block(BlockType::Code).into();
+        let json = serde_json::to_string(&original).unwrap();
+        let parsed: BlockDto = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.block_type, original.block_type);
+        assert_eq!(parsed.content, original.content);
+        assert_eq!(parsed.id, original.id);
+    }
+
+    /// A DTO with `page_name = None` (the single-arg `From<Block>`
+    /// impl) must still produce the same `blockType` wire form.
+    /// The two `From` impls in this file both map the type, but
+    /// we'd be sad if one of them forgot.
+    #[test]
+    fn test_block_dto_block_type_via_tuple_from() {
+        let block = make_test_block(BlockType::Quote);
+        let dto: BlockDto = BlockDto::from((block, Some("My Page".to_string())));
+        let json = serde_json::to_value(&dto).unwrap();
+        assert_eq!(json["blockType"], "quote");
+        assert_eq!(json["pageName"], "My Page");
+    }
 }

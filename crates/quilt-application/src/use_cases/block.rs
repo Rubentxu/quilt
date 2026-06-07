@@ -6,7 +6,9 @@ use crate::errors::ApplicationError;
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate, Page, PageCreate};
 use quilt_domain::repositories::{BlockRepository, BlockRepositoryExt, PageRepository};
-use quilt_domain::value_objects::{BlockFormat, Priority, PropertyValue, TaskMarker, Uuid};
+use quilt_domain::value_objects::{
+    BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
@@ -151,6 +153,7 @@ impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
             order: 1.0,
             marker,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties,
         })
         .map_err(ApplicationError::Domain)?;
@@ -201,6 +204,7 @@ impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
             order: 1.0,
             marker: Some(TaskMarker::Todo),
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties,
         })
         .map_err(ApplicationError::Domain)?;

@@ -182,6 +182,30 @@ impl BlockRepository for InMemoryBlockRepository {
         }
         Ok(out)
     }
+
+    async fn list_distinct_keys(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<String>, DomainError> {
+        // Mirrors `quilt-test-helpers::InMemoryBlockRepo::list_distinct_keys`.
+        // Kept here only to satisfy the trait — production code uses
+        // the test-helpers version.
+        let blocks = self.blocks.read();
+        let mut keys: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for block in blocks.values() {
+            for k in block.properties.keys() {
+                keys.insert(k.clone());
+            }
+        }
+
+        let mut out: Vec<String> = keys.into_iter().collect();
+        if let Some(c) = cursor {
+            out.retain(|k| k.as_str() > c);
+        }
+        out.truncate(limit as usize);
+        Ok(out)
+    }
 }
 
 #[cfg(test)]
@@ -189,7 +213,7 @@ impl BlockRepository for InMemoryBlockRepository {
 mod tests {
     use super::*;
     use quilt_domain::entities::BlockCreate;
-    use quilt_domain::value_objects::BlockFormat;
+    use quilt_domain::value_objects::{BlockFormat, BlockType};
     use std::collections::HashMap;
 
     fn create_test_block(content: &str, page_id: Uuid) -> Block {
@@ -200,6 +224,7 @@ mod tests {
             order: 1.0,
             marker: None,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties: HashMap::new(),
         })
         .unwrap()
@@ -265,6 +290,7 @@ mod tests {
             order: 1.0,
             marker: None,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties: HashMap::new(),
         })
         .unwrap();

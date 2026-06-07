@@ -39,7 +39,7 @@ use quilt_domain::repositories::{
     TagRepository, TourStateRepository,
 };
 use quilt_domain::value_objects::{
-    BlockFormat, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
+    BlockFormat, BlockType, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -129,6 +129,14 @@ fn format_to_str(f: &BlockFormat) -> &'static str {
     }
 }
 
+fn parse_block_type(s: &str) -> Option<BlockType> {
+    BlockType::parse_str(s)
+}
+
+fn block_type_to_str(t: &BlockType) -> &'static str {
+    t.as_str()
+}
+
 fn parse_properties(blob: &[u8]) -> HashMap<String, PropertyValue> {
     if blob.is_empty() || blob == b"{}" {
         return HashMap::new();
@@ -192,6 +200,10 @@ struct BlockRow {
     order_index: f64,
     level: i64,
     format: String,
+    /// `block_type` column. `None` for pre-migration databases (the
+    /// column was added in migration 007). When missing, the entity
+    /// falls back to `BlockType::Paragraph` — the previous default.
+    block_type: Option<String>,
     marker: Option<String>,
     priority: Option<String>,
     content: String,
@@ -210,6 +222,16 @@ struct BlockRow {
 
 impl BlockRow {
     fn from_row(row: &sqlx::sqlite::SqliteRow) -> Result<Self, DomainError> {
+        // The `block_type` column was added in migration 007. Pre-migration
+        // databases don't have it, so the SELECT may not include it.
+        // `try_get` returns Err if the column is missing; we silently
+        // fall back to `None` and the entity-level `unwrap_or_default()`
+        // below will fill in `BlockType::Paragraph` — matching the
+        // pre-migration default (which was implicit).
+        let block_type = row
+            .try_get::<Option<String>, _>("block_type")
+            .ok()
+            .flatten();
         Ok(Self {
             id: row.get("id"),
             page_id: row.get("page_id"),
@@ -217,6 +239,7 @@ impl BlockRow {
             order_index: row.get("order_index"),
             level: row.get("level"),
             format: row.get("format"),
+            block_type,
             marker: row.get("marker"),
             priority: row.get("priority"),
             content: row.get("content"),
@@ -242,6 +265,11 @@ impl BlockRow {
             order: self.order_index,
             level: self.level as u8,
             format: parse_format(&self.format),
+            block_type: self
+                .block_type
+                .as_deref()
+                .and_then(parse_block_type)
+                .unwrap_or_default(),
             marker: self.marker.as_deref().and_then(parse_marker),
             priority: self.priority.as_deref().and_then(parse_priority),
             content: self.content.clone(),
@@ -431,10 +459,10 @@ impl BlockRepository for SqliteBlockRepository {
     async fn insert(&self, block: &Block) -> Result<(), DomainError> {
         sqlx::query(
             r#"INSERT INTO blocks
-            (id, page_id, parent_id, order_index, level, format, marker, priority,
+            (id, page_id, parent_id, order_index, level, format, block_type, marker, priority,
              content, properties, scheduled, deadline, start_time, repeated, logbook,
              collapsed, created_at, updated_at, refs, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(uuid_to_blob(&block.id))
         .bind(uuid_to_blob(&block.page_id))
@@ -442,6 +470,7 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(block.order)
         .bind(block.level as i64)
         .bind(format_to_str(&block.format))
+        .bind(block_type_to_str(&block.block_type))
         .bind(block.marker.as_ref().map(|m| marker_to_str(m)))
         .bind(block.priority.as_ref().map(|p| priority_to_str(p)))
         .bind(&block.content)
@@ -467,7 +496,7 @@ impl BlockRepository for SqliteBlockRepository {
         sqlx::query(
             r#"UPDATE blocks SET
             page_id = ?, parent_id = ?, order_index = ?, level = ?,
-            format = ?, marker = ?, priority = ?, content = ?,
+            format = ?, block_type = ?, marker = ?, priority = ?, content = ?,
             properties = ?, scheduled = ?, deadline = ?, start_time = ?,
             repeated = ?, logbook = ?, collapsed = ?,
             updated_at = ?, refs = ?, tags = ?
@@ -478,6 +507,7 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(block.order)
         .bind(block.level as i64)
         .bind(format_to_str(&block.format))
+        .bind(block_type_to_str(&block.block_type))
         .bind(block.marker.as_ref().map(|m| marker_to_str(m)))
         .bind(block.priority.as_ref().map(|p| priority_to_str(p)))
         .bind(&block.content)
@@ -656,6 +686,48 @@ impl BlockRepository for SqliteBlockRepository {
         rows.iter()
             .map(|r| BlockRow::from_row(r).and_then(|br| br.to_block()))
             .collect()
+    }
+
+    async fn list_distinct_keys(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<String>, DomainError> {
+        // Two query shapes: with and without the cursor predicate.
+        // `json_each` over an object yields one row per top-level
+        // key — it does NOT recurse into nested values, which is
+        // exactly what we want (nested keys are not "property
+        // keys" in our model). The cursor uses lexicographic ASC
+        // (`>`) and `LIMIT` is bound as a parameter.
+        let rows = match cursor {
+            Some(c) => {
+                sqlx::query(
+                    "SELECT DISTINCT je.key \
+                     FROM blocks, json_each(blocks.properties) AS je \
+                     WHERE je.key > ? \
+                     ORDER BY je.key ASC \
+                     LIMIT ?",
+                )
+                .bind(c)
+                .bind(limit as i64)
+                .fetch_all(&self.pool)
+                .await
+            }
+            None => {
+                sqlx::query(
+                    "SELECT DISTINCT je.key \
+                     FROM blocks, json_each(blocks.properties) AS je \
+                     ORDER BY je.key ASC \
+                     LIMIT ?",
+                )
+                .bind(limit as i64)
+                .fetch_all(&self.pool)
+                .await
+            }
+        }
+        .map_err(|e| DomainError::Storage(format!("list_distinct_keys: {}", e)))?;
+
+        Ok(rows.iter().map(|r| r.get::<String, _>("key")).collect())
     }
 }
 
@@ -1447,6 +1519,7 @@ mod tests {
             order: 1.0,
             marker: None,
             format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
             properties: HashMap::new(),
         };
         Block::new(create).expect("Failed to create block")
@@ -2185,5 +2258,148 @@ mod tests {
             second > first,
             "second dismiss should refresh the timestamp"
         );
+    }
+
+    // ── BlockType persistence tests (P0 of `quilt-blocktype-persistence`) ──
+    //
+    // These tests prove the end-to-end contract: a block's `block_type`
+    // round-trips through SQLite byte-identical. They cover all 11
+    // variants to catch any future mismatch between the Rust enum and
+    // the persisted string.
+
+    /// Helper that inserts a block with a specific `BlockType` and reads
+    /// it back, asserting the type survives the round-trip. Every
+    /// `BlockType` variant in the public contract is exercised once.
+    async fn assert_block_type_round_trip(block_type: BlockType) {
+        let pool = setup_test_db().await;
+        let page_id = Uuid::new_v4();
+        // Create a page (FK target for the block).
+        sqlx::query(
+            "INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
+                     VALUES (?, ?, 'markdown', 0, 0, 0)",
+        )
+        .bind(uuid_to_blob(&page_id))
+        .bind(format!("page-for-{:?}", block_type))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let repo = SqliteBlockRepository::new(pool.clone());
+        let mut block = make_block(page_id, "x");
+        block.block_type = block_type;
+
+        repo.insert(&block).await.expect("insert should succeed");
+        let loaded = repo
+            .get_by_id(block.id)
+            .await
+            .expect("get_by_id should succeed")
+            .expect("block should exist after insert");
+
+        assert_eq!(
+            loaded.block_type, block_type,
+            "block_type round-trip mismatch for variant {:?}",
+            block_type
+        );
+    }
+
+    /// Every `BlockType` variant must round-trip through SQLite. This is
+    /// the wire contract that the frontend's slash commands rely on.
+    #[tokio::test]
+    async fn test_block_type_round_trip_for_every_variant() {
+        for variant in BlockType::all() {
+            assert_block_type_round_trip(*variant).await;
+        }
+    }
+
+    /// The PATCH path mutates a block's `block_type` in place. The
+    /// column must reflect the new value after `repo.update(&block)`.
+    #[tokio::test]
+    async fn test_block_type_persists_after_update() {
+        let pool = setup_test_db().await;
+        let page_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
+                     VALUES (?, ?, 'markdown', 0, 0, 0)",
+        )
+        .bind(uuid_to_blob(&page_id))
+        .bind("page-update-bt")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let repo = SqliteBlockRepository::new(pool);
+        let mut block = make_block(page_id, "Heading text");
+        repo.insert(&block).await.unwrap();
+
+        // Simulate the slash-command PATCH path: mutate the entity, then
+        // write it back. This is what `update_block` does in
+        // `quilt-server/src/handlers/blocks.rs`.
+        block.block_type = BlockType::Heading1;
+        repo.update(&block).await.unwrap();
+
+        let loaded = repo.get_by_id(block.id).await.unwrap().unwrap();
+        assert_eq!(loaded.block_type, BlockType::Heading1);
+
+        // And a second change — covers the same-block-update path that
+        // the slash-command registry exercises when the user toggles
+        // between kinds rapidly.
+        block.block_type = BlockType::Code;
+        repo.update(&block).await.unwrap();
+        let loaded = repo.get_by_id(block.id).await.unwrap().unwrap();
+        assert_eq!(loaded.block_type, BlockType::Code);
+    }
+
+    /// The DB column is `NOT NULL DEFAULT 'paragraph'`. Rows inserted
+    /// via raw SQL (bypassing the repo) without specifying a type must
+    /// still load as `BlockType::Paragraph`. This is the migration
+    /// safety net — pre-migration data backfills to `'paragraph'`.
+    #[tokio::test]
+    async fn test_default_block_type_is_paragraph() {
+        let pool = setup_test_db().await;
+        let page_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
+                     VALUES (?, ?, 'markdown', 0, 0, 0)",
+        )
+        .bind(uuid_to_blob(&page_id))
+        .bind("page-default")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        // Insert a block WITHOUT specifying block_type — relies on the
+        // column's `DEFAULT 'paragraph'`.
+        let block_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO blocks (id, page_id, order_index, level, format, content, \
+             properties, collapsed, created_at, updated_at, refs, tags) \
+             VALUES (?, ?, 1.0, 1, 'markdown', '', '{}', 0, 0, 0, '[]', '[]')",
+        )
+        .bind(uuid_to_blob(&block_id))
+        .bind(uuid_to_blob(&page_id))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        let repo = SqliteBlockRepository::new(pool);
+        let loaded = repo.get_by_id(block_id).await.unwrap().unwrap();
+        assert_eq!(
+            loaded.block_type,
+            BlockType::Paragraph,
+            "rows without an explicit block_type must default to Paragraph"
+        );
+    }
+
+    /// Migrations must be idempotent. Running them twice on the same
+    /// pool must not error — this matches the contract of
+    /// migration 006 (`pages.properties`) and the existing
+    /// `ALTER TABLE ... "duplicate column"` swallow.
+    #[tokio::test]
+    async fn test_migrations_are_idempotent() {
+        let pool = setup_test_db().await;
+        // Second run must not error.
+        connection::run_migrations(&pool)
+            .await
+            .expect("second run_migrations call should be a no-op");
     }
 }

@@ -248,11 +248,28 @@ export const api = {
   getTemplateSchema: (name: string) =>
     fetchJson<TemplateSchema>(`/templates/${encodeURIComponent(name)}/schema`),
 
-  // Schema Pack (G6)
-  getSchemaPack: (name: string) =>
-    fetchJson<{ schema_pack: unknown }>(
-      `/templates/${encodeURIComponent(name)}/schema-pack`,
-    ),
+  // ─── TODO: Unmounted endpoints removed in P0 fix ───────────────────
+  //
+  // The following methods used to live here but were removed because
+  // their target routes are NOT registered in
+  // `crates/quilt-server/src/routes.rs`. Calling them caused runtime
+  // 404s / unhandled promise rejections. Re-add them only after the
+  // matching server route is mounted:
+  //
+  //   - `getSchemaPack(name)`        →  GET /api/v1/templates/:name/schema-pack
+  //   - `getAnalysisMirror()`         →  GET /api/v1/analysis/mirror
+  //   - `getAnalysisConnections(n)`   →  GET /api/v1/analysis/connections
+  //   - `getAnalysisGardener()`       →  GET /api/v1/analysis/gardener
+  //
+  // The `api surface (P0 — only mounted routes)` test in
+  // `src/core/__tests__/api-client.test.ts` will fail until each
+  // method is both re-added AND its route is registered on the
+  // server. That is the contract that prevents the P0 from
+  // regressing.
+  //
+  // The DTOs that used to back these methods (MirrorAnalysisDto,
+  // ConnectionDto, GardenerDto, etc.) have been moved to a TODO
+  // block at the bottom of this file to be revived alongside them.
 
   // Query execution (F18)
   executeQuery: async (
@@ -311,30 +328,6 @@ export const api = {
     return res.json() as Promise<QueryResult>;
   },
 
-  // ─── Analysis endpoints (G7 Dream Cycle) ────────────────────────────
-
-  /**
-   * GET /api/v1/analysis/mirror
-   * Returns structural mirror analysis: clusters, gaps, frontiers, density.
-   */
-  getAnalysisMirror: () =>
-    fetchJson<MirrorAnalysisDto>('/analysis/mirror'),
-
-  /**
-   * GET /api/v1/analysis/connections
-   * Returns serendipitous connections between blocks.
-   * @param limit Maximum number of connections (clamped to 50 server-side)
-   */
-  getAnalysisConnections: (limit = 10) =>
-    fetchJson<ConnectionDto>(`/analysis/connections?limit=${limit}`),
-
-  /**
-   * GET /api/v1/analysis/gardener
-   * Returns belief suggestions from the structure gardener.
-   */
-  getAnalysisGardener: () =>
-    fetchJson<GardenerDto>('/analysis/gardener'),
-
   // ─── Tour state (B of quilt-fase4-cross-device-tour) ────────────────
   //
   // Server-stored dismissal state for first-run product tours. The
@@ -369,57 +362,81 @@ export const api = {
     }),
 };
 
-// ─── Analysis DTOs ──────────────────────────────────────────────────────
+// ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────
+//
+// The DTOs that used to back `getAnalysisMirror`, `getAnalysisConnections`,
+// and `getAnalysisGardener` are preserved here so the schema isn't lost
+// when those routes are re-mounted. They are NOT exported — consumers
+// (MirrorPanel, SerendipityFeed) were also removed and should be
+// recreated fresh from this contract.
+//
+// To re-enable:
+//   1. Mount the routes in `crates/quilt-server/src/routes.rs`:
+//        .nest("/api/v1/analysis", handlers::cognitive::analysis_routes())
+//      (the handler module `cognitive.rs` already defines them)
+//   2. Re-export the DTOs (remove the `TODO` comment) and re-add the
+//      three `getAnalysis*` methods on the `api` object above.
+//   3. Recreate the consumer components under
+//      `src/features/cognitive/` and import from this module.
 
-export interface MirrorAnalysisDto {
-  clusters: ClusterDto[]
-  gaps: GapDto[]
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoMirrorAnalysisDto {
+  clusters: _TodoClusterDto[]
+  gaps: _TodoGapDto[]
   frontiers: string[]
   density: number
-  top_influencers: InfluencerDto[]
+  top_influencers: _TodoInfluencerDto[]
 }
 
-export interface ClusterDto {
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoClusterDto {
   block_ids: string[]
   theme: string | null
   coherence_score: number
 }
 
-export interface GapDto {
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoGapDto {
   from_block: string
   to_block: string
   shared_refs: string[]
 }
 
-export interface InfluencerDto {
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoInfluencerDto {
   block_id: string
   influence_score: number
 }
 
-export interface ConnectionDto {
-  pairs: ConnectionPairDto[]
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoConnectionDto {
+  pairs: _TodoConnectionPairDto[]
 }
 
-export interface ConnectionPairDto {
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoConnectionPairDto {
   block_a: string
   block_b: string
   score: number
   reason: string
 }
 
-export interface GardenerDto {
-  beliefs: BeliefDto[]
-  suggestions: DeepeningSuggestionDto[]
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoGardenerDto {
+  beliefs: _TodoBeliefDto[]
+  suggestions: _TodoDeepeningSuggestionDto[]
 }
 
-export interface BeliefDto {
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoBeliefDto {
   id: string
   statement: string
   confidence: number
   last_updated: string
 }
 
-export interface DeepeningSuggestionDto {
+/** @internal — TODO: re-export when analysis routes are mounted */
+interface _TodoDeepeningSuggestionDto {
   concept: string
   current_depth: number
   suggested_questions: string[]

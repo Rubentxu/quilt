@@ -160,11 +160,6 @@ export function DashboardPage() {
             description="Explore connections"
             onClick={() => navigate({ to: '/graph' })}
           />
-          <QuickAction
-            label="Query Editor"
-            description="Write DSL queries"
-            onClick={() => navigate({ to: '/query' })}
-          />
         </div>
       </div>
 

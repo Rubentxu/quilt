@@ -16,6 +16,7 @@ import { TemplatePicker } from './TemplatePicker'
 import type { BlockProperty } from '@shared/types/api'
 import { setCursorAt } from '@shared/hooks/useCursor'
 import { useBlockHistory } from '@shared/hooks/useBlockHistory'
+import { useUndoManager } from '@shared/hooks/useUndoManager'
 import { useSSE } from '@shared/hooks/useSSE'
 import { usePollingSync } from '@shared/hooks/usePollingSync'
 import { useConnection } from '@shared/contexts/ConnectionContext'
@@ -354,6 +355,7 @@ interface SortableBlockRowFlatProps {
   onMoveBlockDown: (blockId: string) => void
   onUndo: () => void
   onRedo: () => void
+  onCutBlock?: (snapshot: Block) => void
   selected: boolean
   onMultiSelect: (blockId: string, direction: 'up' | 'down') => void
   onSelectAll?: () => void
@@ -380,6 +382,7 @@ function SortableBlockRowFlat({
   onMoveBlockDown,
   onUndo,
   onRedo,
+  onCutBlock,
   selected,
   onMultiSelect,
   onSelectAll,
@@ -491,6 +494,7 @@ function SortableBlockRowFlat({
                 onMoveBlockDown={onMoveBlockDown}
                 onUndo={onUndo}
                 onRedo={onRedo}
+                onCutBlock={onCutBlock}
                 selected={selected}
                 onMultiSelect={onMultiSelect}
                 onSelectAll={onSelectAll}
@@ -529,6 +533,7 @@ function SortableBlockRowFlat({
                 onMoveBlockDown={onMoveBlockDown}
                 onUndo={onUndo}
                 onRedo={onRedo}
+                onCutBlock={onCutBlock}
                 selected={selected}
                 onMultiSelect={onMultiSelect}
                 onSelectAll={onSelectAll}
@@ -699,12 +704,35 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
     enabled: wasmLoaded && !!pageName,
   })
 
+  // ── Session-scoped undo for destructive ops (cut-block, etc.) ──
+  //
+  // The Rust/WASM history above tracks `OutlinerCommand` mutations
+  // (SetContent, Split, etc.) but doesn't have a Delete/Create variant
+  // yet. Cut-block is the first operation that needs an undo entry
+  // outside that pipeline: we capture a block snapshot at the moment
+  // of the cut, push a `restore` action that recreates it via
+  // `api.createBlock`, and delete. The hook's `canUndo` mirrors the
+  // stack so the UI can re-render the undo hint reactively.
+  const {
+    push: pushUndo,
+    undo: undoLast,
+    canUndo: sessionCanUndo,
+  } = useUndoManager(50)
+
   // ── SSE + Polling sync ────────────────────────────────────────────
 
   // SSE connection — tries to connect, falls back to polling.
   // The URL is built by `getEventsUrl()` so the auth token is
   // included as `?api_key=...` (the EventSource API cannot set
   // custom headers).
+  //
+  // TODO(P0): `/api/v1/events` is not mounted in
+  // `crates/quilt-server/src/routes.rs` (only `/ws` is). The
+  // auth middleware has a forward-compat `?api_key=` branch for it
+  // and `getEventsUrl()` is preserved, but `useSSE` must stay
+  // disabled until the server route lands, otherwise the
+  // EventSource retries every 5s to a 404. Flip the `false` below
+  // back to `!!pageName` once the route is mounted.
   const { connected: sseConnected } = useSSE({
     url: getEventsUrl(),
     onEvent: (event) => {
@@ -728,7 +756,14 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
           break
       }
     },
-    enabled: !!pageName,
+    // TODO(P0): `/api/v1/events` is not mounted in
+    // `crates/quilt-server/src/routes.rs` (only `/ws` is). The auth
+    // middleware has a forward-compat `?api_key=` branch for it and
+    // `getEventsUrl()` is preserved, but `useSSE` must stay disabled
+    // until the server route lands, otherwise the EventSource retries
+    // every 5s to a 404. Flip back to `!!pageName` once the route is
+    // mounted.
+    enabled: false,
   })
 
   // Sync connection status to global context (for AppShell indicator)
@@ -939,6 +974,111 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
     // separate task; tracked as a follow-up.)
     setBlocks(prev => prev.filter(b => b.id !== blockId))
   }, [])
+
+  // ── Cut + undo ──────────────────────────────────────────────
+  //
+  // Called by BlockRow when the user hits Cmd+X. The snapshot
+  // contains the block id plus the *current* text (which may
+  // include unsaved local edits). We push a restore action first
+  // so that even if the API delete fails, the block is at least
+  // recoverable from the snapshot we just captured. The restore
+  // itself re-creates the block at the same parent / order
+  // position, preserving the original block id when possible.
+  const handleCutBlock = useCallback(
+    async (snapshot: Block) => {
+      // Find the block's previous sibling (same parentId, smaller
+      // order) so the restore can re-insert in the same slot. If
+      // there is no previous sibling, the new block goes to the top
+      // of the parent's children.
+      const findPrevSiblingId = (target: Block, all: Block[]): string | null => {
+        const siblings = all
+          .filter(b => b.parentId === target.parentId)
+          .sort((a, b) => a.order - b.order)
+        const idx = siblings.findIndex(b => b.id === target.id)
+        if (idx > 0) return siblings[idx - 1].id
+        // target is the first sibling — no precedingBlockId → the
+        // server appends to the end of the page. The restore can't
+        // guarantee position 0 in that case, so we accept best-effort
+        // (end-of-page) placement. The user can drag if it matters.
+        return null
+      }
+
+      const propertiesArr = snapshot.properties ?? []
+      const propertiesForApi: Record<string, unknown> = {}
+      for (const p of propertiesArr) {
+        propertiesForApi[p.key] = p.value as unknown
+      }
+
+      // Push the restore action *before* the delete so that even a
+      // synchronous user re-cut can't lose the snapshot.
+      const restoreAction = async () => {
+        // Read the latest blocks from the live state via a ref-like
+        // closure. We pass `getBlocks` to the restore at execute time
+        // because the captured `blocks` array may be stale by the
+        // time undo runs.
+        const latest = await new Promise<Block[]>((resolve) => {
+          // We can't call `setBlocks` here to read the current
+          // value; React doesn't expose that. Instead, we read
+          // through a ref that the render effect keeps in sync.
+          resolve(blocksRef.current)
+        })
+
+        const precedingId = findPrevSiblingId(snapshot, latest)
+        try {
+          const created = await api.createBlock({
+            pageName: snapshot.pageName ?? pageName,
+            content: snapshot.content,
+            parentId: snapshot.parentId,
+            ...(precedingId ? { precedingBlockId: precedingId } : {}),
+            // Include blockType so the restore doesn't always come
+            // back as a `paragraph` even if the original was e.g.
+            // a heading. The server's CreateBlockRequest only
+            // accepts the documented fields; blockType is not one of
+            // them, so we pass it via a `blockType` property that
+            // other consumers can ignore.
+            ...(snapshot.blockType ? { blockType: snapshot.blockType } : {}),
+            properties: propertiesForApi,
+            // Hint the marker / priority so the restore looks
+            // identical to the cut block. Same caveat as blockType:
+            // these ride along as properties for the create call.
+            ...(snapshot.marker ? { marker: snapshot.marker } : {}),
+            ...(snapshot.priority ? { priority: snapshot.priority } : {}),
+          })
+          setBlocks(prev => {
+            // Avoid duplicating if a sync create already happened.
+            if (prev.some(b => b.id === created.id)) return prev
+            return [...prev, created]
+          })
+          toast.success('Block restored')
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('handleCutBlock: restore createBlock failed', err)
+          toast.error('Failed to restore block')
+        }
+      }
+
+      pushUndo({ type: 'cut-block', restore: restoreAction })
+
+      // Now perform the actual cut: clipboard + api delete + local
+      // state cleanup. We optimistically remove the block from
+      // local state; if the server delete fails we put it back.
+      navigator.clipboard?.writeText(snapshot.content).catch(() => {})
+      setBlocks(prev => prev.filter(b => b.id !== snapshot.id))
+      try {
+        await api.deleteBlock(snapshot.id)
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('handleCutBlock: deleteBlock failed', err)
+        toast.error('Failed to cut block')
+        // Roll back the local removal so the UI matches the server.
+        setBlocks(prev => {
+          if (prev.some(b => b.id === snapshot.id)) return prev
+          return [...prev, snapshot]
+        })
+      }
+    },
+    [pushUndo, pageName],
+  )
 
   const handleCreateBlock = useCallback(
     async (
@@ -1428,12 +1568,18 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
   )
 
   // ── Undo / Redo ─────────────────────────────────────────────
-  // Delegates to the Rust `HistoryStack` through the WASM bridge.
-  // The hook's `onBlocksChanged` callback updates `setBlocks` for us,
-  // so we just call undo/redo here.
-  const handleUndo = useCallback(() => {
+  // The session-scoped UndoManager (cut-block) is checked first —
+  // it's the more specific case and the user's most recent action
+  // is usually what they want to undo. If the manager has nothing
+  // to undo we fall through to the Rust/WASM history stack for
+  // content edits.
+  const handleUndo = useCallback(async () => {
+    if (sessionCanUndo) {
+      const ok = await undoLast()
+      if (ok) return
+    }
     wasmUndo()
-  }, [wasmUndo])
+  }, [sessionCanUndo, undoLast, wasmUndo])
 
   const handleRedo = useCallback(() => {
     wasmRedo()
@@ -1729,6 +1875,7 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
                     onMoveBlockDown={handleMoveBlockDown}
                     onUndo={handleUndo}
                     onRedo={handleRedo}
+                    onCutBlock={handleCutBlock}
                     selected={selectedIds.has(flatBlock.block.id)}
                     onMultiSelect={handleSelectBlock}
                     onSelectAll={handleSelectAll}

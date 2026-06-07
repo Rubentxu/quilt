@@ -14,7 +14,7 @@
 
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::errors::DomainError;
-use quilt_domain::value_objects::BlockFormat;
+use quilt_domain::value_objects::{BlockFormat, BlockType};
 
 /// Create a page and its top-level blocks with aligned `page_id` values.
 ///
@@ -61,6 +61,7 @@ pub fn page_with_blocks(
                 order: (idx + 1) as f64,
                 marker: None,
                 format: BlockFormat::Markdown,
+                block_type: BlockType::Paragraph,
                 properties: std::collections::HashMap::new(),
             })
             .map_err(|e| {

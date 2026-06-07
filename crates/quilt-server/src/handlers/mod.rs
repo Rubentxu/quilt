@@ -9,6 +9,7 @@ pub mod metrics;
 pub mod migration;
 pub mod navigate;
 pub mod pages;
+pub mod properties;
 pub mod query;
 pub mod search;
 pub mod settings;

@@ -281,9 +281,18 @@ fn summarize_template(page: &Page, blocks: &[Block]) -> TemplateSummary {
         // A block is "metadata" if it carries at least one of the
         // card-shape / icon / cssclass properties. Dedupe by id
         // so a block that has all three counts only once.
-        let shape = block.properties.get("card-shape").and_then(|v| Some(v.as_display_string()));
-        let ic = block.properties.get("icon").and_then(|v| Some(v.as_display_string()));
-        let cc = block.properties.get("cssclass").and_then(|v| Some(v.as_display_string()));
+        let shape = block
+            .properties
+            .get("card-shape")
+            .and_then(|v| Some(v.as_display_string()));
+        let ic = block
+            .properties
+            .get("icon")
+            .and_then(|v| Some(v.as_display_string()));
+        let cc = block
+            .properties
+            .get("cssclass")
+            .and_then(|v| Some(v.as_display_string()));
         if shape.is_none() && ic.is_none() && cc.is_none() {
             continue;
         }
