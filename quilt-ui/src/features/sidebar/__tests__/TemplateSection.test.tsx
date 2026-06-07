@@ -30,6 +30,8 @@ import { TemplateSection } from '../sections/TemplateSection'
 
 const mockListTemplates = vi.fn()
 const mockCreatePageFromTemplate = vi.fn()
+const mockCreatePage = vi.fn()
+const mockCreateBlock = vi.fn()
 const mockNavigate = vi.fn()
 
 vi.mock('@core/api-client', () => ({
@@ -37,6 +39,8 @@ vi.mock('@core/api-client', () => ({
     listTemplates: (...args: unknown[]) => mockListTemplates(...args),
     createPageFromTemplate: (...args: unknown[]) =>
       mockCreatePageFromTemplate(...args),
+    createPage: (...args: unknown[]) => mockCreatePage(...args),
+    createBlock: (...args: unknown[]) => mockCreateBlock(...args),
   },
 }))
 
@@ -67,6 +71,8 @@ const TEMPLATE_REFERENCE = {
 beforeEach(() => {
   mockListTemplates.mockReset()
   mockCreatePageFromTemplate.mockReset()
+  mockCreatePage.mockReset()
+  mockCreateBlock.mockReset()
   mockNavigate.mockReset()
 })
 
@@ -352,5 +358,119 @@ describe('TemplateSection — sidebar-template-ux', () => {
     expect(screen.getByText(/no templates available/i)).toBeInTheDocument()
 
     errorSpy.mockRestore()
+  })
+
+  // ─── Create-template flow (quilt-template-management-ui) ──────────
+
+  it('shows a "Create template" button in the empty state (spec: Empty state offers create)', async () => {
+    mockListTemplates.mockResolvedValue([])
+
+    render(<TemplateSection />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/no templates available/i)).toBeInTheDocument()
+    })
+
+    // The empty-state affordance opens the modal.
+    expect(
+      screen.getByRole('button', { name: /create template/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('shows a "+" create button in the header even when templates exist (spec: Header always offers create)', async () => {
+    mockListTemplates.mockResolvedValue([TEMPLATE_MEETING])
+
+    render(<TemplateSection />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('template-item-meeting-notes'),
+      ).toBeInTheDocument()
+    })
+
+    // The header action button is always visible (the empty-state
+    // button only appears when there are zero templates).
+    expect(
+      screen.getByRole('button', { name: /new template/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('clicking the empty-state create button opens the create-template modal (spec: Trigger opens modal)', async () => {
+    const user = userEvent.setup()
+    mockListTemplates.mockResolvedValue([])
+
+    render(<TemplateSection />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/no templates available/i)).toBeInTheDocument()
+    })
+
+    await user.click(
+      screen.getByRole('button', { name: /create template/i }),
+    )
+
+    // The modal's dialog role is the user-visible signal that it opened.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText('Name', { exact: true })).toBeInTheDocument()
+  })
+
+  it('clicking the header "+" button also opens the create-template modal (spec: Header trigger opens modal)', async () => {
+    const user = userEvent.setup()
+    mockListTemplates.mockResolvedValue([TEMPLATE_MEETING])
+
+    render(<TemplateSection />)
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('template-item-meeting-notes'),
+      ).toBeInTheDocument()
+    })
+
+    await user.click(
+      screen.getByRole('button', { name: /new template/i }),
+    )
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('refetches the template list after a template is created (spec: Sidebar refreshes after create)', async () => {
+    const user = userEvent.setup()
+    // First fetch returns [] (empty state), then refetch returns the new
+    // template after the user creates it from the modal.
+    mockListTemplates
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([TEMPLATE_MEETING])
+    mockCreatePage.mockResolvedValue({
+      id: 'p-new',
+      name: 'template/my-template',
+      title: 'my-template',
+      journal: false,
+      journalDay: null,
+      createdAt: '',
+    })
+    mockCreateBlock.mockResolvedValue({})
+
+    render(<TemplateSection />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/no templates available/i)).toBeInTheDocument()
+    })
+
+    // Open the modal and create a template.
+    await user.click(
+      screen.getByRole('button', { name: /create template/i }),
+    )
+    await user.type(screen.getByLabelText('Name', { exact: true }), 'my-template')
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+    // The sidebar refetches and the new template is now visible.
+    await waitFor(() => {
+      expect(mockListTemplates).toHaveBeenCalledTimes(2)
+    })
+    await waitFor(() => {
+      expect(
+        screen.getByTestId('template-item-meeting-notes'),
+      ).toBeInTheDocument()
+    })
   })
 })

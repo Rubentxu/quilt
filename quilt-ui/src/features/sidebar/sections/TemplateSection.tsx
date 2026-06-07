@@ -5,6 +5,15 @@
 // creates a new page via `api.createPageFromTemplate({templateName,
 // pageName})` and navigates to it.
 //
+// Template management (quilt-template-management-ui):
+//   - Header has a "+" button (always visible) that opens the
+//     CreateTemplateModal so users can author templates from the UI
+//     instead of the terminal.
+//   - The empty state has a more prominent "Create template" button
+//     for the first-run experience.
+//   - After a successful create, the section refetches the list so
+//     the new template appears without a page reload.
+//
 // Design constraints:
 //   - D5: section is positioned after Pages in the sidebar nav.
 //   - D6: single fetch on mount; cancellation on unmount via the
@@ -19,16 +28,19 @@
 //     the section never blocks the rest of the sidebar.
 //
 // Spec: openspec/changes/quilt-fase1-sidebar-mcp-templates/specs/
-//       sidebar-template-ux/spec.md
+//       sidebar-template-ux/spec.md (template list + create-from-template)
+//      openspec/changes/quilt-template-management-ui/specs/
+//       sidebar-template-create/spec.md (create-template flow)
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
-import { FileText } from 'lucide-react'
+import { FileText, Plus } from 'lucide-react'
 import { api } from '@core/api-client'
 import type { TemplateSummary } from '@shared/types/api'
 import { GroupHeader } from './GroupHeader'
 import { SidebarSkeleton } from './SidebarSkeleton'
+import { CreateTemplateModal } from './CreateTemplateModal'
 
 interface TemplateSectionProps {
   /** When true, the section is hidden (matches existing sidebar collapsed UX). */
@@ -44,14 +56,20 @@ export function TemplateSection({ collapsed }: TemplateSectionProps) {
   // "Click on busy item is ignored"). Using a Set keeps the type
   // honest when the API allows multiple in-flight creates.
   const [busyNames, setBusyNames] = useState<Set<string>>(new Set())
+  // `quilt-template-management-ui` — controls the create-template modal.
+  const [createOpen, setCreateOpen] = useState(false)
   const navigate = useNavigate()
   // `mountedRef` guarantees we never call setState after unmount even
   // if the `cancelled` closure variable is shadowed by re-renders.
   const mountedRef = useRef(true)
 
-  // ── Fetch on mount (D6) ───────────────────────────────────────────
-  useEffect(() => {
-    mountedRef.current = true
+  // ── Fetch (D6 — single fetch on mount + refetch on demand) ───────
+  //
+  // `fetchTemplates` is reused by the create-template flow to refresh
+  // the list after a new template is created (quilt-template-management-ui).
+  // The mount effect calls it once; the unmount cleanup flags the
+  // in-flight promise as stale so we never call setState after unmount.
+  const fetchTemplates = useCallback(() => {
     let cancelled = false
     api
       .listTemplates()
@@ -59,6 +77,8 @@ export function TemplateSection({ collapsed }: TemplateSectionProps) {
         if (cancelled || !mountedRef.current) return
         setTemplates(data)
         setLoading(false)
+        // Clear any prior load error — the new fetch succeeded.
+        setError(null)
       })
       .catch((err: unknown) => {
         if (cancelled || !mountedRef.current) return
@@ -69,9 +89,17 @@ export function TemplateSection({ collapsed }: TemplateSectionProps) {
       })
     return () => {
       cancelled = true
-      mountedRef.current = false
     }
   }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    const cleanup = fetchTemplates()
+    return () => {
+      mountedRef.current = false
+      cleanup?.()
+    }
+  }, [fetchTemplates])
 
   // ── Click handler — create + navigate (spec) ──────────────────────
   const handleClick = useCallback(
@@ -118,21 +146,99 @@ export function TemplateSection({ collapsed }: TemplateSectionProps) {
 
   return (
     <section>
-      <GroupHeader label="Plantillas" />
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingRight: 'var(--space-2)',
+        }}
+      >
+        <GroupHeader label="Plantillas" />
+        <button
+          type="button"
+          onClick={() => setCreateOpen(true)}
+          aria-label="New template"
+          title="New template"
+          data-testid="template-create-header"
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: '4px',
+            marginBottom: 'var(--space-2)',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            color: 'var(--color-text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition:
+              'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
+          }}
+          onMouseEnter={(e) => {
+            ;(e.currentTarget as HTMLButtonElement).style.background =
+              'var(--color-surface-subtle)'
+            ;(e.currentTarget as HTMLButtonElement).style.color =
+              'var(--color-text-primary)'
+          }}
+          onMouseLeave={(e) => {
+            ;(e.currentTarget as HTMLButtonElement).style.background =
+              'transparent'
+            ;(e.currentTarget as HTMLButtonElement).style.color =
+              'var(--color-text-muted)'
+          }}
+        >
+          <Plus size={14} />
+        </button>
+      </div>
 
       {loading ? (
         <SidebarSkeleton />
       ) : templates.length === 0 ? (
-        <p
+        <div
           style={{
-            padding: '0 var(--space-2)',
-            fontSize: '12px',
-            color: 'var(--color-text-disabled)',
-            fontStyle: 'italic',
+            padding: '0 var(--space-3)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--space-2)',
           }}
         >
-          No templates available{error ? ' — could not load' : ''}
-        </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: '12px',
+              color: 'var(--color-text-disabled)',
+              fontStyle: 'italic',
+            }}
+          >
+            No templates available{error ? ' — could not load' : ''}
+          </p>
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            data-testid="template-create-empty"
+            aria-label="Create template"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              padding: '8px var(--space-3)',
+              border: '1px dashed var(--color-border)',
+              borderRadius: 'var(--radius-md)',
+              background: 'transparent',
+              color: 'var(--color-text-secondary)',
+              fontSize: '12px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition:
+                'background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard)',
+            }}
+          >
+            <Plus size={14} />
+            Create template
+          </button>
+        </div>
       ) : (
         <ul
           style={{
@@ -202,6 +308,20 @@ export function TemplateSection({ collapsed }: TemplateSectionProps) {
           })}
         </ul>
       )}
+
+      <CreateTemplateModal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={() => {
+          // The modal already showed the success toast; we just need
+          // to refetch the list so the new template is visible. The
+          // modal's own onClose (called after onCreated internally)
+          // dismisses the dialog — the order in the modal is:
+          //   onCreated?.(fullName); onClose();
+          // so this fires BEFORE the close, which is what we want.
+          fetchTemplates()
+        }}
+      />
     </section>
   )
 }
