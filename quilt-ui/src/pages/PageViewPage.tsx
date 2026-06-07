@@ -4,10 +4,12 @@ import { AlertCircle } from 'lucide-react'
 import { PageView } from '@features/outliner-tiptap/PageView'
 import { ErrorBoundary } from '@shared/components/ErrorBoundary'
 import { useTabs } from '@shared/contexts/TabsContext'
+import { useUrlParam } from '@shared/hooks/useUrlParam'
 
 export function PageViewPage() {
   const { name } = useParams({ from: '/page/$name' })
   const { openTab } = useTabs()
+  const [zoomBlockId, setZoomBlockId] = useUrlParam('zoom')
 
   // Auto-open tab for this page
   useEffect(() => {
@@ -33,7 +35,11 @@ export function PageViewPage() {
         </div>
       }
     >
-      <PageView pageName={decodeURIComponent(name)} />
+      <PageView
+        pageName={decodeURIComponent(name)}
+        zoomBlockId={zoomBlockId}
+        onZoomOut={() => setZoomBlockId(null)}
+      />
     </ErrorBoundary>
   )
 }

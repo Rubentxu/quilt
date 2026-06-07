@@ -289,6 +289,121 @@ describe('BlockRow editing behavior', () => {
     // Dropdown should be closed.
     expect(screen.queryByRole('listbox', { name: 'Tag suggestions' })).not.toBeInTheDocument()
   })
+
+  // ── NL Dates V1 (quilt-feature-natural-dates-v1) ───────────────
+  //
+  // When the user types `deadline:: today` in a block and blurs the
+  // editor, the value sent to the API must be `deadline:: YYYY-MM-DD`
+  // — NOT the literal word "today". The resolver lives in
+  // @shared/utils/naturalDate and is wired through BlockRow.saveToApi.
+  //
+  // These tests verify the *wiring* (the API receives a resolved
+  // date, not the raw token). The exact-date math is unit-tested
+  // deterministically in naturalDate.test.ts with a fixed refDate.
+
+  const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+  it('rewrites "deadline:: today" to an ISO date on save', async () => {
+    const { onUpdate } = renderRow('')
+    mockUpdateBlock.mockResolvedValueOnce(
+      makeBlock('deadline:: 2026-06-05'),
+    )
+
+    const read = document.querySelector('.block-content-read') as HTMLElement
+    fireEvent.click(read)
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = 'deadline:: today'
+    fireEvent.input(editor)
+    fireEvent.blur(editor)
+
+    await waitFor(() => {
+      expect(mockUpdateBlock).toHaveBeenCalled()
+    })
+    const sentPayload = mockUpdateBlock.mock.calls[0]?.[1] as
+      | { content: string }
+      | undefined
+    // Must be a real ISO date, not the raw "today" token.
+    expect(sentPayload?.content).toMatch(/^deadline:: \d{4}-\d{2}-\d{2}$/)
+    expect(sentPayload?.content).not.toContain('today')
+    expect(onUpdate).toHaveBeenCalled()
+  })
+
+  it('rewrites "scheduled:: tomorrow" to an ISO date on save', async () => {
+    renderRow('')
+    mockUpdateBlock.mockResolvedValueOnce(
+      makeBlock('scheduled:: 2026-06-06'),
+    )
+
+    const read = document.querySelector('.block-content-read') as HTMLElement
+    fireEvent.click(read)
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = 'scheduled:: tomorrow'
+    fireEvent.input(editor)
+    fireEvent.blur(editor)
+
+    await waitFor(() => {
+      expect(mockUpdateBlock).toHaveBeenCalled()
+    })
+    const sentPayload = mockUpdateBlock.mock.calls[0]?.[1] as
+      | { content: string }
+      | undefined
+    expect(sentPayload?.content).toMatch(
+      /^scheduled:: \d{4}-\d{2}-\d{2}$/,
+    )
+    expect(sentPayload?.content).not.toContain('tomorrow')
+  })
+
+  it('leaves free-text "today" mentions untouched', async () => {
+    // Only values that are the *exact* natural-date token in a date
+    // property get rewritten. A sentence like "I will finish this
+    // today" is preserved verbatim — the resolver must not be a
+    // find-and-replace hammer.
+    renderRow('')
+    mockUpdateBlock.mockResolvedValueOnce(
+      makeBlock('I will finish this today'),
+    )
+
+    const read = document.querySelector('.block-content-read') as HTMLElement
+    fireEvent.click(read)
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = 'I will finish this today'
+    fireEvent.input(editor)
+    fireEvent.blur(editor)
+
+    await waitFor(() => {
+      expect(mockUpdateBlock).toHaveBeenCalled()
+    })
+    const sentPayload = mockUpdateBlock.mock.calls[0]?.[1] as
+      | { content: string }
+      | undefined
+    expect(sentPayload?.content).toBe('I will finish this today')
+  })
+
+  it('does not rewrite values that are already ISO dates', async () => {
+    renderRow('')
+    mockUpdateBlock.mockResolvedValueOnce(
+      makeBlock('deadline:: 2026-01-15'),
+    )
+
+    const read = document.querySelector('.block-content-read') as HTMLElement
+    fireEvent.click(read)
+
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = 'deadline:: 2026-01-15'
+    fireEvent.input(editor)
+    fireEvent.blur(editor)
+
+    await waitFor(() => {
+      expect(mockUpdateBlock).toHaveBeenCalled()
+    })
+    const sentPayload = mockUpdateBlock.mock.calls[0]?.[1] as
+      | { content: string }
+      | undefined
+    expect(sentPayload?.content).toBe('deadline:: 2026-01-15')
+  })
 })
 
 // ─── findNearestLink helper (Cmd/Ctrl+Enter target selection) ───────

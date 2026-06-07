@@ -14,6 +14,7 @@ import { CommentRow } from '@features/comments/CommentRow'
 import { BlockContextMenu } from './BlockContextMenu'
 import { buildCommentTree } from '@shared/utils/blockProperties'
 import { normalizePageName } from '@shared/utils/pageName'
+import { resolveNaturalDatesInContent } from '@shared/utils/naturalDate'
 import { blockKeyboardHandler } from './blockKeyboardHandler'
 // Type-only import — keeps the type for handleSlashSelect without
 // pulling the (large) SlashCommandMenu module into the eager bundle.
@@ -241,8 +242,14 @@ export function BlockRow({
       // Preserve the exact text the user typed. Quilt-style editors do not
       // silently trim leading/trailing whitespace on blur.
       if (text === block.content) return
+      // NL Dates V1: rewrite natural-date tokens in date-property
+      // values (`deadline:: today`, `scheduled:: tomorrow`, …) to real
+      // ISO YYYY-MM-DD strings before persisting. The backend stays
+      // date-agnostic; the UI owns the "friendly" → "real" transform.
+      const resolved = resolveNaturalDatesInContent(text)
+      if (resolved === block.content) return
       try {
-        const updated = await api.updateBlock(block.id, { content: text })
+        const updated = await api.updateBlock(block.id, { content: resolved })
         onUpdate(updated)
       } catch (err) {
         toast.error('Failed to save block')

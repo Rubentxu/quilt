@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal, FileText, Link, LayoutGrid, List, Star } from 'lucide-react'
+import { Calendar, Plus, ChevronLeft, ChevronRight, MoreHorizontal, FileText, Link, LayoutGrid, List, Star, ZoomIn, X } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
 import { DndContext, closestCenter, useDndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
@@ -22,11 +22,20 @@ import { usePollingSync } from '@shared/hooks/usePollingSync'
 import { useConnection } from '@shared/contexts/ConnectionContext'
 import type { Block } from '@shared/types/api'
 import { flattenBlockTree, type FlatBlock } from './flattenTree'
+import { collectZoomSubtree } from './zoomSubtree'
 import { formatJournalDate } from '@shared/utils/formatJournalDate'
 import { KanbanBoard, useKanbanGrouping } from '../kanban'
 
 interface PageViewProps {
   pageName: string
+  /**
+   * Block Zoom — when set, the page renders only this block and
+   * its descendants. The component fires `onZoomOut` when the
+   * zoomed block is deleted (or when the user clicks the zoom-out
+   * button), so the parent can sync URL state.
+   */
+  zoomBlockId?: string | null
+  onZoomOut?: () => void
   isJournal?: boolean
   journalFormat?: string
 }
@@ -555,7 +564,7 @@ function SortableBlockRowFlat({
 
 // ──── PageView ──────────────────────────────────────────────────────
 
-export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) {
+export function PageView({ pageName, isJournal, journalFormat, zoomBlockId, onZoomOut }: PageViewProps) {
   const { loaded: wasmLoaded, wasmLoadPage } = useWasm()
   const [blocks, setBlocks] = useState<Block[]>([])
   const [loading, setLoading] = useState(true)
@@ -865,10 +874,67 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
     return () => { cancelled = true }
   }, [pageName, wasmLoaded, wasmLoadPage])
 
+  // ── Block Zoom filter ──────────────────────────────────────
+  //
+  // When `zoomBlockId` is set, we restrict the visible block list
+  // to the zoomed block + its transitive descendants. The filter
+  // is a pure function (`collectZoomSubtree`) so it's trivial to
+  // reason about and test in isolation. The result is memoized on
+  // `[blocks, zoomBlockId]` so the flatten step only re-runs when
+  // the input or the zoom target changes.
+  const zoomedSubtree = useMemo(
+    () => collectZoomSubtree(blocks, zoomBlockId),
+    [blocks, zoomBlockId],
+  )
+
+  const visibleBlocks = useMemo(() => {
+    if (zoomedSubtree == null) return blocks
+    return blocks.filter(b => zoomedSubtree.has(b.id))
+  }, [blocks, zoomedSubtree])
+
+  // Auto-zoom-out: when the zoomed block disappears from the
+  // loaded block list (e.g. user deleted it, or the server no
+  // longer returns it), fire `onZoomOut` so the parent can
+  // clear the URL state. The `Set.has` check handles two cases:
+  //   - `zoomedSubtree` is `null` → no zoom active, skip
+  //   - `zoomedSubtree` is `Set()` (empty) → zoom active but
+  //     block is missing, fire the callback
+  //
+  // We only fire once per transition (a ref guards against
+  // firing on every render while the block is missing), and
+  // we skip the check until the initial block load completes
+  // (otherwise the empty initial state would trigger a
+  // false-positive "block missing" signal).
+  const autoZoomedOutRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (zoomedSubtree == null) {
+      // Zoom not active — clear the guard so a future zoom
+      // session starts fresh.
+      autoZoomedOutRef.current = null
+      return
+    }
+    if (loading) {
+      // Initial load not done — `blocks` is still empty so
+      // the zoomed block is "missing" only temporarily. Don't
+      // auto-zoom-out; wait for the load to complete.
+      return
+    }
+    const blockStillExists = zoomedSubtree.size > 0
+    if (!blockStillExists && autoZoomedOutRef.current !== zoomBlockId) {
+      autoZoomedOutRef.current = zoomBlockId ?? null
+      onZoomOut?.()
+    }
+    if (blockStillExists && autoZoomedOutRef.current !== zoomBlockId) {
+      // Zoomed block is present and a new zoom session started.
+      // Reset the guard so we can fire on a future deletion.
+      autoZoomedOutRef.current = zoomBlockId ?? null
+    }
+  }, [zoomedSubtree, zoomBlockId, onZoomOut, loading])
+
   // ── Virtual-scroll flat blocks ────────────────────────────────
   const flatBlocks = useMemo(
-    () => flattenBlockTree(blocks, null, collapsedIds),
-    [blocks, collapsedIds],
+    () => flattenBlockTree(visibleBlocks, null, collapsedIds),
+    [visibleBlocks, collapsedIds],
   )
   const flatBlocksRef = useRef<FlatBlock[]>(flatBlocks)
   flatBlocksRef.current = flatBlocks
@@ -1830,12 +1896,80 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
         </div>
       )}
 
+      {/* Block Zoom indicator — a small "Zoom out" pill that
+          appears above the block list whenever the page is
+          zoomed into a specific subtree. The pill shows the
+          block's content as a label so the user can confirm
+          what they're zoomed into, and a × button fires
+          `onZoomOut` to drop the zoom. */}
+      {zoomedSubtree != null && (
+        <div
+          data-testid="zoom-indicator"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            padding: '6px 8px 6px 14px',
+            marginBottom: 'var(--space-3)',
+            borderRadius: 'var(--radius-md)',
+            background: 'var(--color-surface-subtle)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-secondary)',
+            fontSize: '13px',
+            fontWeight: 500,
+          }}
+        >
+          <ZoomIn size={14} aria-hidden="true" />
+          <span>
+            Zoomed into
+            <strong style={{ marginLeft: 6 }}>
+              {visibleBlocks[0]?.content ?? '(missing block)'}
+            </strong>
+          </span>
+          <button
+            type="button"
+            data-testid="zoom-out-button"
+            onClick={() => onZoomOut?.()}
+            aria-label="Zoom out"
+            title="Zoom out"
+            style={{
+              marginLeft: 'auto',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 10px',
+              borderRadius: 'var(--radius-sm)',
+              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface)',
+              color: 'var(--color-text-secondary)',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 500,
+            }}
+          >
+            <X size={12} aria-hidden="true" />
+            Zoom out
+          </button>
+        </div>
+      )}
+
       {/* Block list (virtualized) or empty state */}
       {blocks.length === 0 ? (
         <EmptyState
           isJournal={isJournal}
           onCreateBlock={handleCreateFromTemplatePicker}
         />
+      ) : zoomedSubtree != null && visibleBlocks.length === 0 ? (
+        // Zoom is active but the zoomed block is missing from
+        // the loaded blocks (deleted, never existed, etc.).
+        // Don't render the empty-state template picker — the
+        // user explicitly wanted to see one specific block and
+        // it's gone. The auto-zoom-out effect will clear the
+        // zoom; in the meantime we just render nothing rather
+        // than offer to create a new block at the page root.
+        <div style={{ padding: 'var(--space-4)', color: 'var(--color-text-muted)' }}>
+          Block no longer exists.
+        </div>
       ) : view === 'kanban' && kanbanGrouping.isValid ? (
         <KanbanBoard
           propertyKey={kanbanGrouping.propertyKey}
@@ -1892,8 +2026,11 @@ export function PageView({ pageName, isJournal, journalFormat }: PageViewProps) 
         </div>
       )}
 
-      {/* New block button at the bottom */}
-      {blocks.length > 0 && (
+      {/* New block button at the bottom — hidden in zoom mode
+          because adding top-level blocks from a focused subtree
+          view is confusing. The user can still add a child of
+          the zoomed block by pressing Enter inside it. */}
+      {blocks.length > 0 && zoomedSubtree == null && (
         <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
           <div
             style={{
