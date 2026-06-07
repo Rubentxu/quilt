@@ -12,7 +12,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { toast } from 'react-hot-toast'
 import { api } from '@core/api-client'
-import { AgentActivityPanel } from '@features/cognitive/AgentActivityPanel'
+import { AgentActivityFeed } from '@features/cognitive/AgentActivityFeed'
 
 interface Stats {
   pages: number
@@ -183,7 +183,7 @@ export function DashboardPage() {
             padding: 'var(--space-4)',
           }}
         >
-          <AgentActivityPanel maxItems={10} />
+          <AgentActivityFeed maxItems={10} />
         </div>
       </div>
     </div>

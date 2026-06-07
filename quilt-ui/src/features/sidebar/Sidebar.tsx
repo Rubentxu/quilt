@@ -5,7 +5,7 @@ import { Table, Kanban, Terminal, LayoutDashboard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { api } from '@core/api-client'
 import type { Page } from '@shared/types/api'
-import { AgentActivityPanel } from '@features/cognitive/AgentActivityPanel'
+import { AgentActivityFeed } from '@features/cognitive/AgentActivityFeed'
 
 
 function readFavorites(): string[] {
@@ -523,7 +523,7 @@ export function Sidebar({ collapsed, onOpenSearch, onClose }: SidebarProps) {
               paddingTop: 'var(--space-2)',
             }}
           >
-            <AgentActivityPanel maxItems={15} />
+            <AgentActivityFeed maxItems={15} />
           </section>
         )}
       </nav>

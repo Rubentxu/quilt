@@ -41,10 +41,6 @@ const KanbanPage = lazyRouteComponent(
   () => import('@pages/KanbanPage'),
   'KanbanPage',
 )
-const QueryPage = lazyRouteComponent(
-  () => import('@pages/QueryPage'),
-  'QueryPage',
-)
 const DashboardPage = lazyRouteComponent(
   () => import('@pages/DashboardPage'),
   'DashboardPage',
@@ -103,12 +99,6 @@ const kanbanRoute = createRoute({
   component: KanbanPage,
 })
 
-const queryRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/query',
-  component: QueryPage,
-})
-
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard',
@@ -124,7 +114,6 @@ const routeTree = rootRoute.addChildren([
   graphRoute,
   tableRoute,
   kanbanRoute,
-  queryRoute,
   dashboardRoute,
 ])
 

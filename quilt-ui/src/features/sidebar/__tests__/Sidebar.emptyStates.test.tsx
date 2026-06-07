@@ -80,8 +80,8 @@ vi.mock('@tanstack/react-router', () => ({
   useLocation: () => ({ pathname: '/page/whatever' }),
 }))
 
-vi.mock('@features/cognitive/AgentActivityPanel', () => ({
-  AgentActivityPanel: () => <div data-testid="agent-activity-panel" />,
+vi.mock('@features/cognitive/AgentActivityFeed', () => ({
+  AgentActivityFeed: () => <div data-testid="agent-activity-feed" />,
 }))
 
 beforeEach(() => {

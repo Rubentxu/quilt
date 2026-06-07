@@ -1,7 +1,13 @@
 /**
- * Cognitive Feature — G7 Dream Cycle Display
+ * Cognitive Feature — `cognitivo::` family namespace (ADR-0001, ADR-DRAFT).
  *
- * Exports cognitive-related components and hooks.
+ * Exports components belonging to the cognitive feature family. The
+ * `cognitivo::` namespace marks surfaces that read or surface what AI
+ * agents have added to the graph — Quilt itself does not perform
+ * semantic analysis (see ADR-0001).
+ *
+ * Current panels:
+ * - `AgentActivityFeed` — passive view of recent agent-authored blocks.
  *
  * Note: The MirrorPanel, SerendipityFeed, and the analysis hooks
  * (`useAnalysisQuery`, `useRefreshInterval`) were removed as part of
@@ -10,4 +16,4 @@
  * return when the server route is registered.
  */
 
-export { AgentActivityPanel } from './AgentActivityPanel'
+export { AgentActivityFeed } from './AgentActivityFeed'
