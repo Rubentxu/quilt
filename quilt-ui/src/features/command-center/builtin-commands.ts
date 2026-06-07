@@ -1,9 +1,11 @@
 import toast from 'react-hot-toast'
 import { CommandCategory, type Command } from './types'
+import { dispatchDashboardChange } from '@features/dashboard'
+import { PRESETS } from '@features/dashboard/presets'
 
 /**
- * Build the built-in command set: navigation, view toggles, capture,
- * and help.
+ * Build the built-in command set: navigation, view toggles, layout
+ * presets, capture, and help.
  *
  * The returned commands are LOCAL (`target: 'local'`) and do not
  * need any external state — they capture their dependencies via
@@ -14,9 +16,11 @@ import { CommandCategory, type Command } from './types'
  * prompts, locale-aware labels) can pass arguments without
  * touching the call site.
  *
- * The 9-command set is verified by `builtin-commands.test.ts`:
+ * The command set is verified by `builtin-commands.test.ts`:
  *   5 Navigation  (nav/home, nav/journal, nav/graph, nav/pages, nav/settings)
  *   2 View       (view/toggle-theme, view/toggle-sidebar)
+ *   3 Layout     (layout/switch-to-default, layout/switch-to-focus, layout/switch-to-review)
+ *   2 Layout     (layout/toggle-sidebar, layout/toggle-backlinks)
  *   1 Capture    (capture/quick)
  *   1 Help       (help/shortcuts)
  */
@@ -127,6 +131,78 @@ export function createBuiltinCommands(): Command[] {
     },
   }
 
+  // ──── Layout (priority 20) ────────────────────────────────────
+  //
+  // DashboardLayout commands. They dispatch a custom DOM event
+  // that the PanelVisibilityProvider listens to. This decouples
+  // the command factory from React (the factory runs in a plain
+  // useEffect, outside any React context) while still reaching
+  // the same single source of truth the LayoutMenu uses.
+
+  const layoutSwitchToDefault: Command = {
+    id: 'layout/switch-to-default',
+    label: 'Layout: Default',
+    category: CommandCategory.View,
+    priority: 20,
+    target: 'local',
+    execute: () => {
+      dispatchDashboardChange({ type: 'preset', preset: 'default' })
+      toast('Layout: Default', { icon: '▦', duration: 1500 })
+    },
+  }
+
+  const layoutSwitchToFocus: Command = {
+    id: 'layout/switch-to-focus',
+    label: 'Layout: Focus',
+    category: CommandCategory.View,
+    priority: 20,
+    target: 'local',
+    execute: () => {
+      dispatchDashboardChange({ type: 'preset', preset: 'focus' })
+      toast('Layout: Focus', { icon: '▦', duration: 1500 })
+    },
+  }
+
+  const layoutSwitchToReview: Command = {
+    id: 'layout/switch-to-review',
+    label: 'Layout: Review',
+    category: CommandCategory.View,
+    priority: 20,
+    target: 'local',
+    execute: () => {
+      dispatchDashboardChange({ type: 'preset', preset: 'review' })
+      toast('Layout: Review', { icon: '▦', duration: 1500 })
+    },
+  }
+
+  const layoutToggleSidebar: Command = {
+    id: 'layout/toggle-sidebar',
+    label: 'Toggle Sidebar Panel',
+    category: CommandCategory.View,
+    priority: 20,
+    target: 'local',
+    execute: () => {
+      dispatchDashboardChange({ type: 'toggle', panel: 'sidebar' })
+    },
+  }
+
+  const layoutToggleBacklinks: Command = {
+    id: 'layout/toggle-backlinks',
+    label: 'Toggle Backlinks Panel',
+    category: CommandCategory.View,
+    priority: 20,
+    target: 'local',
+    execute: () => {
+      dispatchDashboardChange({ type: 'toggle', panel: 'backlinks' })
+    },
+  }
+
+  // Silence the unused-var warning when PRESETS is only imported
+  // for type narrowing inside the handlers above. Keeping the
+  // import explicit documents that the dispatch is type-checked
+  // against the PRESETS table.
+  void PRESETS
+
   // ──── Capture (priority 30) ───────────────────────────────────
 
   const captureQuick: Command = {
@@ -182,6 +258,11 @@ export function createBuiltinCommands(): Command[] {
     navSettings,
     viewToggleTheme,
     viewToggleSidebar,
+    layoutSwitchToDefault,
+    layoutSwitchToFocus,
+    layoutSwitchToReview,
+    layoutToggleSidebar,
+    layoutToggleBacklinks,
     captureQuick,
     helpShortcuts,
   ]

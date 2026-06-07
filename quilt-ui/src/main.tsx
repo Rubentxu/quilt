@@ -7,6 +7,7 @@ import { ConnectionProvider } from '@shared/contexts/ConnectionContext'
 import { TabsProvider } from '@shared/contexts/TabsContext'
 import { ErrorBoundary } from '@shared/components/ErrorBoundary'
 import { CommandRegistryProvider } from '@features/command-center/context'
+import { PanelVisibilityProvider } from '@features/dashboard'
 import { router } from './router'
 import './globals.css'
 
@@ -22,21 +23,23 @@ createRoot(document.getElementById('root')!).render(
       <ConnectionProvider>
         <TabsProvider>
           <CommandRegistryProvider>
-            <ErrorBoundary>
-              <RouterProvider router={router} />
-              <Toaster
-                position="bottom-right"
-                toastOptions={{
-                  style: {
-                    background: 'var(--color-surface)',
-                    color: 'var(--color-text-primary)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md)',
-                    fontSize: '14px',
-                  },
-                }}
-              />
-            </ErrorBoundary>
+            <PanelVisibilityProvider>
+              <ErrorBoundary>
+                <RouterProvider router={router} />
+                <Toaster
+                  position="bottom-right"
+                  toastOptions={{
+                    style: {
+                      background: 'var(--color-surface)',
+                      color: 'var(--color-text-primary)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-md)',
+                      fontSize: '14px',
+                    },
+                  }}
+                />
+              </ErrorBoundary>
+            </PanelVisibilityProvider>
           </CommandRegistryProvider>
         </TabsProvider>
       </ConnectionProvider>

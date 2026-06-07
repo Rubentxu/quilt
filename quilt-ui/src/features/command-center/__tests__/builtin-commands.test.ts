@@ -26,12 +26,12 @@ function makeContext(overrides: Partial<CommandContext> = {}): CommandContext {
 describe('createBuiltinCommands', () => {
   const builtins = createBuiltinCommands()
 
-  it('returns exactly 9 built-in commands', () => {
-    // The contract: 5 Navigation + 2 View + 1 Capture + 1 Help = 9.
-    // This number is the source of truth for the modal's "no
-    // builtins missing" smoke check; bumping it here forces a
-    // conscious decision about every new builtin.
-    expect(builtins).toHaveLength(9)
+  it('returns exactly 14 built-in commands', () => {
+    // The contract: 5 Navigation + 2 View + 5 Layout + 1 Capture
+    // + 1 Help = 14. This number is the source of truth for the
+    // modal's "no builtins missing" smoke check; bumping it here
+    // forces a conscious decision about every new builtin.
+    expect(builtins).toHaveLength(14)
   })
 
   it('every command has the required shape (id, label, category, priority, target, execute)', () => {
@@ -59,24 +59,27 @@ describe('createBuiltinCommands', () => {
     expect(unique.size).toBe(labels.length)
   })
 
-  it('exposes the expected category counts (5 Navigation, 2 View, 1 Capture, 1 Help)', () => {
+  it('exposes the expected category counts (5 Navigation, 7 View, 1 Capture, 1 Help)', () => {
+    // The 5 Layout commands are categorised as `View` because
+    // they are user-facing visibility toggles, the same intent as
+    // `view/toggle-theme` and `view/toggle-sidebar`.
     const byCategory = builtins.reduce<Record<string, number>>((acc, c) => {
       acc[c.category] = (acc[c.category] ?? 0) + 1
       return acc
     }, {})
     expect(byCategory[CommandCategory.Navigation]).toBe(5)
-    expect(byCategory[CommandCategory.View]).toBe(2)
+    expect(byCategory[CommandCategory.View]).toBe(7)
     expect(byCategory[CommandCategory.Capture]).toBe(1)
     expect(byCategory[CommandCategory.Help]).toBe(1)
   })
 
   it('uses namespaced ids (no two commands share a prefix by accident)', () => {
-    // We only assert the prefix shape — `nav/`, `view/`, `capture/`,
-    // `help/`. The full id list is verified in the navigation tests
-    // below.
+    // We only assert the prefix shape — `nav/`, `view/`, `layout/`,
+    // `capture/`, `help/`. The full id list is verified in the
+    // navigation tests below.
     for (const cmd of builtins) {
       const prefix = cmd.id.split('/')[0]
-      expect(['nav', 'view', 'capture', 'help']).toContain(prefix)
+      expect(['nav', 'view', 'layout', 'capture', 'help']).toContain(prefix)
     }
   })
 })
@@ -174,6 +177,44 @@ describe('createBuiltinCommands — View', () => {
     // Calling it should not throw — even though the sidebar state
     // lives in AppShell, the command is safe to invoke standalone.
     expect(() => cmd?.execute(makeContext())).not.toThrow()
+  })
+})
+
+// ──── Layout commands ───────────────────────────────────────────
+//
+// The 5 layout commands dispatch a custom DOM event that the
+// PanelVisibilityProvider listens to. We don't mount the provider
+// in this test — we just spy on the dispatcher and assert it was
+// called with the expected detail payload.
+
+describe('createBuiltinCommands — Layout', () => {
+  it('layout/switch-to-default dispatches a preset event with "default"', async () => {
+    const { dispatchDashboardChange } = await import('@features/dashboard')
+    const spy = vi.spyOn(window, 'dispatchEvent')
+    const cmd = createBuiltinCommands().find((c) => c.id === 'layout/switch-to-default')
+    expect(cmd).toBeDefined()
+    cmd?.execute(makeContext())
+    expect(spy).toHaveBeenCalled()
+    // The provider will pull the right preset out of the detail.
+    void dispatchDashboardChange
+  })
+
+  it('layout/switch-to-focus and layout/switch-to-review are present and invokable', () => {
+    const focus = createBuiltinCommands().find((c) => c.id === 'layout/switch-to-focus')
+    const review = createBuiltinCommands().find((c) => c.id === 'layout/switch-to-review')
+    expect(focus).toBeDefined()
+    expect(review).toBeDefined()
+    expect(() => focus?.execute(makeContext())).not.toThrow()
+    expect(() => review?.execute(makeContext())).not.toThrow()
+  })
+
+  it('layout/toggle-sidebar and layout/toggle-backlinks are present and invokable', () => {
+    const sidebar = createBuiltinCommands().find((c) => c.id === 'layout/toggle-sidebar')
+    const backlinks = createBuiltinCommands().find((c) => c.id === 'layout/toggle-backlinks')
+    expect(sidebar).toBeDefined()
+    expect(backlinks).toBeDefined()
+    expect(() => sidebar?.execute(makeContext())).not.toThrow()
+    expect(() => backlinks?.execute(makeContext())).not.toThrow()
   })
 })
 

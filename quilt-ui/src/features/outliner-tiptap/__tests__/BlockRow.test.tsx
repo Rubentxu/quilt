@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { BlockRow, findNearestLink } from '../BlockRow'
+import type { Block, BlockProperty } from '@shared/types/api'
 
 // Place the caret at character offset `offset` inside a contentEditable.
 // BlockRow's `handleInput` reads `window.getSelection()` to compute the
@@ -95,6 +96,49 @@ function makeBlock(content = '') {
     updatedAt: '2026-06-02T00:00:00Z',
     properties: [],
   } as any
+}
+
+/**
+ * Build a Block typed as an AgentRun role (ADR-DRAFT-agent-run-block-role).
+ * Pass the role metadata via `overrides`; the `type: agent-run` marker
+ * property is added automatically. Property types follow the
+ * BlockProperty union from `@shared/types/api`.
+ */
+function makeAgentRunBlock(
+  overrides: {
+    agent?: string
+    model?: string
+    runStatus?: string
+    startedAt?: string
+    completedAt?: string
+    summary?: string
+    error?: string
+    content?: string
+    id?: string
+  } = {},
+) {
+  const props: BlockProperty[] = [
+    { key: 'type', value: 'agent-run', type: 'string' },
+  ]
+  if (overrides.agent !== undefined)
+    props.push({ key: 'agent', value: overrides.agent, type: 'string' })
+  if (overrides.model !== undefined)
+    props.push({ key: 'model', value: overrides.model, type: 'string' })
+  if (overrides.runStatus !== undefined)
+    props.push({ key: 'run-status', value: overrides.runStatus, type: 'select' })
+  if (overrides.startedAt !== undefined)
+    props.push({ key: 'started-at', value: overrides.startedAt, type: 'date' })
+  if (overrides.completedAt !== undefined)
+    props.push({ key: 'completed-at', value: overrides.completedAt, type: 'date' })
+  if (overrides.summary !== undefined)
+    props.push({ key: 'summary', value: overrides.summary, type: 'string' })
+  if (overrides.error !== undefined)
+    props.push({ key: 'error', value: overrides.error, type: 'string' })
+  return {
+    ...makeBlock(overrides.content ?? ''),
+    id: overrides.id ?? 'b1',
+    properties: props,
+  } as Block
 }
 
 function renderRow(content = '') {
@@ -403,6 +447,182 @@ describe('BlockRow editing behavior', () => {
       | { content: string }
       | undefined
     expect(sentPayload?.content).toBe('deadline:: 2026-01-15')
+  })
+})
+
+// ─── AgentRun block role (ADR-DRAFT-agent-run-block-role) ──────────
+//
+// A block with `type:: agent-run` is rendered with a dedicated header
+// strip (agent name, run-status badge, started-at timestamp) but the
+// block content itself remains editable like any other block. The
+// role is interpreted purely from the `properties` array — no schema
+// change to the Block entity is required.
+
+function renderAgentRunBlock(block: Block) {
+  const onUpdateSpy = vi.fn()
+  function Wrapper() {
+    const [b, setB] = useState<Block>(block)
+    return (
+      <BlockRow
+        block={b}
+        allBlocks={[b]}
+        pageName="demo"
+        hasChildren={false}
+        isCollapsed={false}
+        onToggleCollapse={vi.fn()}
+        onUpdate={(updated) => {
+          onUpdateSpy(updated)
+          if (updated) setB(updated)
+        }}
+        onCreateBlock={vi.fn()}
+        onDeleteBlock={vi.fn()}
+        onFocusBlock={vi.fn()}
+        onMoveBlockUp={vi.fn()}
+        onMoveBlockDown={vi.fn()}
+        onUndo={vi.fn()}
+        onRedo={vi.fn()}
+        indent={0}
+      />
+    )
+  }
+  render(<Wrapper />)
+  return { onUpdate: onUpdateSpy }
+}
+
+describe('AgentRun block role rendering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(global.navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    })
+  })
+
+  it('renders the agent-run header when the block has type=agent-run', () => {
+    renderAgentRunBlock(
+      makeAgentRunBlock({ agent: 'claude', runStatus: 'Completed' }),
+    )
+    expect(screen.getByTestId('agent-run-header')).toBeInTheDocument()
+  })
+
+  it('does NOT render the agent-run header for a regular paragraph block', () => {
+    renderAgentRunBlock(makeBlock('just a normal block'))
+    expect(screen.queryByTestId('agent-run-header')).not.toBeInTheDocument()
+  })
+
+  it('does NOT render the agent-run header when type is some other role (e.g. comment)', () => {
+    const block = makeBlock('a comment')
+    block.properties = [
+      { key: 'type', value: 'comment', type: 'string' },
+    ]
+    renderAgentRunBlock(block)
+    expect(screen.queryByTestId('agent-run-header')).not.toBeInTheDocument()
+  })
+
+  it('does NOT render the agent-run header when properties is undefined', () => {
+    const block = makeBlock('no props')
+    block.properties = undefined
+    renderAgentRunBlock(block)
+    expect(screen.queryByTestId('agent-run-header')).not.toBeInTheDocument()
+  })
+
+  it('displays the agent name from the agent:: property', () => {
+    renderAgentRunBlock(
+      makeAgentRunBlock({ agent: 'claude', runStatus: 'Running' }),
+    )
+    expect(screen.getByTestId('agent-run-agent')).toHaveTextContent('claude')
+  })
+
+  it('displays the model when provided', () => {
+    renderAgentRunBlock(
+      makeAgentRunBlock({
+        agent: 'claude',
+        model: 'sonnet-4',
+        runStatus: 'Completed',
+      }),
+    )
+    expect(screen.getByTestId('agent-run-model')).toHaveTextContent('sonnet-4')
+  })
+
+  it('displays the run-status with the status text', () => {
+    renderAgentRunBlock(
+      makeAgentRunBlock({ agent: 'claude', runStatus: 'Failed' }),
+    )
+    const status = screen.getByTestId('agent-run-status')
+    // Case-insensitive — the badge is rendered uppercased to match
+    // the marker-badge convention; the underlying value carries the
+    // canonical case.
+    expect(status).toHaveTextContent(/failed/i)
+  })
+
+  // Each run-status is a distinct state of the lifecycle (ADR §"Ciclo
+  // de vida"). The badge must therefore be visually distinguishable
+  // for every state — this guards against accidentally flattening them
+  // into a single style.
+  it.each(['Queued', 'Running', 'Completed', 'Failed', 'Cancelled'] as const)(
+    'renders the %s run-status with a distinct background colour',
+    (runStatus) => {
+      const block = makeAgentRunBlock({ agent: 'claude', runStatus })
+      renderAgentRunBlock(block)
+      const status = screen.getByTestId('agent-run-status')
+      const bg = status.style.background
+      // Every status has a non-empty `background` inline style.
+      expect(bg).toBeTruthy()
+      expect(bg).not.toBe('transparent')
+    },
+  )
+
+  it('Completed and Failed statuses have visually distinct backgrounds', () => {
+    renderAgentRunBlock(makeAgentRunBlock({ runStatus: 'Completed' }))
+    const completedBg = screen.getByTestId('agent-run-status').style.background
+    cleanup()
+    renderAgentRunBlock(makeAgentRunBlock({ runStatus: 'Failed' }))
+    const failedBg = screen.getByTestId('agent-run-status').style.background
+    expect(completedBg).not.toBe(failedBg)
+  })
+
+  it('displays the started-at timestamp when provided', () => {
+    renderAgentRunBlock(
+      makeAgentRunBlock({
+        agent: 'claude',
+        runStatus: 'Completed',
+        startedAt: '2026-06-07T09:00:00Z',
+      }),
+    )
+    expect(screen.getByTestId('agent-run-started-at')).toBeInTheDocument()
+  })
+
+  it('omits the started-at element when the property is missing', () => {
+    renderAgentRunBlock(
+      makeAgentRunBlock({ agent: 'claude', runStatus: 'Queued' }),
+    )
+    expect(screen.queryByTestId('agent-run-started-at')).not.toBeInTheDocument()
+  })
+
+  it('still allows editing the block content (agent-run is a role, not a freeze)', () => {
+    const block = makeAgentRunBlock({
+      agent: 'claude',
+      runStatus: 'Running',
+      content: 'Refactoring auth',
+    })
+    mockUpdateBlock.mockResolvedValueOnce({
+      ...block,
+      content: 'Refactoring auth v2',
+    })
+    renderAgentRunBlock(block)
+
+    const read = screen.getByText('Refactoring auth')
+    fireEvent.click(read)
+    const editor = screen.getByRole('textbox', { name: 'Block content' })
+    editor.textContent = 'Refactoring auth v2'
+    fireEvent.input(editor)
+    fireEvent.blur(editor)
+
+    return waitFor(() => {
+      expect(mockUpdateBlock).toHaveBeenCalledWith('b1', {
+        content: 'Refactoring auth v2',
+      })
+    })
   })
 })
 

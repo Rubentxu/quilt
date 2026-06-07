@@ -8,6 +8,7 @@ import { TabsBar } from './TabsBar'
 import { FloatingHelpButton } from './FloatingHelpButton'
 import { WelcomeTour } from './WelcomeTour'
 import { useTabs } from '@shared/contexts/TabsContext'
+import { usePanelVisibility, LayoutMenu } from '@features/dashboard'
 import { useResponsive } from '@shared/hooks/useResponsive'
 import { useConnection } from '@shared/contexts/ConnectionContext'
 import { usePerformance } from '@shared/hooks/usePerformance'
@@ -427,8 +428,13 @@ export function UserAvatar({ onClick }: UserAvatarProps) {
 export function AppShell() {
   // Surface any unexpectedly slow mount of the app shell itself.
   usePerformance('AppShell mount', 32)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [backlinksOpen, setBacklinksOpen] = useState(true)
+  // DashboardLayout — sidebar / backlinks visibility is driven by
+  // the PanelVisibilityContext so it can be persisted across
+  // reloads and switched via presets. See
+  // `features/dashboard/presets.ts` for the named presets.
+  const { visiblePanels, togglePanel } = usePanelVisibility()
+  const sidebarOpen = visiblePanels.has('sidebar')
+  const backlinksOpen = visiblePanels.has('backlinks')
   const [mobileBacklinksOpen, setMobileBacklinksOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('quilt-theme') === 'dark'
@@ -605,7 +611,7 @@ export function AppShell() {
           <>
             {/* Drawer backdrop */}
             <div
-              onClick={() => setSidebarOpen(false)}
+              onClick={() => togglePanel('sidebar')}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -634,7 +640,7 @@ export function AppShell() {
                 <Sidebar
                   collapsed={false}
                   onOpenSearch={() => setSearchOpen(true)}
-                  onClose={() => setSidebarOpen(false)}
+                  onClose={() => togglePanel('sidebar')}
                 />
               </div>
             </div>
@@ -696,7 +702,7 @@ export function AppShell() {
         >
           {/* Hamburger menu */}
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={() => togglePanel('sidebar')}
             aria-label={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
             title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
             data-testid="mobile-menu-button"
@@ -749,9 +755,13 @@ export function AppShell() {
                 borderRadius: '12px',
               }}
             >
+              {/* LayoutMenu — DashboardLayout presets + per-panel
+                  toggles. Lives next to the kebab in the same
+                  surface-subtle pill. */}
+              <LayoutMenu />
               <TopbarMenu
                 onRefresh={() => window.location.reload()}
-                onToggleSidebar={() => setSidebarOpen(v => !v)}
+                onToggleSidebar={() => togglePanel('sidebar')}
                 onOpenHelp={() => setHelpExpanded(true)}
               />
             </div>
@@ -780,7 +790,7 @@ export function AppShell() {
             </button>
           ) : (
             <button
-              onClick={() => setBacklinksOpen(!backlinksOpen)}
+              onClick={() => togglePanel('backlinks')}
               aria-label={backlinksOpen ? 'Close backlinks panel' : 'Open backlinks panel'}
               title={backlinksOpen ? 'Close backlinks panel' : 'Open backlinks panel'}
               style={{

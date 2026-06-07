@@ -102,6 +102,41 @@ const PRIORITY_STYLES: Record<Priority, { bg: string; text: string }> = {
   C: { bg: 'var(--color-text-muted)', text: '#fff' },
 }
 
+// ──── AgentRun block role (ADR-DRAFT-agent-run-block-role) ───────────
+//
+// A block with `type:: agent-run` is a regular Block (no schema change)
+// whose `properties` array carries run metadata. The header strip
+// surfaces agent name, run-status, and started-at so users can scan
+// runs at a glance. The block content remains editable.
+
+/** All run-status values per ADR lifecycle. */
+export const AGENT_RUN_STATUSES = [
+  'Queued',
+  'Running',
+  'Completed',
+  'Failed',
+  'Cancelled',
+] as const
+export type AgentRunStatus = (typeof AGENT_RUN_STATUSES)[number]
+
+/** Per-status badge colours. Failed/Completed/Running are the three
+ *  terminal/in-flight states and get the highest-contrast colours
+ *  (danger / success / info). Queued and Cancelled stay muted. */
+const AGENT_RUN_STATUS_STYLES: Record<AgentRunStatus, { bg: string; text: string }> = {
+  Queued: { bg: 'var(--color-text-muted)', text: '#fff' },
+  Running: { bg: 'var(--color-info)', text: '#fff' },
+  Completed: { bg: 'var(--color-success)', text: '#fff' },
+  Failed: { bg: 'var(--color-danger)', text: '#fff' },
+  Cancelled: { bg: 'var(--color-text-disabled)', text: '#fff' },
+}
+
+/** Read a string property from a block, or null if absent. */
+function readProperty(block: Block, key: string): string | null {
+  const prop = block.properties?.find(p => p.key === key)
+  if (!prop || prop.value == null) return null
+  return String(prop.value)
+}
+
 // ──── Helpers ────────────────────────────────────────────────────────
 
 /** Find the sibling immediately before this block (by order) */
@@ -996,6 +1031,22 @@ export function BlockRow({
   const createdByStr = createdBy == null ? '' : String(createdBy)
   const isAgentAuthor = createdByStr.startsWith('agent::')
 
+  // ADR-DRAFT-agent-run-block-role: AgentRun is a *role* carried by
+  // `type:: agent-run` in the block's properties array. The block
+  // itself stays a normal block (editable, saveable, queryable via
+  // DSL); the header strip just visualises the run metadata.
+  const agentRunType = readProperty(block, 'type')
+  const isAgentRun = agentRunType === 'agent-run'
+  const agentName = isAgentRun ? readProperty(block, 'agent') : null
+  const agentModel = isAgentRun ? readProperty(block, 'model') : null
+  const runStatusRaw = isAgentRun ? readProperty(block, 'run-status') : null
+  const runStatus: AgentRunStatus | null =
+    runStatusRaw && (AGENT_RUN_STATUSES as readonly string[]).includes(runStatusRaw)
+      ? (runStatusRaw as AgentRunStatus)
+      : null
+  const startedAt = isAgentRun ? readProperty(block, 'started-at') : null
+  const runError = isAgentRun ? readProperty(block, 'error') : null
+
   const isDimmed = block.marker === 'Done' || block.marker === 'Cancelled'
 
   return (
@@ -1123,6 +1174,101 @@ export function BlockRow({
         >
           {block.priority}
         </span>
+      )}
+
+      {/* AgentRun header (ADR-DRAFT-agent-run-block-role) — only when
+          the block carries `type:: agent-run`. The header is a small
+          inline strip showing agent name, run-status badge, and the
+          started-at timestamp. The block content below remains a
+          normal editable block. */}
+      {isAgentRun && (
+        <div
+          data-testid="agent-run-header"
+          aria-label="Agent run"
+          title={
+            runError
+              ? `Agent run (${runStatus ?? 'unknown'}): ${runError}`
+              : runStatus
+                ? `Agent run (${runStatus})`
+                : 'Agent run'
+          }
+          style={{
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            marginTop: '4px',
+            flexWrap: 'wrap',
+            maxWidth: '100%',
+          }}
+        >
+          {agentName && (
+            <span
+              data-testid="agent-run-agent"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-pill)',
+                background: 'var(--color-accent-subtle, rgba(99, 102, 241, 0.12))',
+                color: 'var(--color-accent)',
+                lineHeight: 1.4,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span aria-hidden="true">🤖</span>
+              {agentName}
+            </span>
+          )}
+          {agentModel && (
+            <span
+              data-testid="agent-run-model"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                color: 'var(--color-text-muted)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {agentModel}
+            </span>
+          )}
+          {runStatus && (
+            <span
+              data-testid="agent-run-status"
+              style={{
+                fontSize: '11px',
+                fontWeight: 600,
+                padding: '2px 8px',
+                borderRadius: 'var(--radius-pill)',
+                background: AGENT_RUN_STATUS_STYLES[runStatus].bg,
+                color: AGENT_RUN_STATUS_STYLES[runStatus].text,
+                lineHeight: 1.4,
+                letterSpacing: '0.01em',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {runStatus.toUpperCase()}
+            </span>
+          )}
+          {startedAt && (
+            <span
+              data-testid="agent-run-started-at"
+              title={`Started at ${startedAt}`}
+              style={{
+                fontSize: '11px',
+                fontWeight: 400,
+                color: 'var(--color-text-muted)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {startedAt}
+            </span>
+          )}
+        </div>
       )}
 
       {/* Content: edit mode shows raw contentEditable, read mode shows rendered inline */}
