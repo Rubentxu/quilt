@@ -31,13 +31,15 @@ export function KanbanPage() {
             .map(p => api.getPageBlocks(p.name))
         )
       ).then(blockArrays => blockArrays.flat()),
-      api.getBlockProperties('').then(props =>
-        [...new Set(props.map((p: { key: string }) => p.key))].sort()
-      ),
+      // Property keys come from the cross-block aggregation endpoint
+      // (`GET /api/v1/properties/keys`), not from a per-block
+      // properties call. The previous `getBlockProperties('')` hack
+      // sent `''` as a block ID and 404'd.
+      api.listPropertyKeys().then(({ keys }) => keys),
     ])
       .then(([allBlocks, keys]) => {
         setBlocks(allBlocks)
-        setAvailableKeys(keys.filter((k: string) => k !== 'card-shape' && k !== 'icon'))
+        setAvailableKeys(keys.filter(k => k !== 'card-shape' && k !== 'icon'))
       })
       .catch(() => toast.error('Failed to load blocks'))
       .finally(() => setLoading(false))

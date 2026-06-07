@@ -32,11 +32,14 @@ export function TablePage() {
 
   // Fetch property keys for the filter chip dropdown
   useEffect(() => {
+    // Property keys come from the cross-block aggregation endpoint
+    // (`GET /api/v1/properties/keys`), not from a per-block
+    // properties call. The previous `getBlockProperties('')` hack
+    // sent `''` as a block ID and 404'd.
     api
-      .getBlockProperties('') // empty = get all keys
-      .then((props) => {
-        const keys = [...new Set(props.map((p: { key: string }) => p.key))]
-        setAvailableKeys(keys.sort())
+      .listPropertyKeys()
+      .then(({ keys }) => {
+        setAvailableKeys([...keys].sort())
       })
       .catch(() => {
         // Non-fatal — filter dropdown will be empty

@@ -354,6 +354,81 @@ describe('dismissTour', () => {
   })
 })
 
+// ── listPropertyKeys (frontend fix for empty-id getBlockProperties) ──
+//
+// KanbanPage and TablePage used to call `getBlockProperties('')` as a
+// hack to get the global list of property keys for filter dropdowns.
+// The empty block ID hit `/blocks//properties` which 404s at runtime.
+// The proper backend endpoint is `GET /api/v1/properties/keys?cursor=&limit=`
+// (mounted in `crates/quilt-server/src/routes.rs:40`).
+//
+// Response shape: `{ keys: string[], nextCursor: string | null }`.
+// We lock the wire contract here so a future server change to either
+// the URL or the field names breaks a test instead of breaking the
+// production kanban/table views.
+
+describe('listPropertyKeys', () => {
+  it('GETs /api/v1/properties/keys with no params by default', async () => {
+    const body = { keys: ['status', 'priority', 'card-shape'], nextCursor: null }
+    mockResponse(200, body)
+
+    const result = await api.listPropertyKeys()
+    expect(result).toEqual(body)
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/properties/keys',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+
+  it('forwards the cursor and limit as query params', async () => {
+    const body = { keys: ['status', 'priority'], nextCursor: 'priority' }
+    mockResponse(200, body)
+
+    const result = await api.listPropertyKeys('status', 2)
+    expect(result).toEqual(body)
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/properties/keys?cursor=status&limit=2',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+
+  it('encodes the cursor so special characters survive the URL parser', async () => {
+    const body = { keys: ['a/b'], nextCursor: null }
+    mockResponse(200, body)
+
+    await api.listPropertyKeys('a/b', 5)
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/properties/keys?cursor=a%2Fb&limit=5',
+      expect.anything(),
+    )
+  })
+
+  it('omits the cursor from the URL when the caller passes undefined', async () => {
+    mockResponse(200, { keys: [], nextCursor: null })
+    await api.listPropertyKeys(undefined, 10)
+    // No `?cursor=` should appear when cursor is undefined — the
+    // server treats absent cursor as "start from the beginning".
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/properties/keys?limit=10',
+      expect.anything(),
+    )
+  })
+
+  it('propagates 400 when the server rejects an empty cursor', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      statusText: 'Bad Request',
+      json: () =>
+        Promise.resolve({
+          code: 'BAD_REQUEST',
+          error: 'cursor must not be empty',
+        }),
+    })
+    await expect(api.listPropertyKeys('')).rejects.toThrow(QuiltApiError)
+  })
+})
+
 // ── P0 fix: api surface must match mounted routes ──────────────────
 //
 // The frontend's `api` object must only expose methods whose target
@@ -406,6 +481,8 @@ describe('api surface (P0 — only mounted routes)', () => {
       'getSettings', 'updateSettings', 'getDateFormats',
       // Block properties
       'getBlockProperties', 'setBlockProperty', 'deleteBlockProperty',
+      // Property keys (cross-block aggregation endpoint)
+      'listPropertyKeys',
       // Templates
       'listTemplates', 'getTemplateSchema',
       // Query

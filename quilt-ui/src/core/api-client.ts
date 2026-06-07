@@ -236,6 +236,34 @@ export const api = {
       method: 'DELETE',
     }),
 
+  /**
+   * List distinct top-level property keys that appear in any block's
+   * `properties` JSON column, paginated by key (lexicographic ASC,
+   * forward-only, key-as-cursor).
+   *
+   * Powers the kanban board's "Group by" dropdown and the table view's
+   * filter-chip dropdown — both of which used to call
+   * `getBlockProperties('')` (an empty block ID, which 404s). The
+   * endpoint is mounted at `/api/v1/properties/keys?cursor=&limit=`
+   * in `crates/quilt-server/src/routes.rs:40`.
+   *
+   * @param cursor  Optional cursor — keys are strictly greater than this.
+   *                The server rejects the empty string as a 400; pass
+   *                `undefined` for the first page.
+   * @param limit   Optional page size. Server bounds: 1..=100 (default 50).
+   */
+  listPropertyKeys: (cursor?: string, limit?: number) => {
+    const params = new URLSearchParams()
+    if (cursor !== undefined) params.set('cursor', cursor)
+    if (limit !== undefined) params.set('limit', String(limit))
+    const qs = params.toString()
+    const url = qs ? `/properties/keys?${qs}` : `/properties/keys`
+    return fetchJson<{
+      keys: string[]
+      nextCursor: string | null
+    }>(url)
+  },
+
   // Templates (ADR-0007)
   //
   // Lists `template/*` pages with their card metadata (card-shape,
