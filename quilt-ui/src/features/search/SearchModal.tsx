@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { Search, FileText, Calendar, Hash } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { Search, FileText, Calendar, Hash, X } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { api } from '@core/api-client'
 import type { Page, SearchResult } from '@shared/types/api'
@@ -12,6 +12,82 @@ interface SearchModalProps {
 
 const PAGE_LIMIT = 10
 const BLOCK_LIMIT = 10
+
+// ──── Property filter parsing ───────────────────────────────────────
+//
+// The FTS5 endpoint doesn't understand property syntax (`status:: todo`),
+// so we let the user type short filters (`status:todo`) client-side and
+// post-filter the FTS results by regex-matching the block content.
+//
+// Keys are case-insensitive on input and matched against the keys below.
+// Anything else (e.g. `author:foo`) is treated as free text and passed
+// to FTS5 verbatim.
+
+const SUPPORTED_FILTER_KEYS = [
+  'status',
+  'priority',
+  'created_by',
+  'card-shape',
+  'card_shape',
+] as const
+
+type FilterKey = (typeof SUPPORTED_FILTER_KEYS)[number]
+
+/** A single property filter parsed from the user's query. */
+export interface PropertyFilter {
+  key: FilterKey
+  value: string
+}
+
+/** Result of splitting a query into the FTS text part and any filters. */
+export interface ParsedQuery {
+  text: string
+  filters: PropertyFilter[]
+}
+
+/**
+ * Split a raw query into the FTS text part and any `key:value` property
+ * filters. Whitespace-separated tokens matching `<key>:<value>` where
+ * `<key>` is one of {@link SUPPORTED_FILTER_KEYS} become filters; the
+ * rest stays as free text. The value keeps everything after the colon
+ * (whitespace inside the token is not allowed — `status: todo` is two
+ * tokens and does NOT match).
+ */
+export function parseQuery(query: string): ParsedQuery {
+  const tokens = query.split(/\s+/).filter(Boolean)
+  const filters: PropertyFilter[] = []
+  const textTokens: string[] = []
+
+  for (const token of tokens) {
+    const match = token.match(/^([a-z][a-z0-9_-]*):(.+)$/i)
+    if (match) {
+      const key = match[1].toLowerCase() as FilterKey
+      if ((SUPPORTED_FILTER_KEYS as readonly string[]).includes(key)) {
+        filters.push({ key, value: match[2] })
+        continue
+      }
+    }
+    textTokens.push(token)
+  }
+
+  return { text: textTokens.join(' ').trim(), filters }
+}
+
+/**
+ * Test whether a block's content includes the property `key:: value`
+ * or `key: value` (case-insensitive). Used to post-filter FTS results
+ * client-side. The match requires a word boundary before the key so
+ * that `substatus:: todo` does NOT satisfy a filter on `status`.
+ */
+export function blockMatchesFilter(content: string, filter: PropertyFilter): boolean {
+  const escapedKey = filter.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escapedValue = filter.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = new RegExp(
+    `(?:^|\\s)${escapedKey}(?:::|:)\\s*${escapedValue}(?=\\s|$|[,;])`,
+    'i',
+  )
+  return pattern.test(content)
+}
 
 /**
  * One row in the unified result list. The modal flattens page and block
@@ -35,6 +111,14 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
+
+  // Parse the query into the FTS text part and any property filters.
+  // Memoized on `query` so the array reference stays stable across
+  // re-renders that don't change the query — that keeps the search
+  // useEffect's debounce timer from being reset on every render.
+  const parsed = useMemo(() => parseQuery(query), [query])
+  const filters = parsed.filters
+  const hasFilters = filters.length > 0
 
   // Flatten pages + blocks into a single navigable list. Sections are
   // rendered as headers but don't participate in the keyboard cursor.
@@ -85,22 +169,46 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     setLoading(true)
     const timer = setTimeout(async () => {
       try {
+        // FTS5 receives only the free-text part of the query. When the
+        // user typed ONLY filters (e.g. `status:todo`), fall back to the
+        // first filter's value so block search still produces a result
+        // set to post-filter. If there are no filters and no text, the
+        // FTS call is skipped entirely (the empty-query branch above
+        // already covered the no-input case).
+        const ftsQuery = parsed.text || (hasFilters ? filters[0].value : '')
+
         // Run both calls in parallel. We intentionally don't `await`
         // them sequentially because the page filter is fast and the
         // FTS call is the slow one — kicking them off together means
         // the UI updates as soon as either settles.
         const [pages, blocks] = await Promise.all([
           api.listPages().catch(() => [] as Page[]),
-          api.searchBlocks(trimmed, BLOCK_LIMIT).catch(() => [] as SearchResult[]),
+          ftsQuery
+            ? api.searchBlocks(ftsQuery, BLOCK_LIMIT).catch(() => [] as SearchResult[])
+            : Promise.resolve([] as SearchResult[]),
         ])
 
-        const q = trimmed.toLowerCase()
-        const filteredPages = pages.filter(
-          p => p.name.toLowerCase().includes(q) || (p.title && p.title.toLowerCase().includes(q)),
-        ).slice(0, PAGE_LIMIT)
+        // Post-filter blocks by the parsed property filters. FTS5
+        // doesn't understand property syntax, so the filter is a
+        // client-side regex on the block's raw content. ALL filters
+        // must match (AND semantics).
+        const filteredBlocks = filters.length > 0
+          ? blocks.filter(b => filters.every(f => blockMatchesFilter(b.content, f)))
+          : blocks
+
+        const q = parsed.text.toLowerCase()
+        const filteredPages = pages
+          .filter(
+            p => p.name.toLowerCase().includes(q) || (p.title && p.title.toLowerCase().includes(q)),
+          )
+          // Sort by most recently updated (proxy: createdAt desc, since
+          // the Page DTO doesn't expose updatedAt yet). ISO-8601 date
+          // strings sort correctly via localeCompare.
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .slice(0, PAGE_LIMIT)
 
         setPageResults(filteredPages)
-        setBlockResults(blocks)
+        setBlockResults(filteredBlocks)
         setSelectedIndex(0)
       } catch (e) {
         toast.error('Search failed')
@@ -110,7 +218,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     }, 200)
 
     return () => clearTimeout(timer)
-  }, [query])
+  }, [query, parsed, hasFilters, filters])
 
   // Keyboard navigation
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -126,6 +234,22 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     } else if (e.key === 'Escape') {
       onClose()
     }
+  }
+
+  /**
+   * Remove one of the active property filters by index. Reconstructs
+   * the query string from the free-text part + the surviving filters,
+   * so the user sees the filter disappear from both the chip row and
+   * the input. Text comes first to match the natural order the user
+   * originally typed (e.g. `hello status:todo priority:A`).
+   */
+  function removeFilter(index: number) {
+    const remaining = filters.filter((_, i) => i !== index)
+    const parts = [
+      parsed.text,
+      ...remaining.map(f => `${f.key}:${f.value}`),
+    ].filter(Boolean)
+    setQuery(parts.join(' '))
   }
 
   function selectItem(item: ResultItem) {
@@ -229,6 +353,65 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             ESC
           </button>
         </div>
+
+        {/* ─── Filter chips ───
+         *
+         * Rendered between the input and the result list. Each parsed
+         * filter becomes a removable pill. The X button is exposed via
+         * aria-label so screen readers and tests can target it.
+         */}
+        {hasFilters && (
+          <div
+            data-testid="filter-chips"
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 'var(--space-2)',
+              padding: 'var(--space-2) var(--space-4)',
+              borderBottom: '1px solid var(--color-border)',
+              background: 'var(--color-surface-subtle)',
+            }}
+          >
+            {filters.map((f, i) => (
+              <span
+                key={`${f.key}:${f.value}:${i}`}
+                data-testid={`filter-chip-${f.key}-${i}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-1)',
+                  padding: '2px var(--space-2)',
+                  background: 'var(--color-accent-bg, var(--color-surface))',
+                  color: 'var(--color-accent, var(--color-text-primary))',
+                  border: '1px solid var(--color-accent, var(--color-border))',
+                  borderRadius: 'var(--radius-pill)',
+                  fontSize: 'var(--font-size-micro)',
+                  fontWeight: 600,
+                }}
+              >
+                {f.key}:{f.value}
+                <button
+                  onClick={() => removeFilter(i)}
+                  aria-label={`Remove filter ${f.key}:${f.value}`}
+                  data-testid={`filter-chip-remove-${f.key}-${i}`}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'inherit',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: 0,
+                    marginLeft: '2px',
+                    lineHeight: 1,
+                  }}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* ─── Results ─── */}
         <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
