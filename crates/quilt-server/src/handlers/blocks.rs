@@ -19,7 +19,7 @@ use crate::state::AppState;
 use quilt_application::services::ref_service::parse_refs_from_content;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid};
+use quilt_domain::value_objects::{BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid};
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository,
 };
@@ -568,6 +568,31 @@ pub async fn update_block(
     // Track whether content changed BEFORE moving payload.content
     let content_changed = payload.content.is_some();
 
+    // Parse optional marker / priority. The frontend's slash
+    // registry (see `slashRegistry.tsx`) sends one of the known
+    // values from `TaskMarker` / `Priority`. Reject unknowns with
+    // 400 instead of silently dropping them — silent drops mask
+    // the slash-menu → status-handler path and leave the user
+    // wondering why `/todo` doesn't show a TODO badge.
+    let marker_update = match payload.marker.as_deref() {
+        Some(s) => Some(TaskMarker::parse_str(s).ok_or_else(|| {
+            AppError::BadRequest(format!(
+                "Invalid marker: '{}'. Expected one of: now, later, todo, done, cancelled",
+                s
+            ))
+        })?),
+        None => None,
+    };
+    let priority_update = match payload.priority.as_deref() {
+        Some(s) => Some(Priority::parse_str(s).ok_or_else(|| {
+            AppError::BadRequest(format!(
+                "Invalid priority: '{}'. Expected one of: A, B, C",
+                s
+            ))
+        })?),
+        None => None,
+    };
+
     let update = BlockUpdate {
         content: payload.content,
         parent_id,
@@ -575,6 +600,8 @@ pub async fn update_block(
         level: payload.level.map(|l| l as u8),
         collapsed: payload.collapsed,
         block_type: block_type_update,
+        marker: marker_update,
+        priority: priority_update,
         ..Default::default()
     };
 

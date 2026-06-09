@@ -925,7 +925,14 @@ export function BlockRow({
     const updated: Block = { ...block, parentId: newParentId, level: newLevel, order: newOrder }
     onUpdate(updated)
 
-    api.updateBlock(block.id, { parentId: newParentId, level: newLevel, order: newOrder })
+    // Server PATCH treats JSON `null` for parentId as a no-op (PATCH semantics:
+    // absent/null = don't modify). Empty string `""` is the wire signal to
+    // clear the parent. See `crates/quilt-server/src/handlers/blocks.rs:539`.
+    api.updateBlock(block.id, {
+      parentId: newParentId ?? '',
+      level: newLevel,
+      order: newOrder,
+    })
       .catch(() => {
         toast.error('Failed to outdent block')
         onUpdate(block)

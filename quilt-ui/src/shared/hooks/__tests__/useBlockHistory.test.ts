@@ -183,4 +183,162 @@ describe('useBlockHistory', () => {
     })
     expect(mockHistory.wasmHistoryApply).not.toHaveBeenCalled()
   })
+
+  // ── Sticky-undo: the WASM undo only reverts in-memory state. Without
+  // a way to PATCH the server, the next SSE/poll tick would re-apply
+  // the post-edit content. The `onAfterHistoryChange` prop gives the
+  // caller the changed blocks so it can persist the revert. These
+  // tests prove the diff and the callback wiring.
+  describe('onAfterHistoryChange (sticky-undo persistence hook)', () => {
+    it('fires on undo with the reverted blocks whose content changed', () => {
+      const onAfterHistoryChange = vi.fn()
+      const { result } = renderHook(() =>
+        useBlockHistory({
+          pageName: 'test',
+          blocks: baseBlocks,
+          onBlocksChanged: vi.fn(),
+          onAfterHistoryChange,
+        }),
+      )
+
+      // First, apply a setContent so the stack has an entry to undo.
+      act(() => {
+        result.current.applyCommand({
+          type: 'setContent',
+          blockId: '1',
+          before: 'initial',
+          after: 'updated',
+        } as any)
+      })
+      onAfterHistoryChange.mockClear()
+
+      act(() => {
+        const ok = result.current.undo()
+        expect(ok).toBe(true)
+      })
+
+      // The mock wasmHistoryUndo returns `[{ id: '1', content: 'original' }]`.
+      // baseBlocks has `content: 'initial'`. So 'original' !== 'initial'
+      // → the changed block is the one with id '1', content 'original'.
+      expect(onAfterHistoryChange).toHaveBeenCalledTimes(1)
+      expect(onAfterHistoryChange).toHaveBeenCalledWith([
+        { id: '1', content: 'original' },
+      ])
+    })
+
+    it('fires on redo with the restored blocks whose content changed', () => {
+      const onAfterHistoryChange = vi.fn()
+      const { result } = renderHook(() =>
+        useBlockHistory({
+          pageName: 'test',
+          blocks: baseBlocks,
+          onBlocksChanged: vi.fn(),
+          onAfterHistoryChange,
+        }),
+      )
+
+      act(() => {
+        result.current.applyCommand({
+          type: 'setContent',
+          blockId: '1',
+          before: 'initial',
+          after: 'updated',
+        } as any)
+      })
+      act(() => {
+        result.current.undo()
+      })
+      onAfterHistoryChange.mockClear()
+
+      act(() => {
+        const ok = result.current.redo()
+        expect(ok).toBe(true)
+      })
+
+      // After redo, the mock returns `[{ id: '1', content: 'updated' }]`.
+      // The pre-redo in-memory state (after the undo) is `content: 'original'`.
+      // 'updated' !== 'original' → the changed block fires.
+      expect(onAfterHistoryChange).toHaveBeenCalledTimes(1)
+      expect(onAfterHistoryChange).toHaveBeenCalledWith([
+        { id: '1', content: 'updated' },
+      ])
+    })
+
+    it('does NOT fire when content did not change (e.g. no-op undo)', () => {
+      // Defence against double-fire: if the WASM returns a block list
+      // where every block's content is identical to the pre-undo
+      // state, the caller shouldn't be told to PATCH anything.
+      const onAfterHistoryChange = vi.fn()
+      // Override the undo mock to return the same content as baseBlocks.
+      mockHistory.wasmHistoryUndo.mockReturnValueOnce([{ id: '1', content: 'initial' }])
+
+      const { result } = renderHook(() =>
+        useBlockHistory({
+          pageName: 'test',
+          blocks: baseBlocks,
+          onBlocksChanged: vi.fn(),
+          onAfterHistoryChange,
+        }),
+      )
+
+      act(() => {
+        result.current.undo()
+      })
+
+      expect(onAfterHistoryChange).not.toHaveBeenCalled()
+    })
+
+    it('does NOT fire on applyCommand (only undo/redo are sticky events)', () => {
+      // applyCommand is called when the user TYPES — the server has
+      // already been updated by the editor's onBlur path, so the
+      // history hook shouldn't re-PATCH.
+      const onAfterHistoryChange = vi.fn()
+      const { result } = renderHook(() =>
+        useBlockHistory({
+          pageName: 'test',
+          blocks: baseBlocks,
+          onBlocksChanged: vi.fn(),
+          onAfterHistoryChange,
+        }),
+      )
+
+      act(() => {
+        result.current.applyCommand({
+          type: 'setContent',
+          blockId: '1',
+          before: 'initial',
+          after: 'updated',
+        } as any)
+      })
+
+      expect(onAfterHistoryChange).not.toHaveBeenCalled()
+    })
+
+    it('skips the callback entirely when not provided (backwards compatible)', () => {
+      // The prop is optional. Existing callers that don't pass it
+      // should keep working — undo just becomes in-memory only.
+      const { result } = renderHook(() =>
+        useBlockHistory({
+          pageName: 'test',
+          blocks: baseBlocks,
+          onBlocksChanged: vi.fn(),
+          // no onAfterHistoryChange
+        }),
+      )
+
+      act(() => {
+        result.current.applyCommand({
+          type: 'setContent',
+          blockId: '1',
+          before: 'initial',
+          after: 'updated',
+        } as any)
+      })
+      act(() => {
+        // Should not throw.
+        const ok = result.current.undo()
+        expect(ok).toBe(true)
+      })
+    })
+  })
 })

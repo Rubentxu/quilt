@@ -711,6 +711,43 @@ export function PageView({ pageName, isJournal, journalFormat, zoomBlockId, onZo
     blocks,
     onBlocksChanged: setBlocks,
     enabled: wasmLoaded && !!pageName,
+    // Sticky-undo fix: when WASM undoes/redoes, the in-memory block
+    // list reverts but the server still holds the post-edit content.
+    // The 15-second polling sync would then re-apply the post-edit
+    // state and the undo would visually "snap back". To make the
+    // undo sticky, we PATCH the reverted content to the server in
+    // the same tick — the poll that fires next sees the reverted
+    // value and the DOM stays reverted.
+    //
+    // We do NOT await this in the undo handler itself: the user gets
+    // an immediate visual revert (the React state already changed via
+    // `onBlocksChanged`), and the network call lands in the
+    // background. On failure we toast and re-fetch so the UI resyncs
+    // with the server's view of truth.
+    onAfterHistoryChange: (changed) => {
+      if (changed.length === 0) return
+      const results = Promise.all(
+        changed.map(b =>
+          api.updateBlock(b.id, { content: b.content }, b.pageName ?? pageName)
+            .then(() => true)
+            .catch((err) => {
+              // eslint-disable-next-line no-console
+              console.error('useBlockHistory: persist undo/redo failed', err)
+              return false
+            }),
+        ),
+      )
+      results.then((oks) => {
+        const hadFailure = oks.some(ok => !ok)
+        if (!hadFailure) return
+        // Re-sync from the server so the UI matches the API after a
+        // partial failure. The user already has the reverted view;
+        // this is the rollback path.
+        api.getPageBlocks(pageName)
+          .then(setBlocks)
+          .catch(() => { /* swallow — next poll will recover */ })
+      })
+    },
   })
 
   // ── Session-scoped undo for destructive ops (cut-block, etc.) ──
