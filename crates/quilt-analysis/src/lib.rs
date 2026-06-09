@@ -52,6 +52,8 @@ pub use agent_store::AgentStore;
 pub use connection_engine::ConnectionEngine;
 pub use structural_mirror::StructuralMirror;
 pub use structure_gardener::{
-    Belief, BeliefSnapshot, Contradiction, DeepeningSuggestion, MentalModel, StructureGardener,
+    Belief, BeliefSnapshot, Contradiction, DeepeningSuggestion, DefaultRegistry, DiagnosisReport,
+    GardenerCare, Issue, IssueKind, MentalModel, RepairAction, RepairReport, StructureGardener,
+    TemplateDoctor, TemplateState,
 };
 pub use structure_mapper::{StructureEdge, StructureGraph, StructureMapper, StructureNode};
