@@ -1,9 +1,21 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Search, FileText, Calendar, Hash, X } from 'lucide-react'
+import { Search, FileText, Calendar, Hash, X, BookmarkPlus, History, Bookmark, Trash2 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { api } from '@core/api-client'
 import type { Page, SearchResult } from '@shared/types/api'
 import toast from 'react-hot-toast'
+import { SaveAsViewModal, type SaveAsViewRequest } from './SaveAsViewModal'
+import {
+  loadRecentSearches,
+  loadSavedSearches,
+  recordRecentSearch,
+  addSavedSearch,
+  deleteSavedSearch,
+  SAVED_SEARCH_VIEW_TYPES,
+  type RecentSearch,
+  type SavedSearch,
+  type SavedSearchViewType,
+} from './savedSearches'
 
 interface SearchModalProps {
   isOpen: boolean
@@ -89,6 +101,40 @@ export function blockMatchesFilter(content: string, filter: PropertyFilter): boo
   return pattern.test(content)
 }
 
+// ──── Search-DSL reconstruction ────────────────────────────────────
+//
+// ROADMAP #25 ("Save as View" desde search) needs to materialise the
+// current search into a reusable `type:: query` block. The FTS
+// query we sent to the backend is the free-text part of the parsed
+// query; the property filters were applied client-side. To make the
+// saved view reproducible by anyone — including the QueryBlock
+// renderer that will eventually execute the DSL — we round-trip the
+// filters into the Logseq-style `key:: value` property syntax and
+// concatenate everything with single spaces.
+//
+//   parseQuery("task status:todo priority:A")
+//     → { text: "task", filters: [status:todo, priority:A] }
+//   buildSearchDsl(...) → "task status:: todo priority:: A"
+//
+// The output is the value we store on the new query block's `dsl::`
+// property.
+
+/**
+ * Build a search DSL string from a parsed query. Free text comes
+ * first, then each filter as `key:: value` (Logseq property syntax),
+ * joined by single spaces. The result is `''` for an empty query
+ * and is always trimmed.
+ */
+export function buildSearchDsl(parsed: ParsedQuery): string {
+  const parts: string[] = []
+  const text = parsed.text.trim()
+  if (text) parts.push(text)
+  for (const f of parsed.filters) {
+    parts.push(`${f.key}:: ${f.value}`)
+  }
+  return parts.join(' ').trim()
+}
+
 /**
  * One row in the unified result list. The modal flattens page and block
  * results into a single array so arrow-key navigation feels natural
@@ -111,6 +157,48 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [loading, setLoading] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
+
+  // ── Saved/Recent searches (ROADMAP #22) ────────────────────────
+  //
+  // The user can save explicit named searches (persisted under the
+  // `saved-searches` localStorage key) and the modal also auto-records
+  // the last few queries they ran under `recent-searches` (FIFO-capped
+  // at 10). Both lists render as panels in the modal when the input
+  // is empty; otherwise the normal search results take over.
+  const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([])
+  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([])
+
+  // Save-search inline form state. When `saveFormOpen` is true, a
+  // small row appears next to the save button with a name input and
+  // a view-type selector.
+  const [saveFormOpen, setSaveFormOpen] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [saveViewType, setSaveViewType] = useState<SavedSearchViewType | ''>('')
+
+  // Refs that survive across renders without triggering re-renders.
+  // `lastExecutedQuery` captures the query string at the moment a
+  // search actually fired (i.e. the debounce timer settled) so we
+  // don't auto-record empty strings or duplicates during typing.
+  const lastExecutedQueryRef = useRef('')
+  const lastResultCountRef = useRef(0)
+
+  // ── Save-as-View state (ROADMAP #25) ──────────────────────────
+  //
+  // The user clicks the "Save as View" button on a result row; we
+  // remember which result they picked, then mount `SaveAsViewModal`
+  // with the same page list we already loaded. We keep the entire
+  // `ParsedQuery` in state so the modal's submit handler can rebuild
+  // the DSL after the user picks a name/type/page.
+  const [saveViewTarget, setSaveViewTarget] = useState<
+    | {
+        item: ResultItem
+        parsed: ParsedQuery
+        pages: Page[]
+      }
+    | null
+  >(null)
+  const [saveViewSubmitting, setSaveViewSubmitting] = useState(false)
+  const [saveViewError, setSaveViewError] = useState<string | null>(null)
 
   // Parse the query into the FTS text part and any property filters.
   // Memoized on `query` so the array reference stays stable across
@@ -135,10 +223,44 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       setPageResults([])
       setBlockResults([])
       setSelectedIndex(0)
+      // Reset the save-form state so a stale "Save search" row from
+      // a previous open doesn't bleed into the new one.
+      setSaveFormOpen(false)
+      setSaveName('')
+      setSaveViewType('')
+      // Reload the persisted histories every time the modal opens
+      // so external writes (e.g. the delete button re-renders) and
+      // multi-tab edits are reflected.
+      setRecentSearches(loadRecentSearches())
+      setSavedSearches(loadSavedSearches())
       // Use RAF to ensure DOM is ready
       const raf = requestAnimationFrame(() => inputRef.current?.focus())
       return () => cancelAnimationFrame(raf)
     }
+  }, [isOpen])
+
+  // Record the just-executed query into the recent-searches history
+  // whenever the modal transitions to `isOpen === false`. We do this
+  // in an effect (not in the close handler) so it covers EVERY close
+  // path uniformly:
+  //   - ESC button / backdrop click → handleClose → onClose → isOpen false
+  //   - Parent flips isOpen directly (e.g. AppShell keyboard shortcut)
+  //   - Selecting a result navigates away and the parent unmounts us
+  // If we did this in `handleClose` only, parent-driven closes would
+  // never record to recents.
+  useEffect(() => {
+    if (isOpen) return
+    const executed = lastExecutedQueryRef.current
+    if (executed.trim()) {
+      recordRecentSearch(
+        { query: executed, resultCount: lastResultCountRef.current },
+        Date.now(),
+      )
+    }
+    // Reset for the next open. The in-memory copy is refreshed on
+    // the next mount by the open-effect above.
+    lastExecutedQueryRef.current = ''
+    lastResultCountRef.current = 0
   }, [isOpen])
 
   // Search with debounce — shows recent pages when query is empty.
@@ -210,6 +332,14 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         setPageResults(filteredPages)
         setBlockResults(filteredBlocks)
         setSelectedIndex(0)
+
+        // Remember what the user actually ran (and how many results
+        // it produced) so the close-handler can write one entry to
+        // the recent-searches history. We capture the RAW trimmed
+        // query — not the parsed text — so the user sees the same
+        // string they typed reappear in the recents list later.
+        lastExecutedQueryRef.current = trimmed
+        lastResultCountRef.current = filteredPages.length + filteredBlocks.length
       } catch (e) {
         toast.error('Search failed')
       } finally {
@@ -232,7 +362,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
       e.preventDefault()
       selectItem(items[selectedIndex])
     } else if (e.key === 'Escape') {
-      onClose()
+      handleClose()
     }
   }
 
@@ -252,8 +382,95 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     setQuery(parts.join(' '))
   }
 
-  function selectItem(item: ResultItem) {
+  /**
+   * Close the modal. Recording into the recent-searches history is
+   * handled by the `isOpen`-watching effect above, so all this helper
+   * does is notify the parent (which will flip `isOpen` to `false`).
+   * Centralising the close path here means the ESC button, the
+   * backdrop click, and any future "close from inside" affordance
+   * all share a single function — easier to test, easier to extend.
+   */
+  function handleClose() {
     onClose()
+  }
+
+  // ── Saved/Recent click handlers (ROADMAP #22) ───────────────────
+  //
+  // Clicking a recent or saved search puts its query back into the
+  // input. The next render of the search effect will fire a fresh
+  // debounced FTS call and the result area will switch from the
+  // "Recent / Saved" panel back to the normal "Pages / Blocks" view.
+
+  function executeRecentSearch(q: string) {
+    setQuery(q)
+    setSelectedIndex(0)
+    // Focus the input so the user can keep typing to refine the
+    // search without first clicking back into it.
+    inputRef.current?.focus()
+  }
+
+  function executeSavedSearch(s: SavedSearch) {
+    setQuery(s.query)
+    setSelectedIndex(0)
+    inputRef.current?.focus()
+  }
+
+  function removeSavedSearch(id: string) {
+    deleteSavedSearch(id)
+    setSavedSearches(loadSavedSearches())
+  }
+
+  /**
+   * Confirm the save-search form. Validates the name and the (still-
+   * typed) input, then writes a new saved-search entry. Resets the
+   * inline form on success. Refuses to do anything when the name or
+   * the current query is empty.
+   */
+  function confirmSaveSearch() {
+    const name = saveName.trim()
+    const q = trimmedQuery
+    if (!name || !q) {
+      // The test for "refuses to save when the name is empty" expects
+      // the click to be a no-op. We could toast an error, but the
+      // spec keeps the UX minimal — the disabled state on the confirm
+      // button communicates the same thing.
+      return
+    }
+    addSavedSearch(
+      {
+        name,
+        query: q,
+        viewType: saveViewType === '' ? undefined : saveViewType,
+      },
+      makeSavedSearchId,
+      () => Date.now(),
+    )
+    setSavedSearches(loadSavedSearches())
+    setSaveFormOpen(false)
+    setSaveName('')
+    setSaveViewType('')
+  }
+
+  /**
+   * Stable, locally-generated id for a saved search. We prefer
+   * `crypto.randomUUID()` (available in modern browsers and the
+   * jsdom shim) and fall back to a Math.random-based shape so the
+   * function never throws in older environments.
+   */
+  function makeSavedSearchId(): string {
+    const g = globalThis as { crypto?: { randomUUID?: () => string } }
+    if (g.crypto && typeof g.crypto.randomUUID === 'function') {
+      return g.crypto.randomUUID()
+    }
+    return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  }
+
+  function selectItem(item: ResultItem) {
+    // Record the executed query into recents BEFORE we tear down the
+    // modal — otherwise the lastExecutedQueryRef would still hold the
+    // right value, but routing through handleClose keeps the close
+    // path single-sourced and easy to test.
+    handleClose()
     if (item.kind === 'page') {
       const page = item.page
       if (page.journal && page.journalDay) {
@@ -278,6 +495,93 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     }
   }
 
+  // ── Save as View (ROADMAP #25) ────────────────────────────────
+  //
+  // The user clicked the per-row "Save as View" button. We remember
+  // which row they picked (used to keep the modal scoped to the
+  // right result) and capture the current parsed query so the
+  // submit handler can rebuild the DSL.
+  //
+  // We also fetch the FULL page list (unfiltered) for the page
+  // selector — the user should be able to save the view into ANY
+  // page in the graph, not just the ones whose name happens to
+  // match the search query. While the fetch is in flight we open
+  // the modal with an empty list and let the user wait; the
+  // selector renders nothing rather than confusing them with a
+  // truncated list.
+
+  function openSaveAsView(item: ResultItem) {
+    setSaveViewError(null)
+    setSaveViewTarget({ item, parsed, pages: [] })
+    api.listPages()
+      .then(pages => {
+        setSaveViewTarget(prev => (prev && prev.item === item ? { ...prev, pages } : prev))
+      })
+      .catch(() => {
+        // Fail silently — the user can cancel and try again, or
+        // the saved-view modal will show 0 pages (which makes the
+        // page selector useless). The submit button is disabled
+        // when `pageName` is empty, so the user can't accidentally
+        // create a view in a phantom page.
+        setSaveViewError('Could not load the page list. Please try again.')
+      })
+  }
+
+  function closeSaveAsView() {
+    if (saveViewSubmitting) return
+    setSaveViewTarget(null)
+    setSaveViewError(null)
+  }
+
+  /**
+   * Build a `type:: query` block carrying the current search as
+   * a DSL, then a `type:: view` block referencing it. The two calls
+   * are sequential because the view's `data-source::` needs the
+   * query block's UUID. If the first call fails, the view is not
+   * created and the modal stays open with the error visible.
+   */
+  async function handleSaveAsViewConfirm(req: SaveAsViewRequest) {
+    if (!saveViewTarget) return
+    setSaveViewSubmitting(true)
+    setSaveViewError(null)
+    try {
+      const dsl = buildSearchDsl(saveViewTarget.parsed)
+      // Use the original free-text as the block's content so the
+      // query block reads as "the search the user just ran" in the
+      // outliner. Empty when the query was filter-only.
+      const content = saveViewTarget.parsed.text.trim()
+
+      const queryBlock = await api.createBlock({
+        pageName: req.pageName,
+        content,
+        properties: {
+          type: 'query',
+          dsl,
+        },
+      })
+
+      await api.createBlock({
+        pageName: req.pageName,
+        content: '',
+        properties: {
+          type: 'view',
+          'view-type': req.viewType,
+          'view-name': req.name,
+          'data-source': queryBlock.id,
+        },
+      })
+
+      setSaveViewTarget(null)
+      toast.success(`View "${req.name}" saved to ${req.pageName}`)
+    } catch (e) {
+      const message =
+        e instanceof Error ? e.message : 'Failed to save view'
+      setSaveViewError(message)
+    } finally {
+      setSaveViewSubmitting(false)
+    }
+  }
+
   if (!isOpen) return null
 
   // Compute the running index of the current item so we can highlight
@@ -287,6 +591,26 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const showBlockSection = blockResults.length > 0
   const noResults = !loading && !showPageSection && !showBlockSection && query.length > 0
   const isFirstLoad = loading && items.length === 0
+
+  // ── Saved/Recent visibility (ROADMAP #22) ──────────────────────
+  //
+  // The "Recent / Saved" panel only takes over the result area when
+  // the user has at least one entry to show. If both lists are empty
+  // we fall back to the regular "Pages" listing — that preserves the
+  // behaviour of the empty-input branch (which the existing tests
+  // rely on: opening the modal with no history still shows the page
+  // list).
+  const trimmedQuery = query.trim()
+  const showSavedRecentPanel =
+    trimmedQuery.length === 0 &&
+    (recentSearches.length > 0 || savedSearches.length > 0)
+
+  // The "Save search" affordance is shown whenever the user has run
+  // a non-empty search that produced at least one result. The form
+  // it opens is inline (name input + viewType select) and persists
+  // to the `saved-searches` localStorage key.
+  const showSaveSearchAffordance =
+    trimmedQuery.length > 0 && (showPageSection || showBlockSection)
 
   return (
     <div
@@ -340,7 +664,7 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             }}
           />
           <button
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               background: 'none',
               border: 'none',
@@ -441,15 +765,54 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
             </div>
           )}
 
+          {/* ─── Saved / Recent searches panel (ROADMAP #22) ───
+           *
+           * Rendered in place of the "Pages" / "Blocks" sections when
+           * the input is empty AND we have something to show. The
+           * saved-searches section always comes first (the user
+           * deliberately curated those), then the recents.
+           */}
+          {showSavedRecentPanel && (
+            <>
+              {savedSearches.length > 0 && (
+                <>
+                  <SectionHeader label="Saved searches" />
+                  {savedSearches.map(s => (
+                    <SavedSearchRow
+                      key={s.id}
+                      saved={s}
+                      onClick={() => executeSavedSearch(s)}
+                      onDelete={() => removeSavedSearch(s.id)}
+                    />
+                  ))}
+                </>
+              )}
+
+              {recentSearches.length > 0 && (
+                <>
+                  <SectionHeader label="Recent searches" />
+                  {recentSearches.map((r, i) => (
+                    <RecentSearchRow
+                      key={`${r.query}-${i}`}
+                      recent={r}
+                      onClick={() => executeRecentSearch(r.query)}
+                    />
+                  ))}
+                </>
+              )}
+            </>
+          )}
+
           {/* ─── Pages section ─── */}
-          {showPageSection && (
+          {!showSavedRecentPanel && showPageSection && (
             <SectionHeader label="Pages" />
           )}
-          {showPageSection && pageResults.map((page, idx) => {
+          {!showSavedRecentPanel && showPageSection && pageResults.map((page, idx) => {
             const itemIndex = idx
             return (
               <ResultButton
                 key={`page:${page.id}`}
+                testId={`result-row-page-${page.id}`}
                 selected={itemIndex === selectedIndex}
                 onClick={() => selectItem({ kind: 'page', page, id: `page:${page.id}` })}
                 onMouseEnter={() => setSelectedIndex(itemIndex)}
@@ -462,20 +825,27 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 }
                 title={page.title || page.name}
                 badge={page.journal ? 'Journal' : null}
+                trailing={
+                  <SaveAsViewButton
+                    testId={`save-as-view-page-${page.id}`}
+                    onClick={() => openSaveAsView({ kind: 'page', page, id: `page:${page.id}` })}
+                  />
+                }
               />
             )
           })}
 
           {/* ─── Blocks section ─── */}
-          {showBlockSection && (
+          {!showSavedRecentPanel && showBlockSection && (
             <SectionHeader label="Blocks" />
           )}
-          {showBlockSection && blockResults.map((block, idx) => {
+          {!showSavedRecentPanel && showBlockSection && blockResults.map((block, idx) => {
             const itemIndex = pageResults.length + idx
             const preview = block.snippet || block.content
             return (
               <ResultButton
                 key={`block:${block.blockId}`}
+                testId={`result-row-block-${block.blockId}`}
                 selected={itemIndex === selectedIndex}
                 onClick={() => selectItem({ kind: 'block', block, id: `block:${block.blockId}` })}
                 onMouseEnter={() => setSelectedIndex(itemIndex)}
@@ -483,11 +853,186 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 title={preview.length > 80 ? `${preview.slice(0, 80)}…` : preview || '(empty block)'}
                 subtitle={block.pageName || undefined}
                 badge="Block"
+                trailing={
+                  <SaveAsViewButton
+                    testId={`save-as-view-block-${block.blockId}`}
+                    onClick={() => openSaveAsView({ kind: 'block', block, id: `block:${block.blockId}` })}
+                  />
+                }
               />
             )
           })}
+
+          {/* ─── Save-search affordance (ROADMAP #22) ───
+           *
+           * Rendered below the result list when the user has just
+           * executed a non-empty search that produced at least one
+           * hit. Clicking the button toggles the inline save form.
+           * The form stays open across re-renders until the user
+           * confirms or cancels.
+           */}
+          {showSaveSearchAffordance && !saveFormOpen && (
+            <div
+              data-testid="save-search-bar"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 'var(--space-3)',
+                padding: 'var(--space-2) var(--space-4)',
+                borderTop: '1px solid var(--color-border)',
+                background: 'var(--color-surface-subtle)',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 'var(--font-size-caption)',
+                  color: 'var(--color-text-muted)',
+                }}
+              >
+                Save this search
+              </span>
+              <button
+                type="button"
+                data-testid="save-search-button"
+                onClick={() => setSaveFormOpen(true)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px var(--space-3)',
+                  background: 'var(--color-accent, var(--color-surface))',
+                  color: 'var(--color-surface, var(--color-text-primary))',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 'var(--font-size-caption)',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                <BookmarkPlus size={12} />
+                Save
+              </button>
+            </div>
+          )}
+
+          {showSaveSearchAffordance && saveFormOpen && (
+            <div
+              data-testid="save-search-form"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 'var(--space-2)',
+                padding: 'var(--space-3) var(--space-4)',
+                borderTop: '1px solid var(--color-border)',
+                background: 'var(--color-surface-subtle)',
+              }}
+            >
+              <input
+                type="text"
+                data-testid="save-search-name-input"
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                placeholder="Name this search…"
+                style={{
+                  padding: '6px var(--space-2)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '14px',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                }}
+              />
+              <select
+                data-testid="save-search-viewtype-select"
+                value={saveViewType}
+                onChange={e =>
+                  setSaveViewType(e.target.value as SavedSearchViewType | '')
+                }
+                style={{
+                  padding: '6px var(--space-2)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '14px',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                <option value="">(no view type)</option>
+                {SAVED_SEARCH_VIEW_TYPES.map(vt => (
+                  <option key={vt} value={vt}>
+                    {vt}
+                  </option>
+                ))}
+              </select>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 'var(--space-2)',
+                  justifyContent: 'flex-end',
+                }}
+              >
+                <button
+                  type="button"
+                  data-testid="save-search-cancel"
+                  onClick={() => {
+                    setSaveFormOpen(false)
+                    setSaveName('')
+                    setSaveViewType('')
+                  }}
+                  style={{
+                    padding: '4px var(--space-3)',
+                    background: 'transparent',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius-sm)',
+                    color: 'var(--color-text-muted)',
+                    fontSize: 'var(--font-size-caption)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  data-testid="save-search-confirm"
+                  disabled={saveName.trim().length === 0}
+                  onClick={confirmSaveSearch}
+                  style={{
+                    padding: '4px var(--space-3)',
+                    background: 'var(--color-accent, var(--color-surface))',
+                    color: 'var(--color-surface, var(--color-text-primary))',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 'var(--font-size-caption)',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    opacity: saveName.trim().length === 0 ? 0.5 : 1,
+                  }}
+                >
+                  Save search
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ─── Save as View modal (ROADMAP #25) ───
+       *
+       * Mounted at the same zIndex layer as the search modal but
+       * with a higher z (110) so it appears on top. The modal is
+       * self-contained: it stops click propagation, has its own
+       * form, and only fires onConfirm/onCancel.
+       */}
+      {saveViewTarget && (
+        <SaveAsViewModal
+          pages={saveViewTarget.pages}
+          isSubmitting={saveViewSubmitting}
+          errorMessage={saveViewError}
+          onConfirm={handleSaveAsViewConfirm}
+          onCancel={closeSaveAsView}
+        />
+      )}
     </div>
   )
 }
@@ -513,6 +1058,57 @@ function SectionHeader({ label }: { label: string }) {
   )
 }
 
+// ──── Save as View action button ──────────────────────────────────
+//
+// Small icon button rendered at the end of each result row. Clicking
+// it does NOT navigate (the row's onClick is stopped via
+// `e.stopPropagation()`), so the parent row's Enter / click handler
+// is bypassed. The button's `aria-label` describes the action in
+// words so screen-reader and getByLabelText tests can target it.
+
+function SaveAsViewButton({
+  testId,
+  onClick,
+}: {
+  testId: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      data-testid={testId}
+      aria-label="Save as view"
+      title="Save as view"
+      onClick={e => {
+        e.stopPropagation()
+        onClick()
+      }}
+      onMouseDown={e => e.stopPropagation()}
+      onKeyDown={e => e.stopPropagation()}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '4px',
+        padding: '4px var(--space-2)',
+        background: 'transparent',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius-sm)',
+        color: 'var(--color-text-muted)',
+        fontSize: 'var(--font-size-micro)',
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: 'var(--tracking-wider)',
+        cursor: 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      <BookmarkPlus size={12} />
+      <span>Save as view</span>
+    </button>
+  )
+}
+
 interface ResultButtonProps {
   selected: boolean
   onClick: () => void
@@ -521,12 +1117,42 @@ interface ResultButtonProps {
   title: string
   subtitle?: string
   badge?: string | null
+  /**
+   * Optional action button shown at the end of the row. Used for
+   * "Save as View" (ROADMAP #25) and any future per-result
+   * affordances. The outer element is a `<div role="button">` (not
+   * a `<button>`) so a real button can be nested inside without
+   * producing invalid HTML.
+   */
+  trailing?: React.ReactNode
+  /** Test ID for the outer element so individual rows can be targeted. */
+  testId?: string
 }
 
-function ResultButton({ selected, onClick, onMouseEnter, icon, title, subtitle, badge }: ResultButtonProps) {
+function ResultButton({
+  selected,
+  onClick,
+  onMouseEnter,
+  icon,
+  title,
+  subtitle,
+  badge,
+  trailing,
+  testId,
+}: ResultButtonProps) {
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onClick()
+    }
+  }
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
+      data-testid={testId}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -589,13 +1215,196 @@ function ResultButton({ selected, onClick, onMouseEnter, icon, title, subtitle, 
             border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius-pill)',
             padding: '2px var(--space-2)',
-            marginLeft: 'auto',
             flexShrink: 0,
           }}
         >
           {badge}
         </span>
       )}
-    </button>
+      {trailing}
+    </div>
+  )
+}
+
+// ──── Saved / Recent search row helpers (ROADMAP #22) ─────────────
+//
+// Both rows share the same visual treatment as `ResultButton` (a
+// full-width clickable area, accent-on-hover, muted secondary text)
+// but with different leading icons and trailing affordances:
+//   - Saved rows show a × delete button on the right.
+//   - Recent rows show the result count as a small caption.
+//
+// The rows are NOT keyboard-navigable through the same `selectedIndex`
+// the search-results use — they have their own implicit order (saved
+// first by id, recents already ordered newest-first by the writer).
+
+function SavedSearchRow({
+  saved,
+  onClick,
+  onDelete,
+}: {
+  saved: SavedSearch
+  onClick: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      data-testid={`saved-search-row-${saved.id}`}
+      onClick={onClick}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+        width: '100%',
+        padding: 'var(--space-2) var(--space-4)',
+        border: 'none',
+        cursor: 'pointer',
+        textAlign: 'left',
+        background: 'transparent',
+        color: 'var(--color-text-secondary)',
+        fontSize: '14px',
+        transition: 'background var(--motion-fast) var(--ease-standard)',
+      }}
+    >
+      <Bookmark
+        size={16}
+        style={{ flexShrink: 0, color: 'var(--color-accent)' }}
+      />
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+        }}
+      >
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          {saved.name}
+        </span>
+        <span
+          style={{
+            fontSize: 'var(--font-size-caption)',
+            color: 'var(--color-text-muted)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {saved.query}
+          {saved.viewType ? ` · ${saved.viewType}` : ''}
+        </span>
+      </div>
+      <button
+        type="button"
+        data-testid={`delete-saved-search-${saved.id}`}
+        aria-label={`Delete saved search ${saved.name}`}
+        onClick={e => {
+          e.stopPropagation()
+          onDelete()
+        }}
+        onMouseDown={e => e.stopPropagation()}
+        onKeyDown={e => e.stopPropagation()}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '4px',
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 'var(--radius-sm)',
+          color: 'var(--color-text-muted)',
+          cursor: 'pointer',
+          flexShrink: 0,
+        }}
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  )
+}
+
+function RecentSearchRow({
+  recent,
+  onClick,
+}: {
+  recent: RecentSearch
+  onClick: () => void
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      data-testid={`recent-search-row-${recent.query}`}
+      onClick={onClick}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--space-3)',
+        width: '100%',
+        padding: 'var(--space-2) var(--space-4)',
+        border: 'none',
+        cursor: 'pointer',
+        textAlign: 'left',
+        background: 'transparent',
+        color: 'var(--color-text-secondary)',
+        fontSize: '14px',
+        transition: 'background var(--motion-fast) var(--ease-standard)',
+      }}
+    >
+      <History
+        size={16}
+        style={{ flexShrink: 0, color: 'var(--color-text-muted)' }}
+      />
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+        }}
+      >
+        <span
+          style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          {recent.query}
+        </span>
+        <span
+          style={{
+            fontSize: 'var(--font-size-caption)',
+            color: 'var(--color-text-muted)',
+          }}
+        >
+          {recent.resultCount === 1 ? '1 result' : `${recent.resultCount} results`}
+        </span>
+      </div>
+    </div>
   )
 }
