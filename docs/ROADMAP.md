@@ -144,14 +144,14 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 | 26 | StrategySelector WASM + hook | #24 | 2 días | ✅ 2c78bec |
 | 27 | Graph Lens V2 (lens buttons) | #23 | 1.5 días | ✅ 2c78bec |
 
-### Phase 4: Re-grill Remedies 🚧 EN PROGRESO
+### Phase 4: Re-grill Remedies ✅ COMPLETADO
 
 | # | Qué | Remedio | Status |
 |---|-----|---------|--------|
 | 28 | Editable Backlinks | Enrichment en handler, filtro DSL, whitelist | ✅ 35af73a |
 | 29 | Unlinked Ref Queue | Frontend-only, localStorage, PUT existente | ✅ 35af73a |
 | 30 | Template Contracts | Extraer diff de reapply.rs, MCP-only | ✅ 35af73a |
-| 31 | Template Doctor | Extender structure_gardener, versioning infra | 🔲 |
+| 31 | Template Doctor | Extender structure_gardener, versioning infra | ✅ f68f631 |
 
 ### Diferido (V3+)
 
@@ -167,22 +167,22 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 Phase 0 ✅ COMPLETO
 Phase 1 ✅ COMPLETO
 Phase 2 ✅ COMPLETO
-Phase 3 ✅ COMPLETO (7/7 items, commits 28afeb2, 0dbabeb, 35af73a, 2c78bec)
-
-Phase 4 🚧 EN PROGRESO
-  #28 editable backlinks ─────────────────────────────────────► ✅ 35af73a
-  #29 unlinked ref queue ────────────────────────────────────► ✅ 35af73a
-  #30 template contracts ─────────────────────────────────────► ✅ 35af73a
-  #31 template doctor ───────────────────────────────────────► 🔲
+Phase 3 ✅ COMPLETO
+Phase 4 ✅ COMPLETO (4/4 items, commit 35af73a + f68f631)
 ```
 
 ---
 
-## 5. Próximos Pasos Inmediatos
+## 5. Estado Final — TODAS LAS FASES COMPLETADAS
 
-1. **Phase 3**: #24 StrategySelector traits, luego #26 WASM hook
-2. **Phase 2**: #22 Saved searches (depende de #20 ✅)
-3. **Phase 3**: #25 "Save as View" desde search (depende de #20 ✅)
-4. **Phase 4**: comenzar por #28 Editable Backlinks
-5. **Promover ADR drafts** #13, #14, #17
-6. **Aplicar CONTEXT.md patch**
+**Phase 0-4 ✅ — 31/31 items completados**
+
+### Pendiente (no-bloqueantes)
+- Promover ADR drafts #13, #14, #17 a canónicos
+- Aplicar CONTEXT.md patch
+- User manual (HTML) → deploy o hosting
+
+### Diferido (V3+)
+- Block Shape Detector
+- Intent Search completo (NL→DSL)
+- SUNNY Phase 2-5 (telemetry, k-NN, auto-execute)
