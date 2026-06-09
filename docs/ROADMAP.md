@@ -118,27 +118,27 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 | 10 | Renombrar paneles → Cognitive* family | ✅ 33454b3 |
 | 11 | Remover tree_rag dead code | ✅ 33454b3 |
 
-### Phase 2: UX Block-Level 🚧 EN PROGRESO
+### Phase 2: UX Block-Level ✅ COMPLETADO
 
 | # | Qué | Depende | Esfuerzo | Status |
 |---|-----|---------|----------|--------|
 | 12 | Block Zoom (`?zoom=$blockId`) | — | 0.5 día | ✅ f0b5d76 |
-| 13 | Inline+Panel Properties (template) | #7 | 3 días | 🔲 |
+| 13 | Inline+Panel Properties (template) | #7 | 3 días | ✅ 28afeb2 |
 | 14 | Quick Capture (CommandRegistry) | #9 | 0.5 día | ✅ builtin |
 | 15 | Natural Language Dates V1 | #13 | 1 día | ✅ f0b5d76 |
 | 16 | Commandable Transforms (`/task`, `/query`, `/card`) | — | 3h | ✅ 8f6833c |
 | 17 | DashboardLayout + PanelVisibility | #9 | 2 días | ✅ 06e28ad |
-| 18 | Cognitive* panel implementations | #10, #11 | 3 días | 🔲 |
+| 18 | Cognitive* panel implementations | #10, #11 | 3 días | ✅ 28afeb2 |
 | 19 | AgentRun block role | — | 2 días | ✅ 06e28ad |
 | 20 | SavedView block role | #19 | 2 días | ✅ ses_15c8a3d |
 
-### Phase 3: Infra + Avanzado 🔲 PENDIENTE
+### Phase 3: Infra + Avanzado 🚧 EN PROGRESO
 
 | # | Qué | Depende | Esfuerzo | Status |
 |---|-----|---------|----------|--------|
-| 21 | Session cache V1 (dedup api-client) | — | 1 día | 🔲 |
+| 21 | Session cache V1 (dedup api-client) | — | 1 día | ✅ 28afeb2 |
 | 22 | Saved/Recent searches | #20 ✅ | 1 día | 🔲 |
-| 23 | Graph Lens V1 (subgraph endpoint) | — | 2 días | 🔲 |
+| 23 | Graph Lens V1 (subgraph endpoint) | — | 2 días | ✅ 28afeb2 |
 | 24 | StrategySelector traits (determinístico) | — | 3 días | 🔲 |
 | 25 | "Save as View" desde search | #20 ✅ | 0.5 día | 🔲 |
 | 26 | StrategySelector WASM + hook | #24 | 2 días | 🔲 |
@@ -166,24 +166,16 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 ```
 Phase 0 ✅ COMPLETO
 Phase 1 ✅ COMPLETO
+Phase 2 ✅ COMPLETO (commit 28afeb2)
 
-Phase 2 🚧 EN PROGRESO
-  #12 zoom ──────────────────► ✅
-  #7 ────► #13 inline-props ──► #15 NL dates ✅
-  #14 quick-capture ──────────────────────► ✅ builtin
-  #16 commandable transforms ─────────────► ✅ 8f6833c
-  #17 dashboard ──────────────────────────► ✅ 06e28ad
-  #19 agent-run ─────────────────────────► ✅ 06e28ad
-  #20 saved-view ───────────────────────► ✅ ses_15c8a3d
-  #18 cognitive panels ─────────────────► 🔲
-  #13 inline+panel props ───────────────► 🔲
-
-Phase 3 🔲 PENDIENTE
-  #21 cache (indep.)
-  #22 saved searches ──► #20 ✅
-  #23 graph V1 ──► #27 graph V2
-  #24 strategy ──► #26 WASM hook
-  #25 save-as-view ──► #20 ✅
+Phase 3 🚧 EN PROGRESO
+  #21 cache ───────────────────────────► ✅ 28afeb2
+  #23 graph V1 ───────────────────────► ✅ 28afeb2
+  #22 saved searches ──► #20 ✅ ───────────────────► 🔲
+  #25 save-as-view ──► #20 ✅ ───────────────────► 🔲
+  #24 strategy ─────────────────────────────────────► 🔲
+  #26 WASM hook ──► #24 ─────────────────────────► 🔲
+  #27 graph V2 ──► #23 ✅ ──────────────────────► 🔲
 
 Phase 4 🔲 PENDIENTE
   #28-31 remedies
@@ -193,7 +185,9 @@ Phase 4 🔲 PENDIENTE
 
 ## 5. Próximos Pasos Inmediatos
 
-1. **Phase 2 restantes**: #13 (Inline+Panel Properties), #18 (Cognitive panels)
-2. **Phase 3**: comenzar por #21 Session cache o #23 Graph Lens
-3. **Promover 7 ADR drafts** → 0011-0017
-4. **Aplicar CONTEXT.md patch**
+1. **Phase 3**: #24 StrategySelector traits, luego #26 WASM hook
+2. **Phase 2**: #22 Saved searches (depende de #20 ✅)
+3. **Phase 3**: #25 "Save as View" desde search (depende de #20 ✅)
+4. **Phase 4**: comenzar por #28 Editable Backlinks
+5. **Promover ADR drafts** #13, #14, #17
+6. **Aplicar CONTEXT.md patch**
