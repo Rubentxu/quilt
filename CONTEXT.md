@@ -73,7 +73,7 @@ Bloques o páginas sin actividad reciente, detectados por `updated_at`. Expuesto
 _Avoid_: stale, outdated, viejo
 
 ### Rol
-Interpretación semántica de un Bloque basada en sus Properties. No es un tipo de entidad — es un Bloque con properties que le dan significado especial. Los roles se descubren leyendo `type:: <rol>`. Ejemplos: `annotation`, `query`, `action`, `view`, `link`, `comment`, `task`.
+Interpretación semántica de un Bloque basada en sus Properties. No es un tipo de entidad — es un Bloque con properties que le dan significado especial. Los roles se descubren leyendo `type:: <rol>`. Ejemplos: `annotation`, `query`, `action`, `view`, `link`, `comment`, `task`, `agent-run`, `insight`.
 _Avoid_: tipo especial, entidad, objeto
 
 ### Annotation
@@ -89,12 +89,64 @@ Bloque con `type:: action` que define una operación ejecutable. Tipos: `prompt`
 _Avoid_: botón, trigger, automation
 
 ### Query embebida
-Bloque con `type:: query` y property `dsl:: (and ...)` que define una consulta parametrizable. La query usa variables `{{this.property}}` que se resuelven con las properties de la página actual. Se renderiza como vista (tabla, kanban, timeline, lista, grafo) según property `display::`.
+Bloque con `type:: query` y property `dsl:: (and ...)` que define una consulta parametrizable. La query usa variables `{{this.property}}` que se resuelven con las properties de la página actual. Se renderiza como vista (tabla, kanban, timeline, lista, grafo) según property `display::`. Un bloque `type:: view` puede referenciar este query via `data-source::` para crear vistas guardadas reutilizables.
 _Avoid_: widget, componente, saved search
 
 ### Grafo pesado (Weighted Graph)
 El grafo de Quilt donde cada Link tiene un `weight` numérico (0.0-1.0) que representa la fuerza de la relación. Los pesos se calculan automáticamente por el motor de análisis estructural a partir de señales: referencias inline (+0.3), links explícitos con verb (+0.5), co-acceso (+0.1), properties compartidas (+0.2), annotations compartidas (+0.3), decay temporal (-0.1/mes). Los agentes pueden consultar subgrafos filtrados por peso mínimo.
 _Avoid_: graph neural network, embedding, vector
+
+### AgentRun
+Bloque con `type:: agent-run` que representa una ejecución atómica de un agente externo.
+Propiedades: `agent::`, `model::`, `run-status::` (Queued|Running|Completed|Failed|Cancelled),
+`started-at::`, `completed-at::`, `context-page::`, `summary::`, `blocks-modified::`, `error::`.
+El ciclo de vida se modela con `run-status::` (mismo patrón que `status:: todo/done`).
+Consultable por DSL. No es una entidad de dominio separada — es un rol de bloque.
+_Avoid_: ejecución, batch, sesión de agente, run entity
+
+### SavedView
+Bloque con `type:: view` que compone una referencia a un bloque Query (`data-source::`)
+con configuración de renderizado (`view-type::`, `group-by::`, `sort::`) y metadata
+(`view-name::`, `view-icon::`, `view-pinned::`). Múltiples views pueden referenciar el mismo
+query (misma data, distintos renderers). No es una entidad separada — es un rol de bloque.
+_Avoid_: vista guardada como entidad, saved_views table
+
+### DashboardLayout
+Preset de paneles persistible a nivel workspace. Define qué paneles son visibles y su
+disposición. No es un "modo de trabajo" — es configuración de layout del frontend.
+Sin entidad en el dominio de Rust.
+_Avoid_: work mode, modo, vista de trabajo, layout mode
+
+## Frontend Concepts
+
+### CommandRegistry
+React context en `quilt-ui/src/features/command-center/` que registra comandos ejecutables.
+Interface TypeScript: `Command { id, label, category, shortcut?, priority, target, execute }`.
+`target: 'client' | 'server'` permite dispatch MCP híbrido. Activado por `Cmd+Shift+K`.
+Separado del SearchModal (`Cmd+K`). Los comandos server-side van por `quilt_execute_command`.
+_Avoid_: command palette, launcher, spotlight, god modal
+
+### ViewContainer
+Componente React page-level que maneja el layout de una vista guardada. Interpreta el bloque
+`type:: view` y delega al LayoutEngine correspondiente según `view-type::`. No confundir con
+CardRenderer (block-level, formatea un solo bloque según `card-shape::`).
+_Avoid_: view renderer, display container, card container
+
+### Cognitive* (familia de paneles)
+Namespace `cognitivo::` (ADR-0001). Tres paneles integrados en la UI Logseq:
+- AgentActivityFeed: actividad de agentes (reemplaza AgentActivityPanel)
+- StructuralGraph: topología, conectividad, decay, orphans (Quilt lo calcula)
+- SemanticInsight: significado de conexiones (agente externo lo provee, Quilt lo muestra)
+_Avoid_: serendipity feed, agent workbench, connection feed
+
+### StrategySelector
+Trait en `quilt-core` (WASM-compatible): `fn select(features, scorer, portfolio) -> Vec<RankedAction>`.
+Trait `StrategyScorer` separado: `fn score(action, features) -> f32`.
+Tipos: `ContextFeatures` (ContentShape + GraphShape + SchemaShape + UsageContext),
+`RankedAction` (action_id, label, kind, score, rationale).
+Phase 1: reglas determinísticas, 6-8 portfolio actions, top 3 como hints. Sin telemetría.
+Expuesto via WASM (frontend) y `quilt_strategy_select` MCP tool (agentes).
+_Avoid_: ML, recomendador, predictor, SUNNY engine
 
 ## Relationships
 
@@ -114,6 +166,8 @@ _Avoid_: graph neural network, embedding, vector
 - Un **Link** es un **Bloque** (rol) con peso que conecta dos entidades del **Grafo pesado**
 - Una **Acción** es un **Bloque** (rol) que define una operación ejecutable (prompt, query, set-property)
 - Una **Query embebida** es un **Bloque** (rol) con DSL parametrizable por **Properties** de la página actual
+- Una **View** es un **Bloque** (rol) con `type:: view` que define una vista guardada sobre datos del **Grafo pesado**. Compone una referencia a un **Bloque Query** via `data-source::`. Propiedades: `view-type::` (table|kanban|calendar|list|graph|cards|timeline), `data-source::`, `view-name::`, `view-icon::`, `view-pinned::`, `group-by::`, `sort::`. El **ViewContainer** (frontend) interpreta el bloque view y delega al **LayoutEngine** correspondiente.
+- Un **SavedView** es un **Bloque** (rol) con múltiples views sobre el mismo **Bloque Query**
 
 ## Flagged ambiguities
 

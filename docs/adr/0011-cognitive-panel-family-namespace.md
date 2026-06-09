@@ -1,6 +1,5 @@
 # ADR-DRAFT: Familia de paneles Cognitive* bajo namespace `cognitivo::`
 
-Status: draft
 
 ## Context
 

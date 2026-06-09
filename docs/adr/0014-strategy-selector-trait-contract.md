@@ -1,6 +1,5 @@
 # ADR-DRAFT: StrategySelector + StrategyScorer traits en quilt-core (WASM)
 
-Status: draft
 
 ## Context
 

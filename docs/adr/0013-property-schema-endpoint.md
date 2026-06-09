@@ -1,6 +1,5 @@
 # ADR-DRAFT: Endpoint de property keys con paginación y ADR de schema
 
-Status: draft
 
 ## Context
 

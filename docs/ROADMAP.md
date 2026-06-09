@@ -66,18 +66,22 @@ Infraestructura: `SlashActionRegistry` en `slashRegistry.tsx`, lazy-loaded desde
 
 | ADR | Draft | Implementación | Commit |
 |-----|-------|---------------|--------|
-| 0011 | DRAFT-dashboard-layout-no-work-modes.md | PanelVisibilityContext + presets + LayoutMenu | 06e28ad |
+| 0011 | DRAFT-cognitive-panel-family-namespace.md | Cognitive* family (AgentActivityFeed, StructuralGraph, SemanticInsight) | 28afeb2 |
 | 0012 | DRAFT-command-registry-mcp-dispatch.md | CommandRegistry + Cmd+Shift+K palette | 69c254b |
+| 0013 | DRAFT-property-schema-endpoint.md | GET /api/v1/properties/keys con cursor pagination | c435c6f |
+| 0014 | DRAFT-strategy-selector-trait-contract.md | StrategySelector + StrategyScorer traits en quilt-core | 35af73a |
 | 0015 | DRAFT-agent-run-block-role.md | AgentRun inline rendering en BlockRow | 06e28ad |
 | 0016 | DRAFT-saved-view-block-role.md | SavedViewBlock + type:: view + data-source:: | ses_15c8a3d |
+| 0017 | DRAFT-dashboard-layout-no-work-modes.md | PanelVisibilityContext + presets + LayoutMenu | 06e28ad |
 
 ### Candidatos a promover
 
-| Target | Draft | Decisión | Confianza |
-|--------|-------|----------|-----------|
-| 0013 | DRAFT-cognitive-panel-family-namespace.md | Cognitive* bajo namespace `cognitivo::` | Alta |
-| 0014 | DRAFT-property-schema-endpoint.md | GET /properties/keys con cursor pagination | Media |
-| 0017 | DRAFT-strategy-selector-trait-contract.md | StrategySelector + StrategyScorer traits en quilt-core (WASM) | Alta |
+| Target | ADR | Decisión | Confianza |
+|--------|-----|----------|-----------|
+| 0011 | ADR-0011 | Cognitive* family (3 paneles) + namespace `cognitivo::` | ✅ Promovido |
+| 0013 | ADR-0013 | GET /properties/keys con cursor pagination | ✅ Promovido |
+| 0014 | ADR-0014 | StrategySelector + StrategyScorer traits en quilt-core | ✅ Promovido |
+| 0017 | Pending | StrategySelector WASM + MCP tool | En implementación |
 
 ---
 
@@ -178,8 +182,8 @@ Phase 4 ✅ COMPLETO (4/4 items, commit 35af73a + f68f631)
 **Phase 0-4 ✅ — 31/31 items completados**
 
 ### Pendiente (no-bloqueantes)
-- Promover ADR drafts #13, #14, #17 a canónicos
-- Aplicar CONTEXT.md patch
+- ✅ Promover ADR drafts (0011, 0013, 0014, 0015, 0016, 0017) — COMPLETADO
+- ✅ Aplicar CONTEXT.md patch — COMPLETADO
 - User manual (HTML) → deploy o hosting
 
 ### Diferido (V3+)
