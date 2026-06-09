@@ -55,6 +55,44 @@ impl Block {
     pub fn block_type(&self) -> Option<&str> {
         self.properties.get("type").map(String::as_str)
     }
+
+    /// Parse a `Block` from a JSON string of the shape
+    /// `{"properties": {"type": "task", ...}}` — the format the WASM
+    /// bridge (`StrategySelector::select`) expects.
+    ///
+    /// Non-string values are coerced to their string form so
+    /// boolean/number properties (e.g. `resolved:: true`) don't
+    /// silently fall through. `null` values are dropped (an absent
+    /// key is indistinguishable from `null` in the strategy layer).
+    /// Returns `None` for invalid JSON or a non-object root.
+    pub fn from_json(json: &str) -> Option<Self> {
+        let v: serde_json::Value = serde_json::from_str(json).ok()?;
+        // Only accept object roots. A bare `[]`, `42`, or `"x"`
+        // is not a valid Block envelope and must return None so the
+        // WASM bridge surfaces a clear "no match" instead of silently
+        // selecting the default strategy.
+        let obj = v.as_object()?;
+        let mut props = HashMap::new();
+        if let Some(props_obj) = obj.get("properties").and_then(|p| p.as_object()) {
+            for (k, val) in props_obj {
+                if val.is_null() {
+                    continue;
+                }
+                let s = match val {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                };
+                props.insert(k.clone(), s);
+            }
+        }
+        Some(Block::new(props))
+    }
+
+    /// Serialise a `Block` to the JSON shape the WASM bridge expects.
+    /// Round-trips with [`from_json`](Self::from_json).
+    pub fn to_json(&self) -> String {
+        serde_json::json!({ "properties": self.properties }).to_string()
+    }
 }
 
 // ── Strategy trait ──────────────────────────────────────────────────
@@ -256,6 +294,32 @@ impl StrategyScorer for BinaryScorer {
         // `quilt-application` will close over the registered strategies.
         1.0
     }
+}
+
+// ── WASM bridge shim (select_strategy_from_json) ────────────────────
+//
+// Thin façade that the WASM `WasmStrategySelector` in `wasm.rs` builds
+// on. Lives here (not in `wasm.rs`) so the JSON-contract and selector
+// logic can be unit-tested on the **native** target — `wasm.rs` is
+// gated with `#[cfg(target_arch = "wasm32")]` and its tests don't run
+// when `cargo test` builds the default target. The struct itself is
+// `#[wasm_bindgen]`-annotated so the WASM bridge can wrap it; on
+// native the attribute is a no-op and the type works as a plain Rust
+// value.
+
+/// Build a default selector and run it on the given block JSON.
+///
+/// Returns the strategy name (e.g. `"task"`, `"default"`) or `None` if
+/// `block_json` is malformed. This is the function the WASM
+/// `WasmStrategySelector::select` delegates to — splitting it out
+/// keeps the WASM-specific code (`JsValue`, `serde_wasm_bindgen`,
+/// etc.) in `wasm.rs` while the testable logic lives here.
+pub fn select_strategy_from_json(block_json: &str) -> Option<String> {
+    let block = Block::from_json(block_json)?;
+    let selector = DefaultStrategySelector::with_builtins();
+    selector
+        .select(&block)
+        .map(|s| s.name().to_string())
 }
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -486,5 +550,164 @@ mod tests {
     #[test]
     fn block_type_returns_none_when_absent() {
         assert_eq!(empty_block().block_type(), None);
+    }
+
+    // ── Block::from_json / to_json (WASM bridge contract) ────────
+
+    #[test]
+    fn block_from_json_parses_string_properties() {
+        let b = Block::from_json(r#"{"properties":{"type":"task"}}"#).unwrap();
+        assert_eq!(b.block_type(), Some("task"));
+    }
+
+    #[test]
+    fn block_from_json_returns_none_for_invalid_json() {
+        assert!(Block::from_json("not json").is_none());
+    }
+
+    #[test]
+    fn block_from_json_returns_none_for_non_object_root() {
+        assert!(Block::from_json("[]").is_none());
+        assert!(Block::from_json("42").is_none());
+        assert!(Block::from_json("null").is_none());
+    }
+
+    #[test]
+    fn block_from_json_handles_missing_properties_field() {
+        let b = Block::from_json("{}").unwrap();
+        assert!(b.properties.is_empty());
+        assert_eq!(b.block_type(), None);
+    }
+
+    #[test]
+    fn block_from_json_coerces_non_string_values_to_string() {
+        // booleans / numbers should become their string form so
+        // the strategy layer can do exact equality on them.
+        let b = Block::from_json(
+            r#"{"properties":{"type":"task","resolved":true,"count":42}}"#,
+        )
+        .unwrap();
+        assert_eq!(b.properties.get("type").map(String::as_str), Some("task"));
+        assert_eq!(
+            b.properties.get("resolved").map(String::as_str),
+            Some("true"),
+        );
+        assert_eq!(b.properties.get("count").map(String::as_str), Some("42"));
+    }
+
+    #[test]
+    fn block_from_json_drops_null_values() {
+        let b = Block::from_json(
+            r#"{"properties":{"type":"task","cleared":null}}"#,
+        )
+        .unwrap();
+        assert_eq!(b.properties.len(), 1);
+        assert!(b.properties.contains_key("type"));
+        assert!(!b.properties.contains_key("cleared"));
+    }
+
+    #[test]
+    fn block_to_json_roundtrips_through_from_json() {
+        let mut props = HashMap::new();
+        props.insert("type".to_string(), "view".to_string());
+        props.insert("name".to_string(), "My Tasks".to_string());
+        let original = Block::new(props);
+
+        let json = original.to_json();
+        let parsed = Block::from_json(&json).unwrap();
+        assert_eq!(parsed, original);
+    }
+
+    // ── select_strategy_from_json (WASM bridge) ─────────────────
+
+    #[test]
+    fn wasm_bridge_picks_task_for_type_task() {
+        assert_eq!(
+            select_strategy_from_json(r#"{"properties":{"type":"task"}}"#),
+            Some("task".to_string()),
+        );
+    }
+
+    #[test]
+    fn wasm_bridge_picks_query_for_type_query() {
+        assert_eq!(
+            select_strategy_from_json(r#"{"properties":{"type":"query"}}"#),
+            Some("query".to_string()),
+        );
+    }
+
+    #[test]
+    fn wasm_bridge_picks_view_for_type_view() {
+        assert_eq!(
+            select_strategy_from_json(r#"{"properties":{"type":"view"}}"#),
+            Some("view".to_string()),
+        );
+    }
+
+    #[test]
+    fn wasm_bridge_picks_agent_run_for_type_agent_run() {
+        assert_eq!(
+            select_strategy_from_json(r#"{"properties":{"type":"agent-run"}}"#),
+            Some("agent-run".to_string()),
+        );
+    }
+
+    #[test]
+    fn wasm_bridge_falls_back_to_default_for_unknown_type() {
+        assert_eq!(
+            select_strategy_from_json(
+                r#"{"properties":{"type":"something-else"}}"#,
+            ),
+            Some("default".to_string()),
+        );
+    }
+
+    #[test]
+    fn wasm_bridge_falls_back_to_default_for_empty_object() {
+        // `{}` is a valid envelope (no `properties` field). The
+        // selector sees an empty block and the default strategy
+        // matches.
+        assert_eq!(
+            select_strategy_from_json("{}"),
+            Some("default".to_string()),
+        );
+    }
+
+    #[test]
+    fn wasm_bridge_returns_none_for_invalid_json() {
+        // The WASM bridge must NOT silently fall back to the
+        // default strategy on garbage input — it returns `None` and
+        // the front-end collapses to "default" at its layer.
+        assert_eq!(select_strategy_from_json("not json"), None);
+    }
+
+    #[test]
+    fn wasm_bridge_returns_none_for_array_root() {
+        // Arrays are not valid Block envelopes.
+        assert_eq!(select_strategy_from_json("[]"), None);
+    }
+
+    #[test]
+    fn wasm_bridge_ignores_unrelated_properties() {
+        // `priority:: A` is metadata; the selector must not let it
+        // hijack the role.
+        assert_eq!(
+            select_strategy_from_json(r#"{"properties":{"priority":"A"}}"#),
+            Some("default".to_string()),
+        );
+    }
+
+    #[test]
+    fn wasm_bridge_coerces_boolean_property_to_string() {
+        // `resolved:: true` is a real-world boolean property. After
+        // the bridge coerces it to "true", the selector still
+        // picks "default" (no `type` key) — but the path through
+        // the JSON parser is exercised.
+        assert_eq!(
+            select_strategy_from_json(
+                r#"{"properties":{"type":"task","resolved":true}}"#,
+            ),
+            Some("task".to_string()),
+        );
     }
 }

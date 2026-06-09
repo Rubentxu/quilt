@@ -34,6 +34,12 @@ import { InlinePropertyBadges } from '@features/properties/InlinePropertyBadges'
 // in one place.
 export { findNearestLink } from './blockKeyboardHandler'
 
+// Road-map #26: use the WASM `StrategySelector` (with a JS-only
+// fallback) to decide what kind of block we're rendering. The hook
+// returns one of `"task" | "query" | "view" | "agent-run" | "default"`
+// and is the single source of truth for role detection in BlockRow.
+import { useBlockStrategy, type BlockStrategyName } from './useBlockStrategy'
+
 // Heavy overlays that only render on user action. Pulling them in via
 // React.lazy means the page bundle stays small even though every
 // block can theoretically show them.
@@ -1038,28 +1044,16 @@ export function BlockRow({
   const createdByStr = createdBy == null ? '' : String(createdBy)
   const isAgentAuthor = createdByStr.startsWith('agent::')
 
-  // ADR-DRAFT-agent-run-block-role: AgentRun is a *role* carried by
-  // `type:: agent-run` in the block's properties array. The block
-  // itself stays a normal block (editable, saveable, queryable via
-  // DSL); the header strip just visualises the run metadata.
-  const agentRunType = readProperty(block, 'type')
-  const isAgentRun = agentRunType === 'agent-run'
-
-  // ADR-DRAFT-saved-view-block-role: SavedView is a *role* carried
-  // by `type:: view` in the block's properties array. The block's
-  // content area is *replaced* by the SavedViewBlock renderer (not
-  // decorated with a header) because the view IS the content: a
-  // table/kanban/etc. is the user-visible artefact, not the literal
-  // block text. The block's own `content` field is intentionally
-  // ignored for view-typed blocks; the user edits the view via the
-  // `view-type::`, `view-name::`, `data-source::` properties.
-  //
-  // We deliberately branch the read-mode render below (instead of
-  // rendering SavedViewBlock as a header strip) so the click-to-edit
-  // affordance does not interfere with the view's interaction
-  // surface (selecting cards, opening rows, etc.).
-  const viewBlockType = readProperty(block, 'type')
-  const isView = viewBlockType === 'view'
+  // Road-map #26: the WASM `StrategySelector` (with a JS-only
+  // fallback when the engine is not loaded) is the single source of
+  // truth for "what kind of block is this?". We then derive the
+  // localised flags (`isView`, `isAgentRun`, ...) from the strategy
+  // name — keeping the rest of the render path identical to the
+  // pre-hook behaviour. The strategy is also surfaced via
+  // `data-strategy` on the row for tests / debugging.
+  const strategy: BlockStrategyName = useBlockStrategy(block)
+  const isAgentRun = strategy === 'agent-run'
+  const isView = strategy === 'view'
   const agentName = isAgentRun ? readProperty(block, 'agent') : null
   const agentModel = isAgentRun ? readProperty(block, 'model') : null
   const runStatusRaw = isAgentRun ? readProperty(block, 'run-status') : null
@@ -1077,6 +1071,10 @@ export function BlockRow({
       ref={rowRef}
       className="block-row"
       data-testid={`block-row-${block.id}`}
+      // Strategy surface for tests / debugging — the WASM
+      // `StrategySelector` (or its JS fallback) decides what kind of
+      // block this is, and the row reflects the verdict on the DOM.
+      data-strategy={strategy}
       style={{
         display: 'flex',
         alignItems: 'flex-start',

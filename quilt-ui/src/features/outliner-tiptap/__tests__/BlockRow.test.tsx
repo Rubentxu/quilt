@@ -41,6 +41,13 @@ const mockCreatePageFromTemplate = vi.fn()
 const mockWriteText = vi.fn().mockResolvedValue(undefined)
 const mockParseInline = vi.fn()
 
+// `vi.mock` is hoisted — the variables it closes over must be
+// created with `vi.hoisted` so they're available at hoist time.
+const { mockUseWasm } = vi.hoisted(() => {
+  const fn = vi.fn()
+  return { mockUseWasm: fn }
+})
+
 vi.mock('@core/api-client', () => ({
   api: {
     updateBlock: (...args: any[]) => mockUpdateBlock(...args),
@@ -63,21 +70,27 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 vi.mock('@core/wasm-bridge/WasmProvider', () => ({
-  useWasm: () => ({
-    loaded: true,
-    error: null,
-    wasmGetVersion: vi.fn(() => 'test'),
-    wasmPing: vi.fn(() => true),
-    wasmGetState: vi.fn(),
-    wasmLoadPage: vi.fn(),
-    wasmDispatch: vi.fn(),
-    wasmUndo: vi.fn(),
-    wasmRedo: vi.fn(),
-    wasmParseInline: (content: string) => mockParseInline(content),
-    retry: vi.fn(),
-  }),
+  useWasm: () => mockUseWasm(),
   ensureWasmLoaded: vi.fn().mockResolvedValue(undefined),
 }))
+
+// Default the WASM mock to "loaded, no error" so existing tests
+// keep working. The strategy-integration tests below override this
+// via `mockUseWasm.mockReturnValueOnce(...)` to exercise the
+// JS-only fallback path.
+mockUseWasm.mockReturnValue({
+  loaded: true,
+  error: null,
+  wasmGetVersion: vi.fn(() => 'test'),
+  wasmPing: vi.fn(() => true),
+  wasmGetState: vi.fn(),
+  wasmLoadPage: vi.fn(),
+  wasmDispatch: vi.fn(),
+  wasmUndo: vi.fn(),
+  wasmRedo: vi.fn(),
+  wasmParseInline: (content: string) => mockParseInline(content),
+  retry: vi.fn(),
+})
 
 function makeBlock(content = '') {
   return {
@@ -789,6 +802,98 @@ describe('SavedView block role delegation (BlockRow)', () => {
 
     const view = await screen.findByTestId('saved-view-block')
     expect(view).toBeInTheDocument()
+  })
+})
+
+// ─── StrategySelector WASM hook integration (roadmap #26) ────────────
+//
+// BlockRow calls `useBlockStrategy(block)` to pick a rendering / editing
+// strategy. The hook returns a strategy name (one of "task", "query",
+// "view", "agent-run", "default") which BlockRow uses to drive:
+//   • the `data-strategy` attribute on the row (testid-friendly),
+//   • the SavedViewBlock dispatch (view branch),
+//   • the AgentRun header strip.
+//
+// The hook falls back to a JS-only selector when WASM is not loaded,
+// so the existing behaviour is preserved end-to-end. These tests pin
+// the surface area and verify the integration in both modes.
+
+describe('BlockRow uses useBlockStrategy to pick rendering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.defineProperty(global.navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      configurable: true,
+    })
+  })
+
+  it('exposes data-strategy="default" on a plain paragraph block', () => {
+    renderRow('a normal block')
+    const row = screen.getByTestId('block-row-b1')
+    expect(row).toHaveAttribute('data-strategy', 'default')
+  })
+
+  it('exposes data-strategy="view" on a type:: view block', () => {
+    const view = makeViewRoleBlock({ viewType: 'table', dataSource: 'q' })
+    const source = makeQuerySourceForView('q', '(all)')
+    renderViewBlock(view, [view, source])
+    const row = screen.getByTestId(`block-row-${view.id}`)
+    expect(row).toHaveAttribute('data-strategy', 'view')
+  })
+
+  it('exposes data-strategy="agent-run" on a type:: agent-run block', () => {
+    const agent = makeAgentRunBlock({ agent: 'claude', runStatus: 'Running' })
+    renderAgentRunBlock(agent)
+    const row = screen.getByTestId(`block-row-${agent.id}`)
+    expect(row).toHaveAttribute('data-strategy', 'agent-run')
+    // The agent-run header still renders (the strategy drives it).
+    expect(screen.getByTestId('agent-run-header')).toBeInTheDocument()
+  })
+
+  it('mounts SavedViewBlock when the strategy is "view"', async () => {
+    const view = makeViewRoleBlock({
+      viewType: 'kanban',
+      dataSource: 'q-source',
+      viewName: 'My Tasks',
+    })
+    const source = makeQuerySourceForView('q-source', '(task TODO)')
+    renderViewBlock(view, [view, source])
+    // The view dispatcher should mount the lazy-loaded SavedViewBlock.
+    const container = await screen.findByTestId('saved-view-block')
+    expect(container).toBeInTheDocument()
+  })
+
+  it('does NOT mount SavedViewBlock when the strategy is "default"', () => {
+    renderRow('a plain block')
+    expect(screen.queryByTestId('saved-view-block')).not.toBeInTheDocument()
+  })
+
+  it('does NOT mount the agent-run header when the strategy is "default"', () => {
+    renderRow('a plain block')
+    expect(screen.queryByTestId('agent-run-header')).not.toBeInTheDocument()
+  })
+
+  it('does NOT mount the agent-run header when the strategy is "view"', () => {
+    const view = makeViewRoleBlock({ viewType: 'list' })
+    const source = makeQuerySourceForView('q', '(all)')
+    renderViewBlock(view, [view, source])
+    expect(screen.queryByTestId('agent-run-header')).not.toBeInTheDocument()
+  })
+
+  it('falls back to the JS selector when WASM is not loaded (strategy still resolves)', () => {
+    // The default useWasm mock reports `loaded: true`, but if we
+    // switch to `loaded: false` the JS fallback must produce the
+    // right answer — that's the whole point of the roadmap task's
+    // "fallback" requirement.
+    mockUseWasm.mockReturnValueOnce({ loaded: false, error: null })
+
+    const view = makeViewRoleBlock({ viewType: 'list' })
+    const source = makeQuerySourceForView('q', '(all)')
+    renderViewBlock(view, [view, source])
+
+    const row = screen.getByTestId(`block-row-${view.id}`)
+    // JS fallback matched the WASM verdict: type:: view → "view".
+    expect(row).toHaveAttribute('data-strategy', 'view')
   })
 })
 

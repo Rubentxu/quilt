@@ -162,6 +162,74 @@ export function wasmHistoryFree(stackId: number): void {
   requireExport('history_free')(stackId)
 }
 
+// ── StrategySelector bridge (roadmap #26) ──────────────────────────
+//
+// The Rust `DefaultStrategySelector` (crates/quilt-core/src/strategy.rs)
+// is exported to WASM as a class `WasmStrategySelector` with a
+// `select(block_json)` method that returns the strategy name
+// (`"task"`, `"query"`, `"view"`, `"agent-run"`, `"default"`) for the
+// given block. The bridge below adapts the JS-friendly `Block`
+// shape (array of `BlockProperty` records) into the
+// `{"properties": {"type": "..."}}` JSON the WASM function expects.
+
+/**
+ * Build the JSON shape the WASM `select()` wants from a JS `Block`.
+ *
+ * The Rust `strategy::Block` is `{ properties: HashMap<String, String> }`
+ * (serialized as `{ "properties": { "k": "v" } }`). The front-end
+ * `Block.properties` is an array of `{ key, value, type }` records.
+ */
+function blockToStrategyJson(block: {
+  properties?: Array<{ key: string; value: string | number | boolean | null }>
+}): string {
+  const props: Record<string, string> = {}
+  for (const p of block.properties ?? []) {
+    if (!p) continue
+    if (p.value == null) continue
+    // Coerce non-string values to their string form so boolean /
+    // number properties (e.g. `resolved:: true`) don't silently fall
+    // through to the default strategy.
+    props[p.key] = typeof p.value === 'string' ? p.value : String(p.value)
+  }
+  return JSON.stringify({ properties: props })
+}
+
+/**
+ * Pick a strategy for the given block. Returns the strategy name
+ * (`"task" | "query" | "view" | "agent-run" | "default"`) or `null`
+ * if WASM is not loaded / not built yet.
+ *
+ * The hook `useBlockStrategy` wraps this with a JS-only fallback
+ * (always returns `"default"`) so the rest of the app never breaks
+ * when the WASM module is missing.
+ */
+export function wasmStrategySelect(block: {
+  properties?: Array<{ key: string; value: string | number | boolean | null }>
+}): string | null {
+  const Ctor = requireExport('WasmStrategySelector') as unknown
+  // wasm-bindgen generates a JS class; we instantiate with `new` and
+  // call `.select(json)` on the instance. The constructor is
+  // `with_builtins` (canonical registry) — exposed as the default
+  // #[wasm_bindgen(constructor)] on the Rust struct.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const instance = typeof Ctor === 'function' ? new (Ctor as any)() : Ctor
+  const json = blockToStrategyJson(block)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = (instance as any).select(json)
+  if (typeof result === 'string') return result
+  return null
+}
+
+/** Names of all registered strategies, in registration order. */
+export function wasmStrategyAll(): string[] {
+  const Ctor = requireExport('WasmStrategySelector') as unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const instance = typeof Ctor === 'function' ? new (Ctor as any)() : Ctor
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = (instance as any).all_strategies()
+  return Array.isArray(result) ? (result as string[]) : []
+}
+
 // ── Re-exports for the legacy page-level undo/redo (now no-ops) ───
 
 export const wasmUndo = undo

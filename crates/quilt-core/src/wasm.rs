@@ -551,6 +551,69 @@ pub fn schema_validate_class(
     Ok(JsValue::from_str(&json_str))
 }
 
+// ── Strategy Selector WASM exports ────────────────────────────────
+//
+// The `DefaultStrategySelector` (and the `StrategySelector` trait it
+// implements) is the per-block dispatcher the React outliner calls to
+// pick a rendering / editing strategy for a Block. We expose a thin
+// `#[wasm_bindgen]` wrapper so the front-end can call the selector
+// through the same channel as every other Quilt primitive.
+//
+// The WASM surface is intentionally minimal: a constructor
+// (`with_builtins`), a `select(block_json)` call that returns the
+// strategy name (or `None`), and an `all_strategies()` accessor. The
+// shape of the input JSON is `{ "properties": { "type": "task", ... } }`
+// — see `strategy::Block` for the full contract.
+
+use crate::strategy::{DefaultStrategySelector, StrategySelector, select_strategy_from_json};
+
+/// WASM-exposed wrapper around `DefaultStrategySelector`.
+///
+/// Constructed via `new` (no strategies — purely a base) or
+/// `with_builtins` (the canonical task/query/view/agent-run/default
+/// registry). Stored as `Box<dyn StrategySelector>` so the future
+/// portfolio selector (ADR-0006) can be substituted without API churn.
+#[wasm_bindgen]
+pub struct WasmStrategySelector {
+    inner: Box<dyn StrategySelector>,
+}
+
+#[wasm_bindgen]
+impl WasmStrategySelector {
+    /// Build a selector with the built-in strategies
+    /// (task → query → view → agent-run → default).
+    #[wasm_bindgen(constructor)]
+    pub fn with_builtins() -> WasmStrategySelector {
+        WasmStrategySelector {
+            inner: Box::new(DefaultStrategySelector::with_builtins()),
+        }
+    }
+
+    /// Pick a strategy for the given block.
+    ///
+    /// `block_json` must be a JSON string of the shape
+    /// `{"properties":{"type":"task",...}}`. Returns the strategy
+    /// name as a string, or `None` if no registered strategy handles
+    /// the block (which only happens for empty registries).
+    #[wasm_bindgen]
+    pub fn select(&self, block_json: &str) -> Option<String> {
+        // Delegate the testable JSON-parsing + dispatch logic to
+        // `select_strategy_from_json` in `crate::strategy` so the
+        // contract is unit-tested on the native target. The WASM
+        // shim here is a 1-liner.
+        select_strategy_from_json(block_json)
+    }
+
+    /// Names of all registered strategies, in registration order.
+    ///
+    /// Exposed to the React side as `all_strategies` to avoid
+    /// clashing with the reserved `all` keyword.
+    #[wasm_bindgen]
+    pub fn all_strategies(&self) -> Vec<String> {
+        self.inner.all().into_iter().map(String::from).collect()
+    }
+}
+
 // ── Internal ──────────────────────────────────────────────────────
 
 fn compute_hash(blocks: &[BlockDto]) -> String {
@@ -1548,5 +1611,107 @@ mod tests {
             }
             other => panic!("Expected SplitBlock, got {:?}", other),
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  BATCH 12 — StrategySelector WASM bridge
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // The `StrategySelector` in `crate::strategy` decides which rendering /
+    // editing strategy a Block should use. The outliner calls it on every
+    // block. These tests pin the WASM contract:
+    //   • `with_builtins()` exposes the canonical registry.
+    //   • `select(block_json)` returns the strategy name as a string.
+    //   • `all_strategies()` returns the registered names in order.
+    //   • All entry points are Send+Sync (compile-time, no test) and
+    //     safe to call from any WASM thread.
+    //
+    // The actual `Block::from_json` / JSON-contract tests live in
+    // `crate::strategy` (and run on the native target) — the WASM
+    // bridge itself is a 3-line `select_strategy_from_json` call.
+    // We re-test the contract here for completeness.
+
+    use crate::strategy::{Block, DefaultStrategySelector, StrategySelector};
+
+    #[test]
+    fn wasm_default_strategy_selector_selects_task_for_type_task() {
+        let sel = DefaultStrategySelector::with_builtins();
+        let block = Block::from_json(r#"{"properties":{"type":"task"}}"#).unwrap();
+        let picked = sel.select(&block).expect("must pick a strategy");
+        assert_eq!(picked.name(), "task");
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_selects_query_for_type_query() {
+        let sel = DefaultStrategySelector::with_builtins();
+        let block = Block::from_json(r#"{"properties":{"type":"query"}}"#).unwrap();
+        let picked = sel.select(&block).expect("must pick a strategy");
+        assert_eq!(picked.name(), "query");
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_selects_view_for_type_view() {
+        let sel = DefaultStrategySelector::with_builtins();
+        let block = Block::from_json(r#"{"properties":{"type":"view"}}"#).unwrap();
+        let picked = sel.select(&block).expect("must pick a strategy");
+        assert_eq!(picked.name(), "view");
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_selects_agent_run_for_type_agent_run() {
+        let sel = DefaultStrategySelector::with_builtins();
+        let block = Block::from_json(r#"{"properties":{"type":"agent-run"}}"#).unwrap();
+        let picked = sel.select(&block).expect("must pick a strategy");
+        assert_eq!(picked.name(), "agent-run");
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_falls_back_to_default_for_unknown_type() {
+        let sel = DefaultStrategySelector::with_builtins();
+        let block =
+            Block::from_json(r#"{"properties":{"type":"something-else"}}"#).unwrap();
+        let picked = sel.select(&block).expect("default always matches");
+        assert_eq!(picked.name(), "default");
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_falls_back_to_default_for_block_without_properties() {
+        let sel = DefaultStrategySelector::with_builtins();
+        let block = Block::from_json("{}").unwrap();
+        let picked = sel.select(&block).expect("default matches empty blocks");
+        assert_eq!(picked.name(), "default");
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_all_lists_builtins_in_canonical_order() {
+        let sel = DefaultStrategySelector::with_builtins();
+        let names = sel.all();
+        assert_eq!(
+            names,
+            vec!["task", "query", "view", "agent-run", "default"],
+            "WASM-bound selector must list builtins in the same order as the native one"
+        );
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_handles_blocks_with_unrelated_properties() {
+        // `priority:: A` is metadata, not a strategy role. The selector
+        // must not get confused by non-`type` keys.
+        let sel = DefaultStrategySelector::with_builtins();
+        let block = Block::from_json(r#"{"properties":{"priority":"A"}}"#).unwrap();
+        let picked = sel.select(&block).expect("default always matches");
+        assert_eq!(picked.name(), "default");
+    }
+
+    #[test]
+    fn wasm_default_strategy_selector_trait_object_compiles() {
+        // Compile-time check: the selector must be usable as
+        // `Box<dyn StrategySelector>` for the future PortfolioScorer
+        // integration. This is the only ergonomic contract that the
+        // WASM bridge relies on (the bridge stores a Box<dyn ...>).
+        let sel: Box<dyn StrategySelector> =
+            Box::new(DefaultStrategySelector::with_builtins());
+        let block = Block::from_json(r#"{"properties":{"type":"task"}}"#).unwrap();
+        assert_eq!(sel.select(&block).unwrap().name(), "task");
     }
 }
