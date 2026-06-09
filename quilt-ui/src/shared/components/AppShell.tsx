@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast'
 import { Menu, Sun, Moon, Settings, Link2, X, PanelRight, MoreVertical, RefreshCw, Keyboard, Sidebar as SidebarIcon } from 'lucide-react'
 import { Sidebar } from '@features/sidebar/Sidebar'
 import { BacklinksPanel } from '@features/references/BacklinksPanel'
+import { CognitivePanels } from '@features/cognitive/CognitivePanels'
 import { TabsBar } from './TabsBar'
 import { FloatingHelpButton } from './FloatingHelpButton'
 import { WelcomeTour } from './WelcomeTour'
@@ -926,6 +927,21 @@ export function AppShell() {
       ) : (
         <BacklinksPanel pageName={currentPageName} isOpen={backlinksOpen} />
       )}
+
+      {/* ─── Cognitive Panels (cognitivo:: family) ───
+       *
+       * Right-side column for the three cognitive panels
+       * (`docs/adr/drafts/DRAFT-cognitive-panel-family-namespace.md`).
+       * Each panel is gated by its own `PanelVisibilityContext`
+       * flag; toggling via CommandRegistry (`cog/toggle-*`) shows
+       * or hides individual sections without affecting siblings.
+       * The column itself renders only when at least one panel
+       * is visible, so it doesn't take up dead space.
+       *
+       * Hidden on mobile — the bottom-sheet pattern for the
+       * cognitive family is a follow-up; for now, mobile users
+       * toggle via the command palette or the layout menu. */}
+      {!isMobile && <CognitivePanels pageName={currentPageName} />}
 
       {/* ─── Toast notifications ─── */}
       <Toaster

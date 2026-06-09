@@ -23,6 +23,10 @@ import type { SlashMenuItem } from './SlashCommandMenu'
 // truth for slash actions — adding a new one is one `register()`
 // call, not three file edits.
 import { defaultRegistry, type SlashContext } from './slashRegistry'
+// Inline property badges (roadmap #13) — small, render-time-only
+// component, eagerly imported because it's on the hot path of every
+// block row.
+import { InlinePropertyBadges } from '@features/properties/InlinePropertyBadges'
 
 // Re-export findNearestLink for backward compatibility — BlockRow.test.tsx
 // (and any external consumer) imports it from this module. The actual
@@ -41,6 +45,9 @@ const SlashCommandMenu = lazy(() =>
 )
 const BlockPropertiesPanel = lazy(() =>
   import('@features/properties/BlockPropertiesPanel').then(m => ({ default: m.BlockPropertiesPanel })),
+)
+const SavedViewBlock = lazy(() =>
+  import('@features/view/SavedViewBlock').then(m => ({ default: m.SavedViewBlock })),
 )
 
 interface BlockRowProps {
@@ -1037,6 +1044,22 @@ export function BlockRow({
   // DSL); the header strip just visualises the run metadata.
   const agentRunType = readProperty(block, 'type')
   const isAgentRun = agentRunType === 'agent-run'
+
+  // ADR-DRAFT-saved-view-block-role: SavedView is a *role* carried
+  // by `type:: view` in the block's properties array. The block's
+  // content area is *replaced* by the SavedViewBlock renderer (not
+  // decorated with a header) because the view IS the content: a
+  // table/kanban/etc. is the user-visible artefact, not the literal
+  // block text. The block's own `content` field is intentionally
+  // ignored for view-typed blocks; the user edits the view via the
+  // `view-type::`, `view-name::`, `data-source::` properties.
+  //
+  // We deliberately branch the read-mode render below (instead of
+  // rendering SavedViewBlock as a header strip) so the click-to-edit
+  // affordance does not interfere with the view's interaction
+  // surface (selecting cards, opening rows, etc.).
+  const viewBlockType = readProperty(block, 'type')
+  const isView = viewBlockType === 'view'
   const agentName = isAgentRun ? readProperty(block, 'agent') : null
   const agentModel = isAgentRun ? readProperty(block, 'model') : null
   const runStatusRaw = isAgentRun ? readProperty(block, 'run-status') : null
@@ -1271,8 +1294,21 @@ export function BlockRow({
         </div>
       )}
 
-      {/* Content: edit mode shows raw contentEditable, read mode shows rendered inline */}
-      {isEditing ? (
+      {/* Inline property badges (roadmap #13). Rendered as part of the
+          "chrome" around the block content — they sit between the
+          priority/marker badges and the editable text. Lazy-loaded
+          because the `InlinePropertyBadges` component (and its template
+          helpers) is not on the critical path of every block. */}
+      <Suspense fallback={null}>
+        <InlinePropertyBadges block={block} onUpdate={onUpdate} />
+      </Suspense>
+
+      {/* Content: edit mode shows raw contentEditable, read mode shows rendered inline.
+          For `type:: view` blocks the read-mode path delegates to SavedViewBlock instead
+          of InlineContent — the view IS the content (table/kanban/etc.) and there is no
+          literal text to edit. The user edits the view via the properties panel
+          (view-type::, view-name::, data-source::). */}
+      {isEditing && !isView ? (
         <div
           key="edit"
           ref={contentRef}
@@ -1296,6 +1332,22 @@ export function BlockRow({
           onBlur={handleBlur}
           onKeyDown={handleKeyDown}
         />
+      ) : isView ? (
+        // Lazy-loaded SavedViewBlock — the heavy view components
+        // (TableView, KanbanBoard) only enter the bundle when the
+        // user actually has a view block on screen.
+        <div
+          key="view"
+          data-testid="block-view-content"
+          style={{
+            flex: 1,
+            minWidth: 0,
+          }}
+        >
+          <Suspense fallback={<SavedViewFallback />}>
+            <SavedViewBlock block={block} allBlocks={allBlocks} />
+          </Suspense>
+        </div>
       ) : (
         <div
           key="read"
@@ -1684,4 +1736,25 @@ function countResolved(
     count += countResolved(node.replies)
   }
   return count
+}
+
+// ──── SavedView fallback (ADR-DRAFT-saved-view-block-role) ──────
+//
+// Lightweight placeholder rendered while the lazy-loaded
+// SavedViewBlock bundle is being fetched. The full SavedViewBlock
+// mounts the same `data-testid="saved-view-block"` so the fallback
+// and the real component can be swapped without test churn.
+function SavedViewFallback() {
+  return (
+    <div
+      data-testid="saved-view-block"
+      style={{
+        padding: 'var(--space-2) 0',
+        color: 'var(--color-text-muted)',
+        fontSize: '13px',
+      }}
+    >
+      Loading view…
+    </div>
+  )
 }

@@ -5,7 +5,7 @@ import { PRESETS } from '@features/dashboard/presets'
 
 /**
  * Build the built-in command set: navigation, view toggles, layout
- * presets, capture, and help.
+ * presets, cognitive panel toggles, capture, and help.
  *
  * The returned commands are LOCAL (`target: 'local'`) and do not
  * need any external state — they capture their dependencies via
@@ -21,6 +21,7 @@ import { PRESETS } from '@features/dashboard/presets'
  *   2 View       (view/toggle-theme, view/toggle-sidebar)
  *   3 Layout     (layout/switch-to-default, layout/switch-to-focus, layout/switch-to-review)
  *   2 Layout     (layout/toggle-sidebar, layout/toggle-backlinks)
+ *   2 Cognitive  (cog/toggle-structural-graph, cog/toggle-semantic-insight)
  *   1 Capture    (capture/quick)
  *   1 Help       (help/shortcuts)
  */
@@ -203,6 +204,38 @@ export function createBuiltinCommands(): Command[] {
   // against the PRESETS table.
   void PRESETS
 
+  // ──── Cognitive panel toggles (priority 25) ─────────────────────
+  //
+  // The two new panels in the `cognitivo::` family
+  // (`docs/adr/drafts/DRAFT-cognitive-panel-family-namespace.md`).
+  // They live in the same View category as the layout toggles
+  // because they are user-facing visibility changes. Distinct
+  // priority (25, between Layout=20 and Capture=30) keeps them
+  // grouped with the other toggle commands in the modal result
+  // list, but they sort below pure-preset commands.
+
+  const cogToggleStructuralGraph: Command = {
+    id: 'cog/toggle-structural-graph',
+    label: 'Toggle Structural Graph Panel',
+    category: CommandCategory.View,
+    priority: 25,
+    target: 'local',
+    execute: () => {
+      dispatchDashboardChange({ type: 'toggle', panel: 'structural-graph' })
+    },
+  }
+
+  const cogToggleSemanticInsight: Command = {
+    id: 'cog/toggle-semantic-insight',
+    label: 'Toggle Semantic Insight Panel',
+    category: CommandCategory.View,
+    priority: 25,
+    target: 'local',
+    execute: () => {
+      dispatchDashboardChange({ type: 'toggle', panel: 'semantic-insight' })
+    },
+  }
+
   // ──── Capture (priority 30) ───────────────────────────────────
 
   const captureQuick: Command = {
@@ -263,6 +296,8 @@ export function createBuiltinCommands(): Command[] {
     layoutSwitchToReview,
     layoutToggleSidebar,
     layoutToggleBacklinks,
+    cogToggleStructuralGraph,
+    cogToggleSemanticInsight,
     captureQuick,
     helpShortcuts,
   ]

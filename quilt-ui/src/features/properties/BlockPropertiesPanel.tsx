@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Plus, X, Tag, Hash, ToggleLeft, Calendar, Link2 } from 'lucide-react'
 import { api } from '@core/api-client'
 import type { BlockProperty } from '@shared/types/api'
+import { resolveNaturalDate, isDatePropertyKey } from '@shared/utils/naturalDate'
 import toast from 'react-hot-toast'
 
 interface BlockPropertiesPanelProps {
@@ -41,12 +42,23 @@ export function BlockPropertiesPanel({ blockId, onClose }: BlockPropertiesPanelP
   }
 
   async function updateProperty(key: string, value: unknown) {
+    // NL Dates V1: when the user types a natural-language date
+    // ("today" / "tomorrow" / "yesterday") in a date-typed property
+    // (or one of the canonical date keys — `deadline`, `scheduled`,
+    // `date`), resolve it to a real ISO YYYY-MM-DD string before
+    // persisting. Keeps the backend date-agnostic and matches the
+    // behaviour of `BlockRow.saveToApi`.
+    let resolved: unknown = value
+    if (typeof value === 'string' && isDatePropertyKey(key)) {
+      const r = resolveNaturalDate(value)
+      if (r !== null) resolved = r
+    }
     try {
-      await api.setBlockProperty(blockId, key, value)
+      await api.setBlockProperty(blockId, key, resolved)
       setProperties(prev =>
         prev.map(p =>
           p.key === key
-            ? { ...p, value: value as string | number | boolean | null }
+            ? { ...p, value: resolved as string | number | boolean | null }
             : p,
         ),
       )

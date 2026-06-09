@@ -185,6 +185,17 @@ mod tests {
             // is satisfied.
             Ok(Vec::new())
         }
+
+        async fn list_by_property_key(
+            &self,
+            _key: &str,
+            _limit: u32,
+        ) -> Result<Vec<Block>, DomainError> {
+            // Same rationale as `list_distinct_keys` above — the
+            // query executor's mock doesn't model property keys, and
+            // the lens handler never routes through this impl.
+            Ok(Vec::new())
+        }
     }
 
     fn make_block(page_id: Uuid, content: &str) -> Block {

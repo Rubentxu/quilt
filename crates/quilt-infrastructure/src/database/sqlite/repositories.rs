@@ -688,6 +688,43 @@ impl BlockRepository for SqliteBlockRepository {
             .collect()
     }
 
+    async fn list_by_property_key(
+        &self,
+        key: &str,
+        limit: u32,
+    ) -> Result<Vec<Block>, DomainError> {
+        // Use json_extract over the `properties` blob. We pass the JSON
+        // pointer as `$.<key>` and check that the extracted value is
+        // non-NULL (which is the SQLite way of asking "this key
+        // exists in the map"). Limit is appended as a literal — it
+        // comes from a server-side parameter, never user input.
+        let sql = if limit == 0 {
+            "SELECT * FROM blocks \
+             WHERE json_extract(properties, ?) IS NOT NULL \
+             ORDER BY created_at DESC"
+                .to_string()
+        } else {
+            format!(
+                "SELECT * FROM blocks \
+                 WHERE json_extract(properties, ?) IS NOT NULL \
+                 ORDER BY created_at DESC \
+                 LIMIT {}",
+                limit
+            )
+        };
+
+        let pointer = format!("$.{}", key);
+        let rows = sqlx::query(&sql)
+            .bind(&pointer)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("list_by_property_key: {}", e)))?;
+
+        rows.iter()
+            .map(|r| BlockRow::from_row(r).and_then(|br| br.to_block()))
+            .collect()
+    }
+
     async fn list_distinct_keys(
         &self,
         cursor: Option<&str>,

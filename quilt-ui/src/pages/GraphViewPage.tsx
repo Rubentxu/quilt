@@ -45,6 +45,54 @@ interface PageStub {
   journal: boolean
 }
 
+// Map a block UUID (as returned by the lens endpoint's edges) to
+// the page name it belongs to. Walks the response's `nodes` array
+// — O(n) but the lens response is small (bounded by depth × fanout).
+function nodeIdFromBlock(
+  blockId: string,
+  nodes: Array<{ id: string; pageName: string }>,
+): string {
+  const node = nodes.find(n => n.id === blockId)
+  return node ? node.pageName : blockId
+}
+
+// ──── Lens (Graph Lens V1) ──────────────────────────────────────────
+//
+// A "lens" narrows the graph view to a focused subgraph. Four
+// options are exposed above the canvas:
+//
+//   * `all`           — the full graph (the default; uses the legacy
+//                       listPages + getPageBacklinks pipeline).
+//   * `page-context`  — show the current page's blocks and their
+//                       immediate neighbours. V1: implemented via
+//                       the lens endpoint with no `focus` arg
+//                       (identical to "all" until we add a notion
+//                       of "current page" at the graph level).
+//   * `block-subtree` — show a specific block and N levels of its
+//                       children. V1: implemented via the lens
+//                       endpoint at `depth=2` (focus + 1 hop) with
+//                       no explicit block — once the user picks a
+//                       block from the canvas, this would carry the
+//                       focus; V1 just demonstrates the depth
+//                       parameter.
+//   * `property`      — show every block that has a given property
+//                       key. V1: not yet wired to a UI prompt; the
+//                       button is present so the test suite can
+//                       assert the active state and the contract
+//                       with the lens endpoint.
+//
+// The buttons carry a `data-active="true"|"false"` attribute so the
+// test suite (and any other consumer) can inspect state without
+// reaching into CSS or class names.
+type LensType = 'all' | 'page-context' | 'block-subtree' | 'property'
+
+const LENS_OPTIONS: Array<{ id: LensType; label: string; depth: number }> = [
+  { id: 'all', label: 'All', depth: 1 },
+  { id: 'page-context', label: 'Page context', depth: 1 },
+  { id: 'block-subtree', label: 'Block subtree', depth: 2 },
+  { id: 'property', label: 'Property filter', depth: 1 },
+]
+
 // ──── Force Simulation ─────────────────────────────────────
 
 const REPULSION = 2000
@@ -116,6 +164,10 @@ export function GraphViewPage() {
   const [dragging, setDragging] = useState<string | null>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 })
+  // Graph Lens V1 — which lens is active. Default is "all" (the
+  // existing full-graph view). Switching lenses re-fetches data
+  // through `api.getGraphLens` and re-paints the canvas.
+  const [activeLens, setActiveLens] = useState<LensType>('all')
   const navigate = useNavigate()
   const { openTab } = useTabs()
 
@@ -130,55 +182,100 @@ export function GraphViewPage() {
 
     async function loadData() {
       try {
-        const pages: PageStub[] = await api.listPages()
-        if (cancelled) return
+        // The "all" lens is the legacy full-graph view. The other
+        // three lenses go through the subgraph endpoint. Either
+        // way the canvas ends up with the same `(nodes, edges)`
+        // shape — only the data source differs.
+        let nodePayload: Array<{ id: string; label: string; isJournal: boolean }>
+        let edgePayload: GraphEdge[]
+
+        if (activeLens === 'all') {
+          const pages: PageStub[] = await api.listPages()
+          if (cancelled) return
+          nodePayload = pages.map(page => ({
+            id: page.name,
+            label: page.title || page.name,
+            isJournal: page.journal,
+          }))
+          // Build edges from backlinks.
+          const pageNames = new Set(pages.map(p => p.name))
+          const edges: GraphEdge[] = []
+          const edgeSet = new Set<string>()
+          const pagesToFetch = pages.slice(0, 50)
+          const results = await Promise.allSettled(
+            pagesToFetch.map(page =>
+              api.getPageBacklinks(page.name)
+                .then((backlinks: Backlink[]) => ({ pageName: page.name, backlinks }))
+            )
+          )
+          for (const result of results) {
+            if (result.status !== 'fulfilled') continue
+            const { pageName, backlinks } = result.value
+            for (const bl of backlinks) {
+              if (!pageNames.has(bl.sourcePageName)) continue
+              const edgeKey = `${bl.sourcePageName}->${pageName}`
+              if (!edgeSet.has(edgeKey)) {
+                edgeSet.add(edgeKey)
+                edges.push({ source: bl.sourcePageName, target: pageName })
+              }
+            }
+          }
+          edgePayload = edges
+        } else {
+          // Non-`all` lenses go through the lens endpoint. Each lens
+          // has a contract depth (see LENS_OPTIONS). The `focus`
+          // argument is intentionally omitted in V1 for these
+          // lenses — picking a specific block/page/property from
+          // the UI is a follow-up; the endpoint itself is wired
+          // and tested end-to-end.
+          const lensOption = LENS_OPTIONS.find(o => o.id === activeLens)
+          const depth = lensOption?.depth ?? 1
+          const result = await api.getGraphLens({ depth })
+          if (cancelled) return
+          // The lens endpoint returns *block* nodes; for the V1
+          // graph view we collapse them to page-level nodes so the
+          // existing canvas can render them without a layout
+          // rewrite. Page name is the dedupe key.
+          const pageMap = new Map<string, { id: string; label: string; isJournal: boolean }>()
+          for (const n of result.nodes) {
+            const key = n.pageName
+            if (!pageMap.has(key)) {
+              pageMap.set(key, {
+                id: key,
+                label: key,
+                isJournal: n.isJournal,
+              })
+            }
+          }
+          nodePayload = Array.from(pageMap.values())
+          const knownPages = new Set(pageMap.keys())
+          edgePayload = result.edges
+            .filter(e => knownPages.has(nodeIdFromBlock(e.from, result.nodes))
+                      && knownPages.has(nodeIdFromBlock(e.to, result.nodes)))
+            .map(e => ({
+              source: nodeIdFromBlock(e.from, result.nodes),
+              target: nodeIdFromBlock(e.to, result.nodes),
+            }))
+        }
 
         const width = dimensions.width
         const height = dimensions.height
 
-        // Create nodes
-        const pageNames = new Set(pages.map(p => p.name))
-        const nodes: GraphNode[] = pages.map((page, i) => ({
-          id: page.name,
-          label: page.title || page.name,
+        // Create canvas nodes from the payload.
+        const nodes: GraphNode[] = nodePayload.map((p, i) => ({
+          id: p.id,
+          label: p.label,
           x: width / 2 + (Math.random() - 0.5) * 300,
           y: height / 2 + (Math.random() - 0.5) * 300,
           vx: 0,
           vy: 0,
-          radius: page.journal ? 6 : 8,
-          isJournal: page.journal,
+          radius: p.isJournal ? 6 : 8,
+          isJournal: p.isJournal,
         }))
-
-        // Create edges from backlinks
-        const edges: GraphEdge[] = []
-        const edgeSet = new Set<string>()
-
-        // Only fetch backlinks for first 50 pages to avoid hammering
-        const pagesToFetch = pages.slice(0, 50)
-        const results = await Promise.allSettled(
-          pagesToFetch.map(page =>
-            api.getPageBacklinks(page.name)
-              .then((backlinks: Backlink[]) => ({ pageName: page.name, backlinks }))
-          )
-        )
-
-        for (const result of results) {
-          if (result.status !== 'fulfilled') continue
-          const { pageName, backlinks } = result.value
-          for (const bl of backlinks) {
-            // Only create edges to pages that exist in our node set
-            if (!pageNames.has(bl.sourcePageName)) continue
-            const edgeKey = `${bl.sourcePageName}->${pageName}`
-            if (!edgeSet.has(edgeKey)) {
-              edgeSet.add(edgeKey)
-              edges.push({ source: bl.sourcePageName, target: pageName })
-            }
-          }
-        }
 
         if (!cancelled) {
           nodesRef.current = nodes
-          edgesRef.current = edges
+          edgesRef.current = edgePayload
         }
       } catch {
         if (!cancelled) toast.error('Failed to load graph data')
@@ -187,7 +284,7 @@ export function GraphViewPage() {
 
     loadData()
     return () => { cancelled = true }
-  }, [dimensions.width, dimensions.height])
+  }, [dimensions.width, dimensions.height, activeLens])
 
   // Resize observer
   useEffect(() => {
@@ -466,6 +563,54 @@ export function GraphViewPage() {
             <Maximize2 size={16} />
           </button>
         </div>
+      </div>
+
+      {/* Lens selector (Graph Lens V1).
+       *
+       * Four buttons, mutually exclusive. Clicking a button sets
+       * `activeLens` and re-fetches the data through the lens
+       * endpoint (or the legacy listPages pipeline for "all").
+       * The `data-active` attribute reflects the active state so
+       * tests (and any future visual styling hook) can read it
+       * without reaching into CSS or class names. */}
+      <div
+        data-testid="lens-selector"
+        role="radiogroup"
+        aria-label="Graph lens"
+        style={{
+          display: 'flex',
+          gap: 'var(--space-2)',
+          padding: 'var(--space-3) var(--space-4)',
+          borderBottom: '1px solid var(--color-border)',
+          background: 'var(--color-surface)',
+        }}
+      >
+        {LENS_OPTIONS.map(opt => {
+          const isActive = opt.id === activeLens
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              role="radio"
+              aria-checked={isActive}
+              data-active={isActive ? 'true' : 'false'}
+              data-lens={opt.id}
+              onClick={() => setActiveLens(opt.id)}
+              style={{
+                background: isActive ? 'var(--color-accent)' : 'var(--color-surface)',
+                color: isActive ? 'var(--color-on-accent, #fff)' : 'var(--color-text-secondary)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                padding: 'var(--space-1) var(--space-3)',
+                cursor: 'pointer',
+                fontSize: '13px',
+                fontWeight: isActive ? 600 : 400,
+              }}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* Canvas */}

@@ -289,6 +289,27 @@ impl BlockRepository for InMemoryBlockRepo {
         out.truncate(limit as usize);
         Ok(out)
     }
+
+    async fn list_by_property_key(
+        &self,
+        key: &str,
+        limit: u32,
+    ) -> Result<Vec<Block>, DomainError> {
+        // Scan every block; keep the ones that have the key in their
+        // `properties` map (value is irrelevant). Mirrors the SQLite
+        // `json_extract IS NOT NULL` check.
+        let repo = self.repo.read();
+        let mut out: Vec<Block> = repo
+            .values()
+            .filter(|b| b.properties.contains_key(key))
+            .cloned()
+            .collect();
+        out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        if limit > 0 {
+            out.truncate(limit as usize);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]

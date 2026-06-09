@@ -72,6 +72,8 @@ export const DEFAULT_PANELS: readonly PanelId[] = [
   'backlinks',
   'agent-activity',
   'outline',
+  'structural-graph',
+  'semantic-insight',
 ]
 
 /** Human labels for every known panel. Re-exported for consumers. */

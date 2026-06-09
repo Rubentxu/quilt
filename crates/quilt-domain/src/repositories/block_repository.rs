@@ -104,6 +104,22 @@ pub trait BlockRepository: Send + Sync {
         cursor: Option<&str>,
         limit: u32,
     ) -> Result<Vec<String>, DomainError>;
+
+    /// List blocks whose `properties` map contains the given `key`,
+    /// regardless of the value mapped to that key.
+    ///
+    /// Powers the Graph Lens `property:<key>` focus. Returns at most
+    /// `limit` blocks, ordered by `created_at DESC`; `limit == 0`
+    /// means "no limit".
+    ///
+    /// This is distinct from [`list_by_property`](Self::list_by_property)
+    /// which requires the value to match exactly. For the lens use
+    /// case we only care that the key exists.
+    async fn list_by_property_key(
+        &self,
+        key: &str,
+        limit: u32,
+    ) -> Result<Vec<Block>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods

@@ -206,6 +206,27 @@ impl BlockRepository for InMemoryBlockRepository {
         out.truncate(limit as usize);
         Ok(out)
     }
+
+    async fn list_by_property_key(
+        &self,
+        key: &str,
+        limit: u32,
+    ) -> Result<Vec<Block>, DomainError> {
+        // The in-memory implementation does a straight HashMap scan.
+        // Match the SQLite semantics: a block matches if its
+        // `properties` map contains the key (value is irrelevant).
+        let blocks = self.blocks.read();
+        let mut out: Vec<Block> = blocks
+            .values()
+            .filter(|b| b.properties.contains_key(key))
+            .cloned()
+            .collect();
+        out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        if limit > 0 {
+            out.truncate(limit as usize);
+        }
+        Ok(out)
+    }
 }
 
 #[cfg(test)]

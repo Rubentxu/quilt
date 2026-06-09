@@ -4,6 +4,7 @@
 
 pub mod blocks;
 pub mod frontend;
+pub mod graph;
 pub mod health;
 pub mod metrics;
 pub mod migration;

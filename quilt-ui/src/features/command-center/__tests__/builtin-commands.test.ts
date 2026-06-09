@@ -26,12 +26,13 @@ function makeContext(overrides: Partial<CommandContext> = {}): CommandContext {
 describe('createBuiltinCommands', () => {
   const builtins = createBuiltinCommands()
 
-  it('returns exactly 14 built-in commands', () => {
-    // The contract: 5 Navigation + 2 View + 5 Layout + 1 Capture
-    // + 1 Help = 14. This number is the source of truth for the
-    // modal's "no builtins missing" smoke check; bumping it here
-    // forces a conscious decision about every new builtin.
-    expect(builtins).toHaveLength(14)
+  it('returns exactly 16 built-in commands', () => {
+    // The contract: 5 Navigation + 2 View + 5 Layout + 2 Cognitive
+    // + 1 Capture + 1 Help = 16. This number is the source of
+    // truth for the modal's "no builtins missing" smoke check;
+    // bumping it here forces a conscious decision about every new
+    // builtin.
+    expect(builtins).toHaveLength(16)
   })
 
   it('every command has the required shape (id, label, category, priority, target, execute)', () => {
@@ -59,27 +60,28 @@ describe('createBuiltinCommands', () => {
     expect(unique.size).toBe(labels.length)
   })
 
-  it('exposes the expected category counts (5 Navigation, 7 View, 1 Capture, 1 Help)', () => {
-    // The 5 Layout commands are categorised as `View` because
-    // they are user-facing visibility toggles, the same intent as
-    // `view/toggle-theme` and `view/toggle-sidebar`.
+  it('exposes the expected category counts (5 Navigation, 9 View, 1 Capture, 1 Help)', () => {
+    // The 5 Layout commands + 2 Cognitive panel toggles are
+    // categorised as `View` because they are user-facing
+    // visibility toggles, the same intent as `view/toggle-theme`
+    // and `view/toggle-sidebar`.
     const byCategory = builtins.reduce<Record<string, number>>((acc, c) => {
       acc[c.category] = (acc[c.category] ?? 0) + 1
       return acc
     }, {})
     expect(byCategory[CommandCategory.Navigation]).toBe(5)
-    expect(byCategory[CommandCategory.View]).toBe(7)
+    expect(byCategory[CommandCategory.View]).toBe(9)
     expect(byCategory[CommandCategory.Capture]).toBe(1)
     expect(byCategory[CommandCategory.Help]).toBe(1)
   })
 
   it('uses namespaced ids (no two commands share a prefix by accident)', () => {
     // We only assert the prefix shape — `nav/`, `view/`, `layout/`,
-    // `capture/`, `help/`. The full id list is verified in the
-    // navigation tests below.
+    // `cog/`, `capture/`, `help/`. The full id list is verified
+    // in the navigation tests below.
     for (const cmd of builtins) {
       const prefix = cmd.id.split('/')[0]
-      expect(['nav', 'view', 'layout', 'capture', 'help']).toContain(prefix)
+      expect(['nav', 'view', 'layout', 'cog', 'capture', 'help']).toContain(prefix)
     }
   })
 })
@@ -215,6 +217,47 @@ describe('createBuiltinCommands — Layout', () => {
     expect(backlinks).toBeDefined()
     expect(() => sidebar?.execute(makeContext())).not.toThrow()
     expect(() => backlinks?.execute(makeContext())).not.toThrow()
+  })
+})
+
+// ──── Cognitive panel toggles ────────────────────────────────────────
+//
+// The two new commands in the `cognitivo::` family
+// (`docs/adr/drafts/DRAFT-cognitive-panel-family-namespace.md`)
+// dispatch the same custom DOM event the layout commands use, so
+// the existing `PanelVisibilityProvider` is the single source of
+// truth for which panels are visible. We assert the dispatcher was
+// called with the right panel id.
+
+describe('createBuiltinCommands — Cognitive', () => {
+  it('cog/toggle-structural-graph dispatches a toggle event for the structural-graph panel', () => {
+    const spy = vi.spyOn(window, 'dispatchEvent')
+    const cmd = createBuiltinCommands().find(
+      (c) => c.id === 'cog/toggle-structural-graph',
+    )
+    expect(cmd).toBeDefined()
+    cmd?.execute(makeContext())
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('cog/toggle-semantic-insight dispatches a toggle event for the semantic-insight panel', () => {
+    const spy = vi.spyOn(window, 'dispatchEvent')
+    const cmd = createBuiltinCommands().find(
+      (c) => c.id === 'cog/toggle-semantic-insight',
+    )
+    expect(cmd).toBeDefined()
+    cmd?.execute(makeContext())
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('cog/* commands are categorised as View (visibility toggles)', () => {
+    const cogCommands = createBuiltinCommands().filter(
+      (c) => c.id.split('/')[0] === 'cog',
+    )
+    expect(cogCommands.length).toBe(2)
+    for (const c of cogCommands) {
+      expect(c.category).toBe(CommandCategory.View)
+    }
   })
 })
 

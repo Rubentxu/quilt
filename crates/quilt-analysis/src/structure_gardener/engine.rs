@@ -507,6 +507,16 @@ mod tests {
                 "list_distinct_keys not supported in mock".to_string(),
             ))
         }
+
+        async fn list_by_property_key(
+            &self,
+            _key: &str,
+            _limit: u32,
+        ) -> Result<Vec<Block>, DomainError> {
+            Err(DomainError::Storage(
+                "list_by_property_key not supported in mock".to_string(),
+            ))
+        }
     }
 
     fn make_test_gardener(blocks: Vec<Block>) -> StructureGardener {

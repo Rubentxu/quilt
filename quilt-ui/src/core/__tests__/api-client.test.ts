@@ -23,6 +23,9 @@ function mockResponse(status: number, body: unknown, headers: Record<string, str
 
 beforeEach(() => {
   mockFetch.mockReset()
+  // Drop the SessionCache so a prior test's GET response doesn't
+  // bleed into the next one. (Quilt-fase5-session-cache.)
+  api.invalidateAll()
 })
 
 // ── QuiltApiError ───────────────────────────────────────────
@@ -471,6 +474,8 @@ describe('api surface (P0 — only mounted routes)', () => {
     //       `crates/quilt-server/src/routes.rs` before updating the list.
     const expected = [
       'baseUrl',
+      // Cache control
+      'invalidateAll',
       // Pages
       'listPages', 'getPage', 'createPage', 'createPageFromTemplate',
       'getPageBlocks', 'getJournal', 'getPageBacklinks',
@@ -485,6 +490,8 @@ describe('api surface (P0 — only mounted routes)', () => {
       'listPropertyKeys',
       // Templates
       'listTemplates', 'getTemplateSchema',
+      // Graph Lens V1
+      'getGraphLens',
       // Query
       'executeQuery',
       // Tour state

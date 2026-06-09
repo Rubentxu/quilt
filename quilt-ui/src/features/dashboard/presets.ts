@@ -10,7 +10,13 @@
 // and React glue live in `PanelVisibilityContext.tsx`.
 
 /** Every panel the DashboardLayout knows about. */
-export type PanelId = 'sidebar' | 'backlinks' | 'agent-activity' | 'outline'
+export type PanelId =
+  | 'sidebar'
+  | 'backlinks'
+  | 'agent-activity'
+  | 'outline'
+  | 'structural-graph'
+  | 'semantic-insight'
 
 /** Stable, human-readable labels for each panel id. */
 export const PANEL_LABELS: Record<PanelId, string> = {
@@ -18,6 +24,8 @@ export const PANEL_LABELS: Record<PanelId, string> = {
   backlinks: 'Backlinks',
   'agent-activity': 'Agent activity',
   outline: 'Outline',
+  'structural-graph': 'Structural graph',
+  'semantic-insight': 'Semantic insight',
 }
 
 /** A preset id is the key into the `PRESETS` table. */
@@ -28,8 +36,11 @@ export type PresetId = 'default' | 'focus' | 'review'
  *
  *   - `default` — the day-to-day surface: sidebar + backlinks.
  *   - `focus`   — full-width writing, no sidebar.
- *   - `review`  — sidebar + backlinks + agent activity. Used when
- *                 reviewing what agents added during a session.
+ *   - `review`  — sidebar + backlinks + agent activity +
+ *                 structural graph. Used when reviewing what
+ *                 agents added during a session. The semantic-
+ *                 insight panel stays off by default — it requires
+ *                 agent-authored insight blocks to be useful.
  *
  * Keep this object frozen in *intent* (don't mutate the inner sets
  * at runtime); `getPreset` returns a fresh Set every call so the
@@ -38,7 +49,12 @@ export type PresetId = 'default' | 'focus' | 'review'
 export const PRESETS: Record<PresetId, ReadonlySet<PanelId>> = {
   default: new Set<PanelId>(['sidebar', 'backlinks']),
   focus: new Set<PanelId>(['backlinks']),
-  review: new Set<PanelId>(['sidebar', 'backlinks', 'agent-activity']),
+  review: new Set<PanelId>([
+    'sidebar',
+    'backlinks',
+    'agent-activity',
+    'structural-graph',
+  ]),
 }
 
 /** Every preset id, in display order. */
