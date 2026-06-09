@@ -82,6 +82,7 @@ fn parse_marker(s: &str) -> Option<TaskMarker> {
         "now" => Some(TaskMarker::Now),
         "later" => Some(TaskMarker::Later),
         "todo" => Some(TaskMarker::Todo),
+        "doing" => Some(TaskMarker::Doing),
         "done" => Some(TaskMarker::Done),
         "cancelled" => Some(TaskMarker::Cancelled),
         _ => None,
@@ -93,6 +94,7 @@ fn marker_to_str(m: &TaskMarker) -> &'static str {
         TaskMarker::Now => "now",
         TaskMarker::Later => "later",
         TaskMarker::Todo => "todo",
+        TaskMarker::Doing => "doing",
         TaskMarker::Done => "done",
         TaskMarker::Cancelled => "cancelled",
     }

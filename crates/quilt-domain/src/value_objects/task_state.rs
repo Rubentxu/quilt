@@ -69,9 +69,9 @@ impl TaskState {
         self.marker == Some(TaskMarker::Done) || self.marker == Some(TaskMarker::Cancelled)
     }
 
-    /// Check if this block is in progress (NOW marker).
+    /// Check if this block is in progress (NOW or DOING marker).
     pub fn is_in_progress(&self) -> bool {
-        self.marker == Some(TaskMarker::Now)
+        self.marker == Some(TaskMarker::Now) || self.marker == Some(TaskMarker::Doing)
     }
 
     /// Check if this block is pending (TODO or LATER).

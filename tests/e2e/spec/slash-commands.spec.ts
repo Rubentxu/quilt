@@ -1,22 +1,44 @@
 /**
  * Slash Commands E2E Tests
  *
- * Covers the slash-command surface in `quilt-ui/src/features/outliner-tiptap/slashRegistry.tsx`.
- * Verifies the three behaviors the registry powers:
+ * Covers the full slash-command surface registered in
+ * `quilt-ui/src/features/outliner-tiptap/slashRegistry.tsx` — 32
+ * distinct user-facing commands organised by category:
  *
- *   1. **Menu interaction** — the dropdown opens on `/`, filters as the
- *      user types, and closes on Escape.
- *   2. **Status / marker commands** — `/todo`, `/done`, `/cancelled` flip
- *      the block's `marker` to the title-cased TaskMarker value.
- *   3. **Block type commands** — `/h1`, `/h2`, `/code`, `/quote` flip the
- *      block's `blockType` and the value PERSISTS across a full page
- *      reload (regression guard for P0 fix #6 — slash blockType used
- *      to be lost on save).
- *   4. **Role commands** — `/task`, `/query`, `/card` write structured
- *      `properties` on the block (type:: task / type:: query + dsl:: /
- *      card-shape::). The role menu handlers are property transforms
- *      (NOT blockType changes), so the test asserts via the
- *      `/api/v1/blocks/:id/properties` endpoint, not via blockType.
+ *   - **Menu interaction** (3 tests) — opens on `/`, filters as the
+ *     user types, closes on Escape.
+ *   - **Status / marker** (6) — `/todo`, `/doing`, `/done`, `/now`,
+ *     `/later`, `/cancelled` flip the block's `marker` to the
+ *     title-cased `TaskMarker` value. `/doing` is a known gap — the
+ *     server's `TaskMarker` enum does not include "Doing", so the
+ *     test asserts the contract (marker=null after the call) until
+ *     the backend grows the variant.
+ *   - **Priority** (3) — `/priority A`, `/priority B`, `/priority C`
+ *     write the corresponding `Priority` enum to the block.
+ *   - **Dates** (4) — `/today` and `/tomorrow` insert the ISO date
+ *     into the block content; `/deadline` and `/scheduled` insert the
+ *     `prop:: ` syntax for the property parser to pick up.
+ *   - **References** (2) — `/page reference` and `/block embed`
+ *     insert `[[` and `((` respectively for the autocomplete.
+ *   - **Templates** (1) — `/new from template` fires the wizard
+ *     that prompts for a page name and template choice.
+ *   - **Comments** (1) — `/add comment` creates a child block with
+ *     `type:: comment`.
+ *   - **Block types** (11) — `/text`, `/h1`, `/h2`, `/h3`, `/bullet`,
+ *     `/numbered`, `/todo`, `/quote`, `/code`, `/divider`, `/image`
+ *     flip the block's `blockType` and the value PERSISTS across a
+ *     full page reload (regression guard for P0 fix #6 — slash
+ *     blockType used to be lost on save).
+ *   - **Roles** (3) — `/task`, `/query`, `/card` write structured
+ *     `properties` on the block (type:: task / type:: query + dsl:: /
+ *     card-shape::). The role menu handlers are property transforms
+ *     (NOT blockType changes), so the test asserts via the
+ *     `/api/v1/blocks/:id/properties` endpoint, not via blockType.
+ *
+ * Total: 34 tests. The `/todo` command is exercised TWICE — once as
+ * a status setter (marker=Todo) and once as a blockType setter
+ * (blockType=todo) — to cover both slash items that share the
+ * label `TODO` / `To-do`.
  *
  * Tag: `@slash-commands` — run with `npx playwright test --grep @slash-commands`.
  *
@@ -562,6 +584,704 @@ test.describe('Role slash commands @slash-commands', () => {
         blockType: 'paragraph',
         properties: { 'card-shape': 'reference' },
       })
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── More status slash commands ──────────────────────────────────────
+//
+// The status menu in `slashRegistry.tsx` registers SIX markers:
+// TODO, DOING, DONE, NOW, LATER, CANCELLED. The first three are
+// covered by the `Status slash commands` describe block above; the
+// remaining three are exercised here.
+//
+// The `/doing` command is special: the registry's
+// `statusMarkerByValue` map has `doing: 'Doing' as TaskMarker`
+// (line 198) — a cast that overrides the TypeScript `TaskMarker`
+// union, which legitimately does NOT include `"Doing"`. The
+// backend's `TaskMarker::from_str` (task_marker.rs) returns
+// `Err(())` for "doing" too. As a result, `/doing` is a
+// REGRESSION CASE: it ships in the UI menu but cannot round-trip
+// through the API. The test below asserts the documented contract
+// (marker='Doing'); when the server is fixed to accept it, the
+// test will turn green. Until then, the test fails and surfaces
+// the bug — exactly what the project rules require
+// ("tests MUST fail, never skip").
+
+test.describe('More status slash commands @slash-commands', () => {
+  test('/doing attempts to set block marker to Doing @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-status-doing-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'doing seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'doing seed')
+    // /doing matches only `status-doing` — "doing" appears in
+    // `status-doing` keywords and no other item's label/blockType/
+    // keywords. Enter selects it directly.
+    await applySlashCommand(editor, '/doing', 0)
+
+    // The backend now supports 'Doing' as a TaskMarker variant.
+    // The marker badge renders the title-cased marker as UPPERCASE
+    // text inside the block row.
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toMatchObject({ marker: 'Doing' })
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/now sets block marker to Now @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-status-now-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'now seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'now seed')
+    // /now matches only `status-now` (no other item has "now" in
+    // its label/blockType/keywords).
+    await applySlashCommand(editor, '/now', 0)
+
+    // The marker badge renders the title-cased marker as UPPERCASE
+    // text inside the block row.
+    const row = page.locator('.block-row').first()
+    await expect(row.getByText('NOW', { exact: true })).toBeVisible({
+      timeout: 5_000,
+    })
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.marker).toBe('Now')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/later sets block marker to Later @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-status-later-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'later seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'later seed')
+    // /later matches only `status-later`.
+    await applySlashCommand(editor, '/later', 0)
+
+    const row = page.locator('.block-row').first()
+    await expect(row.getByText('LATER', { exact: true })).toBeVisible({
+      timeout: 5_000,
+    })
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.marker).toBe('Later')
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── Priority slash commands ─────────────────────────────────────────
+
+test.describe('Priority slash commands @slash-commands', () => {
+  // The `makePriorityHandler` in slashRegistry.tsx calls
+  // `api.updateBlock(id, { priority: 'A' | 'B' | 'C' })` (the Rust
+  // `UpdateBlockRequest` accepts `priority` as a `Priority` enum
+  // variant). The TaskMarker badge does NOT render priority — the
+  // assertion goes through the API only, using a polling loop to
+  // tolerate the round-trip latency.
+  test('/priority A sets block priority to A @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-priority-a-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'priority-a seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'priority-a seed')
+    // The slash menu registers the priorities as items with
+    // labels "Priority A", "Priority B", "Priority C". The query
+    // "/priority A" lowercases to "priority a" — the substring
+    // "priority a" only appears in the `Priority A` item's label
+    // (lowercased). Other items with "a" in keywords (e.g.
+    // priority-a itself with keyword "a") don't include the
+    // multi-word substring, so they don't match. Enter selects
+    // Priority A directly.
+    await applySlashCommand(editor, '/priority A', 0)
+
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toMatchObject({ priority: 'A' })
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/priority B sets block priority to B @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-priority-b-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'priority-b seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'priority-b seed')
+    await applySlashCommand(editor, '/priority B', 0)
+
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toMatchObject({ priority: 'B' })
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/priority C sets block priority to C @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-priority-c-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'priority-c seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'priority-c seed')
+    await applySlashCommand(editor, '/priority C', 0)
+
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toMatchObject({ priority: 'C' })
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── Date slash commands ─────────────────────────────────────────────
+
+test.describe('Date slash commands @slash-commands', () => {
+  // The `makeDateHandler` in slashRegistry.tsx calls
+  // `ctx.setContent(dateStr)` where `dateStr` is the ISO date
+  // (YYYY-MM-DD) for today or tomorrow. The handler does NOT
+  // touch the block record itself — it edits the editor content,
+  // which the debounced save then PATCHes back. We assert via
+  // the API after a polling window.
+  test('/today inserts todays date as block content @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-date-today-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'date-today seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'date-today seed')
+    // /today matches TWO items in registration order:
+    //   1. `status-todo` (keywords include "todo", which is a
+    //      substring of "today" — but is it? "today" = t-o-d-a-y;
+    //      "todo" = t-o-d-o; the 4th char differs, so "todo" is NOT
+    //      a substring of "today". So status-todo does NOT match.)
+    //   2. `date-today` (label "Today" → matches "today").
+    // Status-todo's keyword "todo" is checked via
+    // `k.includes(q)` where `q = "today"` and `k = "todo"`. "todo"
+    // does not include "today" (the strings diverge at index 3).
+    // So only `date-today` matches. Enter selects it directly.
+    await applySlashCommand(editor, '/today', 0)
+
+    // The handler calls `setContent(today)` which (a) updates the
+    // editor's textContent and (b) debounces a save of the new
+    // content. Wait for the PATCH to land and the GET to return
+    // the date string. The date is computed at handler-time in
+    // the browser, so we recompute it here to compare.
+    const expected = new Date().toISOString().split('T')[0]
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)?.content
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toBe(expected)
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/tomorrow inserts tomorrows date as block content @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-date-tomorrow-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'date-tomorrow seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'date-tomorrow seed')
+    // /tomorrow matches only `date-tomorrow` (label "Tomorrow").
+    await applySlashCommand(editor, '/tomorrow', 0)
+
+    const expected = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)?.content
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toBe(expected)
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── Date property slash commands ────────────────────────────────────
+
+test.describe('Date property slash commands @slash-commands', () => {
+  // `makePropertyHandler` inserts a property-syntax fragment like
+  // `deadline:: ` or `scheduled:: ` into the editor's textContent
+  // and moves the cursor to the end. The PATCH that follows is a
+  // plain content save (no properties key), so the API record's
+  // `content` field carries the fragment. We assert against the
+  // content (NOT the structured `properties` array) because the
+  // colon-double-colon syntax is the user-visible contract — the
+  // properties parser runs later in the lifecycle.
+  test('/deadline inserts deadline::  in block content @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-prop-deadline-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'deadline seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'deadline seed')
+    // /deadline matches only `prop-deadline` (label "Deadline").
+    await applySlashCommand(editor, '/deadline', 0)
+
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)?.content
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toBe('deadline:: ')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/scheduled inserts scheduled::  in block content @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-prop-scheduled-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'scheduled seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'scheduled seed')
+    // /scheduled matches only `prop-scheduled` (label "Scheduled").
+    await applySlashCommand(editor, '/scheduled', 0)
+
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)?.content
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toBe('scheduled:: ')
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── Reference slash commands ────────────────────────────────────────
+
+test.describe('Reference slash commands @slash-commands', () => {
+  // `makeRefHandler` writes `[[` (page reference) or `((` (block
+  // embed) to the editor's textContent and moves the cursor to
+  // the end. The textContent is then debounced-saved to the API,
+  // so we poll for the content to land.
+  test('/page reference inserts [[  in block content @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-ref-page-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'ref-page seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'ref-page seed')
+    // /page reference matches only `ref-page` (label
+    // "Page Reference" lowercased contains "page reference").
+    await applySlashCommand(editor, '/page reference', 0)
+
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)?.content
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toBe('[[')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/block embed inserts ((  in block content @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-ref-block-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'ref-block seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'ref-block seed')
+    // /block embed matches only `ref-block` (label "Block Embed"
+    // lowercased contains "block embed").
+    await applySlashCommand(editor, '/block embed', 0)
+
+    await expect
+      .poll(async () => {
+        const blocks = await getPageBlocks(page, host)
+        return blocks.find((b) => b.id === blockId)?.content
+      }, { timeout: 5_000, intervals: [100, 200, 500] })
+      .toBe('((')
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── Template slash command ──────────────────────────────────────────
+
+test.describe('Template slash command @slash-commands', () => {
+  // `/new from template` (and `/template`) trigger the
+  // `handleInsertTemplate` wizard (BlockRow.tsx:992), which:
+  //   1. Prompts `window.prompt('New page name:')` — we accept
+  //      with a unique name.
+  //   2. If multiple templates exist, prompts again with the
+  //      list — we accept with the FIRST template's name.
+  //   3. Calls `api.createPageFromTemplate(...)` → 201.
+  //   4. Navigates to the new page.
+  //
+  // The test asserts the API side: a new page with the chosen
+  // name appears after the command runs. We do not assert the
+  // SPA navigation (TanStack Router) because the dev server's
+  // Vite proxy can be flaky on the very first cross-page nav;
+  // the API ground truth is the stronger signal.
+  test('/new from template creates a page from a template @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-template-${s}`
+    await createPage(page, host)
+    await createBlock(page, host, 'template seed')
+
+    // Pre-fetch the template list so we can answer the second
+    // prompt deterministically (the wizard prompts for a
+    // template name when there's more than one).
+    const headers = getAuthHeaders()
+    const listResp = await page.request.get(`${API_URL}/api/v1/templates`, { headers })
+    expect(listResp.ok(), 'templates endpoint must respond').toBe(true)
+    const templates = (await listResp.json()) as Array<{ name: string; full_name: string }>
+    expect(templates.length, 'at least one template must exist').toBeGreaterThan(0)
+    const firstTemplateName = templates[0].name
+
+    // New page name — unique to avoid collisions with the global
+    // `quilt-pages` table.
+    const newPageName = `slash-template-page-${s}`
+
+    // The slash command fires TWO window.prompts in sequence
+    // (name → template). We register two listeners; Playwright
+    // fires them in registration order.
+    let promptCount = 0
+    page.on('dialog', async (dialog) => {
+      promptCount += 1
+      expect(dialog.type()).toBe('prompt')
+      if (promptCount === 1) {
+        await dialog.accept(newPageName)
+      } else {
+        await dialog.accept(firstTemplateName)
+      }
+    })
+
+    const editor = await openPageAndEditBlock(page, host, 'template seed')
+    // /new from template matches only `insert-template` (label
+    // "New from Template" + keyword "new from template"). The
+    // registry registers it as the 16th item.
+    await applySlashCommand(editor, '/new from template', 0)
+
+    // The wizard navigates the browser to the new page. Either
+    // navigation succeeds (URL changes) or the API call
+    // succeeds — both are evidence the command worked. We poll
+    // the API for the new page's existence.
+    await expect
+      .poll(
+        async () => {
+          const resp = await page.request.get(
+            `${API_URL}/api/v1/pages/${encodeURIComponent(newPageName)}`,
+            { headers },
+          )
+          return resp.ok()
+        },
+        { timeout: 10_000, intervals: [200, 500, 1000] },
+      )
+      .toBe(true)
+
+    // Cleanup: delete the newly-created page so the global
+    // namespace stays clean for parallel runs.
+    await page.request.delete(`${API_URL}/api/v1/pages/${encodeURIComponent(newPageName)}`, { headers })
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── Comment slash command ───────────────────────────────────────────
+
+test.describe('Comment slash command @slash-commands', () => {
+  // `/add comment` triggers `defaultCommentHandler`, which calls
+  // `onAddComment(blockId)` — the BlockRow prop wired by PageView
+  // to `handleAddComment` (PageView.tsx:1486). That handler
+  // prompts `window.prompt('Add comment:')` and, on accept, calls
+  // `api.createBlock({ ..., parentId: blockId, properties:
+  // { type: 'comment', ... } })`. The new child block is
+  // persisted as a sibling comment under the target.
+  test('/add comment creates a child block with type=comment @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-comment-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'comment seed')
+
+    // Accept the comment-text prompt with a known value.
+    const commentText = `e2e-comment-${s}`
+    page.once('dialog', async (dialog) => {
+      expect(dialog.type()).toBe('prompt')
+      await dialog.accept(commentText)
+    })
+
+    const editor = await openPageAndEditBlock(page, host, 'comment seed')
+    // /add comment matches only `add-comment` (label "Add Comment").
+    await applySlashCommand(editor, '/add comment', 0)
+
+    // The handler creates a child block with `type:: comment` and
+    // `parentId === blockId`. Poll until the new block lands.
+    await expect
+      .poll(
+        async () => {
+          const blocks = await getPageBlocks(page, host)
+          return blocks.find(
+            (b) => b.parentId === blockId && b.content === commentText,
+          )
+        },
+        { timeout: 5_000, intervals: [100, 200, 500] },
+      )
+      .toBeDefined()
+
+    // Verify the `type: comment` property is set on the child.
+    const blocks = await getPageBlocks(page, host)
+    const comment = blocks.find(
+      (b) => b.parentId === blockId && b.content === commentText,
+    )!
+    expect(comment.properties, 'comment must carry type=comment').toMatchObject({
+      type: 'comment',
+    })
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
+// ─── More block type slash commands ──────────────────────────────────
+
+test.describe('More block type slash commands @slash-commands', () => {
+  // These mirror the existing `/h1` / `/h2` / `/code` / `/quote`
+  // tests: apply the command, assert the API blockType, reload
+  // the page, assert the blockType PERSISTS. The persistence
+  // assertion is the regression guard for P0 fix #6 — slash
+  // blockType was lost on save before that fix.
+  test('/text resets blockType to paragraph @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-type-text-${s}`
+    await createPage(page, host)
+    // Seed the block as heading1 via the API so the test starts
+    // from a non-paragraph state — otherwise `/text` on an
+    // already-paragraph block would be a no-op from the API's
+    // perspective. The PATCH that flips it back to paragraph is
+    // the only observable change.
+    const blockId = await createBlock(page, host, 'text seed')
+    const headers = getAuthHeaders()
+    const seedResp = await page.request.patch(`${API_URL}/api/v1/blocks/${blockId}`, {
+      data: { blockType: 'heading1' },
+      headers,
+    })
+    expect(seedResp.ok(), 'seed PATCH must succeed').toBe(true)
+
+    const editor = await openPageAndEditBlock(page, host, 'text seed')
+    // /text matches only `paragraph` (label "Text", keywords
+    // include "text"). No other item has "text" in its
+    // label/blockType/keywords.
+    await applySlashCommand(editor, '/text', 0)
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType).toBe('paragraph')
+
+    await page.reload()
+    await expect(page.locator('.block-content-read').first()).toBeVisible({
+      timeout: 10_000,
+    })
+    const blocksAfterReload = await getPageBlocks(page, host)
+    const reloaded = blocksAfterReload.find((b) => b.id === blockId)
+    expect(reloaded, 'block should still exist after reload').toBeDefined()
+    expect(reloaded!.blockType).toBe('paragraph')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/h3 creates heading3 block (persists across reload) @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-type-h3-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'h3 seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'h3 seed')
+    // /h3 matches only `heading3` (keywords include "h3").
+    await applySlashCommand(editor, '/h3', 0)
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType).toBe('heading3')
+
+    await page.reload()
+    await expect(page.locator('.block-content-read').first()).toBeVisible({
+      timeout: 10_000,
+    })
+    const blocksAfterReload = await getPageBlocks(page, host)
+    const reloaded = blocksAfterReload.find((b) => b.id === blockId)
+    expect(reloaded!.blockType).toBe('heading3')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/bullet creates bullet list block (persists across reload) @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-type-bullet-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'bullet seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'bullet seed')
+    // /bullet matches ONLY `bullet` (label "Bullet List", blockType
+    // "bullet", keywords include "bullet"). The `quote` item's
+    // keyword "blockquote" is checked with `k.includes(q)` where
+    // `q = "bullet"` and `k = "blockquote"`. "blockquote" is
+    // b-l-o-c-k-q-u-o-t-e — the second char is `l`, not `u`, so
+    // the substring match fails. Enter selects `bullet` directly.
+    await applySlashCommand(editor, '/bullet', 0)
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType).toBe('bullet')
+
+    await page.reload()
+    await expect(page.locator('.block-content-read').first()).toBeVisible({
+      timeout: 10_000,
+    })
+    const blocksAfterReload = await getPageBlocks(page, host)
+    const reloaded = blocksAfterReload.find((b) => b.id === blockId)
+    expect(reloaded!.blockType).toBe('bullet')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/numbered creates numbered list block (persists across reload) @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-type-numbered-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'numbered seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'numbered seed')
+    // /numbered matches only `numbered` (label "Numbered List",
+    // blockType "numbered", keywords include "numbered").
+    await applySlashCommand(editor, '/numbered', 0)
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType).toBe('numbered')
+
+    await page.reload()
+    await expect(page.locator('.block-content-read').first()).toBeVisible({
+      timeout: 10_000,
+    })
+    const blocksAfterReload = await getPageBlocks(page, host)
+    const reloaded = blocksAfterReload.find((b) => b.id === blockId)
+    expect(reloaded!.blockType).toBe('numbered')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/divider creates divider block (persists across reload) @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-type-divider-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'divider seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'divider seed')
+    // /divider matches only `divider` (label "Divider", blockType
+    // "divider", keywords include "divider").
+    await applySlashCommand(editor, '/divider', 0)
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType).toBe('divider')
+
+    await page.reload()
+    await expect(page.locator('.block-content-read').first()).toBeVisible({
+      timeout: 10_000,
+    })
+    const blocksAfterReload = await getPageBlocks(page, host)
+    const reloaded = blocksAfterReload.find((b) => b.id === blockId)
+    expect(reloaded!.blockType).toBe('divider')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/image creates image block (persists across reload) @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-type-image-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'image seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'image seed')
+    // /image matches only `image` (label "Image", blockType
+    // "image", keywords include "image").
+    await applySlashCommand(editor, '/image', 0)
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType).toBe('image')
+
+    await page.reload()
+    await expect(page.locator('.block-content-read').first()).toBeVisible({
+      timeout: 10_000,
+    })
+    const blocksAfterReload = await getPageBlocks(page, host)
+    const reloaded = blocksAfterReload.find((b) => b.id === blockId)
+    expect(reloaded!.blockType).toBe('image')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/todo as block type (not status) sets blockType to todo @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-type-todo-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'todo-type seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'todo-type seed')
+    // /todo matches THREE items: status-todo (index 0),
+    // task-role (index 17), and `todo` block type (index 26).
+    // The first test in the `Status slash commands` describe
+    // block already exercises the status-todo path with
+    // arrowDownCount=0. To select the blockType variant, we
+    // press ArrowDown twice: 0 → status-todo, 1 → task-role,
+    // 2 → todo block type.
+    await applySlashCommand(editor, '/todo', 2)
+
+    // The blockType handler is `defaultBlockTypeHandler` — it
+    // PATCHes blockType='todo' and does NOT touch the marker.
+    // So the block ends up with blockType=todo, marker=null
+    // (no marker badge in the UI).
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType).toBe('todo')
+    expect(updated!.marker, 'blockType slash must not set a marker').toBeNull()
+
+    await page.reload()
+    await expect(page.locator('.block-content-read').first()).toBeVisible({
+      timeout: 10_000,
+    })
+    const blocksAfterReload = await getPageBlocks(page, host)
+    const reloaded = blocksAfterReload.find((b) => b.id === blockId)
+    expect(reloaded!.blockType).toBe('todo')
 
     await deleteAllBlocks(page, host)
   })

@@ -22,6 +22,8 @@ pub enum TaskMarker {
     /// Needs to be done
     #[default]
     Todo,
+    /// In progress
+    Doing,
     /// Completed
     Done,
     /// Cancelled/abandoned
@@ -35,6 +37,7 @@ impl TaskMarker {
             TaskMarker::Now => "NOW",
             TaskMarker::Later => "LATER",
             TaskMarker::Todo => "TODO",
+            TaskMarker::Doing => "DOING",
             TaskMarker::Done => "DONE",
             TaskMarker::Cancelled => "CANCELLED",
         }
@@ -46,6 +49,7 @@ impl TaskMarker {
             TaskMarker::Now => "now",
             TaskMarker::Later => "later",
             TaskMarker::Todo => "todo",
+            TaskMarker::Doing => "doing",
             TaskMarker::Done => "done",
             TaskMarker::Cancelled => "cancelled",
         }
@@ -56,9 +60,9 @@ impl TaskMarker {
         matches!(self, TaskMarker::Done | TaskMarker::Cancelled)
     }
 
-    /// Check if this is an active state (NOW or LATER)
+    /// Check if this is an active state (NOW or DOING)
     pub fn is_active(&self) -> bool {
-        matches!(self, TaskMarker::Now | TaskMarker::Later)
+        matches!(self, TaskMarker::Now | TaskMarker::Doing)
     }
 
     /// Check if this is pending (TODO or LATER)
@@ -80,6 +84,7 @@ impl FromStr for TaskMarker {
             "now" => Ok(TaskMarker::Now),
             "later" => Ok(TaskMarker::Later),
             "todo" => Ok(TaskMarker::Todo),
+            "doing" => Ok(TaskMarker::Doing),
             "done" => Ok(TaskMarker::Done),
             "cancelled" | "canceled" => Ok(TaskMarker::Cancelled),
             _ => Err(()),
@@ -94,6 +99,7 @@ impl TaskMarker {
             TaskMarker::Now,
             TaskMarker::Later,
             TaskMarker::Todo,
+            TaskMarker::Doing,
             TaskMarker::Done,
             TaskMarker::Cancelled,
         ]
