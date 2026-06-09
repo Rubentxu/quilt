@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quilt — User Manual</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f0f0f;
+      --bg-card: #181818;
+      --bg-elevated: #222222;
+      --border: #2e2e2e;
+      --text-primary: #e8e8e2;
+      --text-secondary: #8a8a82;
+      --text-muted: #555550;
+      --accent: #c8f240;
+      --accent-dim: #a0c430;
+      --accent-glow: rgba(200, 242, 64, 0.12);
+      --danger: #f24040;
+      --info: #40a0f2;
+      --success: #40f290;
+      --warning: #f2c040;
+      --radius: 10px;
+      --font-display: 'Newsreader', Georgia, serif;
+      --font-body: 'Inter', system-ui, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-body);
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Layout ── */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 32px 20px;
+      background: var(--bg);
+    }
+    .sidebar-logo {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .sidebar-subtitle {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 32px;
+    }
+    .sidebar nav a {
+      display: block;
+      padding: 6px 10px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .sidebar nav a:hover,
+    .sidebar nav a.active {
+      color: var(--accent);
+      background: var(--accent-glow);
+    }
+    .sidebar nav a + a { margin-top: 2px; }
+    .sidebar-section { margin-bottom: 20px; }
+    .sidebar-section-title {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      font-weight: 600;
+    }
+
+    .main { padding: 48px 56px 96px; max-width: 820px; }
+    .hero {
+      margin-bottom: 64px;
+    }
+    .hero-eyebrow {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      line-height: 1.05;
+      color: var(--text-primary);
+      margin-bottom: 20px;
+    }
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      max-width: 560px;
+      line-height: 1.75;
+    }
+
+    /* ── Sections ── */
+    .section { margin-bottom: 64px; }
+    .section-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .section h2 {
+      font-family: var(--font-display);
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 8px;
+      color: var(--text-primary);
+    }
+    .section h3 {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 24px 0 8px;
+      color: var(--text-primary);
+    }
+    .section-subtitle {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin-bottom: 24px;
+    }
+    .section p {
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+    }
+
+    /* ── Screenshots ── */
+    .screenshot {
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      margin: 24px 0;
+      position: relative;
+    }
+    .screenshot img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .screenshot-caption {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-align: center;
+      padding: 8px;
+      background: var(--bg-card);
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── Callouts ── */
+    .callout {
+      padding: 16px 20px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--bg-card);
+      margin: 20px 0;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+    .callout p { font-size: 0.9rem; color: var(--text-secondary); }
+    .callout.info { border-color: rgba(64,160,242,0.3); background: rgba(64,160,242,0.05); }
+    .callout.warning { border-color: rgba(242,192,64,0.3); background: rgba(242,192,64,0.05); }
+    .callout.success { border-color: rgba(64,242,144,0.3); background: rgba(64,242,144,0.05); }
+
+    /* ── Tables ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      margin: 20px 0;
+    }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      background: var(--bg-elevated);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg-card); }
+    code {
+      font-family: var(--font-mono);
+      font-size: 0.82em;
+      background: var(--bg-elevated);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--accent);
+    }
+
+    /* ── Shortcut badges ── */
+    .kbd {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.72em;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      padding: 2px 6px;
+      color: var(--text-secondary);
+    }
+
+    /* ── Feature cards ── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin: 24px 0;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .feature-card-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      color: var(--text-primary);
+    }
+    .feature-card-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    /* ── Code blocks ── */
+    pre {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin: 16px 0;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+    }
+
+    /* ── Status colors ── */
+    .status-queued { color: var(--text-muted); }
+    .status-running { color: var(--info); }
+    .status-completed { color: var(--success); }
+    .status-failed { color: var(--danger); }
+
+    /* ── Responsive ── */
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
+      .main { padding: 24px 20px 64px; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">Quilt</div>
+    <div class="sidebar-subtitle">User Manual v1.0</div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Getting started</div>
+      <nav>
+        <a href="#installation">Installation</a>
+        <a href="#navigation">Navigation</a>
+        <a href="#palette">Command palette</a>
+      </nav>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Features</div>
+      <nav>
+        <a href="#slash">Slash commands</a>
+        <a href="#layout">Panel layout</a>
+        <a href="#graph">Knowledge graph</a>
+        <a href="#search">Search</a>
+        <a href="#zoom">Block zoom</a>
+        <a href="#dates">Natural dates</a>
+        <a href="#agentrun">Agent blocks</a>
+        <a href="#views">Saved views</a>
+      </nav>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-title">Reference</div>
+      <nav>
+        <a href="#properties">Properties</a>
+        <a href="#shortcuts">Keyboard shortcuts</a>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-eyebrow">User documentation</div>
+      <h1>Your intelligent<br/>block-based workspace</h1>
+      <p>Quilt combines a structured outliner, a knowledge graph, and AI agents
+         into a single local-first workspace. This guide takes you from zero to productive.</p>
+    </div>
+
+    <!-- ── Installation ── -->
+    <section class="section" id="installation">
+      <div class="section-label">01 — Getting started</div>
+      <h2>Installation and startup</h2>
+      <p class="section-subtitle">One command to spin up the entire development environment.</p>
+
+      <pre><code>just dev</code></pre>
+
+      <div class="callout info">
+        <span class="callout-icon">ℹ</span>
+        <p>This starts the API backend at <code>localhost:3737</code>, the React frontend at
+           <code>localhost:5173</code>, and the WASM watcher for graph operations.</p>
+      </div>
+
+      <p>On first run, Quilt generates an API key and prints it to the server console.
+         Create it in <code>quilt-ui/.env</code>:</p>
+      <pre><code>VITE_QUILT_API_KEY=4eb04d25-ba93-44e3-baec-9c21ae5a9a2c</code></pre>
+    </section>
+
+    <!-- ── Navigation ── -->
+    <section class="section" id="navigation">
+      <div class="section-label">02 — Navigation</div>
+      <h2>Journals, pages and links</h2>
+
+      <h3>Auto-redirect to today's journal</h3>
+      <p>Opening <code>/</code> (root) takes you directly to today's journal page.
+         No more clicks to get to where you work.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/01-home-redirect.png" alt="Home redirect — today's journal" />
+        <div class="screenshot-caption">/ redirects to /journal/2026-06-07 automatically</div>
+      </div>
+
+      <h3>Journal view</h3>
+      <p>Journals are automatically generated daily pages. Navigate with
+         <strong>Previous day</strong> / <strong>Next day</strong>, or click
+         <strong>Today</strong> to jump back to the current day.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/04-journal-page.png" alt="Journal page" />
+        <div class="screenshot-caption">Journal view with temporal navigation</div>
+      </div>
+
+      <h3>Page list</h3>
+      <p>All workspace pages organized in a list. Access from the sidebar or create
+         new ones from the journal with <code>Cmd+Shift+K → New page</code>.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/05-pages-list.png" alt="Page list" />
+        <div class="screenshot-caption">Workspace page list</div>
+      </div>
+    </section>
+
+    <!-- ── Command palette ── -->
+    <section class="section" id="palette">
+      <div class="section-label">03 — Productivity</div>
+      <h2>Command palette</h2>
+      <p class="section-subtitle">One shortcut for everything. Press <span class="kbd">Cmd Shift K</span> from anywhere.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/02-command-palette.png" alt="Command palette" />
+        <div class="screenshot-caption">Cmd+Shift+K opens the command palette</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Command</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>New page</td><td>Create a blank page</td></tr>
+          <tr><td>Search</td><td>Search across the entire workspace</td></tr>
+          <tr><td>Toggle theme</td><td>Switch between light and dark mode</td></tr>
+          <tr><td>Layout: Default</td><td>Preset with sidebar + journal + backlinks</td></tr>
+          <tr><td>Layout: Focus</td><td>Journal only, no distractions</td></tr>
+          <tr><td>Layout: Review</td><td>Journal + expanded backlinks</td></tr>
+          <tr><td>Toggle Sidebar</td><td>Show / hide sidebar</td></tr>
+          <tr><td>Toggle Backlinks</td><td>Show / hide references panel</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Slash commands ── -->
+    <section class="section" id="slash">
+      <div class="section-label">04 — Blocks</div>
+      <h2>Slash commands — <code>/</code></h2>
+      <p class="section-subtitle">Transform any block. Type <code>/</code> at the start to open the menu.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/06-slash-command-menu.png" alt="Slash command menu" />
+        <div class="screenshot-caption">Slash command menu with categories</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Command</th><th>Properties set</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>/h1</code>, <code>/h2</code>, <code>/h3</code></td><td><code>level:: 1 | 2 | 3</code></td></tr>
+          <tr><td><code>/code</code></td><td><code>blockType:: code</code></td></tr>
+          <tr><td><code>/quote</code></td><td><code>blockType:: quote</code></td></tr>
+          <tr><td><code>/task</code></td><td><code>type:: task</code> + <code>status:: todo</code></td></tr>
+          <tr><td><code>/query</code></td><td><code>type:: query</code> + <code>dsl::</code> (prompts for DSL)</td></tr>
+          <tr><td><code>/card</code></td><td><code>card-shape::</code> (prompts for shape)</td></tr>
+          <tr><td><code>/divider</code></td><td>Visual separator</td></tr>
+          <tr><td><code>/bullet</code>, <code>/numbered</code></td><td>Bullet or numbered list</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout success">
+        <span class="callout-icon">✓</span>
+        <p><strong>Semantic roles vs. visual types:</strong> <code>/task</code>, <code>/query</code>,
+           and <code>/card</code> set <em>roles</em> (properties like <code>type::</code>).
+           The other commands (<code>/h1</code>, <code>/code</code>, etc.) set visual formatting
+           or block type (<code>blockType::</code>).</p>
+      </div>
+    </section>
+
+    <!-- ── Layout ── -->
+    <section class="section" id="layout">
+      <div class="section-label">05 — Customization</div>
+      <h2>Panel layout</h2>
+      <p class="section-subtitle">Save and restore visible panel configurations.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/08-dashboard-layout.png" alt="Dashboard layout presets" />
+        <div class="screenshot-caption">Layout menu — presets and panel toggles</div>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Preset</th><th>Visible panels</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Default</strong></td><td>Sidebar + Journal + Backlinks</td></tr>
+          <tr><td><strong>Focus</strong></td><td>Journal only</td></tr>
+          <tr><td><strong>Review</strong></td><td>Journal + expanded Backlinks</td></tr>
+        </tbody>
+      </table>
+
+      <p>Access from the <strong>Layout</strong> button in the top bar or with
+         <code>Cmd+Shift+K → Layout</code>. Presets are saved to localStorage.</p>
+    </section>
+
+    <!-- ── Graph ── -->
+    <section class="section" id="graph">
+      <div class="section-label">06 — Knowledge</div>
+      <h2>Knowledge graph</h2>
+      <p class="section-subtitle">Visualize connections between your blocks. Automatic dark mode.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/03-graph-dark-mode.png" alt="Graph view — dark mode" />
+        <div class="screenshot-caption">Graph in dark mode with connected nodes</div>
+      </div>
+
+      <div class="callout info">
+        <span class="callout-icon">ℹ</span>
+        <p>The graph detects <code>data-theme="dark"</code> on the document and renders
+           with a dark background automatically. No configuration needed.</p>
+      </div>
+    </section>
+
+    <!-- ── Search ── -->
+    <section class="section" id="search">
+      <div class="section-label">07 — Search</div>
+      <h2>Full-text search</h2>
+      <p class="section-subtitle">Search across the entire workspace with autocomplete and property filters.</p>
+
+      <div class="screenshot">
+        <img src="screenshots/10-search-modal.png" alt="Search modal" />
+        <div class="screenshot-caption">Search modal with real-time results</div>
+      </div>
+    </section>
+
+    <!-- ── Block Zoom ── -->
+    <section class="section" id="zoom">
+      <div class="section-label">08 — Navigation</div>
+      <h2>Block zoom — <code>?zoom=$blockId</code></h2>
+      <p class="section-subtitle">Deep-link to a specific block. Its content becomes the focus of the view.</p>
+
+      <pre><code>/journal/2026-06-07?zoom=abc123-def456</code></pre>
+
+      <p>This opens the journal focused on block <code>abc123</code>, with its content
+         expanded and the rest of the page dimmed. Ideal for sharing precise block
+         references within a page.</p>
+    </section>
+
+    <!-- ── Natural dates ── -->
+    <section class="section" id="dates">
+      <div class="section-label">09 — Dates</div>
+      <h2>Natural language dates</h2>
+      <p class="section-subtitle">In property values you can write dates as plain text.</p>
+
+      <table>
+        <thead>
+          <tr><th>You write</th><th>Resolves to</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>due:: today</code></td><td>The current date</td></tr>
+          <tr><td><code>due:: tomorrow</code></td><td>Tomorrow's date</td></tr>
+          <tr><td><code>due:: yesterday</code></td><td>Yesterday's date</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout warning">
+        <span class="callout-icon">⚠</span>
+        <p>Natural dates are resolved in the frontend at render time. The value stored
+           in the database is the original string (<code>today</code>, <code>tomorrow</code>,
+           <code>yesterday</code>), not the computed date.</p>
+      </div>
+    </section>
+
+    <!-- ── AgentRun ── -->
+    <section class="section" id="agentrun">
+      <div class="section-label">10 — AI</div>
+      <h2>Agent blocks — <code>type:: agent-run</code></h2>
+      <p class="section-subtitle">External agent executions recorded as blocks.</p>
+
+      <p>A block with <code>type:: agent-run</code> logs an agent execution.
+         Properties:</p>
+
+      <table>
+        <thead>
+          <tr><th>Property</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>agent::</code></td><td>Agent name</td></tr>
+          <tr><td><code>model::</code></td><td>Model used</td></tr>
+          <tr><td><code>run-status::</code></td><td>Status: Queued / Running / Completed / Failed / Cancelled</td></tr>
+          <tr><td><code>started-at::</code></td><td>Start timestamp</td></tr>
+          <tr><td><code>completed-at::</code></td><td>End timestamp</td></tr>
+          <tr><td><code>summary::</code></td><td>Summary of what was done</td></tr>
+        </tbody>
+      </table>
+
+      <p>Status colors in the UI:</p>
+      <table>
+        <thead>
+          <tr><th>Status</th><th>Color</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="status-queued">Queued / Cancelled</td><td>Grey</td></tr>
+          <tr><td class="status-running">Running</td><td>Blue (info)</td></tr>
+          <tr><td class="status-completed">Completed</td><td>Green (success)</td></tr>
+          <tr><td class="status-failed">Failed</td><td>Red (danger)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Saved Views ── -->
+    <section class="section" id="views">
+      <div class="section-label">11 — Views</div>
+      <h2>Saved views — <code>type:: view</code></h2>
+      <p class="section-subtitle">Composition over inheritance: multiple views over the same query.</p>
+
+      <p>A <strong>saved view</strong> is a <code>type:: view</code> block that references
+         an existing query block via <code>data-source::</code>.</p>
+
+      <div class="callout info">
+        <span class="callout-icon">ℹ</span>
+        <p><strong>Composition pattern:</strong> the query block contains the DSL.
+           The view block defines the renderer and configuration (group-by, sort).
+           Multiple views can share the same query.</p>
+      </div>
+
+      <table>
+        <thead>
+          <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>view-type::</code></td><td>select</td><td><code>table</code> | <code>kanban</code> | <code>calendar</code> | <code>list</code> | <code>graph</code> | <code>cards</code> | <code>timeline</code></td></tr>
+          <tr><td><code>data-source::</code></td><td>block-ref</td><td>UUID of the query block</td></tr>
+          <tr><td><code>view-name::</code></td><td>string</td><td>Human-readable name</td></tr>
+          <tr><td><code>view-icon::</code></td><td>string</td><td>Lucide icon name</td></tr>
+          <tr><td><code>group-by::</code></td><td>property-key</td><td>Grouping property</td></tr>
+          <tr><td><code>sort::</code></td><td>JSON</td><td>Sort configuration</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Properties ── -->
+    <section class="section" id="properties">
+      <div class="section-label">12 — Reference</div>
+      <h2>Block properties</h2>
+      <p class="section-subtitle">Quilt's type system. Everything is a block with properties.</p>
+
+      <table>
+        <thead>
+          <tr><th>Property</th><th>Type</th><th>Values</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>type::</code></td><td>role</td><td><code>task</code>, <code>query</code>, <code>view</code>, <code>agent-run</code>, <code>comment</code></td></tr>
+          <tr><td><code>status::</code></td><td>select</td><td><code>todo</code>, <code>done</code>, <code>running</code>, <code>cancelled</code></td></tr>
+          <tr><td><code>priority::</code></td><td>select</td><td><code>A</code>, <code>B</code>, <code>C</code></td></tr>
+          <tr><td><code>due::</code></td><td>date</td><td>Date (supports <code>today</code>, <code>tomorrow</code>, <code>yesterday</code>)</td></tr>
+          <tr><td><code>dsl::</code></td><td>string</td><td>Query DSL (for <code>type:: query</code> blocks)</td></tr>
+          <tr><td><code>data-source::</code></td><td>block-ref</td><td>Source block UUID (for views)</td></tr>
+          <tr><td><code>view-type::</code></td><td>select</td><td><code>kanban</code>, <code>table</code>, <code>list</code>, <code>graph</code>, <code>cards</code>, <code>calendar</code>, <code>timeline</code></td></tr>
+          <tr><td><code>agent::</code></td><td>string</td><td>Agent name</td></tr>
+          <tr><td><code>model::</code></td><td>string</td><td>Model used</td></tr>
+          <tr><td><code>run-status::</code></td><td>select</td><td><code>Queued</code>, <code>Running</code>, <code>Completed</code>, <code>Failed</code>, <code>Cancelled</code></td></tr>
+          <tr><td><code>card-shape::</code></td><td>select</td><td><code>content</code>, <code>reference</code>, <code>presentation</code>, <code>article</code>, <code>note</code></td></tr>
+          <tr><td><code>level::</code></td><td>number</td><td>Heading level: <code>1</code>, <code>2</code>, <code>3</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ── Shortcuts ── -->
+    <section class="section" id="shortcuts">
+      <div class="section-label">13 — Reference</div>
+      <h2>Keyboard shortcuts</h2>
+
+      <table>
+        <thead>
+          <tr><th>Shortcut</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="kbd">Cmd Shift K</span></td><td>Open command palette</td></tr>
+          <tr><td><span class="kbd">Cmd Z</span></td><td>Undo last action</td></tr>
+          <tr><td><span class="kbd">Enter</span></td><td>Create sibling block</td></tr>
+          <tr><td><span class="kbd">Tab</span></td><td>Indent block (make child)</td></tr>
+          <tr><td><span class="kbd">Shift Tab</span></td><td>Un-indent block (make parent)</td></tr>
+          <tr><td><span class="kbd">/</span> at start</td><td>Open slash command menu</td></tr>
+          <tr><td><span class="kbd">Esc</span></td><td>Close menus and modals</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>
