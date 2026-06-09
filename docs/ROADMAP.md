@@ -132,26 +132,26 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 | 19 | AgentRun block role | — | 2 días | ✅ 06e28ad |
 | 20 | SavedView block role | #19 | 2 días | ✅ ses_15c8a3d |
 
-### Phase 3: Infra + Avanzado 🚧 EN PROGRESO
+### Phase 3: Infra + Avanzado ✅ COMPLETADO
 
 | # | Qué | Depende | Esfuerzo | Status |
 |---|-----|---------|----------|--------|
 | 21 | Session cache V1 (dedup api-client) | — | 1 día | ✅ 28afeb2 |
-| 22 | Saved/Recent searches | #20 ✅ | 1 día | 🔲 |
+| 22 | Saved/Recent searches | #20 ✅ | 1 día | ✅ 0dbabeb |
 | 23 | Graph Lens V1 (subgraph endpoint) | — | 2 días | ✅ 28afeb2 |
-| 24 | StrategySelector traits (determinístico) | — | 3 días | 🔲 |
-| 25 | "Save as View" desde search | #20 ✅ | 0.5 día | 🔲 |
-| 26 | StrategySelector WASM + hook | #24 | 2 días | 🔲 |
-| 27 | Graph Lens V2 (lens buttons) | #23 | 1.5 días | 🔲 |
+| 24 | StrategySelector traits (determinístico) | — | 3 días | ✅ 35af73a |
+| 25 | "Save as View" desde search | #20 ✅ | 0.5 día | ✅ 0dbabeb |
+| 26 | StrategySelector WASM + hook | #24 | 2 días | ✅ 2c78bec |
+| 27 | Graph Lens V2 (lens buttons) | #23 | 1.5 días | ✅ 2c78bec |
 
-### Phase 4: Re-grill Remedies
+### Phase 4: Re-grill Remedies 🚧 EN PROGRESO
 
-| # | Qué | Remedio |
-|---|-----|---------|
-| 28 | Editable Backlinks | Enrichment en handler, filtro DSL, whitelist |
-| 29 | Unlinked Ref Queue | Frontend-only, localStorage, PUT existente |
-| 30 | Template Contracts | Extraer diff de reapply.rs, MCP-only |
-| 31 | Template Doctor | Extender structure_gardener, versioning infra |
+| # | Qué | Remedio | Status |
+|---|-----|---------|--------|
+| 28 | Editable Backlinks | Enrichment en handler, filtro DSL, whitelist | ✅ 35af73a |
+| 29 | Unlinked Ref Queue | Frontend-only, localStorage, PUT existente | ✅ 35af73a |
+| 30 | Template Contracts | Extraer diff de reapply.rs, MCP-only | ✅ 35af73a |
+| 31 | Template Doctor | Extender structure_gardener, versioning infra | 🔲 |
 
 ### Diferido (V3+)
 
@@ -166,19 +166,14 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 ```
 Phase 0 ✅ COMPLETO
 Phase 1 ✅ COMPLETO
-Phase 2 ✅ COMPLETO (commit 28afeb2)
+Phase 2 ✅ COMPLETO
+Phase 3 ✅ COMPLETO (7/7 items, commits 28afeb2, 0dbabeb, 35af73a, 2c78bec)
 
-Phase 3 🚧 EN PROGRESO
-  #21 cache ───────────────────────────► ✅ 28afeb2
-  #23 graph V1 ───────────────────────► ✅ 28afeb2
-  #22 saved searches ──► #20 ✅ ───────────────────► 🔲
-  #25 save-as-view ──► #20 ✅ ───────────────────► 🔲
-  #24 strategy ─────────────────────────────────────► 🔲
-  #26 WASM hook ──► #24 ─────────────────────────► 🔲
-  #27 graph V2 ──► #23 ✅ ──────────────────────► 🔲
-
-Phase 4 🔲 PENDIENTE
-  #28-31 remedies
+Phase 4 🚧 EN PROGRESO
+  #28 editable backlinks ─────────────────────────────────────► ✅ 35af73a
+  #29 unlinked ref queue ────────────────────────────────────► ✅ 35af73a
+  #30 template contracts ─────────────────────────────────────► ✅ 35af73a
+  #31 template doctor ───────────────────────────────────────► 🔲
 ```
 
 ---
