@@ -24,6 +24,13 @@ pub struct RefRow {
     pub target_id: Uuid,
     /// The type of reference
     pub ref_type: RefType,
+    /// User-edited context override (Q028: Editable Backlinks).
+    ///
+    /// `None` means "no override" — the Backlinks panel falls back to
+    /// the source block's content snippet. `Some("")` and `Some("...")`
+    /// are meaningful: the former clears any default-derived text, the
+    /// latter is the user's custom snippet.
+    pub custom_context: Option<String>,
 }
 
 /// Repository trait for reference persistence.
@@ -82,4 +89,54 @@ pub trait RefRepository: Send + Sync {
         page_name: &str,
         page_id: Uuid,
     ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError>;
+
+    /// Set or clear the user-edited context override for a single reference
+    /// (Q028: Editable Backlinks).
+    ///
+    /// - `Some("...")` stores the custom snippet (or an empty string to
+    ///   override the default with an explicit blank).
+    /// - `None` clears the override — the Backlinks panel falls back to
+    ///   the source block's content snippet.
+    ///
+    /// Implementations should:
+    /// 1. Verify the reference `(source_id, target_id, ref_type)` exists.
+    /// 2. Return `Ok(false)` if the reference does not exist (caller
+    ///    maps that to a 404).
+    /// 3. Otherwise update the `custom_context` column and return `Ok(true)`.
+    async fn set_custom_context(
+        &self,
+        source_id: Uuid,
+        target_id: Uuid,
+        ref_type: RefType,
+        context: Option<&str>,
+    ) -> Result<bool, DomainError>;
+
+    /// Get the user-edited context override for a single reference.
+    ///
+    /// Returns `None` if the reference does not exist OR if no override
+    /// has been set. Callers that need to distinguish "no reference" from
+    /// "reference exists but no override" should combine this with
+    /// `get_forward_refs` or `get_backlinks`.
+    async fn get_custom_context(
+        &self,
+        source_id: Uuid,
+        target_id: Uuid,
+        ref_type: RefType,
+    ) -> Result<Option<String>, DomainError>;
+
+    /// Get the user-edited context overrides for every reference that
+    /// points AT a given target page.
+    ///
+    /// Returns a list of `(source_id, ref_type, custom_context)` tuples
+    /// for each ref that has a non-`None` `custom_context`. References
+    /// without an override are omitted — the caller can detect "no
+    /// override" by absence from the result.
+    ///
+    /// This is the bulk-read used by the page backlinks handler to
+    /// avoid N+1 queries when enriching a list of backlinks with
+    /// their overrides.
+    async fn get_custom_contexts_for_target(
+        &self,
+        target_id: Uuid,
+    ) -> Result<Vec<(Uuid, RefType, String)>, DomainError>;
 }

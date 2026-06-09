@@ -116,10 +116,7 @@ async fn app_with_n_roots(n: u32) -> Result<(axum::Router, Uuid)> {
     let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
     let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
     let state = AppState::new(pool, search_index, ref_service);
-    Ok((
-        quilt_server::routes::create_app(state),
-        page.id.into(),
-    ))
+    Ok((quilt_server::routes::create_app(state), page.id.into()))
 }
 
 /// Build a tree: `root` with two children `c1`, `c2`, where `c1`

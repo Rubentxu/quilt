@@ -1,0 +1,21 @@
+-- 007_add_ref_custom_context.sql
+--
+-- Add `custom_context` column to the `refs` table (ROADMAP Q028:
+-- Editable Backlinks). Each reference (source_id, target_id, ref_type)
+-- can carry a user-edited snippet that overrides the default context
+-- in the Backlinks panel.
+--
+-- This is an ADDITIVE migration — no data backfill, no row rewriting.
+-- Pre-existing refs get `NULL` which the Rust deserializer treats as
+-- "no override" — the Backlinks panel falls back to the source block's
+-- content snippet.
+--
+-- The column is `TEXT` (nullable) rather than `NOT NULL DEFAULT ''`
+-- because `NULL` is a meaningful semantic value here: it means "no
+-- override set, use the default". An empty string is also valid and
+-- means "override exists but is empty" (used to clear an override
+-- without re-fetching defaults).
+--
+-- Rollback: ALTER TABLE refs DROP COLUMN custom_context;
+
+ALTER TABLE refs ADD COLUMN custom_context TEXT;

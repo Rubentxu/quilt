@@ -222,6 +222,14 @@ export interface Backlink {
   sourceBlockId: string;
   sourcePageName: string;
   contentPreview: string;
+  /**
+   * The snippet shown in the Backlinks panel for this reference.
+   * Q028 (Editable Backlinks): the server returns the user-edited
+   * override when one is set, otherwise the source block's content
+   * snippet. The panel uses this field for display and as the
+   * starting value when the user opens the inline editor.
+   */
+  context: string;
 }
 
 // ──── Search results ─────────────────────────────────────────────

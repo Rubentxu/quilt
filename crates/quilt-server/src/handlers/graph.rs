@@ -249,34 +249,24 @@ where
         }
 
         // 1. Parent → child edges.
-        let children = block_repo
-            .get_children(current)
-            .await
-            .unwrap_or_default();
+        let children = block_repo.get_children(current).await.unwrap_or_default();
         for child in children {
             let child_id: Uuid = child.id.into();
             if !visited.contains(&child_id) {
                 // Resolve page metadata on demand.
                 if !page_meta.contains_key(&child.page_id.into()) {
                     if let Ok(Some(p)) = page_repo.get_by_id(child.page_id.into()).await {
-                        page_meta.insert(
-                            child.page_id.into(),
-                            (p.name, p.journal),
-                        );
+                        page_meta.insert(child.page_id.into(), (p.name, p.journal));
                     }
                 }
                 visited.insert(child_id);
                 graph.blocks.insert(child_id, child.clone());
-                graph
-                    .edges
-                    .push((current, child_id, "parent-child"));
+                graph.edges.push((current, child_id, "parent-child"));
                 queue.push_back((child_id, dist + 1));
             } else {
                 // Even if visited, record the edge if it was missed.
                 // Deduplicate edges below.
-                graph
-                    .edges
-                    .push((current, child_id, "parent-child"));
+                graph.edges.push((current, child_id, "parent-child"));
             }
         }
 
@@ -286,19 +276,13 @@ where
                 let target_id: Uuid = target_block.id.into();
                 if !visited.contains(&target_id) {
                     if !page_meta.contains_key(&target_block.page_id.into()) {
-                        if let Ok(Some(p)) =
-                            page_repo.get_by_id(target_block.page_id.into()).await
+                        if let Ok(Some(p)) = page_repo.get_by_id(target_block.page_id.into()).await
                         {
-                            page_meta.insert(
-                                target_block.page_id.into(),
-                                (p.name, p.journal),
-                            );
+                            page_meta.insert(target_block.page_id.into(), (p.name, p.journal));
                         }
                     }
                     visited.insert(target_id);
-                    graph
-                        .blocks
-                        .insert(target_id, target_block.clone());
+                    graph.blocks.insert(target_id, target_block.clone());
                     graph.edges.push((current, target_id, "ref"));
                     queue.push_back((target_id, dist + 1));
                 } else {
@@ -354,8 +338,7 @@ pub async fn get_lens(
 
     // 2. Parse focus. None / empty → empty graph (graceful).
     let focus_str = params.focus.as_deref().unwrap_or("").to_string();
-    let focus = Focus::parse(&focus_str)
-        .map_err(|e| AppError::BadRequest(e))?;
+    let focus = Focus::parse(&focus_str).map_err(|e| AppError::BadRequest(e))?;
 
     let Some(focus) = focus else {
         return Ok(Json(LensResponse {
@@ -484,7 +467,7 @@ pub async fn get_lens(
                 content: truncate(&b.content, 200),
                 page_id: b.page_id.to_string(),
                 page_name: String::new(), // filled below
-                is_journal: false,         // filled below
+                is_journal: false,        // filled below
                 has_properties: !b.properties.is_empty(),
             }
         })

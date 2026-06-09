@@ -17,6 +17,7 @@ pub mod query;
 pub mod schema;
 pub mod scoring;
 pub mod search;
+pub mod strategy;
 pub mod sync;
 pub mod types;
 

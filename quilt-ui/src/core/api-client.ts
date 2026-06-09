@@ -378,6 +378,45 @@ export const api = {
   getPageBacklinks: (name: string) =>
     cachedFetch<Backlink[]>('GET', `/pages/${encodeURIComponent(name)}/backlinks`, { pageName: name }),
 
+  /**
+   * Set or clear the user-edited context override for a single
+   * backlink. Q028 (Editable Backlinks).
+   *
+   * The `:blockId` is the UUID of the **source** block — the block
+   * whose content contains the `[[target]]` link. The target is
+   * identified by the current `targetPageName` (the page being
+   * viewed in the Backlinks panel).
+   *
+   * Pass `context: null` to clear the override; the panel will fall
+   * back to the source block's content snippet. Pass an empty
+   * string to explicitly blank out the snippet (same effect as
+   * `null` from the server's perspective — the GET endpoint will
+   * fall back to the default).
+   *
+   * The endpoint is intentionally NOT a `PUT` on
+   * `/pages/:name/backlinks` because a single source block can have
+   * multiple outgoing references — the URL must address the
+   * specific `(source, target)` pair.
+   */
+  updateReferenceContext: (params: {
+    sourceBlockId: string;
+    targetPageName: string;
+    context: string | null;
+  }): Promise<Backlink> =>
+    fetchJson<Backlink>(
+      `/references/${encodeURIComponent(params.sourceBlockId)}?targetPage=${encodeURIComponent(params.targetPageName)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ context: params.context }),
+      },
+    ).then(dto => {
+      // The backlinks list for the target page is now stale — drop it
+      // so the next read refetches. Use the same page-key the GET
+      // uses so we don't have to know the cache key format.
+      sessionCache.invalidatePage(params.targetPageName)
+      return dto
+    }),
+
   // Blocks
   createBlock: async (data: CreateBlockRequest): Promise<Block> => {
     const raw = await fetchJson<RawBlock>(`/blocks`, {

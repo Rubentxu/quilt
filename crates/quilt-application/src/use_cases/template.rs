@@ -58,6 +58,32 @@ pub trait TemplateUseCases: Send + Sync {
         &self,
         template_name: &str,
     ) -> Result<Option<SchemaPack>, ApplicationError>;
+
+    /// Get the schema for a template by its page UUID (Q030).
+    ///
+    /// This is the variant used by the contract tools, which need to
+    /// resolve a template by id (the same id the agent has on hand
+    /// from `quilt_list_templates` metadata). The default
+    /// implementation enumerates `list_templates` and returns the
+    /// first whose page id matches.
+    async fn get_template_schema_by_id(
+        &self,
+        template_id: Uuid,
+    ) -> Result<Option<TemplateSchema>, ApplicationError> {
+        let summaries = self.list_templates().await?;
+        for s in summaries {
+            let schema = match self.get_template_schema(&s.name).await? {
+                Some(sch) => sch,
+                None => continue,
+            };
+            if let Some(first) = schema.blocks.first() {
+                if first.page_id == template_id {
+                    return Ok(Some(schema));
+                }
+            }
+        }
+        Ok(None)
+    }
 }
 
 /// Summary of one template page — what the MCP tool returns to the

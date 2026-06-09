@@ -21,6 +21,9 @@
 
 use std::sync::Arc;
 
+use quilt_application::templates::contract::{
+    ApplyTemplateWithContractUseCase, ApplyTemplateWithContractUseCaseImpl,
+};
 use quilt_application::templates::reapply::{ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
@@ -69,8 +72,16 @@ async fn setup_server() -> (McpServer, SqlitePool) {
         page_repo.clone(),
         block_repo.clone(),
     ));
+    let concrete_tuc: TemplateUseCasesImpl<SqlitePageRepository, SqliteBlockRepository> =
+        TemplateUseCasesImpl::new(page_repo.clone(), block_repo.clone());
     let reapply_use_cases: Arc<dyn ReapplyTemplateUseCase> = Arc::new(
-        ReapplyTemplateUseCaseImpl::new(template_use_cases.clone(), block_repo.clone()),
+        ReapplyTemplateUseCaseImpl::new(Arc::new(concrete_tuc), block_repo.clone()),
+    );
+    let apply_with_contract_use_cases: Arc<dyn ApplyTemplateWithContractUseCase> = Arc::new(
+        ApplyTemplateWithContractUseCaseImpl::new(
+            template_use_cases.clone(),
+            block_repo.clone(),
+        ),
     );
 
     let search_use_cases = Arc::new(SearchUseCasesImpl::new().with_search_service(Arc::new(
@@ -83,8 +94,11 @@ async fn setup_server() -> (McpServer, SqlitePool) {
     let retrieval_handler = RetrievalToolHandler::new(search_use_cases.clone());
     let temporal_handler = TemporalToolHandler::new(search_use_cases.clone());
     let graph_handler = GraphToolHandler::new(block_use_cases.clone());
-    let template_handler =
-        TemplateToolHandler::new(template_use_cases.clone(), reapply_use_cases.clone());
+        let template_handler = TemplateToolHandler::new(
+            template_use_cases.clone(),
+            reapply_use_cases.clone(),
+            apply_with_contract_use_cases.clone(),
+        );
     // handler list. This contract test uses a focused subset of handlers
     // (no SystemToolHandler) so the tool count is 20 here, while the
     // exercised by the contract tests below just like every other tool.
@@ -113,7 +127,8 @@ async fn setup_server() -> (McpServer, SqlitePool) {
 async fn test_no_handler_serializes_top_level_evidence_key() {
     let (server, _pool) = setup_server().await;
 
-    // Get the list of registered tools (17 live tools per design).
+    // Get the list of registered tools (17 live tools per design, +3
+    // contract tools from Q030).
     let tools_response = server.handle_request(McpRequest::ListTools).await;
     let tools = match tools_response {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
@@ -121,8 +136,8 @@ async fn test_no_handler_serializes_top_level_evidence_key() {
     };
     assert_eq!(
         tools.len(),
-        19,
-        "Expected exactly 19 live tools (14 base + 3 retrieval-graph + 2 template)"
+        22,
+        "Expected exactly 22 live tools (19 base + 3 contract)"
     );
 
     // For each tool, call it (with safe empty args) and inspect the
@@ -194,7 +209,7 @@ async fn test_every_response_carries_meta_evidence() {
         quilt_mcp::protocol::McpResponse::ToolsList(r) => r.tools,
         _ => panic!("Expected ToolsList response"),
     };
-    assert_eq!(tools.len(), 19);
+    assert_eq!(tools.len(), 22);
 
     let mut missing = Vec::new();
     for tool in &tools {

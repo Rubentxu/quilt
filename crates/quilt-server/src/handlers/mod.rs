@@ -12,6 +12,7 @@ pub mod navigate;
 pub mod pages;
 pub mod properties;
 pub mod query;
+pub mod references;
 pub mod search;
 pub mod settings;
 pub mod templates;

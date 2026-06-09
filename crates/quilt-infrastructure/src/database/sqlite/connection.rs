@@ -242,12 +242,32 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
             target_id BLOB NOT NULL,
             ref_type TEXT NOT NULL CHECK(ref_type IN ('page_ref','block_ref','tag','alias')),
             created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),
+            custom_context TEXT,
             PRIMARY KEY (source_id, target_id, ref_type)
         )
         "#,
     )
     .execute(pool)
     .await?;
+
+    // Migration 007: add `custom_context` column to `refs` (Q028
+    // Editable Backlinks). Additive: no data backfill, no row
+    // rewriting. Pre-existing refs get `NULL` which the Rust
+    // deserializer treats as "no override". Idempotent: if the
+    // column already exists, this errors with "duplicate column"
+    // but we catch and ignore that case.
+    match sqlx::query("ALTER TABLE refs ADD COLUMN custom_context TEXT")
+        .execute(pool)
+        .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+        }
+    }
 
     sqlx::query(
         r#"

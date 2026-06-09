@@ -6,6 +6,7 @@ mod file;
 mod journal;
 mod page;
 mod tag;
+mod template_contract;
 mod user_settings;
 
 pub use asset::Asset;
@@ -14,4 +15,7 @@ pub use file::File;
 pub use journal::Journal;
 pub use page::{Page, PageCreate};
 pub use tag::Tag;
+pub use template_contract::{
+    ContractError, PropertyKey, TemplateContract, TemplateContractBuilder, TemplateLayout, Version,
+};
 pub use user_settings::UserSettings;

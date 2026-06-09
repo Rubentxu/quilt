@@ -14,10 +14,12 @@ use tracing::instrument;
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
-use quilt_domain::repositories::{BlockRepository, PageRepository, SettingsRepository};
+use quilt_domain::repositories::{
+    BlockRepository, PageRepository, RefRepository, SettingsRepository,
+};
 use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository,
+    SqliteBlockRepository, SqlitePageRepository, SqliteRefRepository,
 };
 
 /// A page returned to the frontend
@@ -121,7 +123,11 @@ pub async fn get_page_unlinked_references(
         dtos.push(BacklinkDto {
             source_block_id: source_block_id.to_string(),
             source_page_name,
-            content_preview,
+            content_preview: content_preview.clone(),
+            // Unlinked references have no `refs` row, so there is no
+            // override to read — `context` falls back to the
+            // content snippet, matching the GET-backlinks behavior.
+            context: content_preview,
         });
     }
 
@@ -283,6 +289,14 @@ pub struct BacklinkDto {
     pub source_page_name: String,
     /// Content preview of the source block (first ~100 chars)
     pub content_preview: String,
+    /// The snippet shown in the Backlinks panel for this reference.
+    ///
+    /// Q028 (Editable Backlinks): when the user has set a custom
+    /// context override via `PUT /api/v1/references/:blockId`, this
+    /// field reflects that override. Otherwise, it falls back to the
+    /// source block's `contentPreview` so the panel always has
+    /// something to render.
+    pub context: String,
 }
 
 /// GET /api/v1/pages/:name/backlinks
@@ -299,6 +313,7 @@ pub async fn get_page_backlinks(
         quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository::new(
             state.pool.clone(),
         );
+    let ref_repo = SqliteRefRepository::new(state.pool.clone());
 
     // Look up the page by name
     let page = page_repo
@@ -316,6 +331,21 @@ pub async fn get_page_backlinks(
     if backlinks.is_empty() {
         return Ok(Json(Vec::new()));
     }
+
+    // Q028 (Editable Backlinks): bulk-fetch every custom-context
+    // override for the target page in a single SQL query so the
+    // per-source enrichment below is an in-memory map lookup, not
+    // an N+1 round-trip. References without an override (no row
+    // in the result) fall back to the source block's content
+    // snippet.
+    let overrides = ref_repo
+        .get_custom_contexts_for_target(page.id)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let overrides_by_source: HashMap<Uuid, String> = overrides
+        .into_iter()
+        .map(|(source, _ref_type, ctx)| (source, ctx))
+        .collect();
 
     // Enrich backlinks with source block content and page names
     let mut dtos = Vec::with_capacity(backlinks.len());
@@ -337,13 +367,22 @@ pub async fn get_page_backlinks(
             let content_preview = if plain_text.len() > 100 {
                 format!("{}...", &plain_text[..100])
             } else {
-                plain_text
+                plain_text.clone()
             };
+
+            // `context` falls back to the source block's content snippet
+            // when no override is set. An empty-string override stays
+            // empty (the user explicitly cleared the text).
+            let context = overrides_by_source
+                .get(source_id)
+                .cloned()
+                .unwrap_or(content_preview.clone());
 
             dtos.push(BacklinkDto {
                 source_block_id: source_id.to_string(),
                 source_page_name,
                 content_preview,
+                context,
             });
         }
     }

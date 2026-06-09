@@ -115,11 +115,7 @@ pub trait BlockRepository: Send + Sync {
     /// This is distinct from [`list_by_property`](Self::list_by_property)
     /// which requires the value to match exactly. For the lens use
     /// case we only care that the key exists.
-    async fn list_by_property_key(
-        &self,
-        key: &str,
-        limit: u32,
-    ) -> Result<Vec<Block>, DomainError>;
+    async fn list_by_property_key(&self, key: &str, limit: u32) -> Result<Vec<Block>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods

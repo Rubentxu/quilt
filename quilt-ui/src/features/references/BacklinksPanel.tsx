@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, Copy, ChevronDown, ChevronRight, Link2 } from 'lucide-react'
+import { Search, Copy, ChevronDown, ChevronRight, Link2, Pencil, Check, X } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { api } from '@core/api-client'
 import type { Backlink } from '@shared/types/api'
 import toast from 'react-hot-toast'
+import { useUnlinkedRefQueue } from './useUnlinkedRefQueue'
+import { UnlinkedRefQueue } from './UnlinkedRefQueue'
 
 interface BacklinksPanelProps {
   pageName: string | null
@@ -27,6 +29,13 @@ export function BacklinksPanel({ pageName, isOpen, defaultExpanded = false }: Ba
   const [collapsedPages, setCollapsedPages] = useState<Set<string>>(new Set())
   const [expanded, setExpanded] = useState(defaultExpanded)
   const navigate = useNavigate()
+
+  // Unlinked reference queue (Q029). The hook is enabled only when
+  // the panel is actually visible — there's no point scanning for
+  // mentions on a hidden sidebar. We still call the hook
+  // unconditionally (rules-of-hooks) and pass `null` when disabled
+  // so the hook short-circuits internally.
+  const unlinked = useUnlinkedRefQueue(isOpen ? pageName : null)
 
   useEffect(() => {
     if (!isOpen || !pageName) return
@@ -104,6 +113,69 @@ export function BacklinksPanel({ pageName, isOpen, defaultExpanded = false }: Ba
       toast.success('Link copied')
     } catch {
       toast.error('Failed to copy link')
+    }
+  }
+
+  // ─── Q028: Editable Backlinks state ─────────────────────────────
+  //
+  // The panel tracks which single row is currently being edited
+  // (by sourceBlockId) and the in-progress text in that row's
+  // textarea. We intentionally keep the editing state at the
+  // panel level rather than in each row so a single shared
+  // `BacklinkItem` sub-component is the only place that renders
+  // edit affordances, but the click and save logic stays close
+  // to the data.
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null)
+  const [editingDraft, setEditingDraft] = useState<string>('')
+  const [savingBlockId, setSavingBlockId] = useState<string | null>(null)
+
+  function startEdit(ref: Backlink) {
+    setEditingBlockId(ref.sourceBlockId)
+    // Pre-fill with the current `context` (either the user's override
+    // or the default snippet). The textarea is bound to `editingDraft`
+    // so the user can freely edit before saving.
+    setEditingDraft(ref.context)
+  }
+
+  function cancelEdit() {
+    setEditingBlockId(null)
+    setEditingDraft('')
+  }
+
+  async function saveEdit(ref: Backlink) {
+    if (savingBlockId) return // ignore double-clicks
+    setSavingBlockId(ref.sourceBlockId)
+    // Empty string and whitespace-only are both treated as "clear":
+    // the server stores NULL and the panel falls back to the default
+    // snippet. This matches the server's behavior of treating an
+    // empty string as a clear (see editable_backlinks_api.rs).
+    const trimmed = editingDraft.trim()
+    const payload = trimmed.length === 0 ? null : trimmed
+
+    try {
+      const updated = await api.updateReferenceContext({
+        sourceBlockId: ref.sourceBlockId,
+        targetPageName: pageName ?? '',
+        context: payload,
+      })
+      // Optimistic-ish local update: replace the row's DTO so the
+      // panel reflects the new value without waiting for the next
+      // refetch. The api-client already invalidated the page's
+      // backlinks cache, so any future re-fetch will return the
+      // server-authoritative version.
+      setBacklinks(prev =>
+        prev.map(b =>
+          b.sourceBlockId === ref.sourceBlockId ? updated : b,
+        ),
+      )
+      setEditingBlockId(null)
+      setEditingDraft('')
+      toast.success(payload === null ? 'Context cleared' : 'Context saved')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to save context'
+      toast.error(message)
+    } finally {
+      setSavingBlockId(null)
     }
   }
 
@@ -361,65 +433,229 @@ export function BacklinksPanel({ pageName, isOpen, defaultExpanded = false }: Ba
 
                     {/* Reference items */}
                     {!isCollapsed &&
-                      refs.map((ref, i) => (
-                        <div
-                          key={ref.sourceBlockId + i}
-                          onClick={() =>
-                            navigate({
-                              to: '/page/$name',
-                              params: { name: ref.sourcePageName },
-                            })
-                          }
-                          style={{
-                            padding: 'var(--space-3) var(--space-4)',
-                            cursor: 'pointer',
-                            fontSize: '13px',
-                            color: 'var(--color-text-secondary)',
-                            borderTop: '1px solid var(--color-border)',
-                            transition:
-                              'background var(--motion-fast) var(--ease-standard)',
-                          }}
-                          onMouseEnter={(e) =>
-                            (e.currentTarget.style.background =
-                              'var(--color-surface-subtle)')
-                          }
-                          onMouseLeave={(e) =>
-                            (e.currentTarget.style.background = 'transparent')
-                          }
-                        >
+                      refs.map((ref, i) => {
+                        const isEditing = editingBlockId === ref.sourceBlockId
+                        const isSaving = savingBlockId === ref.sourceBlockId
+                        return (
                           <div
+                            key={ref.sourceBlockId + i}
+                            data-testid={`backlinks-item-${ref.sourceBlockId}`}
+                            onClick={() => {
+                              // Q028: while editing, the row click
+                              // is a no-op so the user can interact
+                              // with the textarea / buttons without
+                              // accidentally navigating away.
+                              if (isEditing) return
+                              navigate({
+                                to: '/page/$name',
+                                params: { name: ref.sourcePageName },
+                              })
+                            }}
                             style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 'var(--space-2)',
+                              padding: 'var(--space-3) var(--space-4)',
+                              cursor: isEditing ? 'default' : 'pointer',
+                              fontSize: '13px',
+                              color: 'var(--color-text-secondary)',
+                              borderTop: '1px solid var(--color-border)',
+                              transition:
+                                'background var(--motion-fast) var(--ease-standard)',
+                            }}
+                            onMouseEnter={(e) => {
+                              if (!isEditing)
+                                e.currentTarget.style.background =
+                                  'var(--color-surface-subtle)'
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!isEditing)
+                                e.currentTarget.style.background = 'transparent'
                             }}
                           >
-                            <Link2
-                              size={11}
-                              style={{
-                                color: 'var(--color-text-muted)',
-                                flexShrink: 0,
-                              }}
-                            />
-                            <span
-                              style={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                lineHeight: 1.4,
-                              }}
-                            >
-                              {ref.contentPreview}
-                            </span>
+                            {isEditing ? (
+                              // ── Inline editor ──────────────────
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  gap: 'var(--space-2)',
+                                }}
+                              >
+                                <textarea
+                                  aria-label="Edit context"
+                                  value={editingDraft}
+                                  onChange={(e) => setEditingDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    // Cmd/Ctrl+Enter saves — matches
+                                    // the convention in the block
+                                    // editor. Escape cancels.
+                                    if (
+                                      (e.metaKey || e.ctrlKey) &&
+                                      e.key === 'Enter'
+                                    ) {
+                                      e.preventDefault()
+                                      void saveEdit(ref)
+                                    } else if (e.key === 'Escape') {
+                                      e.preventDefault()
+                                      cancelEdit()
+                                    }
+                                  }}
+                                  autoFocus
+                                  rows={3}
+                                  style={{
+                                    width: '100%',
+                                    resize: 'vertical',
+                                    minHeight: '60px',
+                                    padding: '6px 8px',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: 'var(--radius-sm)',
+                                    background: 'var(--color-surface)',
+                                    color: 'var(--color-text-primary)',
+                                    fontSize: '13px',
+                                    lineHeight: 1.4,
+                                    fontFamily: 'inherit',
+                                    outline: 'none',
+                                    boxSizing: 'border-box',
+                                  }}
+                                />
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    gap: 'var(--space-1)',
+                                    justifyContent: 'flex-end',
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={cancelEdit}
+                                    disabled={isSaving}
+                                    aria-label="Cancel"
+                                    title="Cancel (Esc)"
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '4px 8px',
+                                      border: '1px solid var(--color-border)',
+                                      borderRadius: 'var(--radius-sm)',
+                                      background: 'var(--color-surface)',
+                                      color: 'var(--color-text-secondary)',
+                                      fontSize: '12px',
+                                      cursor: isSaving ? 'not-allowed' : 'pointer',
+                                      opacity: isSaving ? 0.5 : 1,
+                                    }}
+                                  >
+                                    <X size={11} />
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void saveEdit(ref)}
+                                    disabled={isSaving}
+                                    aria-label="Save"
+                                    title="Save (⌘+Enter)"
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '4px',
+                                      padding: '4px 8px',
+                                      border: '1px solid var(--color-accent, var(--color-text-primary))',
+                                      borderRadius: 'var(--radius-sm)',
+                                      background: 'var(--color-accent, var(--color-text-primary))',
+                                      color: 'var(--color-surface)',
+                                      fontSize: '12px',
+                                      cursor: isSaving ? 'not-allowed' : 'pointer',
+                                      opacity: isSaving ? 0.5 : 1,
+                                    }}
+                                  >
+                                    <Check size={11} />
+                                    {isSaving ? 'Saving…' : 'Save'}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              // ── Read-only row ──────────────────
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'flex-start',
+                                  gap: 'var(--space-2)',
+                                }}
+                              >
+                                <Link2
+                                  size={11}
+                                  style={{
+                                    color: 'var(--color-text-muted)',
+                                    flexShrink: 0,
+                                    marginTop: '2px',
+                                  }}
+                                />
+                                <span
+                                  data-testid={`backlinks-item-context-${ref.sourceBlockId}`}
+                                  style={{
+                                    flex: 1,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 3,
+                                    WebkitBoxOrient: 'vertical',
+                                    lineHeight: 1.4,
+                                  }}
+                                >
+                                  {ref.context}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    startEdit(ref)
+                                  }}
+                                  aria-label="Edit context"
+                                  title="Edit context"
+                                  data-testid={`backlinks-item-edit-${ref.sourceBlockId}`}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--color-text-muted)',
+                                    padding: '2px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    borderRadius: 'var(--radius-sm)',
+                                    flexShrink: 0,
+                                    opacity: 0.6,
+                                    transition: 'opacity var(--motion-fast) var(--ease-standard)',
+                                  }}
+                                  onMouseEnter={(e) =>
+                                    (e.currentTarget.style.opacity = '1')
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.opacity = '0.6')
+                                  }
+                                >
+                                  <Pencil size={11} />
+                                </button>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        )
+                      })}
                   </div>
                 )
               })}
             </div>
+          )}
+
+          {/* Unlinked reference queue (Q029) — appears below the
+              linked-references list, hidden when the queue is empty
+              and not loading. */}
+          {pageName && (
+            <UnlinkedRefQueue
+              pageName={pageName}
+              queue={unlinked.queue}
+              loading={unlinked.loading}
+              onLink={unlinked.link}
+              onDismiss={unlinked.dismiss}
+            />
           )}
         </div>
       )}

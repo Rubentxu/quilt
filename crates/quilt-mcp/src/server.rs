@@ -213,6 +213,9 @@ mod tests {
         query::QueryToolHandler, resource::GraphResourceProvider, retrieval::RetrievalToolHandler,
         system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
+    use quilt_application::templates::contract::{
+        ApplyTemplateWithContractUseCase, ApplyTemplateWithContractUseCaseImpl,
+    };
     use quilt_application::templates::reapply::{
         ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl,
     };
@@ -266,6 +269,11 @@ mod tests {
                 Arc::new(concrete_template_use_cases),
                 block_repo.clone(),
             ));
+        let apply_with_contract_use_cases: Arc<dyn ApplyTemplateWithContractUseCase> =
+            Arc::new(ApplyTemplateWithContractUseCaseImpl::new(
+                template_use_cases.clone(),
+                block_repo.clone(),
+            ));
 
         let block_handler = BlockToolHandler::new(block_use_cases.clone());
         let page_handler = PageToolHandler::new(page_use_cases.clone());
@@ -277,8 +285,11 @@ mod tests {
         let retrieval_handler = RetrievalToolHandler::new(search_use_cases.clone());
         let temporal_handler = TemporalToolHandler::new(search_use_cases.clone());
         let graph_handler = GraphToolHandler::new(block_use_cases.clone());
-        let template_handler =
-            TemplateToolHandler::new(template_use_cases.clone(), reapply_use_cases.clone());
+        let template_handler = TemplateToolHandler::new(
+            template_use_cases.clone(),
+            reapply_use_cases.clone(),
+            apply_with_contract_use_cases.clone(),
+        );
         let system_handler = SystemToolHandler::new();
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
@@ -341,11 +352,14 @@ mod tests {
                 // QueryToolHandler: quilt_query, quilt_search (2)
                 // TemplateToolHandler: quilt_list_templates, quilt_get_template_schema,
                 //                      quilt_reapply_template, quilt_get_template_schema_pack (4) — ADR-0007 + F20
+                //                      + Q030: quilt_get_template_contract,
+                //                              quilt_list_templates_with_contracts,
+                //                              quilt_apply_template_with_contract (3)
                 // RetrievalToolHandler: quilt_query_retrieve (1) — G5
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                assert_eq!(result.tools.len(), 21);
+                assert_eq!(result.tools.len(), 24);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(

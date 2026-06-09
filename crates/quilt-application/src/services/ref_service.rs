@@ -339,6 +339,7 @@ mod tests {
                     source_id,
                     target_id: *target,
                     ref_type: *ref_type,
+                    custom_context: None,
                 });
             }
             Ok(())
@@ -364,6 +365,7 @@ mod tests {
                     source_id,
                     target_id,
                     ref_type,
+                    custom_context: None,
                 });
             }
             Ok(())
@@ -376,6 +378,57 @@ mod tests {
         ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
             // Mock returns empty — unlinked refs require full-text search
             Ok(Vec::new())
+        }
+
+        async fn set_custom_context(
+            &self,
+            source_id: Uuid,
+            target_id: Uuid,
+            ref_type: RefType,
+            context: Option<&str>,
+        ) -> Result<bool, DomainError> {
+            let mut stored = self.refs.lock().unwrap();
+            let row = stored.iter_mut().find(|r| {
+                r.source_id == source_id && r.target_id == target_id && r.ref_type == ref_type
+            });
+            match row {
+                Some(r) => {
+                    r.custom_context = context.map(str::to_string);
+                    Ok(true)
+                }
+                None => Ok(false),
+            }
+        }
+
+        async fn get_custom_context(
+            &self,
+            source_id: Uuid,
+            target_id: Uuid,
+            ref_type: RefType,
+        ) -> Result<Option<String>, DomainError> {
+            let stored = self.refs.lock().unwrap();
+            Ok(stored
+                .iter()
+                .find(|r| {
+                    r.source_id == source_id && r.target_id == target_id && r.ref_type == ref_type
+                })
+                .and_then(|r| r.custom_context.clone()))
+        }
+
+        async fn get_custom_contexts_for_target(
+            &self,
+            target_id: Uuid,
+        ) -> Result<Vec<(Uuid, RefType, String)>, DomainError> {
+            let stored = self.refs.lock().unwrap();
+            Ok(stored
+                .iter()
+                .filter(|r| r.target_id == target_id)
+                .filter_map(|r| {
+                    r.custom_context
+                        .as_ref()
+                        .map(|c| (r.source_id, r.ref_type, c.clone()))
+                })
+                .collect())
         }
     }
 

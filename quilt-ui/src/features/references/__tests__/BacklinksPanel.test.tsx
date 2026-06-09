@@ -4,12 +4,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { BacklinksPanel } from '../BacklinksPanel'
 
 const mockGetPageBacklinks = vi.fn()
+const mockListPages = vi.fn()
+const mockSearchBlocks = vi.fn()
+const mockUpdateBlock = vi.fn()
 const mockNavigate = vi.fn()
 const mockWriteText = vi.fn().mockResolvedValue(undefined)
 
 vi.mock('@core/api-client', () => ({
   api: {
     getPageBacklinks: (name: string) => mockGetPageBacklinks(name),
+    listPages: () => mockListPages(),
+    searchBlocks: (q: string, limit?: number) => mockSearchBlocks(q, limit),
+    updateBlock: (id: string, data: { content: string }) => mockUpdateBlock(id, data),
   },
 }))
 
@@ -35,8 +41,15 @@ function makeBacklinks(count: number, sourcePrefix = 'source-page') {
 describe('BacklinksPanel — G6: auto-shown on every page', () => {
   beforeEach(() => {
     mockGetPageBacklinks.mockReset()
+    mockListPages.mockReset()
+    mockSearchBlocks.mockReset()
+    mockUpdateBlock.mockReset()
     mockNavigate.mockReset()
     mockWriteText.mockReset()
+    // Default: empty graph so the unlinked-ref hook stays quiet
+    // and resolves with no extra state updates that escape `act()`.
+    mockListPages.mockResolvedValue([])
+    mockSearchBlocks.mockResolvedValue([])
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: mockWriteText },
@@ -192,5 +205,130 @@ describe('BacklinksPanel — G6: auto-shown on every page', () => {
     expect(
       screen.getByText(/This page is not linked from other notes/i),
     ).toBeInTheDocument()
+  })
+})
+
+describe('BacklinksPanel — Q029: unlinked ref queue integration', () => {
+  beforeEach(() => {
+    mockGetPageBacklinks.mockReset()
+    mockListPages.mockReset()
+    mockSearchBlocks.mockReset()
+    mockUpdateBlock.mockReset()
+    mockNavigate.mockReset()
+    mockWriteText.mockReset()
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: mockWriteText },
+    })
+  })
+
+  it('does NOT render the queue section when pageName is null', () => {
+    render(<BacklinksPanel pageName={null} isOpen={true} defaultExpanded={true} />)
+    expect(screen.queryByTestId('unlinked-ref-queue')).not.toBeInTheDocument()
+  })
+
+  it('renders the queue section with count "0" when the workspace is empty', async () => {
+    mockGetPageBacklinks.mockResolvedValue([])
+    mockListPages.mockResolvedValue([])
+    mockSearchBlocks.mockResolvedValue([])
+
+    render(<BacklinksPanel pageName="demo" isOpen={true} defaultExpanded={true} />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('unlinked-ref-queue-count')).toHaveTextContent('0'),
+    )
+  })
+
+  it('populates the queue with a candidate when the scan finds an unlinked mention', async () => {
+    mockGetPageBacklinks.mockResolvedValue([])
+    mockListPages.mockResolvedValue([
+      { id: 'p-1', name: 'demo', title: null, journal: false, journalDay: null, createdAt: '' },
+    ])
+    mockSearchBlocks.mockResolvedValue([
+      {
+        blockId: 'b-99',
+        pageId: 'p-other',
+        pageName: 'Other',
+        content: 'look at demo for the answer',
+        snippet: '',
+        score: 1,
+      },
+    ])
+
+    render(<BacklinksPanel pageName="demo" isOpen={true} defaultExpanded={true} />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('unlinked-ref-queue-count')).toHaveTextContent('1'),
+    )
+
+    // Expand the queue section so we can find the row.
+    await userEvent.setup().click(screen.getByTestId('unlinked-ref-queue-header'))
+
+    expect(screen.getByTestId('unlinked-ref-queue-item')).toBeInTheDocument()
+  })
+
+  it('"Link" action PUTs the updated content to the block and removes the candidate', async () => {
+    const user = userEvent.setup()
+    mockGetPageBacklinks.mockResolvedValue([])
+    mockListPages.mockResolvedValue([
+      { id: 'p-1', name: 'demo', title: null, journal: false, journalDay: null, createdAt: '' },
+    ])
+    mockSearchBlocks.mockResolvedValue([
+      {
+        blockId: 'b-99',
+        pageId: 'p-other',
+        pageName: 'Other',
+        content: 'look at demo for the answer',
+        snippet: '',
+        score: 1,
+      },
+    ])
+    mockUpdateBlock.mockResolvedValue({} as any)
+
+    render(<BacklinksPanel pageName="demo" isOpen={true} defaultExpanded={true} />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('unlinked-ref-queue-count')).toHaveTextContent('1'),
+    )
+    await user.click(screen.getByTestId('unlinked-ref-queue-header'))
+
+    await user.click(screen.getByTestId('unlinked-ref-queue-link'))
+
+    await waitFor(() => expect(mockUpdateBlock).toHaveBeenCalledWith('b-99', { content: 'look at [[demo]] for the answer' }))
+    await waitFor(() =>
+      expect(screen.getByTestId('unlinked-ref-queue-count')).toHaveTextContent('0'),
+    )
+  })
+
+  it('"Dismiss" action removes the candidate without calling the API', async () => {
+    const user = userEvent.setup()
+    mockGetPageBacklinks.mockResolvedValue([])
+    mockListPages.mockResolvedValue([
+      { id: 'p-1', name: 'demo', title: null, journal: false, journalDay: null, createdAt: '' },
+    ])
+    mockSearchBlocks.mockResolvedValue([
+      {
+        blockId: 'b-99',
+        pageId: 'p-other',
+        pageName: 'Other',
+        content: 'look at demo for the answer',
+        snippet: '',
+        score: 1,
+      },
+    ])
+
+    render(<BacklinksPanel pageName="demo" isOpen={true} defaultExpanded={true} />)
+
+    await waitFor(() =>
+      expect(screen.getByTestId('unlinked-ref-queue-count')).toHaveTextContent('1'),
+    )
+    await user.click(screen.getByTestId('unlinked-ref-queue-header'))
+
+    await user.click(screen.getByTestId('unlinked-ref-queue-dismiss'))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('unlinked-ref-queue-count')).toHaveTextContent('0'),
+    )
+    expect(mockUpdateBlock).not.toHaveBeenCalled()
   })
 })

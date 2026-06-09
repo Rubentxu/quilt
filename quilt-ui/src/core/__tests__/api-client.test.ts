@@ -488,6 +488,8 @@ describe('api surface (P0 — only mounted routes)', () => {
       'getBlockProperties', 'setBlockProperty', 'deleteBlockProperty',
       // Property keys (cross-block aggregation endpoint)
       'listPropertyKeys',
+      // Q028: Editable Backlinks
+      'updateReferenceContext',
       // Templates
       'listTemplates', 'getTemplateSchema',
       // Graph Lens V1
