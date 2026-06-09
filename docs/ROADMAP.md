@@ -1,28 +1,33 @@
 # Quilt — Action Roadmap
 
 > Generated: 2026-06-07
+> Last updated: 2026-06-09 (post Phase 1-2 sprint)
 > Sources: auto-grill 30 cycles, ux-workflow-portfolio-analysis.md, 7 ADR drafts, CONTEXT.md patch
+
+**Leyenda**: ✅ completado | 🚧 en progreso | 🔲 pendiente | `commit` = commit SHA
 
 ---
 
 ## 0. Estado Actual
 
-### Funciona
-- Backend: Axum + SQLite + FTS5 + MCP tools + property CRUD
+### ✅ Funciona (post Phase 0-1)
+- Backend: Axum + SQLite + FTS5 + MCP tools + property CRUD + `blockType` persistence
 - Frontend: React 19 + TipTap + sidebar + block editor + search modal + templates
 - WASM: quilt-core compila a wasm32-unknown-unknown
 - Dev: `just dev` — hot reload completo
+- Home redirect `/` → journal de hoy ✅
+- Graph dark mode con `data-theme` ✅
+- CutBlock + UndoManager (Cmd+Z) ✅
+- CommandRegistry + Cmd+Shift+K palette ✅
+- Property keys desde API real ✅
 
-### Roto (P0)
-- `/` devuelve null (sin redirect a journal)
-- QueryPage envía `QueryAst` inválido via `as any`
-- API client llama a rutas no montadas (SSE, analysis, schema-pack)
-- Graph dark mode detecta `.dark` pero la app usa `data-theme`
-- `cognitive.rs` no compila — 4 AppState fields faltantes
-- CutBlock no tiene undo
-- **`blockType` no persiste** — el frontend envía `blockType` pero el backend (`UpdateBlockRequest`) no lo tiene. 11 slash commands (`/h1`, `/code`, `/quote`, etc.) parecen funcionar en sesión pero se pierden al recargar
+### Bloqueantes resueltos
+- `blockType` persiste en backend ✅ (Phase 0 #6)
+- `cognitive.rs` eliminado ✅ (Phase 1 #10)
+- API client alineado con rutas montadas ✅ (Phase 0 #4)
+- QueryPage roto eliminado ✅ (Phase 0 #2)
 
-### Slash commands `/` — YA FUNCIONAN (29 registrados)
+### Slash commands `/` — 32 registrados (Phase 1 + Phase 2)
 
 Infraestructura: `SlashActionRegistry` en `slashRegistry.tsx`, lazy-loaded desde `BlockRow`.
 
@@ -35,21 +40,8 @@ Infraestructura: `SlashActionRegistry` en `slashRegistry.tsx`, lazy-loaded desde
 | References | `/page reference` `/block embed` | Inserta `[[` / `((` |
 | Templates | `/new from template` | Wizard: pick → create → navigate |
 | Comments | `/add comment` | `onAddComment` callback |
-| Block types | `/text` `/h1`-`/h3` `/bullet` `/numbered` `/todo` `/quote` `/code` `/divider` `/image` | `api.updateBlock({ blockType })` |
-
-**Lo que FALTA** (Q019 — Commandable Transforms):
-- `/task` → agrega `type:: task` (rol)
-- `/query` → agrega `type:: query` + `dsl::`
-- `/card` → agrega `card-shape::` (template-driven)
-
-La infraestructura (`defaultRegistry.register()`) ya soporta agregar estos sin tocar BlockRow.
-
-**⚠️ BUG: `blockType` no persiste** — los 11 comandos de Block Types (`/h1`-`/h3`, `/code`, `/quote`, etc.) envían `api.updateBlock({ blockType })` pero el backend no tiene `blockType` en `UpdateBlockRequest`. Funciona en sesión (state local) pero se pierde al recargar. Fix: Phase 0 #6.
-
-### Bloqueantes para features nuevas
-- `GET /api/v1/properties/keys` — frontend hardcodea property keys
-- CommandRegistry (Cmd+Shift+K) — palette separada del slash menu
-- Templates no declaran layout de properties (inline vs panel)
+| Block types | `/text` `/h1`-`/h3` `/bullet` `/numbered` `/todo` `/quote` `/code` `/divider` `/image` | `api.updateBlock({ blockType })` ✅ persiste |
+| Roles (Phase 2) | `/task` `/query` `/card` | Establece `type:: task`, `type:: query` + `dsl::`, `card-shape::` ✅ |
 
 ---
 
@@ -70,16 +62,21 @@ La infraestructura (`defaultRegistry.register()`) ya soporta agregar estos sin t
 | 0009 | Formato inline Logseq-compatible |
 | 0010 | Testing strategy |
 
-### De esta sesión — candidatos a promover
+### Implementados (de drafts)
+
+| ADR | Draft | Implementación | Commit |
+|-----|-------|---------------|--------|
+| 0011 | DRAFT-dashboard-layout-no-work-modes.md | PanelVisibilityContext + presets + LayoutMenu | 06e28ad |
+| 0012 | DRAFT-command-registry-mcp-dispatch.md | CommandRegistry + Cmd+Shift+K palette | 69c254b |
+| 0015 | DRAFT-agent-run-block-role.md | AgentRun inline rendering en BlockRow | 06e28ad |
+| 0016 | DRAFT-saved-view-block-role.md | SavedViewBlock + type:: view + data-source:: | ses_15c8a3d |
+
+### Candidatos a promover
 
 | Target | Draft | Decisión | Confianza |
 |--------|-------|----------|-----------|
-| 0011 | DRAFT-dashboard-layout-no-work-modes.md | DashboardLayout como presets de paneles, no Work Modes | Alta |
-| 0012 | DRAFT-command-registry-mcp-dispatch.md | React context + Cmd+Shift+K, dispatch MCP híbrido | Alta |
 | 0013 | DRAFT-cognitive-panel-family-namespace.md | Cognitive* bajo namespace `cognitivo::` | Alta |
 | 0014 | DRAFT-property-schema-endpoint.md | GET /properties/keys con cursor pagination | Media |
-| 0015 | DRAFT-agent-run-block-role.md | AgentRun = `type:: agent-run` block role | Alta |
-| 0016 | DRAFT-saved-view-block-role.md | SavedView = `type:: view` + `data-source::` | Alta |
 | 0017 | DRAFT-strategy-selector-trait-contract.md | StrategySelector + StrategyScorer traits en quilt-core (WASM) | Alta |
 
 ---
@@ -88,66 +85,64 @@ La infraestructura (`defaultRegistry.register()`) ya soporta agregar estos sin t
 
 Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 
-**Agregar**: AgentRun, SavedView, DashboardLayout, CommandRegistry, ViewContainer, Cognitive* family, StrategySelector
+**Agregar**: AgentRun ✅, SavedView ✅, DashboardLayout ✅, CommandRegistry ✅, ViewContainer, Cognitive* family, StrategySelector
 
-**Modificar**: Rol (agregar `agent-run`, `insight`), View (agregar `data-source::`), Query embebida (referencia a view)
+**Modificar**: Rol (agregar `agent-run` ✅, `insight`), View (agregar `data-source::` ✅), Query embebida (referencia a view)
 
 **Eliminar**: Serendipity Feed, Agent Workbench, ConnectionType::Semantic/Content
+
+> ⚠️ Patch NO aplicado aún. Pending de aplicar.
 
 ---
 
 ## 3. Fases de Implementación
 
-### Phase 0: P0 Fixes (1-2 días, sin dependencias)
+### Phase 0: P0 Fixes ✅ COMPLETADO
 
-| # | Qué | Ciclo | Esfuerzo |
-|---|-----|-------|----------|
-| 1 | Home redirect `/` → journal de hoy | Q030 | 1h |
-| 2 | Eliminar QueryPage roto | Q031 | 1h |
-| 3 | Fix graph dark mode (`data-theme`) | Q033 | 30m |
-| 4 | Alinear API client con rutas montadas | Q032 | 2h |
-| 5 | CutBlock + UndoManager (Cmd+Z) | Q021 | 3h |
-| 6 | **Backend: agregar `blockType` a `BlockDto` + `UpdateBlockRequest`** | — | 3h |
+| # | Qué | Status |
+|---|-----|--------|
+| 1 | Home redirect `/` → journal de hoy | ✅ c435c6f |
+| 2 | Eliminar QueryPage roto | ✅ c435c6f |
+| 3 | Fix graph dark mode (`data-theme`) | ✅ c435c6f |
+| 4 | Alinear API client con rutas montadas | ✅ c435c6f |
+| 5 | CutBlock + UndoManager (Cmd+Z) | ✅ c435c6f |
+| 6 | Backend: agregar `blockType` a `BlockDto` + `UpdateBlockRequest` | ✅ c435c6f |
 
-**Check**: `just dev` sin errores en consola, graph en dark mode, cut+undo funciona.
+### Phase 1: Fundamentos ✅ COMPLETADO
 
-### Phase 1: Fundamentos (3-5 días)
+| # | Qué | Status |
+|---|-----|--------|
+| 7 | `GET /api/v1/properties/keys` | ✅ c435c6f |
+| 8 | Frontend usa endpoint real | ✅ 0287902 |
+| 9 | CommandRegistry + Cmd+Shift+K | ✅ 69c254b |
+| 10 | Renombrar paneles → Cognitive* family | ✅ 33454b3 |
+| 11 | Remover tree_rag dead code | ✅ 33454b3 |
 
-| # | Qué | Depende | Esfuerzo |
-|---|-----|---------|----------|
-| 7 | `GET /api/v1/properties/keys` | — | 1 día |
-| 8 | Frontend usa endpoint real | #7 | 2h |
-| 9 | CommandRegistry + Cmd+Shift+K | — | 1.5 días |
-| 10 | Renombrar paneles → Cognitive* family | cargo check | 2h |
-| 11 | Remover tree_rag dead code | #10 | 1h |
+### Phase 2: UX Block-Level 🚧 EN PROGRESO
 
-**Check**: properties desde API, Cmd+Shift+K abre palette, `cargo check` limpio.
+| # | Qué | Depende | Esfuerzo | Status |
+|---|-----|---------|----------|--------|
+| 12 | Block Zoom (`?zoom=$blockId`) | — | 0.5 día | ✅ f0b5d76 |
+| 13 | Inline+Panel Properties (template) | #7 | 3 días | 🔲 |
+| 14 | Quick Capture (CommandRegistry) | #9 | 0.5 día | ✅ builtin |
+| 15 | Natural Language Dates V1 | #13 | 1 día | ✅ f0b5d76 |
+| 16 | Commandable Transforms (`/task`, `/query`, `/card`) | — | 3h | ✅ 8f6833c |
+| 17 | DashboardLayout + PanelVisibility | #9 | 2 días | ✅ 06e28ad |
+| 18 | Cognitive* panel implementations | #10, #11 | 3 días | 🔲 |
+| 19 | AgentRun block role | — | 2 días | ✅ 06e28ad |
+| 20 | SavedView block role | #19 | 2 días | ✅ ses_15c8a3d |
 
-### Phase 2: UX Block-Level (1-2 semanas)
+### Phase 3: Infra + Avanzado 🔲 PENDIENTE
 
-| # | Qué | Depende | Esfuerzo |
-|---|-----|---------|----------|
-| 12 | Block Zoom (`?zoom=$blockId`) | — | 0.5 día |
-| 13 | Inline+Panel Properties (template) | #7 | 3 días |
-| 14 | Quick Capture (CommandRegistry) | #9 | 0.5 día |
-| 15 | Natural Language Dates V1 | #13 | 1 día |
-| 16 | Commandable Transforms (`/task`, `/query`, `/card`) — 3 handlers nuevos en registry existente | — | 3h |
-| 17 | DashboardLayout + PanelVisibility | #9 | 2 días |
-| 18 | Cognitive* panel implementations | #10, #11 | 3 días |
-| 19 | AgentRun block role | — | 2 días |
-| 20 | SavedView block role | #19 | 2 días |
-
-### Phase 3: Infra + Avanzado (2-3 semanas)
-
-| # | Qué | Depende | Esfuerzo |
-|---|-----|---------|----------|
-| 21 | Session cache V1 (dedup api-client) | — | 1 día |
-| 22 | Saved/Recent searches | #20 | 1 día |
-| 23 | Graph Lens V1 (subgraph endpoint) | — | 2 días |
-| 24 | StrategySelector traits (determinístico) | — | 3 días |
-| 25 | "Save as View" desde search | #20 | 0.5 día |
-| 26 | StrategySelector WASM + hook | #24 | 2 días |
-| 27 | Graph Lens V2 (lens buttons) | #23 | 1.5 días |
+| # | Qué | Depende | Esfuerzo | Status |
+|---|-----|---------|----------|--------|
+| 21 | Session cache V1 (dedup api-client) | — | 1 día | 🔲 |
+| 22 | Saved/Recent searches | #20 ✅ | 1 día | 🔲 |
+| 23 | Graph Lens V1 (subgraph endpoint) | — | 2 días | 🔲 |
+| 24 | StrategySelector traits (determinístico) | — | 3 días | 🔲 |
+| 25 | "Save as View" desde search | #20 ✅ | 0.5 día | 🔲 |
+| 26 | StrategySelector WASM + hook | #24 | 2 días | 🔲 |
+| 27 | Graph Lens V2 (lens buttons) | #23 | 1.5 días | 🔲 |
 
 ### Phase 4: Re-grill Remedies
 
@@ -166,38 +161,39 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 
 ---
 
-## 4. Dependencias
+## 4. Dependencias (estado actual)
 
 ```
-Phase 0 ─── sin deps, hacer ya
-  │  #6 blockType backend es prerequisite para que los slash commands persistan
-  │
-  ▼
-Phase 1
-  #7 properties ──► #8 frontend
-  #9 command-reg ──► #14 quick-capture
-  │               ──► #17 dashboard
-  #10 cognitive ──► #11 tree_rag ──► #18 panels
-  │
-  ▼
-Phase 2
-  #12 zoom (indep.)
-  #7 ────────► #13 inline-props ──► #15 NL dates
-  #19 agent-run ► #20 saved-view ──► #22 saved searches
-  │                                  ──► #25 save-as-view
+Phase 0 ✅ COMPLETO
+Phase 1 ✅ COMPLETO
+
+Phase 2 🚧 EN PROGRESO
+  #12 zoom ──────────────────► ✅
+  #7 ────► #13 inline-props ──► #15 NL dates ✅
+  #14 quick-capture ──────────────────────► ✅ builtin
+  #16 commandable transforms ─────────────► ✅ 8f6833c
+  #17 dashboard ──────────────────────────► ✅ 06e28ad
+  #19 agent-run ─────────────────────────► ✅ 06e28ad
+  #20 saved-view ───────────────────────► ✅ ses_15c8a3d
+  #18 cognitive panels ─────────────────► 🔲
+  #13 inline+panel props ───────────────► 🔲
+
+Phase 3 🔲 PENDIENTE
+  #21 cache (indep.)
+  #22 saved searches ──► #20 ✅
   #23 graph V1 ──► #27 graph V2
   #24 strategy ──► #26 WASM hook
-  #21 cache (indep.)
-  │
-  ▼
-Phase 4: remedies (28-31)
+  #25 save-as-view ──► #20 ✅
+
+Phase 4 🔲 PENDIENTE
+  #28-31 remedies
 ```
 
 ---
 
 ## 5. Próximos Pasos Inmediatos
 
-1. **Revisar 7 drafts** → promover a 0011-0017 o pedir cambios
-2. **Aplicar CONTEXT.md patch**
-3. **Fix `cognitive.rs`** → desbloquea Phase 1
-4. **Empezar Phase 0** → 5 fixes sin dependencias
+1. **Phase 2 restantes**: #13 (Inline+Panel Properties), #18 (Cognitive panels)
+2. **Phase 3**: comenzar por #21 Session cache o #23 Graph Lens
+3. **Promover 7 ADR drafts** → 0011-0017
+4. **Aplicar CONTEXT.md patch**
