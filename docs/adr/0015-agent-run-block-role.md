@@ -1,6 +1,6 @@
-# ADR-DRAFT: AgentRun como rol de bloque `type:: agent-run`
+# ADR: AgentRun como rol de bloque `type:: agent-run`
 
-Status: draft
+Status: implemented
 
 ## Context
 
@@ -68,6 +68,13 @@ blocks-modified contains "<uuid>"
 - `blocks-modified::` permite navegar del run a los bloques afectados
 - Los agentes crean el bloque agent-run al iniciar y actualizan `run-status::` al finalizar
 - MCP tool `quilt_create_agent_run` o el agente usa `quilt_create_block` con las properties correspondientes
+
+## Implementation (2026-06-09)
+
+- Inline header strip en `BlockRow.tsx` con status colors
+- `AgentRun` como tipo de `BlockType`
+- Renderizado de estado en línea (no modal)
+- Phase 2 #18 del roadmap
 
 ## References
 

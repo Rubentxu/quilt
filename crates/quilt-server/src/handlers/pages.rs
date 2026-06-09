@@ -2,7 +2,7 @@
 
 use axum::{
     Json,
-    extract::{Extension, Path},
+    extract::{Extension, Path, Query},
     http::StatusCode,
 };
 use axum::{Router, routing::get};
@@ -138,13 +138,15 @@ pub async fn get_page_unlinked_references(
 pub fn routes() -> Router {
     Router::new()
         .route("/", get(list_pages).post(create_page))
-        // NOTE: `/from-template` is a literal segment and must be registered
-        // BEFORE the `/:name` catch-all so that axum does not route the
-        // literal `from-template` string to the page-by-name handler.
+        // NOTE: literal segments (`/from-template`, `/search`) must be
+        // registered BEFORE the `/:name` catch-all so that axum does not
+        // route the literal strings `from-template` / `search` to the
+        // page-by-name handler.
         .route(
             "/from-template",
             axum::routing::post(create_page_from_template),
         )
+        .route("/search", get(search_pages))
         .route("/journal/:date", get(get_journal))
         .route("/:name", get(get_page))
         .route("/:name/blocks", get(get_page_blocks))
@@ -169,6 +171,102 @@ pub async fn list_pages(
 
     let dtos: Vec<PageDto> = pages.into_iter().map(PageDto::from).collect();
 
+    Ok(Json(dtos))
+}
+
+/// Query parameters for `GET /api/v1/pages/search`.
+///
+/// `q` is the user-supplied search string. When absent or empty the
+/// handler treats it as "match everything" and delegates to
+/// `PageRepository::get_all()` so the frontend can call the same
+/// endpoint for both the empty-query and the typed-query case (the
+/// previous design forced two separate calls).
+///
+/// `limit` is the maximum number of pages to return. The repository
+/// implementation already does an `ORDER BY name LIMIT ?`, so the
+/// `limit` is enforced server-side. We clamp it to a sane upper bound
+/// (200) to keep response payloads predictable; the frontend's
+/// `PAGE_LIMIT` of 10 means the typical response is far smaller.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchPagesQuery {
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+/// GET /api/v1/pages/search?q=...&limit=...
+///
+/// Server-side page-name search — S2-03. The previous frontend
+/// implementation called `GET /api/v1/pages` (which returns the entire
+/// page list) and then `Array.prototype.includes` filtered it on every
+/// keystroke. That is O(n) work on the client AND a multi-MB JSON
+/// payload for graphs with thousands of pages. This endpoint delegates
+/// the `LIKE` filter to SQLite (single round-trip, O(log n) with the
+/// existing `pages_name` index when present) and returns only the
+/// matches.
+///
+/// Behavior:
+/// - `q` empty / missing → returns up to `limit` pages ordered by name.
+///   This lets the frontend call a single endpoint whether the input
+///   is empty or non-empty.
+/// - `q` non-empty → `WHERE name LIKE '%q%'`, also matching `title`
+///   so pages with a custom title still surface in the results.
+/// - `limit` is clamped to `[1, 200]` with a default of 50 — well above
+///   the frontend's `PAGE_LIMIT` of 10 but small enough to keep the
+///   payload bounded.
+///
+/// Note: `LIKE` is case-insensitive only for ASCII by default in
+/// SQLite; the `Page` entity normalises names to lowercase at write
+/// time, so the caller's lowercase-typed query is what gets stored.
+/// This is intentional — page names are case-insensitive throughout
+/// the rest of Quilt.
+#[instrument(skip(state, query), fields(q = %query.q.as_deref().unwrap_or(""), limit = query.limit.unwrap_or(0)))]
+pub async fn search_pages(
+    Extension(state): Extension<AppState>,
+    Query(query): Query<SearchPagesQuery>,
+) -> Result<Json<Vec<PageDto>>, AppError> {
+    // Clamp limit to a sane range. `0` means "use the repo default"
+    // so a caller that omits the param gets the same behaviour as a
+    // caller that passes `limit=50`.
+    let limit = match query.limit {
+        Some(0) | None => 50usize,
+        Some(n) => n.clamp(1, 200),
+    };
+
+    let page_repo = SqlitePageRepository::new(state.pool.clone());
+
+    let pages = match query.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        Some(q) => {
+            // Match on `name` OR `title` so pages with a custom
+            // display title surface when the user types a fragment
+            // of the title that does not appear in the lowercased
+            // name. The repository's trait-level `search` only
+            // matches on `name`; the HTTP handler uses an
+            // OR-in-SQL inherent helper instead so the post-filter
+            // can stay a single, well-understood step.
+            page_repo
+                .search_by_name_or_title(q, limit)
+                .await
+                .map_err(|e| AppError::Internal(e.to_string()))?
+        }
+        None => {
+            // Empty / missing query — return a page-name-ordered slice
+            // of the full set. Same shape as `list_pages` but with a
+            // server-side limit so the response stays bounded even for
+            // very large graphs.
+            let mut all = page_repo
+                .get_all()
+                .await
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+            all.sort_by(|a, b| a.name.cmp(&b.name));
+            all.truncate(limit);
+            all
+        }
+    };
+
+    let dtos: Vec<PageDto> = pages.into_iter().map(PageDto::from).collect();
     Ok(Json(dtos))
 }
 

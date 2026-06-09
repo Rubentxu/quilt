@@ -18,4 +18,4 @@ pub use indexing::SearchIndex as SearchIndexManager;
 pub use sanitize::{
     QuoteStrategy, SanitizationStrategy, build_fts5_match_query, sanitize_fts5_query,
 };
-pub use search::{SearchError, SearchResult, SearchService, SearchServiceTrait};
+pub use search::{SearchError, SearchHitProperty, SearchResult, SearchService, SearchServiceTrait};

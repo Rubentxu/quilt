@@ -223,6 +223,32 @@ impl BlockRepository for InMemoryBlockRepository {
         }
         Ok(out)
     }
+
+    async fn list_distinct_authors(
+        &self,
+        prefix: Option<&str>,
+    ) -> Result<Vec<String>, DomainError> {
+        // Mirror the SQLite semantics: distinct string values of the
+        // `created_by` property, sorted ASC, optionally filtered by
+        // a `LIKE` prefix. NULLs and non-string values are skipped.
+        let blocks = self.blocks.read();
+        let mut authors: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
+        for block in blocks.values() {
+            if let Some(value) = block.properties.get("created_by") {
+                if let quilt_domain::value_objects::PropertyValue::String(s) = value {
+                    let matches_prefix = match prefix {
+                        Some(p) => s.starts_with(p),
+                        None => true,
+                    };
+                    if matches_prefix && !s.is_empty() {
+                        authors.insert(s.clone());
+                    }
+                }
+            }
+        }
+        Ok(authors.into_iter().collect())
+    }
 }
 
 #[cfg(test)]

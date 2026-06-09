@@ -125,3 +125,39 @@ describe('propertyTemplate — isPropertyKeyInTemplate', () => {
     expect(isPropertyKeyInTemplate(todoBlock, 'notes', 'inline')).toBe(false)
   })
 })
+
+// Regression: C1 — the `/task` slash command writes `type:: task`
+// (not `type:: todo`) via setBlockProperty. `isTaskBlock` must
+// resolve that to the TODO_PROPERTY_TEMPLATE so status/priority/due
+// surface as inline badges, otherwise task blocks get the default
+// template and their badges never appear.
+describe('propertyTemplate — /task role (C1 regression)', () => {
+  it('treats a block with type:: task as a task block', () => {
+    const taskBlock = makeBlock([{ key: 'type', value: 'task' }])
+    const tpl = getPropertyTemplate(taskBlock)
+    expect(tpl.inline).toContain('status')
+    expect(tpl.inline).toContain('priority')
+    expect(tpl.inline).toContain('due')
+  })
+
+  it('surfaces inline badges for a /task block that has status/priority set', () => {
+    const taskBlock = makeBlock([
+      { key: 'type', value: 'task' },
+      { key: 'status', value: 'todo' },
+      { key: 'priority', value: 'A' },
+    ])
+    expect(getInlinePropertyKeys(taskBlock).sort()).toEqual(['priority', 'status'])
+  })
+
+  it('isPropertyKeyInTemplate returns true for inline keys on a type:: task block', () => {
+    const taskBlock = makeBlock([{ key: 'type', value: 'task' }])
+    expect(isPropertyKeyInTemplate(taskBlock, 'status', 'inline')).toBe(true)
+    expect(isPropertyKeyInTemplate(taskBlock, 'priority', 'inline')).toBe(true)
+  })
+
+  it('still treats type:: todo as a task block (legacy /todo slash command)', () => {
+    const legacyBlock = makeBlock([{ key: 'type', value: 'todo' }])
+    const tpl = getPropertyTemplate(legacyBlock)
+    expect(tpl.inline).toContain('status')
+  })
+})

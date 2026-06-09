@@ -34,8 +34,15 @@ import { api } from '@core/api-client'
 import type { Page, Block } from '@shared/types/api'
 
 // ──── API + router mocks ───────────────────────────────────────────
+//
+// S2-03: the SearchModal now uses `api.searchPages()` (server-side
+// page-name filter) instead of `api.listPages() + client-side
+// includes`. We still keep a `listPages` mock here because the
+// "Save as View" flow calls it to populate the page-picker in the
+// modal — that's an unrelated, full-page-list use case.
 
 const mockListPages = vi.fn()
+const mockSearchPages = vi.fn()
 const mockSearchBlocks = vi.fn()
 const mockCreateBlock = vi.fn()
 const mockNavigate = vi.fn()
@@ -43,6 +50,7 @@ const mockNavigate = vi.fn()
 vi.mock('@core/api-client', () => ({
   api: {
     listPages: (...args: unknown[]) => mockListPages(...args),
+    searchPages: (...args: unknown[]) => mockSearchPages(...args),
     searchBlocks: (...args: unknown[]) => mockSearchBlocks(...args),
     createBlock: (...args: unknown[]) => mockCreateBlock(...args),
   },
@@ -54,9 +62,18 @@ vi.mock('@tanstack/react-router', () => ({
 
 beforeEach(() => {
   mockListPages.mockReset()
+  mockSearchPages.mockReset()
   mockSearchBlocks.mockReset()
   mockCreateBlock.mockReset()
   mockNavigate.mockReset()
+  // S2-03: the SearchModal now calls `api.searchPages('', PAGE_LIMIT)`
+  // on mount (the empty-query case). Without a default resolved
+  // value the call returns `undefined` and the modal crashes before
+  // any test logic runs. Default to `PAGES` so the test mirrors the
+  // "server returns the full page list" behaviour; individual tests
+  // override via `mockImplementation` if they need a different
+  // typed-query response.
+  mockSearchPages.mockResolvedValue(PAGES)
   sessionStorage.clear()
 })
 
@@ -82,13 +99,30 @@ const BLOCKS = [
 /**
  * A separate fixture for the "filter + text" case: the blocks have
  * short text (so the modal's "this is a foo in the wild" string is
- * still findable in the other tests) and ALSO carry a `status::`
- * property so the post-filter keeps them when the user types
- * `foo status:todo`.
+ * still findable in the other tests) and ALSO carry a structured
+ * `properties` bag (S1-04) so the post-filter keeps them when the
+ * user types `foo status:todo`. The old fixture stored the property
+ * only in the body text; the new contract requires structured data.
  */
 const BLOCKS_WITH_STATUS = [
-  { blockId: 'b1', pageId: 'p2', pageName: 'Bar', content: 'this is a foo in the wild status:: todo', snippet: 'this is a foo in the wild status:: todo', score: -1.0 },
-  { blockId: 'b2', pageId: 'p1', pageName: 'Foo', content: 'another foo status:: done', snippet: 'another foo status:: done', score: -0.5 },
+  {
+    blockId: 'b1',
+    pageId: 'p2',
+    pageName: 'Bar',
+    content: 'this is a foo in the wild',
+    snippet: 'this is a foo in the wild',
+    score: -1.0,
+    properties: [{ key: 'status', value: 'todo', type: 'string' }],
+  },
+  {
+    blockId: 'b2',
+    pageId: 'p1',
+    pageName: 'Foo',
+    content: 'another foo',
+    snippet: 'another foo',
+    score: -0.5,
+    properties: [{ key: 'status', value: 'done', type: 'string' }],
+  },
 ]
 
 /** Build a normalized block the way `normalizeBlock` would. */
@@ -324,6 +358,14 @@ describe('SearchModal — Save as View integration', () => {
 
   it('shows a "Save as View" button on every search result', async () => {
     mockListPages.mockResolvedValue(PAGES)
+    // S2-03: server-side filter strips non-matching pages from the
+    // typed-query response. The "Bar" and "Baz" pages don't contain
+    // "foo" in their name or title, so the server (simulated by
+    // this mock) returns only the matching page.
+    mockSearchPages.mockImplementation(async (q: string) => {
+      if (!q) return PAGES
+      return PAGES.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))
+    })
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -464,14 +506,18 @@ describe('SearchModal — Save as View integration', () => {
     const input = screen.getByPlaceholderText(/Search pages and blocks/i)
 
     // Type a query with both text and a filter. The free-text part
-    // ("foo") matches both blocks, and the `status:todo` filter
-    // post-filters them down to the one with `status:: todo`. The
-    // DSL stored on the new query block must be the full
-    // "foo status:: todo", not just the text part.
+    // ("foo") matches both blocks; the `status:todo` filter keeps
+    // only b1 (whose structured `properties` carries
+    // `{ key: 'status', value: 'todo' }`). The DSL stored on the new
+    // query block must be the full "foo status:: todo", not just
+    // the text part.
     await userEvent.type(input, 'foo status:todo')
 
     await waitFor(() => {
-      expect(screen.getByText('this is a foo in the wild status:: todo')).toBeInTheDocument()
+      // b1 visible (status:todo) — content is just "this is a foo in the wild"
+      expect(screen.getByText('this is a foo in the wild')).toBeInTheDocument()
+      // b2 hidden (status:done)
+      expect(screen.queryByText('another foo')).not.toBeInTheDocument()
     })
 
     await userEvent.click(screen.getAllByTestId(/^save-as-view-/)[0])

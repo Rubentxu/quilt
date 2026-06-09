@@ -1,6 +1,6 @@
-# ADR-DRAFT: SavedView como rol de bloque `type:: view` componiendo referencia a Query
+# ADR: SavedView como rol de bloque `type:: view` componiendo referencia a Query
 
-Status: draft
+Status: implemented
 
 ## Context
 
@@ -71,6 +71,13 @@ Múltiples views pueden referenciar el mismo query. Misma data, múltiples rende
 - El frontend renderiza según `view-type::`: TableView, KanbanView, CalendarView, etc.
 - ViewContainer (page-level) consume el bloque view y delega al LayoutEngine correspondiente
 - CardRenderer (block-level) no se modifica — opera a nivel de bloque individual
+
+## Implementation (2026-06-09)
+
+- `SavedViewBlock` component en `quilt-ui/src/features/view/SavedViewBlock.tsx`
+- `SavedViewFallback` para tipos de vista no soportados
+- `type:: view` + `data-source::` como propiedades de bloque
+- Phase 2 #20 del roadmap
 
 ## References
 

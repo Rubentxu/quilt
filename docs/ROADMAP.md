@@ -1,10 +1,10 @@
 # Quilt — Action Roadmap
 
 > Generated: 2026-06-07
-> Last updated: 2026-06-09 (post Phase 1-2 sprint)
+> Last updated: 2026-06-09 (post Phase 1-4 sprint + Judgment Day fixes)
 > Sources: auto-grill 30 cycles, ux-workflow-portfolio-analysis.md, 7 ADR drafts, CONTEXT.md patch
 
-**Leyenda**: ✅ completado | 🚧 en progreso | 🔲 pendiente | `commit` = commit SHA
+**Leyenda**: ✅ completado | 🚧 en progreso | 🔲 pendiente | `commit` = commit SHA | JD = Judgment Day fix
 
 ---
 
@@ -62,40 +62,32 @@ Infraestructura: `SlashActionRegistry` en `slashRegistry.tsx`, lazy-loaded desde
 | 0009 | Formato inline Logseq-compatible |
 | 0010 | Testing strategy |
 
-### Implementados (de drafts)
+### ADR Implementados
 
-| ADR | Draft | Implementación | Commit |
-|-----|-------|---------------|--------|
-| 0011 | DRAFT-cognitive-panel-family-namespace.md | Cognitive* family (AgentActivityFeed, StructuralGraph, SemanticInsight) | 28afeb2 |
-| 0012 | DRAFT-command-registry-mcp-dispatch.md | CommandRegistry + Cmd+Shift+K palette | 69c254b |
-| 0013 | DRAFT-property-schema-endpoint.md | GET /api/v1/properties/keys con cursor pagination | c435c6f |
-| 0014 | DRAFT-strategy-selector-trait-contract.md | StrategySelector + StrategyScorer traits en quilt-core | 35af73a |
-| 0015 | DRAFT-agent-run-block-role.md | AgentRun inline rendering en BlockRow | 06e28ad |
-| 0016 | DRAFT-saved-view-block-role.md | SavedViewBlock + type:: view + data-source:: | ses_15c8a3d |
-| 0017 | DRAFT-dashboard-layout-no-work-modes.md | PanelVisibilityContext + presets + LayoutMenu | 06e28ad |
-
-### Candidatos a promover
-
-| Target | ADR | Decisión | Confianza |
-|--------|-----|----------|-----------|
-| 0011 | ADR-0011 | Cognitive* family (3 paneles) + namespace `cognitivo::` | ✅ Promovido |
-| 0013 | ADR-0013 | GET /properties/keys con cursor pagination | ✅ Promovido |
-| 0014 | ADR-0014 | StrategySelector + StrategyScorer traits en quilt-core | ✅ Promovido |
-| 0017 | Pending | StrategySelector WASM + MCP tool | En implementación |
+| ADR | Decisión | Commit |
+|-----|----------|--------|
+| 0011 | Cognitive* family (3 paneles) + namespace `cognitivo::` | 28afeb2 |
+| 0012 | CommandRegistry + Cmd+Shift+K palette | 69c254b |
+| 0013 | GET /properties/keys con cursor pagination | c435c6f |
+| 0014 | StrategySelector + StrategyScorer traits + concrete `RelevanceScorer` impl | 35af73a + local |
+| 0015 | AgentRun inline rendering en BlockRow | 06e28ad |
+| 0016 | SavedViewBlock + type:: view + data-source:: | ses_15c8a3d |
+| 0017 | PanelVisibilityContext + presets + LayoutMenu | 06e28ad |
+| 0018 | GET /blocks/authors (dinámico) + GET /pages/search server-side | local |
 
 ---
 
 ## 2. CONTEXT.md
 
-Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
+Actualizado con nuevos términos del roadmap:
 
-**Agregar**: AgentRun ✅, SavedView ✅, DashboardLayout ✅, CommandRegistry ✅, ViewContainer, Cognitive* family, StrategySelector
+**Agregado**: AgentRun ✅, SavedView ✅, DashboardLayout ✅, CommandRegistry ✅, ViewContainer, Cognitive* family, StrategySelector
 
-**Modificar**: Rol (agregar `agent-run` ✅, `insight`), View (agregar `data-source::` ✅), Query embebida (referencia a view)
+**Modificado**: Rol (agregar `agent-run` ✅, `insight`), View (agregar `data-source::` ✅), Query embebida (referencia a view)
 
-**Eliminar**: Serendipity Feed, Agent Workbench, ConnectionType::Semantic/Content
+**Eliminado**: Serendipity Feed, Agent Workbench, ConnectionType::Semantic/Content
 
-> ⚠️ Patch NO aplicado aún. Pending de aplicar.
+> ✅ Integrado en CONTEXT.md global (secciones 0.5, 1.4, 1.5, 2.3, 2.4, 3.1, 3.3, 3.4, 3.5)
 
 ---
 
@@ -157,6 +149,20 @@ Aplicar patch desde `docs/grill/.state/CONTEXT.patch.md`:
 | 30 | Template Contracts | Extraer diff de reapply.rs, MCP-only | ✅ 35af73a |
 | 31 | Template Doctor | Extender structure_gardener, versioning infra | ✅ f68f631 |
 
+### Judgment Day Fixes ✅ (2026-06-09)
+
+| # | Finding | Severity | Fix | Commit |
+|---|---------|----------|-----|--------|
+| C1 | `isTaskBlock` no matcheaba `type:: task` | CRITICAL | Extendido a `'task'` + `'todo'` | local |
+| S1-03 | `cognitive.rs` orphaned en quilt-mcp | CRITICAL | Deleted | local |
+| S1-04 | `blockMatchesFilter` regex on content → false positives | CRITICAL | Structured properties lookup | SDD: search-result-properties |
+| S2-01 | PANEL_LABELS dual source of truth | WARNING | Canonical en PanelVisibilityContext | local |
+| S2-02 | AgentActivityFeed hardcoded 4 agents | WARNING | `GET /api/v1/blocks/authors` dinámico | local |
+| S2-03 | SearchModal O(n) carga todas las páginas | WARNING | `GET /api/v1/pages/search?q=` server-side | local |
+| S2-04 | StrategySelector traits sin implementación | WARNING | `RelevanceScorer` + `ScoredStrategySelector` | local |
+| S2-05 | graph.rs depth bounds arbitrary | WARNING | Named constants MIN/MAX_DEPTH con docs | local |
+| S2-06 | template_doctor.rs 49K lines | WARNING | Split en 4 sub-módulos | local |
+
 ### Diferido (V3+)
 
 - Block Shape Detector
@@ -182,8 +188,9 @@ Phase 4 ✅ COMPLETO (4/4 items, commit 35af73a + f68f631)
 **Phase 0-4 ✅ — 31/31 items completados**
 
 ### Pendiente (no-bloqueantes)
-- ✅ Promover ADR drafts (0011, 0013, 0014, 0015, 0016, 0017) — COMPLETADO
+- ✅ Promover ADR drafts (0011-0018) — COMPLETADO
 - ✅ Aplicar CONTEXT.md patch — COMPLETADO
+- ✅ Judgment Day fixes (S1-04 + S2-01 a S2-06) — COMPLETADO
 - User manual (HTML) → deploy o hosting
 
 ### Diferido (V3+)

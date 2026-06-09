@@ -1,6 +1,6 @@
-# ADR-DRAFT: DashboardLayout en lugar de Work Mode Switcher
+# ADR: DashboardLayout en lugar de Work Mode Switcher
 
-Status: draft
+Status: implemented
 
 ## Context
 
@@ -44,6 +44,14 @@ interface PanelVisibility {
 - `DashboardLayout` no colisiona con `SavedView`: uno es layout de workspace, el otro es vista de datos
 - El CommandRegistry expone comandos `layout:switch-to-*` para cambiar layouts vía teclado
 - No se crea entidad "WorkMode" ni "DashboardLayout" en el dominio de Rust
+
+## Implementation (2026-06-09)
+
+- `PanelVisibilityContext` en `quilt-ui/src/features/dashboard/PanelVisibilityContext.tsx`
+- `PANEL_LABELS` como fuente única de verdad (resuelve S2-01)
+- Presets de layout en `quilt-ui/src/features/dashboard/presets.ts`
+- `LayoutMenu` para cambiar entre presets
+- Phase 2 #17 del roadmap
 
 ## References
 

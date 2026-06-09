@@ -32,6 +32,21 @@ import {
   type PresetId,
 } from './presets'
 
+/**
+ * Canonical human-readable label for every known panel. This is the
+ * single source of truth — `presets.ts` re-exports this constant
+ * (it does not redefine it) so consumers can import from either
+ * module without risk of drift.
+ */
+export const PANEL_LABELS: Record<PanelId, string> = {
+  sidebar: 'Sidebar',
+  backlinks: 'Backlinks',
+  'agent-activity': 'Agent activity',
+  outline: 'Outline',
+  'structural-graph': 'Structural graph',
+  'semantic-insight': 'Semantic insight',
+}
+
 /** localStorage key for the dashboard layout. */
 export const DASHBOARD_STORAGE_KEY = 'quilt-dashboard-layout'
 
@@ -75,9 +90,6 @@ export const DEFAULT_PANELS: readonly PanelId[] = [
   'structural-graph',
   'semantic-insight',
 ]
-
-/** Human labels for every known panel. Re-exported for consumers. */
-export { PANEL_LABELS } from './presets'
 
 /** Shape of the public context. */
 export interface PanelVisibilityContextValue {

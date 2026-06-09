@@ -216,6 +216,7 @@ pub fn routes() -> Router {
         .route("/search", get(search_blocks))
         .route("/link", post(link_blocks))
         .route("/by-author", get(list_blocks_by_author))
+        .route("/authors", get(list_distinct_authors))
         .route("/:id", delete(delete_block).patch(update_block))
         .route("/:id/backlinks", get(get_backlinks))
         .route(
@@ -451,6 +452,11 @@ pub async fn search_blocks(
             content: r.content,
             snippet: r.snippet,
             score: r.score,
+            properties: r
+                .properties
+                .into_iter()
+                .map(crate::handlers::search::to_block_property_dto)
+                .collect(),
         })
         .collect();
 
@@ -660,6 +666,30 @@ pub async fn list_blocks_by_author(
 
     let dtos: Vec<BlockDto> = blocks.into_iter().map(BlockDto::from).collect();
     Ok(Json(dtos))
+}
+
+/// GET /api/v1/blocks/authors
+///
+/// Returns the distinct values of the `created_by` property whose
+/// value starts with `agent::` (e.g. `agent::claude`, `agent::gemini`,
+/// `agent::deepseek`). Result is sorted ASC and excludes NULLs / empty
+/// strings.
+///
+/// This endpoint exists so the agent-activity panel (and any other
+/// UI that needs to enumerate "which agents have ever written to the
+/// graph") does NOT have to hardcode a list. New agents show up
+/// automatically as soon as the first block authored by them is
+/// created. S2-02.
+#[instrument(skip(state))]
+pub async fn list_distinct_authors(
+    Extension(state): Extension<AppState>,
+) -> Result<Json<Vec<String>>, AppError> {
+    let block_repo = SqliteBlockRepository::new(state.pool.clone());
+    let authors = block_repo
+        .list_distinct_authors(Some("agent::"))
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    Ok(Json(authors))
 }
 
 /// GET /api/v1/blocks/:id/properties

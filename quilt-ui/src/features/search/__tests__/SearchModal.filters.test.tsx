@@ -10,16 +10,16 @@ import { api } from '@core/api-client'
 
 // ──── API + router mocks ───────────────────────────────────────────
 // Same shape as SearchModal.test.tsx — SearchModal wires BOTH
-// `api.listPages()` and `api.searchBlocks()`, and the router's
+// `api.searchPages()` and `api.searchBlocks()`, and the router's
 // `useNavigate` is stubbed so the test doesn't need a real router.
 
-const mockListPages = vi.fn()
+const mockSearchPages = vi.fn()
 const mockSearchBlocks = vi.fn()
 const mockNavigate = vi.fn()
 
 vi.mock('@core/api-client', () => ({
   api: {
-    listPages: (...args: unknown[]) => mockListPages(...args),
+    searchPages: (...args: unknown[]) => mockSearchPages(...args),
     searchBlocks: (...args: unknown[]) => mockSearchBlocks(...args),
   },
 }))
@@ -29,7 +29,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 beforeEach(() => {
-  mockListPages.mockReset()
+  mockSearchPages.mockReset()
   mockSearchBlocks.mockReset()
   mockNavigate.mockReset()
   sessionStorage.clear()
@@ -44,15 +44,25 @@ afterEach(() => {
 // ──── Test data ────────────────────────────────────────────────────
 //
 // `BLOCKS_WITH_PROPS` mirrors the shape returned by the FTS endpoint
-// (blockId/pageId/pageName/content/snippet/score). The `content`
-// field includes Logseq-style property syntax so we can exercise the
-// post-filter regex on realistic strings.
+// (blockId/pageId/pageName/content/snippet/score/properties). Each
+// block carries a structured `properties` bag (S1-04) — the modal
+// post-filters against this, not against the raw content.
+import type { BlockProperty } from '@shared/types/api'
+
 const PAGES = [
   { id: 'p1', name: 'Foo', title: 'Foo Page', journal: false, journalDay: null, createdAt: '2026-01-02T00:00:00Z' },
   { id: 'p2', name: 'Foobar', title: null, journal: false, journalDay: null, createdAt: '2025-12-01T00:00:00Z' },
 ]
 
-const BLOCKS_WITH_PROPS = [
+const BLOCKS_WITH_PROPS: Array<{
+  blockId: string
+  pageId: string
+  pageName: string
+  content: string
+  snippet: string
+  score: number
+  properties?: BlockProperty[]
+}> = [
   {
     blockId: 'b1',
     pageId: 'p1',
@@ -60,22 +70,31 @@ const BLOCKS_WITH_PROPS = [
     content: 'task one — no property here',
     snippet: 'task one',
     score: -1.0,
+    // No properties bag → filter must reject (S1-04 contract).
   },
   {
     blockId: 'b2',
     pageId: 'p1',
     pageName: 'Foo',
-    content: 'task two status:: done priority:: B',
+    content: 'task two (content-only, properties present)',
     snippet: 'task two',
     score: -0.5,
+    properties: [
+      { key: 'status', value: 'done', type: 'string' },
+      { key: 'priority', value: 'B', type: 'string' },
+    ],
   },
   {
     blockId: 'b3',
     pageId: 'p1',
     pageName: 'Foo',
-    content: 'task three status:: todo priority:: A',
+    content: 'task three (content-only, properties present)',
     snippet: 'task three',
     score: -0.2,
+    properties: [
+      { key: 'status', value: 'todo', type: 'string' },
+      { key: 'priority', value: 'A', type: 'string' },
+    ],
   },
 ]
 
@@ -170,71 +189,95 @@ describe('parseQuery', () => {
   })
 })
 
-// ──── blockMatchesFilter — pure-function tests ─────────────────────
+// ──── blockMatchesFilter — pure-function tests (S1-04) ─────────────
+//
+// The contract changed: `blockMatchesFilter` no longer regex-matches
+// the block's raw content. It looks up the filter key in the block's
+// structured `properties` bag. These tests assert the NEW contract —
+// they would fail against the old (content-based) implementation,
+// which is exactly the regression S1-04 closes.
 
 describe('blockMatchesFilter', () => {
-  it('matches the double-colon Logseq property syntax', () => {
-    expect(
-      blockMatchesFilter('task status:: todo', { key: 'status', value: 'todo' }),
-    ).toBe(true)
+  it('matches when the block has a string property with the same value', () => {
+    const block = {
+      properties: [{ key: 'status', value: 'todo', type: 'string' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'status', value: 'todo' })).toBe(true)
   })
 
-  it('matches the single-colon property syntax', () => {
-    expect(
-      blockMatchesFilter('task status: todo', { key: 'status', value: 'todo' }),
-    ).toBe(true)
+  it('is case-insensitive on the key', () => {
+    const block = {
+      properties: [{ key: 'Status', value: 'todo', type: 'string' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'status', value: 'todo' })).toBe(true)
   })
 
-  it('matches the no-space form (status:todo)', () => {
-    expect(
-      blockMatchesFilter('task status:todo', { key: 'status', value: 'todo' }),
-    ).toBe(true)
-  })
-
-  it('is case-insensitive on both key and value', () => {
-    expect(
-      blockMatchesFilter('task Status:: Todo', { key: 'status', value: 'todo' }),
-    ).toBe(true)
+  it('is case-insensitive on the value', () => {
+    const block = {
+      properties: [{ key: 'status', value: 'TODO', type: 'string' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'status', value: 'todo' })).toBe(true)
   })
 
   it('returns false when the property is not present', () => {
-    expect(
-      blockMatchesFilter('plain text', { key: 'status', value: 'todo' }),
-    ).toBe(false)
+    const block = { properties: [] as BlockProperty[] }
+    expect(blockMatchesFilter(block, { key: 'status', value: 'todo' })).toBe(false)
   })
 
   it('returns false when the value does not match', () => {
-    expect(
-      blockMatchesFilter('task status:: done', { key: 'status', value: 'todo' }),
-    ).toBe(false)
+    const block = {
+      properties: [{ key: 'status', value: 'done', type: 'string' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'status', value: 'todo' })).toBe(false)
   })
 
   it('does not match partial key names (substatus is not status)', () => {
+    const block = {
+      properties: [{ key: 'substatus', value: 'todo', type: 'string' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'status', value: 'todo' })).toBe(false)
+  })
+
+  it('returns false when properties is undefined', () => {
+    expect(blockMatchesFilter({}, { key: 'status', value: 'todo' })).toBe(false)
+  })
+
+  it('returns false when properties is an empty array', () => {
     expect(
-      blockMatchesFilter('task substatus:: todo', { key: 'status', value: 'todo' }),
+      blockMatchesFilter({ properties: [] }, { key: 'status', value: 'todo' }),
     ).toBe(false)
   })
 
-  it('matches when the value is the only thing on the line', () => {
-    expect(
-      blockMatchesFilter('status:: todo', { key: 'status', value: 'todo' }),
-    ).toBe(true)
+  it('coerces numeric property values to strings for comparison', () => {
+    // Numbers on the wire round-trip via String() coercion — a user
+    // typing `priority:42` should match a property whose stored value
+    // is the number 42.
+    const block = {
+      properties: [{ key: 'priority', value: 42, type: 'number' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'priority', value: '42' })).toBe(true)
   })
 
-  it('matches when followed by a comma or semicolon', () => {
-    expect(
-      blockMatchesFilter('status:: todo, done soon', { key: 'status', value: 'todo' }),
-    ).toBe(true)
+  it('coerces boolean property values to strings for comparison', () => {
+    const block = {
+      properties: [{ key: 'done', value: true, type: 'boolean' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'done', value: 'true' })).toBe(true)
+    expect(blockMatchesFilter(block, { key: 'done', value: 'false' })).toBe(false)
   })
 
-  it('escapes regex metacharacters in the value', () => {
-    // `A.` is a regex wildcard; we want literal dot match
-    expect(
-      blockMatchesFilter('priority:: A.', { key: 'priority', value: 'A.' }),
-    ).toBe(true)
-    expect(
-      blockMatchesFilter('priority:: AX', { key: 'priority', value: 'A.' }),
-    ).toBe(false)
+  // ── S1-04 regression test ────────────────────────────────────────
+  // The original bug: a block whose body says "we discussed the
+  // status: idea" used to satisfy a `status:todo` filter (regex on
+  // content). The new contract requires structured properties, so
+  // that body no longer matches. This test pins the fix.
+  it('S1-04 regression: a body string that mentions the key but has no matching property does NOT match', () => {
+    const block = {
+      // No structured `status` property — just body text that
+      // happens to say "status:" in passing.
+      properties: [{ key: 'topic', value: 'status', type: 'string' }] as BlockProperty[],
+    }
+    expect(blockMatchesFilter(block, { key: 'status', value: 'todo' })).toBe(false)
   })
 })
 
@@ -242,7 +285,7 @@ describe('blockMatchesFilter', () => {
 
 describe('SearchModal — filter UI', () => {
   it('input is directly editable (not read-only)', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -258,7 +301,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('shows a filter chip when the user types a filter', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -274,7 +317,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('does NOT show the chip row when the query has no filters', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -286,7 +329,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('post-filters FTS results by the status property (AND semantics)', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     // FTS returns ALL three blocks; the post-filter must narrow to b3.
     mockSearchBlocks.mockResolvedValue(BLOCKS_WITH_PROPS)
 
@@ -308,7 +351,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('combines multiple filters with AND semantics', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue(BLOCKS_WITH_PROPS)
 
     renderModal()
@@ -328,7 +371,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('falls back to the first filter value as the FTS query when only filters are typed', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -342,7 +385,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('removes a filter when the chip X button is clicked', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -370,7 +413,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('removing one of several filters keeps the others', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -397,7 +440,7 @@ describe('SearchModal — filter UI', () => {
 
   it('does not close the modal when the chip X is clicked', async () => {
     const onClose = vi.fn()
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     render(<SearchModal isOpen={true} onClose={onClose} />)
@@ -415,7 +458,7 @@ describe('SearchModal — filter UI', () => {
   })
 
   it('shows the filter chip with the correct key and value', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -435,7 +478,7 @@ describe('SearchModal — filter UI', () => {
 
 describe('SearchModal — page result ranking', () => {
   it('sorts page results by createdAt descending (most recent first)', async () => {
-    mockListPages.mockResolvedValue(PAGES) // p1 = 2026-01-02, p2 = 2025-12-01
+    mockSearchPages.mockResolvedValue(PAGES) // p1 = 2026-01-02, p2 = 2025-12-01
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -462,7 +505,7 @@ describe('SearchModal — page result ranking', () => {
 describe('SearchModal — debounce interacts correctly with filter parsing', () => {
   it('sends the final parsed text (without filter tokens) to FTS after debounce settles', async () => {
     vi.useFakeTimers()
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()

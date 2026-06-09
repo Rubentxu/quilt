@@ -2,12 +2,27 @@
 
 use async_trait::async_trait;
 use lru::LruCache;
+use serde::Deserialize;
 use sqlx::SqlitePool;
+use std::collections::BTreeMap;
 use std::num::NonZeroUsize;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 use crate::sanitize::build_fts5_match_query;
+
+/// One key/value property exposed alongside a search hit.
+///
+/// S1-04: mirrors the JSON shape the frontend expects in
+/// `BlockProperty` (`{ key, value, type }`). The value is kept as a
+/// `serde_json::Value` (not a coerced primitive) so the wire format
+/// is lossless — the frontend can decide whether to render a string,
+/// number, boolean, or null.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchHitProperty {
+    pub key: String,
+    pub value: serde_json::Value,
+}
 
 /// Search result with ranking
 #[derive(Debug, Clone)]
@@ -17,6 +32,10 @@ pub struct SearchResult {
     pub content: String,
     pub snippet: String,
     pub score: f64,
+    /// Structured properties projected from the `blocks.properties`
+    /// BLOB column. Empty when the BLOB is missing, null, or not a
+    /// valid JSON object.
+    pub properties: Vec<SearchHitProperty>,
 }
 
 /// FTS5 Search query result row
@@ -26,6 +45,11 @@ pub struct FtsSearchRow {
     pub page_name: String,
     pub content: String,
     pub rank: f64,
+    /// Raw JSON bytes from `blocks.properties` (a BLOB column). We
+    /// keep the bytes here and decode UTF-8 inside `row_to_result` so
+    /// that we never choke on invalid UTF-8 (just fall back to an
+    /// empty property set).
+    pub properties: Option<Vec<u8>>,
 }
 
 /// Errors that can occur during search operations.
@@ -116,7 +140,7 @@ impl SearchService {
     ) -> Result<Vec<SearchResult>, SearchError> {
         let rows: Vec<FtsSearchRow> = sqlx::query_as::<_, FtsSearchRow>(
             r#"
-            SELECT hex(b.id) as block_id, p.name as page_name, b.content, bm25(blocks_fts) as rank
+            SELECT hex(b.id) as block_id, p.name as page_name, b.content, b.properties, bm25(blocks_fts) as rank
             FROM blocks_fts fts
             JOIN blocks b ON fts.rowid = b.rowid
             JOIN pages p ON b.page_id = p.id
@@ -206,7 +230,7 @@ impl SearchService {
         let like_pattern = format!("%{}%", query);
         let rows = sqlx::query_as::<_, FtsSearchRow>(
             r#"
-            SELECT DISTINCT hex(b.id) as block_id, p.name as page_name, b.content, 0.0 as rank
+            SELECT DISTINCT hex(b.id) as block_id, p.name as page_name, b.content, b.properties, 0.0 as rank
             FROM blocks b
             JOIN pages p ON b.page_id = p.id
             WHERE b.content LIKE ? OR p.name LIKE ?
@@ -260,13 +284,40 @@ impl SearchService {
     }
 
     /// Convert FTS row to SearchResult
+    ///
+    /// `row.properties` is the raw JSON bytes read from the
+    /// `blocks.properties` BLOB column. Three cases are handled
+    /// defensively:
+    ///
+    /// 1. `None` → empty vec (column was NULL).
+    /// 2. Valid UTF-8 JSON object → each key becomes one
+    ///    [`SearchHitProperty`] whose `value` is the raw
+    ///    `serde_json::Value` (preserves string/number/bool/null
+    ///    distinction).
+    /// 3. Anything else (non-UTF-8 bytes, malformed JSON, array,
+    ///    scalar) → empty vec. We never panic on bad data; the
+    ///    search result is still returned, just with no structured
+    ///    properties to filter on.
     pub fn row_to_result(row: FtsSearchRow, query: &str, snippet_len: usize) -> SearchResult {
+        let properties = row
+            .properties
+            .as_deref()
+            .and_then(|raw| std::str::from_utf8(raw).ok())
+            .and_then(|raw| serde_json::from_str::<BTreeMap<String, serde_json::Value>>(raw).ok())
+            .map(|map| {
+                map.into_iter()
+                    .map(|(key, value)| SearchHitProperty { key, value })
+                    .collect()
+            })
+            .unwrap_or_default();
+
         SearchResult {
             block_id: row.block_id,
             page_name: row.page_name,
             content: row.content.clone(),
             snippet: Self::generate_snippet(&row.content, query, snippet_len),
             score: row.rank,
+            properties,
         }
     }
 
@@ -487,11 +538,16 @@ mod tests {
             page_name: "Test Page".to_string(),
             content: "This is test content".to_string(),
             rank: -1.5,
+            properties: None,
         };
         let result = SearchService::row_to_result(row, "test", 50);
         assert_eq!(result.block_id, "abc");
         assert_eq!(result.page_name, "Test Page");
         assert_eq!(result.score, -1.5);
+        assert!(
+            result.properties.is_empty(),
+            "None properties must default to empty vec"
+        );
     }
 
     #[tokio::test]
@@ -1044,6 +1100,118 @@ mod tests {
             results.len() >= 1,
             "fuzzy_search LIKE fallback should find page named 'Test Page'"
         );
+    }
+
+    // ── S1-04: properties projection (structured filtering) ──────
+
+    /// Task 1.1+1.2+1.3 RED: row_to_result must surface a Vec<{key, value}>
+    /// derived from the SQLite BLOB column `blocks.properties` (JSON
+    /// string). When the column is a valid JSON object the values are
+    /// coerced to `serde_json::Value`; when it's None or malformed we
+    /// fall back to an empty vec (defensive — never panic, never return
+    /// an error, just expose no properties).
+    #[test]
+    fn test_row_to_result_parses_valid_properties_json() {
+        // Valid JSON object → key/value pairs are preserved as serde_json::Value
+        let row = FtsSearchRow {
+            block_id: "abc".to_string(),
+            page_name: "Test Page".to_string(),
+            content: "task".to_string(),
+            rank: -1.0,
+            properties: Some(br#"{"status":"todo","priority":"A"}"#.to_vec()),
+        };
+        let result = SearchService::row_to_result(row, "task", 50);
+        assert_eq!(result.properties.len(), 2, "Should produce 2 properties");
+        let status = result
+            .properties
+            .iter()
+            .find(|p| p.key == "status")
+            .expect("status property must be present");
+        assert_eq!(status.value, serde_json::json!("todo"));
+        let priority = result
+            .properties
+            .iter()
+            .find(|p| p.key == "priority")
+            .expect("priority property must be present");
+        assert_eq!(priority.value, serde_json::json!("A"));
+    }
+
+    /// Task 1.3: Malformed JSON in the BLOB → empty vec, never panic.
+    #[test]
+    fn test_row_to_result_malformed_properties_json_returns_empty_vec() {
+        let row = FtsSearchRow {
+            block_id: "abc".to_string(),
+            page_name: "Test Page".to_string(),
+            content: "task".to_string(),
+            rank: -1.0,
+            // Not valid JSON: missing closing brace
+            properties: Some(br#"{"status":"todo""#.to_vec()),
+        };
+        let result = SearchService::row_to_result(row, "task", 50);
+        assert!(
+            result.properties.is_empty(),
+            "Malformed JSON must produce an empty vec, not panic"
+        );
+    }
+
+    /// Task 1.1+1.3: None properties → empty vec (defensive default).
+    #[test]
+    fn test_row_to_result_none_properties_returns_empty_vec() {
+        let row = FtsSearchRow {
+            block_id: "abc".to_string(),
+            page_name: "Test Page".to_string(),
+            content: "task".to_string(),
+            rank: -1.0,
+            properties: None,
+        };
+        let result = SearchService::row_to_result(row, "task", 50);
+        assert!(
+            result.properties.is_empty(),
+            "None properties must produce an empty vec"
+        );
+    }
+
+    /// Task 1.2: End-to-end — the FTS query must project `b.properties`
+    /// from the blocks table so callers receive the structured data
+    /// for post-filtering. Insert a block whose properties BLOB is
+    /// `{"status":"todo","priority":"A"}` and verify the search result
+    /// surfaces those two properties.
+    #[tokio::test]
+    async fn test_search_projects_properties_blob() {
+        let env = TestEnv::new().await;
+        let page_id: Vec<u8> = sqlx::query_scalar("SELECT id FROM pages LIMIT 1")
+            .fetch_one(&env.pool)
+            .await
+            .unwrap();
+        let id = uuid::Uuid::new_v4().as_bytes().to_vec();
+        let props_blob: Vec<u8> =
+            serde_json::to_vec(&serde_json::json!({"status": "todo", "priority": "A"})).unwrap();
+        sqlx::query(
+            "INSERT INTO blocks (id, page_id, content, properties, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0)",
+        )
+        .bind(&id)
+        .bind(&page_id)
+        .bind("findme inside this block")
+        .bind(&props_blob)
+        .execute(&env.pool)
+        .await
+        .unwrap();
+        env.service.clear_cache();
+
+        let results = env.service.search("findme", 10).await.unwrap();
+        assert_eq!(results.len(), 1, "Should find the inserted block");
+        let result = &results[0];
+        assert_eq!(
+            result.properties.len(),
+            2,
+            "Block should expose 2 properties from the BLOB"
+        );
+        let status = result
+            .properties
+            .iter()
+            .find(|p| p.key == "status")
+            .expect("status property must be present");
+        assert_eq!(status.value, serde_json::json!("todo"));
     }
 
     /// Test 16: Performance benchmarks

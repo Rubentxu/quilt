@@ -22,6 +22,12 @@ import type { Block } from '@shared/types/api'
 // Convention: blocks where `created_by` starts with `agent::` (e.g.
 // `agent::claude`, `agent::gemini`). User-authored blocks are hidden
 // by design — those live in regular block views.
+//
+// S2-02 — the set of agent identifiers is discovered dynamically via
+// `GET /api/v1/blocks/authors` instead of being hardcoded here. New
+// agents (e.g. `agent::deepseek`) show up automatically as soon as
+// the first block authored by them is created. The hardcoded list
+// used to miss them silently.
 
 interface ActivityItem {
   block: Block
@@ -46,24 +52,25 @@ export function AgentActivityFeed({ maxItems = 20 }: AgentActivityFeedProps) {
       else setLoading(true)
       setError(null)
       try {
-        // We probe the most-likely agent identifiers. The list is
-        // intentionally small — we don't want to scan every page.
-        // New agents can be added here without any backend change.
-        const knownAgents = [
-          'agent::claude',
-          'agent::gemini',
-          'agent::gpt',
-          'agent::quilt',
-        ]
+        // S2-02: discover the agent roster from the server instead
+        // of hardcoding it. The endpoint returns the distinct set
+        // of `created_by` values that start with `agent::`, sorted
+        // ASC. An empty array is the legitimate cold-start state —
+        // we render the "No agent activity yet" placeholder in that
+        // case (see the empty-state branch below).
+        const agents = await api.getDistinctAuthors()
         const collected: ActivityItem[] = []
-        for (const author of knownAgents) {
+        for (const author of agents) {
           try {
             const blocks = await api.listBlocksByAuthor(author, 50)
             for (const b of blocks) {
               collected.push({ block: b, pageName: b.pageName ?? null })
             }
           } catch {
-            // Per-author failure is non-fatal — we just skip that author.
+            // Per-author failure is non-fatal — we just skip that
+            // author. The roster itself already loaded successfully;
+            // a transient hiccup on one author shouldn't blank the
+            // whole feed.
           }
         }
         // Sort by updatedAt desc and dedupe by block id.

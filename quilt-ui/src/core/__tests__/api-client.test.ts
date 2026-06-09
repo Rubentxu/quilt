@@ -68,6 +68,56 @@ describe('listPages', () => {
   })
 })
 
+describe('searchPages', () => {
+  // S2-03: server-side page-name search. Replaces the previous
+  // `listPages() + Array.includes` client filter. The endpoint is
+  // `/api/v1/pages/search?q=&limit=` and MUST always pass both params
+  // (q may be empty for the "no query yet" case).
+
+  it('passes the query and limit to the server as query params', async () => {
+    mockResponse(200, [])
+
+    await api.searchPages('foo', 25)
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/pages/search?q=foo&limit=25',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+
+  it('encodes special characters in the q parameter', async () => {
+    mockResponse(200, [])
+
+    await api.searchPages('café bar', 10)
+    const called = mockFetch.mock.calls[0][0] as string
+    // `URLSearchParams.toString()` uses application/x-www-form-urlencoded
+    // encoding (so spaces become `+`, non-ASCII becomes percent-encoded
+    // UTF-8). The exact encoding isn't the contract we care about —
+    // what matters is that the raw `'café bar'` string is NOT
+    // passed through verbatim to the URL.
+    expect(called).toMatch(/^\/api\/v1\/pages\/search\?q=caf/)
+    expect(called).not.toMatch(/q=café bar\b/)
+    // The literal space must NOT appear unencoded after the `q=`.
+    expect(called).not.toMatch(/q=caf[^%]*[^A]é\ bar/)
+  })
+
+  it('returns an empty array on 200 with no matches', async () => {
+    mockResponse(200, [])
+
+    const result = await api.searchPages('nothing-matches')
+    expect(result).toEqual([])
+  })
+
+  it('omits the limit param when none is supplied', async () => {
+    mockResponse(200, [])
+
+    await api.searchPages('foo')
+    expect(mockFetch).toHaveBeenCalledWith(
+      '/api/v1/pages/search?q=foo',
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+})
+
 describe('getPage', () => {
   it('returns a single page', async () => {
     const page = { id: '1', name: 'home', title: 'Home', journal: false, journalDay: null, createdAt: '2026-01-01' }
@@ -477,11 +527,11 @@ describe('api surface (P0 — only mounted routes)', () => {
       // Cache control
       'invalidateAll',
       // Pages
-      'listPages', 'getPage', 'createPage', 'createPageFromTemplate',
+      'listPages', 'searchPages', 'getPage', 'createPage', 'createPageFromTemplate',
       'getPageBlocks', 'getJournal', 'getPageBacklinks',
       // Blocks
       'createBlock', 'updateBlock', 'deleteBlock',
-      'searchBlocks', 'listBlocksByAuthor',
+      'searchBlocks', 'listBlocksByAuthor', 'getDistinctAuthors',
       // Settings
       'getSettings', 'updateSettings', 'getDateFormats',
       // Block properties

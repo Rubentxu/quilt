@@ -328,3 +328,78 @@ async fn list_blocks_by_author_respects_limit() -> Result<()> {
 
     Ok(())
 }
+
+// ═══════════════════════════════════════════════════════════
+// /api/v1/blocks/authors
+// ═══════════════════════════════════════════════════════════
+
+/// `GET /api/v1/blocks/authors` must return only `agent::*` authors
+/// (excluding `user::*`) and must pick up authors that no code path
+/// knew about in advance. This is the regression test for S2-02:
+/// the frontend used to hardcode `['agent::claude', 'agent::gemini',
+/// 'agent::gpt', 'agent::quilt']` and missed `agent::deepseek`.
+#[tokio::test]
+async fn list_distinct_authors_discovers_unexpected_agents() -> Result<()> {
+    let app = create_test_app().await?;
+    let page = create_page(&app, "Author Discovery").await;
+
+    // Mix of well-known and "new" agents + a human author. Only the
+    // agent authors should be returned.
+    for (content, author) in [
+        ("from claude", "agent::claude"),
+        ("from deepseek", "agent::deepseek"),
+        ("from gemini", "agent::gemini"),
+        ("from alice", "user::alice"),
+    ] {
+        let (status, _) = post(
+            app.clone(),
+            "/api/v1/blocks",
+            json!({
+                "pageName": page,
+                "content": content,
+                "createdBy": author
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "create failed for {author}");
+    }
+
+    let (status, authors) = get(app, "/api/v1/blocks/authors").await;
+    assert_eq!(status, StatusCode::OK);
+
+    let arr = authors.as_array().expect("array response");
+    let got: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+
+    // The set must include the unexpected `agent::deepseek` and
+    // must NOT include the human `user::alice`.
+    assert!(
+        got.contains(&"agent::deepseek"),
+        "agent::deepseek must be discovered dynamically, got {got:?}"
+    );
+    assert!(
+        got.contains(&"agent::claude"),
+        "agent::claude must be in the result, got {got:?}"
+    );
+    assert!(
+        !got.contains(&"user::alice"),
+        "human authors must be filtered out, got {got:?}"
+    );
+
+    // Result is sorted ASC (the handler's SQL has ORDER BY author ASC).
+    let mut sorted = got.clone();
+    sorted.sort();
+    assert_eq!(got, sorted, "result must be sorted ASC, got {got:?}");
+
+    Ok(())
+}
+
+/// On an empty database, the endpoint must return an empty array,
+/// not a 404 or a 500. This is the cold-start contract.
+#[tokio::test]
+async fn list_distinct_authors_empty_db() -> Result<()> {
+    let app = create_test_app().await?;
+    let (status, authors) = get(app, "/api/v1/blocks/authors").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(authors.as_array().unwrap().len(), 0);
+    Ok(())
+}

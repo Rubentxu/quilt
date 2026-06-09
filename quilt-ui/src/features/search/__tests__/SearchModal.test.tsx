@@ -5,18 +5,18 @@ import { SearchModal, FOCUS_BLOCK_STORAGE_KEY } from '../SearchModal'
 import { api } from '@core/api-client'
 
 // ──── API + router mocks ───────────────────────────────────────────
-// SearchModal wires BOTH `api.listPages()` (page-name filter) and
-// `api.searchBlocks()` (FTS over block content) — G3 of the wikilinks
-// audit. The router's `useNavigate` is stubbed so the test doesn't
-// need a real router instance.
+// SearchModal wires BOTH `api.searchPages()` (server-side page-name
+// filter — S2-03) and `api.searchBlocks()` (FTS over block content —
+// G3 of the wikilinks audit). The router's `useNavigate` is stubbed
+// so the test doesn't need a real router instance.
 
-const mockListPages = vi.fn()
+const mockSearchPages = vi.fn()
 const mockSearchBlocks = vi.fn()
 const mockNavigate = vi.fn()
 
 vi.mock('@core/api-client', () => ({
   api: {
-    listPages: (...args: unknown[]) => mockListPages(...args),
+    searchPages: (...args: unknown[]) => mockSearchPages(...args),
     searchBlocks: (...args: unknown[]) => mockSearchBlocks(...args),
   },
 }))
@@ -26,7 +26,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 beforeEach(() => {
-  mockListPages.mockReset()
+  mockSearchPages.mockReset()
   mockSearchBlocks.mockReset()
   mockNavigate.mockReset()
   sessionStorage.clear()
@@ -55,7 +55,7 @@ function renderModal() {
 
 describe('SearchModal', () => {
   it('shows pages when the query is empty (no block search call)', async () => {
-    mockListPages.mockResolvedValue(PAGES)
+    mockSearchPages.mockResolvedValue(PAGES)
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -72,7 +72,18 @@ describe('SearchModal', () => {
   })
 
   it('shows both page matches and block matches when the query is non-empty', async () => {
-    mockListPages.mockResolvedValue(PAGES)
+    // S2-03: the search modal now drives BOTH the empty-query and
+    // the typed-query paths through `api.searchPages()`. The server
+    // returns a filtered list when a query is passed, so the
+    // `Other` page (whose name doesn't contain "foo") is absent
+    // from the typed-query response — no client-side filter
+    // required. The empty-query response, on the other hand, is
+    // the full PAGES list (mirroring the previous "listPages"
+    // behaviour).
+    mockSearchPages.mockImplementation(async (q: string) => {
+      if (!q) return PAGES
+      return PAGES.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))
+    })
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -85,14 +96,11 @@ describe('SearchModal', () => {
       expect(screen.getByText('this is a foo in the wild')).toBeInTheDocument()
     })
 
-    // Page section: only pages whose name/title matches.
+    // Page section: only pages whose name contains 'foo'.
     expect(screen.getByText('Foo Page')).toBeInTheDocument()
-    // Wait for the filtered list to settle — the "Other Page" row is
-    // rendered with the initial unfiltered list and only disappears
-    // after the debounce fires and the filter runs.
-    await waitFor(() => {
-      expect(screen.queryByText('Other Page')).not.toBeInTheDocument()
-    })
+    // "Other Page" must NOT be present — the server-side filter
+    // (simulated by mockImplementation above) excluded it.
+    expect(screen.queryByText('Other Page')).not.toBeInTheDocument()
 
     // The block's parent page appears as a subtitle so the user knows
     // which page they'd land on. There are two "Foobar" rows visible
@@ -109,7 +117,7 @@ describe('SearchModal', () => {
 
   it('truncates block content previews to ~80 characters', async () => {
     const longContent = 'x'.repeat(200)
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([
       { blockId: 'b1', pageId: 'p1', pageName: 'P', content: longContent, snippet: longContent, score: -1 },
     ])
@@ -127,7 +135,7 @@ describe('SearchModal', () => {
 
   it('debounces the search — typing fast does not fire one request per keystroke', async () => {
     vi.useFakeTimers()
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -158,7 +166,7 @@ describe('SearchModal', () => {
   })
 
   it('navigates to a page when a page result is clicked', async () => {
-    mockListPages.mockResolvedValue(PAGES)
+    mockSearchPages.mockResolvedValue(PAGES)
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -179,7 +187,7 @@ describe('SearchModal', () => {
   })
 
   it('navigates to a block result and stores the focus request', async () => {
-    mockListPages.mockResolvedValue(PAGES)
+    mockSearchPages.mockResolvedValue(PAGES)
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -201,7 +209,14 @@ describe('SearchModal', () => {
   })
 
   it('ArrowDown / ArrowUp move the selection through the unified list', async () => {
-    mockListPages.mockResolvedValue(PAGES)
+    // S2-03: the server-side filter strips the non-matching 'Other'
+    // page from the typed-query response. The flat result list is
+    // [Foo, Foobar, block1, block2], so two ArrowDowns land on the
+    // first block.
+    mockSearchPages.mockImplementation(async (q: string) => {
+      if (!q) return PAGES
+      return PAGES.filter(p => p.name.toLowerCase().includes(q.toLowerCase()))
+    })
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -212,7 +227,7 @@ describe('SearchModal', () => {
       expect(screen.getByText('this is a foo in the wild')).toBeInTheDocument()
     })
 
-    // Default: index 0 (the first page match).
+    // Default: index 0 (the first page match — "Foo").
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     // Now on index 1 (the second page match — "Foobar").
     fireEvent.keyDown(input, { key: 'ArrowDown' })

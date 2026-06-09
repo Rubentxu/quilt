@@ -116,6 +116,29 @@ pub trait BlockRepository: Send + Sync {
     /// which requires the value to match exactly. For the lens use
     /// case we only care that the key exists.
     async fn list_by_property_key(&self, key: &str, limit: u32) -> Result<Vec<Block>, DomainError>;
+
+    /// List distinct string values of a property that satisfy an
+    /// optional `LIKE` prefix.
+    ///
+    /// Used by `GET /api/v1/blocks/authors` to enumerate "which agent
+    /// identifiers have ever authored a block" without hardcoding
+    /// the set in the UI. The default empty prefix matches all
+    /// non-NULL string values; pass `Some("agent::")` to scope the
+    /// result to AI authors.
+    ///
+    /// Semantics:
+    /// * Values are deduplicated and sorted ASC.
+    /// * NULL and non-text values are excluded (defense in depth on
+    ///   top of the SQL `typeof` filter).
+    /// * Empty strings are also excluded.
+    /// * No limit is applied — the set of distinct authors is
+    ///   expected to be tiny (single digits). If a deployment grows
+    ///   to thousands of distinct authors, this method should grow
+    ///   a `cursor` + `limit` pair, mirroring `list_distinct_keys`.
+    async fn list_distinct_authors(
+        &self,
+        prefix: Option<&str>,
+    ) -> Result<Vec<String>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods

@@ -18,15 +18,15 @@ export type PanelId =
   | 'structural-graph'
   | 'semantic-insight'
 
-/** Stable, human-readable labels for each panel id. */
-export const PANEL_LABELS: Record<PanelId, string> = {
-  sidebar: 'Sidebar',
-  backlinks: 'Backlinks',
-  'agent-activity': 'Agent activity',
-  outline: 'Outline',
-  'structural-graph': 'Structural graph',
-  'semantic-insight': 'Semantic insight',
-}
+/**
+ * Re-export of the canonical `PANEL_LABELS` from
+ * `PanelVisibilityContext.tsx`. The constant is *defined* in the
+ * context module (single source of truth) and re-exported here so
+ * existing imports from `./presets` keep resolving. Do not redeclare
+ * a second `PANEL_LABELS` value — that would create the dual-source
+ * drift this re-export is designed to prevent.
+ */
+export { PANEL_LABELS } from './PanelVisibilityContext'
 
 /** A preset id is the key into the `PRESETS` table. */
 export type PresetId = 'default' | 'focus' | 'review'

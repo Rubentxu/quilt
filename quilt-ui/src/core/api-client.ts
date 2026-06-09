@@ -321,6 +321,34 @@ export const api = {
   listPages: () =>
     cachedFetch<Page[]>('GET', `/pages`),
 
+  /**
+   * Server-side page-name search — S2-03.
+   *
+   * Replaces the previous pattern of calling `listPages()` and
+   * client-side `Array.prototype.includes` filtering on every keystroke,
+   * which was O(n) AND transferred the full page list (multi-MB on
+   * large graphs) on every search-modal open.
+   *
+   * The server endpoint is `GET /api/v1/pages/search?q=&limit=` and
+   * returns `Page[]`. The optional `limit` defaults to 50 server-side
+   * and is clamped to [1, 200]. The endpoint is also safe to call
+   * with `q === ''` — the server returns up to `limit` pages
+   * ordered by name, so the frontend can drive the "empty query"
+   * and "typed query" cases from a single function.
+   *
+   * The cache key includes the full URL (q + limit) so two distinct
+   * queries do not share a cached body. There is no per-page invalidation
+   * here because the search result set is a derived view, not the
+   * canonical page data — mutations are handled by `createPage` /
+   * `updatePage` invalidating the canonical endpoints.
+   */
+  searchPages: (query: string, limit?: number) => {
+    const params = new URLSearchParams()
+    params.set('q', query)
+    if (limit !== undefined) params.set('limit', String(limit))
+    return cachedFetch<Page[]>('GET', `/pages/search?${params.toString()}`)
+  },
+
   getPage: (name: string) =>
     cachedFetch<Page>('GET', `/pages/${encodeURIComponent(name)}`, { pageName: name }),
 
@@ -480,6 +508,20 @@ export const api = {
     )
     return raw.map(normalizeBlock)
   },
+
+  /**
+   * Get the distinct set of agent identifiers that have ever authored
+   * a block, sorted ASC. The server filters the result to values
+   * starting with `agent::` (so `user::alice` is excluded).
+   *
+   * Powers the `AgentActivityFeed` panel. Replacing the previous
+   * hardcoded `['agent::claude', 'agent::gemini', 'agent::gpt',
+   * 'agent::quilt']` list — S2-02.
+   *
+   * Returns an empty array on a cold graph (no agent authors yet).
+   */
+  getDistinctAuthors: () =>
+    cachedFetch<string[]>('GET', '/blocks/authors'),
 
   // Settings
   getSettings: () =>

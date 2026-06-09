@@ -30,13 +30,13 @@ import type { SavedSearch } from '../savedSearches'
 
 // ──── API + router mocks ───────────────────────────────────────────
 
-const mockListPages = vi.fn()
+const mockSearchPages = vi.fn()
 const mockSearchBlocks = vi.fn()
 const mockNavigate = vi.fn()
 
 vi.mock('@core/api-client', () => ({
   api: {
-    listPages: (...args: unknown[]) => mockListPages(...args),
+    searchPages: (...args: unknown[]) => mockSearchPages(...args),
     searchBlocks: (...args: unknown[]) => mockSearchBlocks(...args),
   },
 }))
@@ -46,7 +46,7 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 beforeEach(() => {
-  mockListPages.mockReset()
+  mockSearchPages.mockReset()
   mockSearchBlocks.mockReset()
   mockNavigate.mockReset()
   sessionStorage.clear()
@@ -85,10 +85,10 @@ function getInput() {
 
 describe('SearchModal — recent searches panel', () => {
   it('does NOT show recent searches when the history is empty', async () => {
-    mockListPages.mockResolvedValue(PAGES)
+    mockSearchPages.mockResolvedValue(PAGES)
     renderModal()
 
-    // The default "Pages" section appears (from listPages), but the
+    // The default "Pages" section appears (from searchPages), but the
     // "Recent searches" header is absent because nothing is stored.
     await waitFor(() => {
       expect(screen.getByText('Foo Page')).toBeInTheDocument()
@@ -104,7 +104,7 @@ describe('SearchModal — recent searches panel', () => {
         { query: 'beta', timestamp: 200, resultCount: 1 },
       ]),
     )
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     renderModal()
 
     await waitFor(() => {
@@ -119,7 +119,7 @@ describe('SearchModal — recent searches panel', () => {
       RECENT_SEARCHES_KEY,
       JSON.stringify([{ query: 'alpha', timestamp: 1, resultCount: 0 }]),
     )
-    mockListPages.mockResolvedValue(PAGES)
+    mockSearchPages.mockResolvedValue(PAGES)
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -142,7 +142,7 @@ describe('SearchModal — clicking a recent search', () => {
       RECENT_SEARCHES_KEY,
       JSON.stringify([{ query: 'alpha', timestamp: 1, resultCount: 0 }]),
     )
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([
       { blockId: 'b1', pageId: 'p1', pageName: 'P', content: 'alpha hit', snippet: 'alpha hit', score: -1 },
     ])
@@ -166,7 +166,7 @@ describe('SearchModal — clicking a recent search', () => {
 
 describe('SearchModal — auto-save recent searches', () => {
   it('writes the executed query to localStorage when the user has typed and the modal closes', async () => {
-    mockListPages.mockResolvedValue(PAGES)
+    mockSearchPages.mockResolvedValue(PAGES)
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     const onClose = vi.fn()
@@ -214,7 +214,7 @@ describe('SearchModal — auto-save recent searches', () => {
     }))
     localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(seeded))
 
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     const onClose = vi.fn()
@@ -251,13 +251,13 @@ describe('SearchModal — auto-save recent searches', () => {
 
 describe('SearchModal — save search', () => {
   it('does NOT show a save button while the input is empty', () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     renderModal()
     expect(screen.queryByTestId('save-search-button')).not.toBeInTheDocument()
   })
 
   it('shows a save button after the user has executed a search', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -270,7 +270,7 @@ describe('SearchModal — save search', () => {
   })
 
   it('opens a save form when the save button is clicked', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -289,7 +289,7 @@ describe('SearchModal — save search', () => {
   })
 
   it('saves a new search to localStorage when the form is confirmed', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -318,7 +318,7 @@ describe('SearchModal — save search', () => {
   })
 
   it('saves the chosen viewType alongside the search', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -342,7 +342,7 @@ describe('SearchModal — save search', () => {
   })
 
   it('refuses to save when the name is empty', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue(BLOCKS)
 
     renderModal()
@@ -365,7 +365,7 @@ describe('SearchModal — save search', () => {
 
 describe('SearchModal — saved searches panel', () => {
   it('does NOT show the saved section when the store is empty', async () => {
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     renderModal()
     expect(screen.queryByText(/saved searches/i)).not.toBeInTheDocument()
   })
@@ -376,7 +376,7 @@ describe('SearchModal — saved searches panel', () => {
       { id: 's2', name: 'Recent Notes', query: 'note', createdAt: 2, viewType: 'cards' },
     ]
     localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(saved))
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
 
     renderModal()
 
@@ -392,7 +392,7 @@ describe('SearchModal — saved searches panel', () => {
       { id: 's1', name: 'Open TODOs', query: 'status:todo', createdAt: 1 },
     ]
     localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(saved))
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
     mockSearchBlocks.mockResolvedValue([])
 
     renderModal()
@@ -408,7 +408,7 @@ describe('SearchModal — saved searches panel', () => {
       { id: 's1', name: 'Open TODOs', query: 'status:todo', createdAt: 1 },
     ]
     localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(saved))
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
 
     // First mount — the saved search is visible.
     const first = renderModal()
@@ -430,7 +430,7 @@ describe('SearchModal — saved searches panel', () => {
       { id: 's2', name: 'B', query: 'b', createdAt: 2 },
     ]
     localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(saved))
-    mockListPages.mockResolvedValue([])
+    mockSearchPages.mockResolvedValue([])
 
     renderModal()
     await waitFor(() => {

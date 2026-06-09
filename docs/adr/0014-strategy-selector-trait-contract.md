@@ -1,4 +1,4 @@
-# ADR-DRAFT: StrategySelector + StrategyScorer traits en quilt-core (WASM)
+# ADR: StrategySelector + StrategyScorer traits en quilt-core (WASM)
 
 
 ## Context
@@ -136,10 +136,44 @@ pub trait StrategySelector {
 ## Consequences
 
 - `quilt-core` gana un módulo `strategy.rs` con traits y tipos puros
+- `quilt-core` gana `strategy_scoring.rs` con implementación concreta `RelevanceScorer` (4 signals: type-match 0.50, property completeness 0.20, recency 0.15, semantic 0.15) y `ScoredStrategySelector`
 - No requiere dependencias externas (sin ML, sin DB)
 - Frontend obtiene sugerencias en tiempo real sin round-trip de red
 - Agentes MCP usan el mismo selector vía `quilt_strategy_select`
 - Separación Scorer/Selector permite testear calidad de ranking independientemente
+
+## Implementation (2026-06-09)
+
+Implementación Phase 1eterminística completa:
+
+```rust
+// crates/quilt-core/src/strategy_scoring.rs
+
+/// Scoring signals (4 señales ponderadas, suman 1.0):
+/// - type-match: 0.50 (compatibilidad de tipo)
+/// - property completeness: 0.20 (completitud de schema)
+/// - recency: 0.15 (half-life 24h, RFC 3339 + Unix epoch)
+/// - semantic: 0.15 (reservado, neutral 0.5)
+
+pub struct RelevanceScorer {
+    pub const TYPE_MATCH_WEIGHT: f32 = 0.50;
+    pub const PROPERTY_WEIGHT: f32 = 0.20;
+    pub const RECENCY_WEIGHT: f32 = 0.15;
+    pub const SEMANTIC_WEIGHT: f32 = 0.15;
+}
+
+impl StrategyScorer for RelevanceScorer {
+    fn score(&self, action: &str, features: &ContextFeatures) -> f32 { ... }
+}
+
+pub struct ScoredStrategySelector { ... }
+
+impl StrategySelector for ScoredStrategySelector {
+    fn select(&self, features: &ContextFeatures, scorer: &dyn StrategyScorer, portfolio: &[String]) -> Vec<RankedAction> { ... }
+}
+```
+
+Tests: 27 inline tests cubriendo todos los signals, weights-sum-to-one invariant, RFC 3339 + Unix epoch parsing, fallback behavior.
 
 ## References
 

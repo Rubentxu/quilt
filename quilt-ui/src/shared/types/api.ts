@@ -240,6 +240,10 @@ export interface Backlink {
  * (`crates/quilt-server/src/handlers/search.rs`). G3 of the wikilinks
  * audit wires the search modal to this endpoint so users can find
  * blocks by content, not just by page name.
+ *
+ * S1-04: `properties` carries the structured property bag from the
+ * `blocks.properties` BLOB. The frontend's `blockMatchesFilter` uses
+ * this for filter matching instead of regex-matching raw content.
  */
 export interface SearchResult {
   blockId: string;
@@ -248,6 +252,7 @@ export interface SearchResult {
   content: string;
   snippet: string;
   score: number;
+  properties?: BlockProperty[];
 }
 
 // ──── OutlinerCommand (WASM history bridge) ───────────────────────

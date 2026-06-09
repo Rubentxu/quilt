@@ -368,6 +368,13 @@ mod tests {
                 "list_by_property_key not supported in mock".to_string(),
             ))
         }
+
+        async fn list_distinct_authors(
+            &self,
+            _prefix: Option<&str>,
+        ) -> Result<Vec<String>, DomainError> {
+            Ok(vec![])
+        }
     }
 
     #[tokio::test]

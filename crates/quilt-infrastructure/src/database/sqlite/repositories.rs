@@ -762,6 +762,59 @@ impl BlockRepository for SqliteBlockRepository {
 
         Ok(rows.iter().map(|r| r.get::<String, _>("key")).collect())
     }
+
+    async fn list_distinct_authors(
+        &self,
+        prefix: Option<&str>,
+    ) -> Result<Vec<String>, DomainError> {
+        // Two query shapes: with and without the prefix predicate.
+        // The `created_by` value lives inside the `properties` JSON
+        // blob (it's not a column), so we extract it with
+        // `json_extract` and the `$.created_by` JSON pointer. We
+        // also enforce `typeof() = 'text'` so a non-text value
+        // stored under that key (e.g. a future booleanean flag
+        // called `created_by`) cannot crash the extraction.
+        // Distinct + ORDER BY is pushed down to SQLite so the
+        // handler returns a stable list without doing it in Rust.
+        //
+        // The `%` LIKE suffix is appended to the bound prefix
+        // parameter — the prefix itself is still a parameter, not a
+        // concatenation into the SQL string. SQL injection-safe.
+        let rows = match prefix {
+            Some(p) => {
+                let pattern = format!("{}%", p);
+                sqlx::query(
+                    "SELECT DISTINCT json_extract(properties, '$.created_by') AS author \
+                     FROM blocks \
+                     WHERE json_extract(properties, '$.created_by') IS NOT NULL \
+                       AND typeof(json_extract(properties, '$.created_by')) = 'text' \
+                       AND json_extract(properties, '$.created_by') LIKE ? \
+                     ORDER BY author ASC",
+                )
+                .bind(pattern)
+                .fetch_all(&self.pool)
+                .await
+            }
+            None => {
+                sqlx::query(
+                    "SELECT DISTINCT json_extract(properties, '$.created_by') AS author \
+                     FROM blocks \
+                     WHERE json_extract(properties, '$.created_by') IS NOT NULL \
+                       AND typeof(json_extract(properties, '$.created_by')) = 'text' \
+                     ORDER BY author ASC",
+                )
+                .fetch_all(&self.pool)
+                .await
+            }
+        }
+        .map_err(|e| DomainError::Storage(format!("list_distinct_authors: {}", e)))?;
+
+        Ok(rows
+            .iter()
+            .filter_map(|r| r.try_get::<String, _>("author").ok())
+            .filter(|s| !s.is_empty())
+            .collect())
+    }
 }
 
 // ── SqlitePageRepository ───────────────────────────────────────────────
@@ -809,6 +862,46 @@ impl SqlitePageRepository {
             pool,
             property_repo: Some(repo),
         }
+    }
+
+    /// Search pages whose `name` OR `title` contains the query
+    /// substring (case-insensitive `LIKE '%q%'`). S2-03 — the
+    /// server-side page search endpoint needs to match on both
+    /// columns because pages with a custom display title should
+    /// surface when the user types a fragment of the title that
+    /// does not appear in the (lowercased) name.
+    ///
+    /// The trait's `search(query, limit)` only matches on `name`,
+    /// which is what the rest of the codebase uses; this inherent
+    /// helper exists to give the HTTP handler an OR query without
+    /// widening the trait contract.
+    ///
+    /// `query` is the raw user input. The SQL is built with
+    /// `lower(...) LIKE lower('%query%')` so the comparison is
+    /// case-insensitive even for the `title` column (which is
+    /// stored as-typed, unlike `name` which the `Page` entity
+    /// lowercases on write).
+    pub async fn search_by_name_or_title(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Page>, DomainError> {
+        let like = format!("%{}%", query.to_lowercase());
+        let rows = sqlx::query(
+            "SELECT * FROM pages \
+             WHERE lower(name) LIKE ? OR lower(IFNULL(title, '')) LIKE ? \
+             ORDER BY name LIMIT ?",
+        )
+        .bind(&like)
+        .bind(&like)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("search_by_name_or_title: {}", e)))?;
+
+        rows.iter()
+            .map(|r| PageRow::from_row(r)?.to_page())
+            .collect()
     }
 
     /// Check whether a key resolves to a read-only PropertyDefinition.

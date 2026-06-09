@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { Search, FileText, Calendar, Hash, X, BookmarkPlus, History, Bookmark, Trash2 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { api } from '@core/api-client'
-import type { Page, SearchResult } from '@shared/types/api'
+import type { BlockProperty, Page, SearchResult } from '@shared/types/api'
 import toast from 'react-hot-toast'
 import { SaveAsViewModal, type SaveAsViewRequest } from './SaveAsViewModal'
 import {
@@ -86,19 +86,45 @@ export function parseQuery(query: string): ParsedQuery {
 }
 
 /**
- * Test whether a block's content includes the property `key:: value`
- * or `key: value` (case-insensitive). Used to post-filter FTS results
- * client-side. The match requires a word boundary before the key so
- * that `substatus:: todo` does NOT satisfy a filter on `status`.
+ * Test whether a block carries a property matching the given filter.
+ *
+ * S1-04: the previous implementation regex-matched raw block content
+ * for `key:: value` or `key: value` substrings, which produced false
+ * positives (a block whose body said "we discussed the status: idea"
+ * would match a `status:todo` filter) and false negatives (a block
+ * whose `status` was set programmatically but never typed into the
+ * body). The new implementation consults the structured `properties`
+ * bag the server returns alongside every search hit.
+ *
+ * Matching is case-insensitive on both the key and the value, and
+ * the value is coerced via `String()` so number- and boolean-valued
+ * properties (`42`, `true`) compare against their stringified
+ * counterpart without surprising the caller.
+ *
+ * Blocks with no `properties` (or an empty array) fail every filter
+ * — they have no structured data to match against, and a missing
+ * property is semantically distinct from a present-but-empty one.
  */
-export function blockMatchesFilter(content: string, filter: PropertyFilter): boolean {
-  const escapedKey = filter.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const escapedValue = filter.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const pattern = new RegExp(
-    `(?:^|\\s)${escapedKey}(?:::|:)\\s*${escapedValue}(?=\\s|$|[,;])`,
-    'i',
-  )
-  return pattern.test(content)
+export function blockMatchesFilter(
+  block: { properties?: BlockProperty[] },
+  filter: PropertyFilter,
+): boolean {
+  if (!block.properties || block.properties.length === 0) {
+    return false
+  }
+  const targetKey = filter.key.toLowerCase()
+  const targetValue = filter.value.toLowerCase()
+  return block.properties.some(p => {
+    if (p.key.toLowerCase() !== targetKey) return false
+    // Coerce non-string values to strings so number/boolean property
+    // values can be matched by their textual form. `String(true)`
+    // is "true" — that's what the user types in the search bar.
+    const propValue = (p.value === null || p.value === undefined
+      ? ''
+      : String(p.value)
+    ).toLowerCase()
+    return propValue === targetValue
+  })
 }
 
 // ──── Search-DSL reconstruction ────────────────────────────────────
@@ -275,8 +301,14 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
     const trimmed = query.trim()
 
     if (!trimmed) {
+      // Empty query — fire a single server-side page search with an
+      // empty `q`. S2-03 used to call `api.listPages()` and slice
+      // client-side; that transferred the entire page list on every
+      // modal open. The new `searchPages` endpoint returns up to
+      // `limit` pages ordered by name, so the response is bounded
+      // regardless of graph size.
       setLoading(true)
-      api.listPages()
+      api.searchPages('', PAGE_LIMIT)
         .then(pages => {
           setPageResults(pages.slice(0, PAGE_LIMIT))
           setBlockResults([])
@@ -299,12 +331,26 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
         // already covered the no-input case).
         const ftsQuery = parsed.text || (hasFilters ? filters[0].value : '')
 
+        // Server-side page-name search. S2-03 used to call
+        // `api.listPages()` and apply `Array.prototype.includes` on
+        // the client for every keystroke — O(n) work plus a
+        // multi-MB payload for large graphs. The new endpoint
+        // returns ONLY the pages whose name or title contains
+        // `parsed.text`, so we can drop the client filter entirely.
+        //
+        // We request a `limit` slightly larger than `PAGE_LIMIT` so
+        // the slice below has headroom for any defensive trimming
+        // the server does. `2 * PAGE_LIMIT` is the smallest
+        // meaningful headroom that keeps the slice from dropping
+        // the only result on a 1-match query.
+        const pageQuery = parsed.text
+
         // Run both calls in parallel. We intentionally don't `await`
         // them sequentially because the page filter is fast and the
         // FTS call is the slow one — kicking them off together means
         // the UI updates as soon as either settles.
         const [pages, blocks] = await Promise.all([
-          api.listPages().catch(() => [] as Page[]),
+          api.searchPages(pageQuery, PAGE_LIMIT * 2).catch(() => [] as Page[]),
           ftsQuery
             ? api.searchBlocks(ftsQuery, BLOCK_LIMIT).catch(() => [] as SearchResult[])
             : Promise.resolve([] as SearchResult[]),
@@ -312,20 +358,19 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
         // Post-filter blocks by the parsed property filters. FTS5
         // doesn't understand property syntax, so the filter is a
-        // client-side regex on the block's raw content. ALL filters
-        // must match (AND semantics).
+        // client-side lookup against the structured `properties`
+        // bag the server now returns alongside each hit (S1-04).
+        // ALL filters must match (AND semantics).
         const filteredBlocks = filters.length > 0
-          ? blocks.filter(b => filters.every(f => blockMatchesFilter(b.content, f)))
+          ? blocks.filter(b => filters.every(f => blockMatchesFilter(b, f)))
           : blocks
 
-        const q = parsed.text.toLowerCase()
+        // The server already filtered by name/title — we only
+        // need to slice to PAGE_LIMIT. Keep the existing
+        // createdAt-desc ordering (the most recently created pages
+        // win the visible slots) for parity with the previous
+        // client-side behaviour.
         const filteredPages = pages
-          .filter(
-            p => p.name.toLowerCase().includes(q) || (p.title && p.title.toLowerCase().includes(q)),
-          )
-          // Sort by most recently updated (proxy: createdAt desc, since
-          // the Page DTO doesn't expose updatedAt yet). ISO-8601 date
-          // strings sort correctly via localeCompare.
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           .slice(0, PAGE_LIMIT)
 

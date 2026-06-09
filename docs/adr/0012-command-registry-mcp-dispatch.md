@@ -1,6 +1,6 @@
-# ADR-DRAFT: CommandRegistry como React Context con dispatch MCP híbrido
+# ADR: CommandRegistry como React Context con dispatch MCP híbrido
 
-Status: draft
+Status: implemented
 
 ## Context
 
@@ -68,6 +68,13 @@ El shortcut `Cmd+Shift+J` fue rechazado por conflicto con Chrome DevTools. `Cmd+
 - `priority` permite orden determinista de resultados
 - `category` como string union permite que features registren nuevas categorías sin modificar el core
 - No requiere cambios en el backend (los comandos server-side van por MCP)
+
+## Implementation (2026-06-09)
+
+- `CommandRegistry` en `quilt-ui/src/features/command-center/`
+- Shortcut `Cmd+Shift+K` para activar
+- Quick Capture builtin command
+- Phase 1 #9 del roadmap
 
 ## References
 

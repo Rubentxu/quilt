@@ -76,14 +76,18 @@ export const QUERY_PROPERTY_TEMPLATE: PropertyTemplate = {
 
 /**
  * Heuristic: is this block a task?  True if the explicit
- * `blockType` is `todo`, or if the block carries a `type:: todo`
- * property (a Quilt convention for blocks typed via properties
- * instead of the typed field).
+ * `blockType` is `todo`, or if the block carries a `type:: todo` /
+ * `type:: task` property (a Quilt convention for blocks typed via
+ * properties instead of the typed field — e.g. the `/task` slash
+ * command writes `type:: task` while the `/todo` slash command and
+ * checkbox blocks still write `type:: todo` / `blockType: 'todo'`).
  */
 function isTaskBlock(block: Block): boolean {
   if (block.blockType === 'todo') return true
   const t = block.properties?.find(p => p.key === 'type')?.value
-  return t != null && String(t).toLowerCase() === 'todo'
+  if (t == null) return false
+  const norm = String(t).toLowerCase()
+  return norm === 'todo' || norm === 'task'
 }
 
 /**
