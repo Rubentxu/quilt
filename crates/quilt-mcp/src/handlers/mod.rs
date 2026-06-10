@@ -57,6 +57,7 @@ pub mod properties;
 pub mod query;
 pub mod resource;
 pub mod retrieval;
+pub mod schemas;
 pub mod system;
 pub mod template;
 pub mod temporal;

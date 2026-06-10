@@ -33,6 +33,9 @@ pub mod migration;
 // Property Intelligence (PI-3) — property service
 pub mod property;
 
+// Property Schema Templates (PI-7) — schema service
+pub mod schema;
+
 // Re-exports
 pub use bootstrap::AppServices;
 pub use errors::ApplicationError;

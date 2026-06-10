@@ -26,6 +26,7 @@ pub mod definition;
 pub mod entry;
 pub mod merge;
 pub mod resolver;
+pub mod schema;
 pub mod types;
 pub mod validator;
 
@@ -37,5 +38,6 @@ pub use definition::PropertyDefinition;
 pub use entry::{DefaultPropertyEntry, HasTimestamp, HasValue, Mergeable, PropertyEntry};
 pub use merge::merge_properties;
 pub use resolver::PropertyKeyResolver;
+pub use schema::{AutoDetectParams, PropertySchema};
 pub use types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext};
 pub use validator::PropertyValidator;

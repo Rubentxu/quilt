@@ -38,6 +38,7 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/blocks", handlers::blocks::routes())
         .nest("/api/v1/pages", handlers::pages::routes())
         .nest("/api/v1/properties", handlers::properties::routes())
+        .nest("/api/v1/schemas", handlers::schemas::routes())
         .nest("/api/v1/references", handlers::references::routes())
         .nest("/api/v1/search", handlers::search::routes())
         .nest("/api/v1/navigate", handlers::navigate::routes())

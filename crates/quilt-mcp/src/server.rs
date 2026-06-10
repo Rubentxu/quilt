@@ -211,7 +211,7 @@ mod tests {
     use crate::handlers::{
         block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
         properties::PropertyToolHandler, query::QueryToolHandler, resource::GraphResourceProvider,
-        retrieval::RetrievalToolHandler, system::SystemToolHandler,
+        retrieval::RetrievalToolHandler, schemas::SchemaHandler, system::SystemToolHandler,
         template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
     use quilt_application::property::{PropertyService, PropertyServiceTrait};
@@ -228,7 +228,7 @@ mod tests {
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
         SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository,
-        SqliteTagRepository,
+        SqliteSchemaRepository, SqliteTagRepository,
     };
     use quilt_search::SearchService;
     use sqlx::SqlitePool;
@@ -299,6 +299,12 @@ mod tests {
             Arc::new(SqlitePropertyRepository::new(pool.clone())),
         ));
         let property_handler = PropertyToolHandler::new(property_service);
+        let schema_handler = SchemaHandler::new(
+            quilt_application::schema::SchemaService::new(
+                Arc::new(SqliteSchemaRepository::new(pool.clone())),
+                Arc::new(SqlitePropertyRepository::new(pool.clone())),
+            ),
+        );
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -311,6 +317,7 @@ mod tests {
                 Box::new(graph_handler),
                 Box::new(template_handler),
                 Box::new(property_handler),
+                Box::new(schema_handler),
                 Box::new(system_handler),
             ],
             vec![Box::new(resource_provider)],
@@ -368,7 +375,7 @@ mod tests {
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                assert_eq!(result.tools.len(), 28);
+                assert_eq!(result.tools.len(), 29);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(

@@ -13,6 +13,7 @@ pub mod pages;
 pub mod properties;
 pub mod query;
 pub mod references;
+pub mod schemas;
 pub mod search;
 pub mod settings;
 pub mod templates;

@@ -520,5 +520,33 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
         .execute(pool)
         .await?;
 
+    // ── Property Intelligence v7 (PI-7) — property schema templates ──
+    //
+    // Stores reusable property clusters (schemas). Each schema has a name,
+    // description, and a JSON array of property keys. Auto-detected schemas
+    // are flagged for user review. UUIDs as BLOB, timestamps as i64 ms.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS property_schemas (
+            id BLOB PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT NOT NULL DEFAULT '',
+            property_keys TEXT NOT NULL DEFAULT '[]',
+            auto_detected INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_schemas_name ON property_schemas(name)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_schemas_auto ON property_schemas(auto_detected)")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }
