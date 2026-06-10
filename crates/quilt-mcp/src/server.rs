@@ -210,9 +210,9 @@ mod tests {
     use super::*;
     use crate::handlers::{
         block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
-        properties::PropertyToolHandler, query::QueryToolHandler, resource::GraphResourceProvider,
-        retrieval::RetrievalToolHandler, schemas::SchemaHandler, system::SystemToolHandler,
-        template::TemplateToolHandler, temporal::TemporalToolHandler,
+        properties::PropertyToolHandler, query::QueryToolHandler, relations::RelationHandler,
+        resource::GraphResourceProvider, retrieval::RetrievalToolHandler, schemas::SchemaHandler,
+        system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
     use quilt_application::property::{PropertyService, PropertyServiceTrait};
     use quilt_application::templates::contract::{
@@ -228,7 +228,7 @@ mod tests {
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
         SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository,
-        SqliteSchemaRepository, SqliteTagRepository,
+        SqliteRelationRepository, SqliteSchemaRepository, SqliteTagRepository,
     };
     use quilt_search::SearchService;
     use sqlx::SqlitePool;
@@ -318,6 +318,7 @@ mod tests {
                 Box::new(template_handler),
                 Box::new(property_handler),
                 Box::new(schema_handler),
+                Box::new(RelationHandler::new(Arc::new(SqliteRelationRepository::new(pool.clone())))),
                 Box::new(system_handler),
             ],
             vec![Box::new(resource_provider)],
@@ -375,7 +376,7 @@ mod tests {
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                assert_eq!(result.tools.len(), 29);
+                assert_eq!(result.tools.len(), 30);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(

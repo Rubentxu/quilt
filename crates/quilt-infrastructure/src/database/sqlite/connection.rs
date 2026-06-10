@@ -548,5 +548,37 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
         .execute(pool)
         .await?;
 
+    // ── Property Intelligence v8 (PI-8) — semantic property relations ──
+    //
+    // Directed relations between property values. Captures workflows,
+    // hierarchies, implications. Source/target are (key, value) pairs.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS property_relations (
+            id BLOB PRIMARY KEY NOT NULL,
+            source_key TEXT NOT NULL,
+            source_value TEXT NOT NULL,
+            target_key TEXT NOT NULL,
+            target_value TEXT NOT NULL,
+            relation_type TEXT NOT NULL DEFAULT 'precedes',
+            description TEXT NOT NULL DEFAULT '',
+            confidence REAL NOT NULL DEFAULT 1.0,
+            created_at INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_prop_rels_source ON property_relations(source_key, source_value)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_prop_rels_target ON property_relations(target_key, target_value)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_prop_rels_type ON property_relations(relation_type)")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }

@@ -55,6 +55,7 @@ pub mod graph;
 pub mod page;
 pub mod properties;
 pub mod query;
+pub mod relations;
 pub mod resource;
 pub mod retrieval;
 pub mod schemas;
