@@ -97,6 +97,33 @@ impl ToolHandler for PropertyToolHandler {
                     }
                 }),
             },
+            Tool {
+                name: "quilt_properties_lifecycle".to_string(),
+                description: "Manage property lifecycle: deprecate, merge, or create alias".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "enum": ["deprecate", "merge", "alias"],
+                            "description": "Lifecycle action to perform"
+                        },
+                        "key": {
+                            "type": "string",
+                            "description": "Property key (for deprecate) or source key (for merge)"
+                        },
+                        "target_key": {
+                            "type": "string",
+                            "description": "Target property key (required for merge and alias)"
+                        },
+                        "new_key": {
+                            "type": "string",
+                            "description": "New alias key (required for alias action)"
+                        }
+                    },
+                    "required": ["action", "key"]
+                }),
+            },
         ]
     }
 
@@ -207,6 +234,48 @@ impl ToolHandler for PropertyToolHandler {
                     .analytics(&params)
                     .await
                     .map_err(|e| e.to_string())?;
+
+                Ok(serde_json::to_string_pretty(&result)
+                    .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+            }
+
+            "quilt_properties_lifecycle" => {
+                let action = args
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'action' parameter")?;
+                let key = args
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'key' parameter")?;
+
+                let result = match action {
+                    "deprecate" => {
+                        let def = self.service.deprecate(key).await.map_err(|e| e.to_string())?;
+                        serde_json::to_value(def).map_err(|e| e.to_string())?
+                    }
+                    "merge" => {
+                        let target = args
+                            .get("target_key")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'target_key' for merge")?;
+                        let def = self.service.merge(key, target).await.map_err(|e| e.to_string())?;
+                        serde_json::to_value(def).map_err(|e| e.to_string())?
+                    }
+                    "alias" => {
+                        let new_key = args
+                            .get("new_key")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'new_key' for alias")?;
+                        let target = args
+                            .get("target_key")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'target_key' for alias")?;
+                        let def = self.service.alias(new_key, target).await.map_err(|e| e.to_string())?;
+                        serde_json::to_value(def).map_err(|e| e.to_string())?
+                    }
+                    _ => return Err(format!("Unknown lifecycle action: {}", action)),
+                };
 
                 Ok(serde_json::to_string_pretty(&result)
                     .unwrap_or_else(|e| format!("Serialization error: {}", e)))

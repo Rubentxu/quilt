@@ -368,7 +368,7 @@ mod tests {
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                assert_eq!(result.tools.len(), 27);
+                assert_eq!(result.tools.len(), 28);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(

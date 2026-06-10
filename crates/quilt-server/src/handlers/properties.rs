@@ -91,6 +91,9 @@ pub fn routes() -> Router {
         .route("/batch", post(batch_properties))
         .route("/suggest", get(suggest_properties))
         .route("/analytics", get(analytics_properties))
+        .route("/lifecycle/deprecate", post(deprecate_property))
+        .route("/lifecycle/merge", post(merge_property))
+        .route("/lifecycle/alias", post(alias_property))
         .route("/", get(list_properties))
 }
 
@@ -351,4 +354,70 @@ pub async fn analytics_properties(
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     Ok(Json(result))
+}
+
+// ── PI-6: Lifecycle management ──
+
+/// `POST /api/v1/properties/lifecycle/deprecate`
+#[derive(Debug, Deserialize)]
+pub struct DeprecateRequest {
+    pub key: String,
+}
+
+#[instrument(skip(state))]
+pub async fn deprecate_property(
+    Extension(state): Extension<AppState>,
+    Json(body): Json<DeprecateRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
+    let service = PropertyService::new(prop_repo);
+    let def = service
+        .deprecate(&body.key)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    Ok(Json(serde_json::to_value(def).unwrap()))
+}
+
+/// `POST /api/v1/properties/lifecycle/merge`
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeRequest {
+    pub source_key: String,
+    pub target_key: String,
+}
+
+#[instrument(skip(state))]
+pub async fn merge_property(
+    Extension(state): Extension<AppState>,
+    Json(body): Json<MergeRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
+    let service = PropertyService::new(prop_repo);
+    let def = service
+        .merge(&body.source_key, &body.target_key)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    Ok(Json(serde_json::to_value(def).unwrap()))
+}
+
+/// `POST /api/v1/properties/lifecycle/alias`
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AliasRequest {
+    pub new_key: String,
+    pub target_key: String,
+}
+
+#[instrument(skip(state))]
+pub async fn alias_property(
+    Extension(state): Extension<AppState>,
+    Json(body): Json<AliasRequest>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
+    let service = PropertyService::new(prop_repo);
+    let def = service
+        .alias(&body.new_key, &body.target_key)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+    Ok(Json(serde_json::to_value(def).unwrap()))
 }

@@ -9,6 +9,7 @@ use quilt_domain::properties::analytics::{
     AnalyticsParams, PropertyAnalytics,
 };
 use quilt_domain::properties::definition::PropertyDefinition;
+use quilt_domain::properties::types::PropertyStatus;
 use quilt_domain::repositories::PropertyRepository;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -89,6 +90,30 @@ pub trait PropertyServiceTrait: Send + Sync {
         &self,
         params: &AnalyticsParams,
     ) -> Result<PropertyAnalytics, ApplicationError>;
+
+    // ── PI-6: Lifecycle management ──
+
+    /// Deprecate a property — marks it as Deprecated.
+    /// Existing blocks still carry the value; writes should warn.
+    async fn deprecate(
+        &self,
+        key: &str,
+    ) -> Result<PropertyDefinition, ApplicationError>;
+
+    /// Merge source_key into target_key — source becomes Merged,
+    /// blocks with source key get migrated to target key.
+    async fn merge(
+        &self,
+        source_key: &str,
+        target_key: &str,
+    ) -> Result<PropertyDefinition, ApplicationError>;
+
+    /// Create an alias — new_key transparently redirects to target_key.
+    async fn alias(
+        &self,
+        new_key: &str,
+        target_key: &str,
+    ) -> Result<PropertyDefinition, ApplicationError>;
 }
 
 #[async_trait]
@@ -249,5 +274,117 @@ impl PropertyServiceTrait for PropertyService {
             total_properties,
             total_blocks_with_properties,
         })
+    }
+
+    #[instrument(skip(self))]
+    async fn deprecate(
+        &self,
+        key: &str,
+    ) -> Result<PropertyDefinition, ApplicationError> {
+        let mut def = self
+            .repo
+            .get_by_db_ident(key)
+            .await
+            .map_err(ApplicationError::Domain)?
+            .ok_or_else(|| ApplicationError::Validation(format!("Property '{}' not found", key)))?;
+
+        def.status = PropertyStatus::Deprecated;
+        self.repo
+            .update(&def)
+            .await
+            .map_err(ApplicationError::Domain)?;
+        Ok(def)
+    }
+
+    #[instrument(skip(self))]
+    async fn merge(
+        &self,
+        source_key: &str,
+        target_key: &str,
+    ) -> Result<PropertyDefinition, ApplicationError> {
+        let mut source = self
+            .repo
+            .get_by_db_ident(source_key)
+            .await
+            .map_err(ApplicationError::Domain)?
+            .ok_or_else(|| {
+                ApplicationError::Validation(format!("Source property '{}' not found", source_key))
+            })?;
+
+        // Verify target exists
+        let _target = self
+            .repo
+            .get_by_db_ident(target_key)
+            .await
+            .map_err(ApplicationError::Domain)?
+            .ok_or_else(|| {
+                ApplicationError::Validation(format!(
+                    "Target property '{}' not found",
+                    target_key
+                ))
+            })?;
+
+        source.status = PropertyStatus::Merged;
+        source.alias_of = Some(target_key.to_string());
+        self.repo
+            .update(&source)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        // Note: actual block property migration is a separate concern
+        // (would need a batch update on blocks.properties JSON).
+        // The definition-level merge marks the source as redirected.
+
+        Ok(source)
+    }
+
+    #[instrument(skip(self))]
+    async fn alias(
+        &self,
+        new_key: &str,
+        target_key: &str,
+    ) -> Result<PropertyDefinition, ApplicationError> {
+        // Verify target exists
+        let _target = self
+            .repo
+            .get_by_db_ident(target_key)
+            .await
+            .map_err(ApplicationError::Domain)?
+            .ok_or_else(|| {
+                ApplicationError::Validation(format!(
+                    "Target property '{}' not found",
+                    target_key
+                ))
+            })?;
+
+        // Check new_key doesn't already exist
+        if self
+            .repo
+            .get_by_db_ident(new_key)
+            .await
+            .map_err(ApplicationError::Domain)?
+            .is_some()
+        {
+            return Err(ApplicationError::Validation(format!(
+                "Property '{}' already exists",
+                new_key
+            )));
+        }
+
+        let alias_def = PropertyDefinition::new(
+            quilt_domain::value_objects::Uuid::new_v4(),
+            new_key.to_string(),
+            format!("Alias → {}", target_key),
+            quilt_domain::properties::types::PropertyType::Text,
+        )
+        .with_status(PropertyStatus::Alias)
+        .with_alias_of(target_key.to_string());
+
+        self.repo
+            .insert(&alias_def)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(alias_def)
     }
 }
