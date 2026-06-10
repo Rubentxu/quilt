@@ -136,6 +136,57 @@ impl fmt::Display for ViewContext {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PI-2: Property Lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Lifecycle status of a property definition.
+///
+/// Properties follow a "grow, never break" philosophy — they are never
+/// destructively deleted, only deprecated or merged.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+pub enum PropertyStatus {
+    /// Active and in use
+    #[default]
+    Active,
+    /// Deprecated — still readable but writes should warn
+    Deprecated,
+    /// Merged into another property — reads redirect to the target
+    Merged,
+    /// Alias — transparent redirect to another property key
+    Alias,
+}
+
+impl PropertyStatus {
+    /// Canonical string representation for storage
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            PropertyStatus::Active => "active",
+            PropertyStatus::Deprecated => "deprecated",
+            PropertyStatus::Merged => "merged",
+            PropertyStatus::Alias => "alias",
+        }
+    }
+
+    /// Parse from canonical string
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "active" => Some(PropertyStatus::Active),
+            "deprecated" => Some(PropertyStatus::Deprecated),
+            "merged" => Some(PropertyStatus::Merged),
+            "alias" => Some(PropertyStatus::Alias),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for PropertyStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// ClosedValue represents a predefined option for a property with closed set semantics.
 ///
 /// Used for properties like status (TODO, DOING, DONE) or priority (A, B, C).

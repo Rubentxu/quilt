@@ -33,6 +33,22 @@ pub trait PropertyRepository: Send + Sync {
 
     /// Delete a property definition
     async fn delete(&self, id: Uuid) -> Result<(), DomainError>;
+
+    // ── PI-2: Batch & search methods ──
+
+    /// Get multiple property definitions by their database identifiers.
+    async fn get_by_db_idents(
+        &self,
+        idents: &[&str],
+    ) -> Result<Vec<PropertyDefinition>, DomainError>;
+
+    /// Search properties by name (case-insensitive, substring match).
+    async fn search(&self, query: &str, limit: usize)
+    -> Result<Vec<PropertyDefinition>, DomainError>;
+
+    /// Get property definitions sorted by usage (block_count descending).
+    async fn list_by_usage(&self, limit: usize)
+    -> Result<Vec<PropertyDefinition>, DomainError>;
 }
 
 /// PropertyRepositoryExt provides convenience methods built on PropertyRepository.

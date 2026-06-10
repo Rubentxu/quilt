@@ -54,6 +54,15 @@ impl PropertyRepository for InMemoryPropertyRepo {
     async fn delete(&self, _id: Uuid) -> Result<(), DomainError> {
         Ok(())
     }
+    async fn get_by_db_idents(&self, _idents: &[&str]) -> Result<Vec<PropertyDefinition>, DomainError> {
+        Ok(Vec::new())
+    }
+    async fn search(&self, _query: &str, _limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
+        Ok(Vec::new())
+    }
+    async fn list_by_usage(&self, _limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
+        Ok(Vec::new())
+    }
 }
 
 /// Helper to get path to a test fixture

@@ -33,5 +33,5 @@ pub use definition::PropertyDefinition;
 pub use entry::{DefaultPropertyEntry, HasTimestamp, HasValue, Mergeable, PropertyEntry};
 pub use merge::merge_properties;
 pub use resolver::PropertyKeyResolver;
-pub use types::{Cardinality, ClosedValue, PropertyType, ViewContext};
+pub use types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext};
 pub use validator::PropertyValidator;
