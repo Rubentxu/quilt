@@ -47,6 +47,11 @@ interface InlineContentProps {
   blocks?: Block[]
   pageMap?: Map<string, Page>
   openTab?: (tab: Omit<Tab, 'id'>) => string
+  /** When true, property segments are NOT rendered inline.
+   *  Instead they are collected and exposed via the callback. */
+  suppressInlineProperties?: boolean
+  /** Called with extracted properties when suppressInlineProperties is true. */
+  onPropertiesExtracted?: (props: Array<{ key: string; value: string }>) => void
 }
 
 // The Rust parser serializes `Segment` as an externally-tagged enum by default,
@@ -603,7 +608,7 @@ function renderSegment(
 
 // ──── Component ─────────────────────────────────────────────────────
 
-export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: InlineContentProps) {
+export function InlineContent({ content, isEditing, blocks, pageMap, openTab, suppressInlineProperties, onPropertiesExtracted }: InlineContentProps) {
   const { loaded, wasmParseInline } = useWasm()
   const [inlineWasmReady, setInlineWasmReady] = useState(loaded)
   const navigate = useNavigate()
@@ -777,11 +782,62 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
     }
   }, [content, inlineWasmReady, wasmParseInline])
 
-  // Fallback: if WASM not ready or parse fails, render raw content with newlines
-  if (!segments || segments.length === 0) {
-    if (!content.includes('\n')) {
-      return <>{content}</>
+  // ── Property extraction (for PropertyStrip) ──────────────────────
+  // When suppressInlineProperties is true, separate property segments
+  // from text and expose them via the callback. This lets BlockRow
+  // render them in a dedicated PropertyStrip card instead of inline.
+  const displaySegments = useMemo(() => {
+    if (!segments || !suppressInlineProperties) return segments
+    const props: Array<{ key: string; value: string }> = []
+    const textOnly: SegmentBase[] = []
+    for (const seg of segments) {
+      if (seg.type === 'property') {
+        const prop = seg.value as { key: string; value: string }
+        props.push({ key: prop.key, value: prop.value })
+      } else {
+        textOnly.push(seg)
+      }
     }
+    // Fire callback synchronously — use a microtask to avoid setState during render
+    if (onPropertiesExtracted && props.length > 0) {
+      queueMicrotask(() => onPropertiesExtracted(props))
+    }
+    return textOnly.length > 0 ? textOnly : null
+  }, [segments, suppressInlineProperties, onPropertiesExtracted])
+
+  // ── Fallback ──────────────────────────────────────────────────────
+  // Fallback: if WASM not ready or parse fails, render raw content with newlines.
+  // When suppressInlineProperties is active, also extract properties
+  // from the raw text using a JS regex so the PropertyStrip works
+  // before WASM loads.
+  const fallbackProps = useMemo(() => {
+    if (displaySegments || !suppressInlineProperties || !content.includes('::')) return null
+    const propRegex = /^(\w[\w-]*?)::\s+(.+)$/gm
+    const props: Array<{ key: string; value: string }> = []
+    let m: RegExpExecArray | null
+    while ((m = propRegex.exec(content)) !== null) {
+      props.push({ key: m[1], value: m[2] })
+    }
+    return props.length > 0 ? props : null
+  }, [content, displaySegments, suppressInlineProperties])
+
+  useEffect(() => {
+    if (fallbackProps && onPropertiesExtracted) onPropertiesExtracted(fallbackProps)
+  }, [fallbackProps, onPropertiesExtracted])
+
+  if (!displaySegments || displaySegments.length === 0) {
+    if (suppressInlineProperties && fallbackProps) {
+      const lines = content.split('\n')
+      const textLines = lines.filter(l => !/^\w[\w-]*?::\s+/.test(l))
+      if (textLines.length === 0) return null
+      const parts: ReactNode[] = []
+      textLines.forEach((line, i) => {
+        if (i > 0) parts.push(<br key={`jfb-br-${i}`} />)
+        parts.push(line)
+      })
+      return <>{parts}</>
+    }
+    if (!content.includes('\n')) return <>{content}</>
     const parts: ReactNode[] = []
     content.split('\n').forEach((line, i) => {
       if (i > 0) parts.push(<br key={`fb-br-${i}`} />)
@@ -792,7 +848,7 @@ export function InlineContent({ content, isEditing, blocks, pageMap, openTab }: 
 
   return (
     <>
-      {segments.map((seg: SegmentBase, i: number) =>
+      {displaySegments.map((seg: SegmentBase, i: number) =>
         renderSegment(seg, i, isEditing, blocks, pageMap, handleHover, handlePageRefClick, handleBlockRefClick, handleTagClick)
       )}
       {hoveredRef && (

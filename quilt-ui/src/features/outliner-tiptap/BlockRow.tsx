@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useRef, useCallback, useEffect, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useState, useRef, useCallback, useEffect, useMemo, type KeyboardEvent } from 'react'
 import { GripVertical, Plus, MoreHorizontal, ChevronDown, ChevronRight, Settings2, MessageCircle } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
@@ -27,6 +27,8 @@ import { defaultRegistry, type SlashContext } from './slashRegistry'
 // component, eagerly imported because it's on the hot path of every
 // block row.
 import { InlinePropertyBadges } from '@features/properties/InlinePropertyBadges'
+// PropertyStrip — renders multiple in-block properties as a compact card
+import { PropertyStrip, type PropertyRow } from '@features/properties/PropertyStrip'
 
 // Re-export findNearestLink for backward compatibility — BlockRow.test.tsx
 // (and any external consumer) imports it from this module. The actual
@@ -222,6 +224,10 @@ export function BlockRow({
   const [localContent, setLocalContent] = useState(block.content)
   const [showProperties, setShowProperties] = useState(false)
   const [showContextMenu, setShowContextMenu] = useState(false)
+  const [extractedProperties, setExtractedProperties] = useState<PropertyRow[]>([])
+  const handlePropsExtracted = useCallback((props: PropertyRow[]) => {
+    setExtractedProperties(props)
+  }, [])
   const contextMenuAnchorRef = useRef<HTMLButtonElement>(null)
   const [pageMap, setPageMap] = useState<Map<string, Page>>(new Map())
   const [autocomplete, setAutocomplete] = useState<{
@@ -1378,8 +1384,22 @@ export function BlockRow({
             wordBreak: 'break-word',
           }}
         >
-          <InlineContent content={block.content} blocks={allBlocks} pageMap={pageMap} openTab={openTab} />
+          <InlineContent
+            content={block.content}
+            blocks={allBlocks}
+            pageMap={pageMap}
+            openTab={openTab}
+            suppressInlineProperties
+            onPropertiesExtracted={handlePropsExtracted}
+          />
         </div>
+      )}
+
+      {/* Property strip — renders multiple in-block properties (key:: value)
+          as a compact, structured card below the content. Property text is
+          stripped from the inline content to avoid double-rendering. */}
+      {extractedProperties.length > 0 && (
+        <PropertyStrip block={block} properties={extractedProperties} onUpdate={onUpdate} />
       )}
 
       {/* ADR-0003: `created_by` badge — small pill that distinguishes
