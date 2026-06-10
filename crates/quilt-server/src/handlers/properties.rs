@@ -30,7 +30,10 @@ use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use quilt_application::property::{PropertyService, PropertyServiceTrait, PropertySuggestion};
+use quilt_application::property::{
+    PropertyService, PropertyServiceTrait, PropertySuggestion,
+};
+use quilt_domain::properties::analytics::AnalyticsParams;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::repositories::BlockRepository;
 use quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository;
@@ -87,6 +90,7 @@ pub fn routes() -> Router {
         .route("/keys", get(list_property_keys))
         .route("/batch", post(batch_properties))
         .route("/suggest", get(suggest_properties))
+        .route("/analytics", get(analytics_properties))
         .route("/", get(list_properties))
 }
 
@@ -295,4 +299,56 @@ pub async fn suggest_properties(
         suggestions,
         count,
     }))
+}
+
+// ── PI-5: Property Analytics ──
+
+/// Query params for `GET /api/v1/properties/analytics`.
+#[derive(Debug, Deserialize)]
+pub struct AnalyticsQueryParams {
+    /// Max co-occurrence pairs. Default: 20.
+    #[serde(default = "default_co_occurrence_limit")]
+    pub co_occurrence_limit: u32,
+    /// Max trending properties. Default: 20.
+    #[serde(default = "default_trend_limit")]
+    pub trend_limit: u32,
+    /// Period in days for trend comparison. Default: 30.
+    #[serde(default = "default_trend_period")]
+    pub trend_period_days: u32,
+}
+
+fn default_co_occurrence_limit() -> u32 {
+    20
+}
+fn default_trend_limit() -> u32 {
+    20
+}
+fn default_trend_period() -> u32 {
+    30
+}
+
+/// `GET /api/v1/properties/analytics`
+///
+/// Returns co-occurrence pairs (with PMI scores), usage trends,
+/// and aggregate statistics about property usage.
+#[instrument(skip(state))]
+pub async fn analytics_properties(
+    Query(params): Query<AnalyticsQueryParams>,
+    Extension(state): Extension<AppState>,
+) -> Result<Json<quilt_domain::properties::analytics::PropertyAnalytics>, AppError> {
+    let analytics_params = AnalyticsParams {
+        co_occurrence_limit: params.co_occurrence_limit.min(100) as usize,
+        trend_limit: params.trend_limit.min(100) as usize,
+        trend_period_days: params.trend_period_days.min(365),
+    };
+
+    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
+    let service = PropertyService::new(prop_repo);
+
+    let result = service
+        .analytics(&analytics_params)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    Ok(Json(result))
 }

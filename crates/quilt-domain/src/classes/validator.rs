@@ -344,6 +344,18 @@ mod tests {
         async fn list_by_usage(&self, _limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
             Ok(Vec::new())
         }
+        async fn get_co_occurrences(&self, _limit: usize) -> Result<Vec<crate::properties::analytics::PropertyCoOccurrence>, DomainError> {
+            Ok(vec![])
+        }
+        async fn get_trends(&self, _period_days: u32, _limit: usize) -> Result<Vec<crate::properties::analytics::PropertyTrend>, DomainError> {
+            Ok(vec![])
+        }
+        async fn count_distinct_properties(&self) -> Result<u64, DomainError> {
+            Ok(0)
+        }
+        async fn count_blocks_with_properties(&self) -> Result<u64, DomainError> {
+            Ok(0)
+        }
     }
 
     #[tokio::test]

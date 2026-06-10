@@ -1,6 +1,7 @@
 //! PropertyRepository trait - abstraction for property persistence
 
 use crate::errors::DomainError;
+use crate::properties::analytics::{PropertyCoOccurrence, PropertyTrend};
 use crate::properties::definition::PropertyDefinition;
 use crate::properties::types::ClosedValue;
 use crate::value_objects::Uuid;
@@ -49,6 +50,33 @@ pub trait PropertyRepository: Send + Sync {
     /// Get property definitions sorted by usage (block_count descending).
     async fn list_by_usage(&self, limit: usize)
     -> Result<Vec<PropertyDefinition>, DomainError>;
+
+    // ── PI-5: Analytics methods ──
+
+    /// Compute co-occurrence counts for properties that appear together on blocks.
+    ///
+    /// Returns raw pairs sorted by co-occurrence count descending.
+    /// PMI calculation is done in the application layer.
+    async fn get_co_occurrences(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<PropertyCoOccurrence>, DomainError>;
+
+    /// Get property usage trends comparing current vs previous period.
+    ///
+    /// The implementation counts blocks with each property key in two
+    /// time windows: [now - period_days, now] and [now - 2*period_days, now - period_days].
+    async fn get_trends(
+        &self,
+        period_days: u32,
+        limit: usize,
+    ) -> Result<Vec<PropertyTrend>, DomainError>;
+
+    /// Count total distinct property keys in use across all blocks.
+    async fn count_distinct_properties(&self) -> Result<u64, DomainError>;
+
+    /// Count blocks that have at least one property.
+    async fn count_blocks_with_properties(&self) -> Result<u64, DomainError>;
 }
 
 /// PropertyRepositoryExt provides convenience methods built on PropertyRepository.

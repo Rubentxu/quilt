@@ -2165,9 +2165,218 @@ impl PropertyRepository for SqlitePropertyRepository {
         }
         Ok(results)
     }
-}
 
-// ── Integration Tests ────────────────────────────────────────────────
+    // ── PI-5: Analytics implementations ──
+
+    #[instrument(skip(self))]
+    async fn get_co_occurrences(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<quilt_domain::properties::analytics::PropertyCoOccurrence>, DomainError> {
+        // Strategy: extract all property keys from blocks.properties JSON,
+        // then self-join to find pairs that co-occur on the same block.
+        // SQLite's json_each() lets us iterate keys of the properties JSON blob.
+        let rows = sqlx::query(
+            r#"
+            WITH block_keys AS (
+                SELECT b.id AS block_id, je.key AS prop_key
+                FROM blocks b, json_each(b.properties) AS je
+                WHERE b.properties != '{}'
+            ),
+            pair_counts AS (
+                SELECT
+                    MIN(a.prop_key, b.prop_key) AS key_a,
+                    MAX(a.prop_key, b.prop_key) AS key_b,
+                    COUNT(DISTINCT a.block_id) AS co_count
+                FROM block_keys a
+                JOIN block_keys b ON a.block_id = b.block_id AND a.prop_key < b.prop_key
+                GROUP BY key_a, key_b
+            ),
+            solo_counts AS (
+                SELECT prop_key, COUNT(DISTINCT block_id) AS solo_count
+                FROM block_keys
+                GROUP BY prop_key
+            )
+            SELECT
+                pc.key_a,
+                pc.key_b,
+                pc.co_count,
+                sa.solo_count AS count_a,
+                sb.solo_count AS count_b
+            FROM pair_counts pc
+            JOIN solo_counts sa ON sa.prop_key = pc.key_a
+            JOIN solo_counts sb ON sb.prop_key = pc.key_b
+            ORDER BY pc.co_count DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_co_occurrences: {}", e)))?;
+
+        let total_blocks = self.count_blocks_with_properties().await.unwrap_or(1).max(1) as f64;
+
+        let results: Vec<_> = rows
+            .iter()
+            .map(|row| {
+                let key_a: String = row.get("key_a");
+                let key_b: String = row.get("key_b");
+                let co_count: i64 = row.get("co_count");
+                let count_a: i64 = row.get("count_a");
+                let count_b: i64 = row.get("count_b");
+
+                let co_count = co_count as u64;
+                let count_a = count_a as u64;
+                let count_b = count_b as u64;
+
+                // PMI = log2(P(a,b) / (P(a) * P(b)))
+                // P(a,b) = co_count / total_blocks
+                // P(a) = count_a / total_blocks
+                // P(b) = count_b / total_blocks
+                let pmi = if co_count > 0 && count_a > 0 && count_b > 0 && total_blocks > 0.0 {
+                    let p_ab = co_count as f64 / total_blocks;
+                    let p_a = count_a as f64 / total_blocks;
+                    let p_b = count_b as f64 / total_blocks;
+                    let denom = p_a * p_b;
+                    if denom > 0.0 {
+                        (p_ab / denom).log2()
+                    } else {
+                        0.0
+                    }
+                } else {
+                    0.0
+                };
+
+                quilt_domain::properties::analytics::PropertyCoOccurrence {
+                    key_a,
+                    key_b,
+                    co_occurrence_count: co_count,
+                    count_a,
+                    count_b,
+                    pmi,
+                }
+            })
+            .collect();
+
+        Ok(results)
+    }
+
+    #[instrument(skip(self))]
+    async fn get_trends(
+        &self,
+        period_days: u32,
+        limit: usize,
+    ) -> Result<Vec<quilt_domain::properties::analytics::PropertyTrend>, DomainError> {
+        let period_ms = (period_days as i64) * 24 * 60 * 60 * 1000;
+
+        let rows = sqlx::query(
+            r#"
+            WITH block_keys AS (
+                SELECT b.id, je.key AS prop_key, b.updated_at
+                FROM blocks b, json_each(b.properties) AS je
+                WHERE b.properties != '{}'
+            ),
+            current_period AS (
+                SELECT prop_key, COUNT(DISTINCT id) AS cnt
+                FROM block_keys
+                WHERE updated_at >= (unixepoch('now') * 1000 - ?)
+                GROUP BY prop_key
+            ),
+            previous_period AS (
+                SELECT prop_key, COUNT(DISTINCT id) AS cnt
+                FROM block_keys
+                WHERE updated_at >= (unixepoch('now') * 1000 - ?)
+                  AND updated_at < (unixepoch('now') * 1000 - ?)
+                GROUP BY prop_key
+            )
+            SELECT
+                COALESCE(c.prop_key, p.prop_key) AS key,
+                COALESCE(c.cnt, 0) AS current_count,
+                COALESCE(p.cnt, 0) AS previous_count
+            FROM current_period c
+            FULL OUTER JOIN previous_period p ON c.prop_key = p.prop_key
+            ORDER BY COALESCE(c.cnt, 0) DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(period_ms)
+        .bind(period_ms * 2)
+        .bind(period_ms)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_trends: {}", e)))?;
+
+        let results: Vec<_> = rows
+            .iter()
+            .map(|row| {
+                let key: String = row.get("key");
+                let current_count: i64 = row.get("current_count");
+                let previous_count: i64 = row.get("previous_count");
+
+                let current = current_count as u64;
+                let previous = previous_count as u64;
+
+                let (change_percent, direction) = if previous == 0 && current > 0 {
+                    (f64::INFINITY, quilt_domain::properties::analytics::TrendDirection::New)
+                } else if previous == 0 && current == 0 {
+                    (0.0, quilt_domain::properties::analytics::TrendDirection::Stable)
+                } else {
+                    let change = ((current as f64 - previous as f64) / previous as f64) * 100.0;
+                    let dir = if change > 10.0 {
+                        quilt_domain::properties::analytics::TrendDirection::Rising
+                    } else if change < -10.0 {
+                        quilt_domain::properties::analytics::TrendDirection::Declining
+                    } else {
+                        quilt_domain::properties::analytics::TrendDirection::Stable
+                    };
+                    (change, dir)
+                };
+
+                quilt_domain::properties::analytics::PropertyTrend {
+                    key,
+                    current_count: current,
+                    previous_count: previous,
+                    change_percent,
+                    direction,
+                }
+            })
+            .collect();
+
+        Ok(results)
+    }
+
+    #[instrument(skip(self))]
+    async fn count_distinct_properties(&self) -> Result<u64, DomainError> {
+        let row = sqlx::query(
+            r#"
+            SELECT COUNT(DISTINCT je.key) AS cnt
+            FROM blocks b, json_each(b.properties) AS je
+            WHERE b.properties != '{}'
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("count_distinct_properties: {}", e)))?;
+
+        let count: i64 = row.get("cnt");
+        Ok(count as u64)
+    }
+
+    #[instrument(skip(self))]
+    async fn count_blocks_with_properties(&self) -> Result<u64, DomainError> {
+        let row = sqlx::query(
+            "SELECT COUNT(*) AS cnt FROM blocks WHERE properties != '{}'",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("count_blocks_with_properties: {}", e)))?;
+
+        let count: i64 = row.get("cnt");
+        Ok(count as u64)
+    }
+}
 
 #[cfg(test)]
 mod tests {

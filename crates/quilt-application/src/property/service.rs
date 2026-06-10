@@ -5,6 +5,9 @@
 
 use crate::errors::ApplicationError;
 use async_trait::async_trait;
+use quilt_domain::properties::analytics::{
+    AnalyticsParams, PropertyAnalytics,
+};
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::repositories::PropertyRepository;
 use serde::{Deserialize, Serialize};
@@ -80,6 +83,12 @@ pub trait PropertyServiceTrait: Send + Sync {
         partial: &str,
         limit: usize,
     ) -> Result<Vec<PropertySuggestion>, ApplicationError>;
+
+    /// Get property analytics: co-occurrence, trends, totals (PI-5).
+    async fn analytics(
+        &self,
+        params: &AnalyticsParams,
+    ) -> Result<PropertyAnalytics, ApplicationError>;
 }
 
 #[async_trait]
@@ -203,5 +212,42 @@ impl PropertyServiceTrait for PropertyService {
         scored.truncate(limit);
 
         Ok(scored.into_iter().map(|(s, _)| s).collect())
+    }
+
+    #[instrument(skip(self))]
+    async fn analytics(
+        &self,
+        params: &AnalyticsParams,
+    ) -> Result<PropertyAnalytics, ApplicationError> {
+        let co_occurrences = self
+            .repo
+            .get_co_occurrences(params.co_occurrence_limit)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        let trends = self
+            .repo
+            .get_trends(params.trend_period_days, params.trend_limit)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        let total_properties = self
+            .repo
+            .count_distinct_properties()
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        let total_blocks_with_properties = self
+            .repo
+            .count_blocks_with_properties()
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(PropertyAnalytics {
+            co_occurrences,
+            trends,
+            total_properties,
+            total_blocks_with_properties,
+        })
     }
 }

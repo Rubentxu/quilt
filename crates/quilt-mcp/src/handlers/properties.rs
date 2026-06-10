@@ -6,7 +6,10 @@ use crate::handlers::ToolHandler;
 use crate::protocol::Evidence;
 use crate::tools::Tool;
 use async_trait::async_trait;
-use quilt_application::property::{PropertyService, PropertyServiceTrait, PropertySuggestion};
+use quilt_application::property::{
+    PropertyService, PropertyServiceTrait, PropertySuggestion,
+};
+use quilt_domain::properties::analytics::AnalyticsParams;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
@@ -68,6 +71,30 @@ impl ToolHandler for PropertyToolHandler {
                         }
                     },
                     "required": ["partial"]
+                }),
+            },
+            Tool {
+                name: "quilt_properties_analytics".to_string(),
+                description: "Get property analytics: co-occurrence (PMI), usage trends, aggregate stats".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "co_occurrence_limit": {
+                            "type": "integer",
+                            "description": "Max co-occurrence pairs",
+                            "default": 20
+                        },
+                        "trend_limit": {
+                            "type": "integer",
+                            "description": "Max trending properties",
+                            "default": 20
+                        },
+                        "trend_period_days": {
+                            "type": "integer",
+                            "description": "Period in days for trends",
+                            "default": 30
+                        }
+                    }
                 }),
             },
         ]
@@ -157,6 +184,32 @@ impl ToolHandler for PropertyToolHandler {
                     "suggestions": suggestions,
                 }))
                 .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+            }
+
+            "quilt_properties_analytics" => {
+                let params = AnalyticsParams {
+                    co_occurrence_limit: args
+                        .get("co_occurrence_limit")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(20) as usize,
+                    trend_limit: args
+                        .get("trend_limit")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(20) as usize,
+                    trend_period_days: args
+                        .get("trend_period_days")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(30) as u32,
+                };
+
+                let result = self
+                    .service
+                    .analytics(&params)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                Ok(serde_json::to_string_pretty(&result)
+                    .unwrap_or_else(|e| format!("Serialization error: {}", e)))
             }
 
             _ => Err(format!("Unknown tool: {}", name)),

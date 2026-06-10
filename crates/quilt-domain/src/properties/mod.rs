@@ -20,6 +20,7 @@
 //! - [`types`]: `PropertyType`, `Cardinality`, `ViewContext`, `ClosedValue`.
 //! - [`validator`]: `PropertyValidator<P>` for type/cardinality/closed-set checks.
 
+pub mod analytics;
 pub mod builtin;
 pub mod definition;
 pub mod entry;
@@ -28,6 +29,9 @@ pub mod resolver;
 pub mod types;
 pub mod validator;
 
+pub use analytics::{
+    AnalyticsParams, PropertyAnalytics, PropertyCoOccurrence, PropertyTrend, TrendDirection,
+};
 pub use builtin::{get_all_builtin_properties, get_builtin_property};
 pub use definition::PropertyDefinition;
 pub use entry::{DefaultPropertyEntry, HasTimestamp, HasValue, Mergeable, PropertyEntry};
