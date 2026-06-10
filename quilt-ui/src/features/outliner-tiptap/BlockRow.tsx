@@ -1107,7 +1107,10 @@ export function BlockRow({
       {/* Indent stripe lines */}
       {stripeLines}
 
-      {/* Drag handle — visible on row hover */}
+      {/* Drag handle — visible on row hover.
+          Remove hardcoded marginTop — use the container's row-height to
+          vertically centre so it stays aligned with any blockType
+          (paragraph, heading, code, quote). */}
       <div
         {...dragHandleProps}
         className="drag-handle"
@@ -1120,18 +1123,22 @@ export function BlockRow({
           display: 'flex',
           alignItems: 'center',
           touchAction: 'none',
+          alignSelf: 'stretch',
+          justifyContent: 'center',
         }}
       >
         <GripVertical size={14} />
       </div>
 
-      {/* Bullet / collapse toggle — chevron if has children, dot otherwise */}
+      {/* Bullet / collapse toggle — chevron if has children, dot otherwise.
+          Replace hardcoded marginTop with alignSelf + minHeight so the
+          icon stays vertically centred regardless of heading size. */}
       <button
         onClick={handleBulletClick}
         aria-label={hasChildren ? (isCollapsed ? 'Expand block' : 'Collapse block') : 'Bullet'}
         title={hasChildren ? (isCollapsed ? 'Expand block' : 'Collapse block') : undefined}
         style={{
-          marginTop: hasChildren ? '5px' : '7px',
+          alignSelf: 'center',
           flexShrink: 0,
           background: 'none',
           border: 'none',
@@ -1166,12 +1173,14 @@ export function BlockRow({
         )}
       </button>
 
-      {/* Marker badge — pill shape per DESIGN.md §9.6 */}
+      {/* Marker badge — pill shape per DESIGN.md §9.6.
+          Use alignSelf:center so the badge stays vertically aligned
+          when the row contains a heading with larger font-size. */}
       {block.marker && (
         <span
           style={{
             flexShrink: 0,
-            marginTop: '2px',
+            alignSelf: 'center',
             fontSize: '11px',
             fontWeight: 600,
             padding: '2px 8px',
@@ -1191,7 +1200,7 @@ export function BlockRow({
         <span
           style={{
             flexShrink: 0,
-            marginTop: '2px',
+            alignSelf: 'center',
             fontSize: '11px',
             fontWeight: 600,
             padding: '2px 8px',
@@ -1226,7 +1235,7 @@ export function BlockRow({
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            marginTop: '4px',
+            alignSelf: 'center',
             flexWrap: 'wrap',
             maxWidth: '100%',
           }}
@@ -1381,8 +1390,7 @@ export function BlockRow({
           title={`Created by ${createdByStr}`}
           style={{
             flexShrink: 0,
-            marginTop: '4px',
-            alignSelf: 'flex-start',
+            alignSelf: 'center',
             fontSize: '10px',
             fontWeight: 500,
             padding: '1px 6px',
