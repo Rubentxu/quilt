@@ -103,6 +103,7 @@ interface BlockRowProps {
 
 const MARKER_STYLES: Record<TaskMarker, { bg: string; text: string }> = {
   Todo: { bg: 'var(--color-info)', text: '#fff' },
+  Doing: { bg: 'var(--color-accent)', text: '#fff' },
   Done: { bg: 'var(--color-success)', text: '#fff' },
   Now: { bg: 'var(--color-danger)', text: '#fff' },
   Later: { bg: 'var(--color-warning)', text: '#fff' },
