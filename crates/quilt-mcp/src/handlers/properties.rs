@@ -6,7 +6,7 @@ use crate::handlers::ToolHandler;
 use crate::protocol::Evidence;
 use crate::tools::Tool;
 use async_trait::async_trait;
-use quilt_application::property::{PropertyService, PropertyServiceTrait};
+use quilt_application::property::{PropertyService, PropertyServiceTrait, PropertySuggestion};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
@@ -25,31 +25,52 @@ impl PropertyToolHandler {
 #[async_trait]
 impl ToolHandler for PropertyToolHandler {
     fn tools(&self) -> Vec<Tool> {
-        vec![Tool {
-            name: "quilt_properties_batch".to_string(),
-            description:
-                "Batch query property definitions: get by keys, search by name, or list by usage"
-                    .to_string(),
-            input_schema: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "keys": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Property keys to fetch"
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Substring search (matches key or title)"
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max results",
-                        "default": 50
+        vec![
+            Tool {
+                name: "quilt_properties_batch".to_string(),
+                description:
+                    "Batch query property definitions: get by keys, search by name, or list by usage"
+                        .to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "keys": {
+                            "type": "array",
+                            "items": { "type": "string" },
+                            "description": "Property keys to fetch"
+                        },
+                        "query": {
+                            "type": "string",
+                            "description": "Substring search (matches key or title)"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max results",
+                            "default": 50
+                        }
                     }
-                }
-            }),
-        }]
+                }),
+            },
+            Tool {
+                name: "quilt_properties_suggest".to_string(),
+                description: "Suggest properties matching partial input (autocomplete for discovery)".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "partial": {
+                            "type": "string",
+                            "description": "Partial property name to match"
+                        },
+                        "limit": {
+                            "type": "integer",
+                            "description": "Max suggestions",
+                            "default": 10
+                        }
+                    },
+                    "required": ["partial"]
+                }),
+            },
+        ]
     }
 
     #[instrument(skip(self, args))]
@@ -110,6 +131,30 @@ impl ToolHandler for PropertyToolHandler {
                 Ok(serde_json::to_string_pretty(&serde_json::json!({
                     "count": results.len(),
                     "definitions": results,
+                }))
+                .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+            }
+
+            "quilt_properties_suggest" => {
+                let partial = args
+                    .get("partial")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'partial' parameter")?;
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(10) as usize;
+                let limit = limit.min(50);
+
+                let suggestions = self
+                    .service
+                    .suggest(partial, limit)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "count": suggestions.len(),
+                    "suggestions": suggestions,
                 }))
                 .unwrap_or_else(|e| format!("Serialization error: {}", e)))
             }

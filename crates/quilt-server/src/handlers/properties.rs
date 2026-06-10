@@ -30,7 +30,7 @@ use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use quilt_application::property::{PropertyService, PropertyServiceTrait};
+use quilt_application::property::{PropertyService, PropertyServiceTrait, PropertySuggestion};
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::repositories::BlockRepository;
 use quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository;
@@ -86,6 +86,7 @@ pub fn routes() -> Router {
     Router::new()
         .route("/keys", get(list_property_keys))
         .route("/batch", post(batch_properties))
+        .route("/suggest", get(suggest_properties))
         .route("/", get(list_properties))
 }
 
@@ -236,6 +237,62 @@ pub async fn list_properties(
     let count = definitions.len();
     Ok(Json(PropertiesResponse {
         definitions,
+        count,
+    }))
+}
+
+// ── PI-4: Property suggestions (discovery UX) ──
+
+/// Query params for `GET /api/v1/properties/suggest`.
+#[derive(Debug, Deserialize)]
+pub struct SuggestParams {
+    /// Partial input to match against keys and titles.
+    pub q: String,
+    /// Max results. Default: 10.
+    #[serde(default = "default_suggest_limit")]
+    pub limit: u32,
+}
+
+fn default_suggest_limit() -> u32 {
+    10
+}
+
+/// Response body for suggest endpoint.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestResponse {
+    pub suggestions: Vec<PropertySuggestion>,
+    pub count: usize,
+}
+
+/// `GET /api/v1/properties/suggest?q=sta&limit=10`
+///
+/// Returns property suggestions ranked by relevance (prefix match >
+/// substring match > usage count). Only active properties are returned.
+#[instrument(skip(state))]
+pub async fn suggest_properties(
+    Query(params): Query<SuggestParams>,
+    Extension(state): Extension<AppState>,
+) -> Result<Json<SuggestResponse>, AppError> {
+    if params.q.is_empty() {
+        return Ok(Json(SuggestResponse {
+            suggestions: vec![],
+            count: 0,
+        }));
+    }
+
+    let limit = params.limit.min(50) as usize;
+    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
+    let service = PropertyService::new(prop_repo);
+
+    let suggestions = service
+        .suggest(&params.q, limit)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
+
+    let count = suggestions.len();
+    Ok(Json(SuggestResponse {
+        suggestions,
         count,
     }))
 }

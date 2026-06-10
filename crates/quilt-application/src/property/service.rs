@@ -1,14 +1,30 @@
 //! PropertyService — application-layer orchestration for property definitions.
 //!
-//! Provides CRUD, batch retrieval, search, and usage-sorted listing.
-//! Delegates persistence to a [`PropertyRepository`] implementation.
+//! Provides CRUD, batch retrieval, search, usage-sorted listing,
+//! and fuzzy suggestion (PI-4) via the `PropertyRepository` trait.
 
 use crate::errors::ApplicationError;
 use async_trait::async_trait;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::repositories::PropertyRepository;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::instrument;
+
+/// A single suggestion result for property discovery.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropertySuggestion {
+    /// The canonical key.
+    pub key: String,
+    /// Display title.
+    pub title: String,
+    /// Property type (Text, Number, etc).
+    pub property_type: String,
+    /// How many blocks use this property (relevance signal).
+    pub usage_count: u64,
+    /// Lifecycle status.
+    pub status: String,
+}
 
 /// Application service for property definitions.
 pub struct PropertyService {
@@ -52,6 +68,18 @@ pub trait PropertyServiceTrait: Send + Sync {
 
     /// Delete a property definition by ID.
     async fn delete(&self, id: quilt_domain::value_objects::Uuid) -> Result<(), ApplicationError>;
+
+    /// Suggest properties matching a partial input (PI-4 discovery).
+    ///
+    /// Returns candidates sorted by:
+    /// 1. Exact prefix match on key (highest priority)
+    /// 2. Substring match on key or title
+    /// 3. Usage count (block_count) as tiebreaker
+    async fn suggest(
+        &self,
+        partial: &str,
+        limit: usize,
+    ) -> Result<Vec<PropertySuggestion>, ApplicationError>;
 }
 
 #[async_trait]
@@ -125,5 +153,55 @@ impl PropertyServiceTrait for PropertyService {
             .delete(id)
             .await
             .map_err(ApplicationError::Domain)
+    }
+
+    #[instrument(skip(self))]
+    async fn suggest(
+        &self,
+        partial: &str,
+        limit: usize,
+    ) -> Result<Vec<PropertySuggestion>, ApplicationError> {
+        let partial_lower = partial.to_lowercase();
+
+        // Use search to get candidates, then score and sort
+        let all = self.repo.search(&partial_lower, limit * 3).await.map_err(ApplicationError::Domain)?;
+
+        let mut scored: Vec<(PropertySuggestion, i32)> = all
+            .into_iter()
+            .filter(|d| d.is_active())
+            .map(|d| {
+                let key_lower = d.db_ident.to_lowercase();
+                let title_lower = d.title.to_lowercase();
+
+                // Scoring: prefix match > contains > usage-based tiebreak
+                let score = if key_lower == partial_lower {
+                    1000
+                } else if key_lower.starts_with(&partial_lower) {
+                    500
+                } else if title_lower.starts_with(&partial_lower) {
+                    400
+                } else if key_lower.contains(&partial_lower) {
+                    200
+                } else if title_lower.contains(&partial_lower) {
+                    100
+                } else {
+                    0
+                } + (d.block_count.min(100) as i32); // usage bonus, capped
+
+                let suggestion = PropertySuggestion {
+                    key: d.db_ident.clone(),
+                    title: d.title.clone(),
+                    property_type: d.property_type.to_string(),
+                    usage_count: d.block_count,
+                    status: d.status.to_string(),
+                };
+                (suggestion, score)
+            })
+            .collect();
+
+        scored.sort_by(|a, b| b.1.cmp(&a.1));
+        scored.truncate(limit);
+
+        Ok(scored.into_iter().map(|(s, _)| s).collect())
     }
 }

@@ -5,4 +5,4 @@
 
 pub mod service;
 
-pub use service::{PropertyService, PropertyServiceTrait};
+pub use service::{PropertyService, PropertyServiceTrait, PropertySuggestion};
