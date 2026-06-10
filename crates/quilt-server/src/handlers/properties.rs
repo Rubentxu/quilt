@@ -23,15 +23,18 @@
 use axum::{
     Json, Router,
     extract::{Extension, Query},
-    routing::get,
+    routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::AppState;
+use quilt_application::property::{PropertyService, PropertyServiceTrait};
+use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::repositories::BlockRepository;
 use quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository;
+use quilt_infrastructure::database::sqlite::SqlitePropertyRepository;
 
 /// Default page size when `?limit=` is absent.
 fn default_limit() -> u32 {
@@ -80,7 +83,10 @@ pub struct PropertyKeysResponse {
 /// is exposed today; additional aggregations (e.g. distinct values
 /// per key) will hang off the same nest.
 pub fn routes() -> Router {
-    Router::new().route("/keys", get(list_property_keys))
+    Router::new()
+        .route("/keys", get(list_property_keys))
+        .route("/batch", post(batch_properties))
+        .route("/", get(list_properties))
 }
 
 /// `GET /api/v1/properties/keys?cursor=&limit=`
@@ -129,4 +135,107 @@ pub async fn list_property_keys(
     };
 
     Ok(Json(PropertyKeysResponse { keys, next_cursor }))
+}
+
+// ── PI-3: Batch & list property definitions ──
+
+/// Request body for `POST /api/v1/properties/batch`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchPropertiesRequest {
+    /// Specific keys to fetch.
+    #[serde(default)]
+    pub keys: Vec<String>,
+    /// Substring search query (matches key or title).
+    pub query: Option<String>,
+    /// Max results. Default: 50.
+    #[serde(default = "default_limit")]
+    pub limit: u32,
+}
+
+/// Response body for batch and list endpoints.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PropertiesResponse {
+    pub definitions: Vec<PropertyDefinition>,
+    pub count: usize,
+}
+
+/// `POST /api/v1/properties/batch`
+///
+/// Accepts optional `keys` to fetch by name, and/or a `query` for
+/// substring search. If both are present, results are merged.
+#[instrument(skip(state))]
+pub async fn batch_properties(
+    Extension(state): Extension<AppState>,
+    Json(req): Json<BatchPropertiesRequest>,
+) -> Result<Json<PropertiesResponse>, AppError> {
+    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
+    let service = PropertyService::new(prop_repo);
+
+    let limit = req.limit.min(100) as usize;
+    let mut results = Vec::new();
+
+    // Fetch by specific keys
+    if !req.keys.is_empty() {
+        let by_keys = service
+            .batch_get(&req.keys)
+            .await
+            .map_err(|e| AppError::BadRequest(e.to_string()))?;
+        results.extend(by_keys);
+    }
+
+    // Search by query
+    if let Some(ref query) = req.query {
+        if !query.is_empty() {
+            let searched = service
+                .search(query, limit)
+                .await
+                .map_err(|e| AppError::BadRequest(e.to_string()))?;
+            // Merge without duplicates (by db_ident)
+            let existing_keys: std::collections::HashSet<_> =
+                results.iter().map(|d| d.db_ident.clone()).collect();
+            for def in searched {
+                if !existing_keys.contains(&def.db_ident) {
+                    results.push(def);
+                }
+            }
+        }
+    }
+
+    // If no keys and no query, list by usage
+    if req.keys.is_empty() && req.query.as_ref().map_or(true, |q| q.is_empty()) {
+        results = service
+            .list_by_usage(limit)
+            .await
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+    }
+
+    let count = results.len();
+    Ok(Json(PropertiesResponse {
+        definitions: results,
+        count,
+    }))
+}
+
+/// `GET /api/v1/properties`
+///
+/// Returns all property definitions.
+#[instrument(skip(state))]
+pub async fn list_properties(
+    Extension(state): Extension<AppState>,
+) -> Result<Json<PropertiesResponse>, AppError> {
+    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
+    let service = PropertyService::new(prop_repo);
+
+    let definitions = service
+        .list_all()
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let count = definitions.len();
+    Ok(Json(PropertiesResponse {
+        definitions,
+        count,
+    }))
 }

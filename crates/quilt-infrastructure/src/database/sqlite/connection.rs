@@ -449,5 +449,76 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
         .execute(pool)
         .await?;
 
+    // ── Property Intelligence v3 (PI-3) — typed property definitions ──
+    //
+    // Persists the schema side of the typed property system. BUILTIN
+    // properties (status, priority, deadline, ...) are seeded by the
+    // application layer from `BUILTIN_PROPERTIES` because their
+    // closed_values live in Rust; the table here is for USER-DEFINED
+    // definitions and the closed values that the user has registered
+    // for them. Builtin definitions still resolve via the static
+    // `BUILTIN_PROPERTIES` map in `quilt-domain::properties::builtin`,
+    // so this table is the "custom" namespace — builtin definitions
+    // are NOT auto-seeded here (they're read from the in-memory map).
+    //
+    // UUIDs are stored as BLOB (16 bytes) — consistent with all other
+    // tables. Booleans are stored as INTEGER (0/1). DateTime<Utc> as
+    // i64 milliseconds since epoch (matching the rest of the schema).
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS property_definitions (
+            id BLOB PRIMARY KEY NOT NULL,
+            db_ident TEXT NOT NULL UNIQUE,
+            title TEXT NOT NULL,
+            property_type TEXT NOT NULL DEFAULT 'Text',
+            cardinality TEXT NOT NULL DEFAULT 'One',
+            view_context TEXT NOT NULL DEFAULT 'Block',
+            public INTEGER NOT NULL DEFAULT 1,
+            queryable INTEGER NOT NULL DEFAULT 1,
+            hidden INTEGER NOT NULL DEFAULT 0,
+            attribute TEXT,
+            read_only INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'active',
+            alias_of TEXT,
+            block_count INTEGER NOT NULL DEFAULT 0,
+            page_count INTEGER NOT NULL DEFAULT 0,
+            first_seen_at INTEGER,
+            last_seen_at INTEGER
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS property_closed_values (
+            id BLOB PRIMARY KEY NOT NULL,
+            property_id BLOB NOT NULL REFERENCES property_definitions(id) ON DELETE CASCADE,
+            db_ident TEXT NOT NULL,
+            value TEXT NOT NULL,
+            icon TEXT,
+            sort_order REAL NOT NULL DEFAULT 0.0
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Indices that back the three new PropertyRepository methods
+    // (get_by_db_ident, get_by_db_idents, list_by_usage).
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_defs_db_ident ON property_definitions(db_ident)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_defs_status ON property_definitions(status)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_defs_usage ON property_definitions(block_count DESC)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_closed_values_property ON property_closed_values(property_id)")
+        .execute(pool)
+        .await?;
+
     Ok(())
 }

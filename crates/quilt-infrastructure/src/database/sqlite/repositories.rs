@@ -28,11 +28,14 @@ use chrono::{DateTime, TimeZone, Utc};
 use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::instrument;
 
 use crate::database::sqlite::connection::DbPool;
 use quilt_domain::entities::{Block, Page, UserSettings};
 use quilt_domain::errors::DomainError;
+use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
+use quilt_domain::properties::types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext};
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
     BlockRepository, PageRepository, PropertyRepository, RefRepository, RefRow, SettingsRepository,
@@ -1737,6 +1740,430 @@ impl TourStateRepository for SqliteTourStateRepository {
         .map_err(|e| DomainError::Storage(format!("dismiss_tour: {}", e)))?;
 
         Ok(())
+    }
+}
+
+// ── SqlitePropertyRepository ──────────────────────────────────────
+
+/// SQLite implementation of the [`PropertyRepository`] trait.
+///
+/// Persists user-defined `PropertyDefinition` rows in the
+/// `property_definitions` table (added in PI-3) and their associated
+/// `ClosedValue` rows in `property_closed_values`. The builtin
+/// definitions (status, priority, deadline, scheduled, url, template,
+/// id/created_at/updated_at, tags, created_by) are NOT stored here —
+/// they are served by the static `BUILTIN_PROPERTIES` map in
+/// `quilt-domain::properties::builtin`.
+///
+/// Each `PropertyDefinition` round-trip also rehydrates its
+/// `closed_values` vector via a second SELECT — that keeps the
+/// definition table flat while still presenting a single entity
+/// to callers (matches the trait contract).
+pub struct SqlitePropertyRepository {
+    pool: DbPool,
+}
+
+impl SqlitePropertyRepository {
+    /// Creates a new `SqlitePropertyRepository` with the given connection pool.
+    ///
+    /// # Arguments
+    ///
+    /// * `pool` - A SQLite connection pool ([`DbPool`])
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+
+    // ── Row ↔ Entity mapping helpers ───────────────────────────────
+
+    /// Map a `property_definitions` row to a `PropertyDefinition`.
+    /// `closed_values` is NOT included — call `load_closed_values`
+    /// separately and merge, or use the private `row_to_definition`
+    /// helper below.
+    fn row_to_definition(&self, row: &sqlx::sqlite::SqliteRow) -> Result<PropertyDefinition, DomainError> {
+        let id_blob: Vec<u8> = row.get("id");
+        let id = blob_to_uuid(&id_blob)?;
+        let property_type_str: String = row.get("property_type");
+        let cardinality_str: String = row.get("cardinality");
+        let view_context_str: String = row.get("view_context");
+        let status_str: String = row.get("status");
+
+        let property_type = PropertyType::from_str(&property_type_str).ok_or_else(|| {
+            DomainError::InvalidData(format!("Unknown property_type: {}", property_type_str))
+        })?;
+        let cardinality = Cardinality::from_str(&cardinality_str).ok_or_else(|| {
+            DomainError::InvalidData(format!("Unknown cardinality: {}", cardinality_str))
+        })?;
+        let view_context = ViewContext::from_str(&view_context_str).ok_or_else(|| {
+            DomainError::InvalidData(format!("Unknown view_context: {}", view_context_str))
+        })?;
+        let status = PropertyStatus::from_str(&status_str).ok_or_else(|| {
+            DomainError::InvalidData(format!("Unknown property status: {}", status_str))
+        })?;
+
+        let public: i64 = row.get("public");
+        let queryable: i64 = row.get("queryable");
+        let hidden: i64 = row.get("hidden");
+        let read_only: i64 = row.get("read_only");
+        let block_count: i64 = row.get("block_count");
+        let page_count: i64 = row.get("page_count");
+        let first_seen_at: Option<i64> = row.get("first_seen_at");
+        let last_seen_at: Option<i64> = row.get("last_seen_at");
+
+        Ok(PropertyDefinition {
+            id,
+            db_ident: row.get("db_ident"),
+            title: row.get("title"),
+            property_type,
+            cardinality,
+            closed_values: Vec::new(), // Populated by `load_closed_values` callers
+            view_context,
+            public: public != 0,
+            queryable: queryable != 0,
+            hidden: hidden != 0,
+            attribute: row.get("attribute"),
+            read_only: read_only != 0,
+            status,
+            alias_of: row.get("alias_of"),
+            block_count: block_count.max(0) as u64,
+            page_count: page_count.max(0) as u64,
+            first_seen_at: optional_ts_to_datetime(first_seen_at),
+            last_seen_at: optional_ts_to_datetime(last_seen_at),
+        })
+    }
+
+    /// Fetch the closed values for a property definition. Returns
+    /// an empty vector when the property has no closed values or
+    /// when no row matches.
+    async fn load_closed_values(&self, property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT id, db_ident, value, icon, sort_order \
+             FROM property_closed_values \
+             WHERE property_id = ? \
+             ORDER BY sort_order ASC, value ASC",
+        )
+        .bind(uuid_to_blob(&property_id))
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("load_closed_values: {}", e)))?;
+
+        rows.iter()
+            .map(|row| {
+                let id_blob: Vec<u8> = row.get("id");
+                let id = blob_to_uuid(&id_blob)?;
+                let order: f64 = row.get("sort_order");
+                Ok(ClosedValue {
+                    id,
+                    db_ident: row.get("db_ident"),
+                    value: row.get("value"),
+                    icon: row.get("icon"),
+                    order,
+                })
+            })
+            .collect()
+    }
+
+    /// Fetch a definition row by id and merge its closed values.
+    async fn fetch_one_with_closed_values(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<PropertyDefinition>, DomainError> {
+        let row = sqlx::query("SELECT * FROM property_definitions WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("fetch_one_with_closed_values: {}", e)))?;
+
+        match row {
+            None => Ok(None),
+            Some(row) => {
+                let mut def = self.row_to_definition(&row)?;
+                def.closed_values = self.load_closed_values(def.id).await?;
+                Ok(Some(def))
+            }
+        }
+    }
+
+    /// Build a `WHERE db_ident IN (?, ?, ...)` clause with one bind
+    /// per id. Returns the SQL fragment and the count of placeholders.
+    fn build_in_clause(idents: &[&str]) -> String {
+        let placeholders = std::iter::repeat("?")
+            .take(idents.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("db_ident IN ({})", placeholders)
+    }
+}
+
+#[async_trait]
+impl PropertyRepository for SqlitePropertyRepository {
+    #[instrument(skip(self))]
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
+        self.fetch_one_with_closed_values(id).await
+    }
+
+    #[instrument(skip(self))]
+    async fn get_by_db_ident(
+        &self,
+        ident: &str,
+    ) -> Result<Option<PropertyDefinition>, DomainError> {
+        let row = sqlx::query("SELECT * FROM property_definitions WHERE db_ident = ?")
+            .bind(ident)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("get_by_db_ident: {}", e)))?;
+
+        match row {
+            None => Ok(None),
+            Some(row) => {
+                let mut def = self.row_to_definition(&row)?;
+                def.closed_values = self.load_closed_values(def.id).await?;
+                Ok(Some(def))
+            }
+        }
+    }
+
+    #[instrument(skip(self))]
+    async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM property_definitions ORDER BY db_ident ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_all: {}", e)))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let mut def = self.row_to_definition(row)?;
+            def.closed_values = self.load_closed_values(def.id).await?;
+            results.push(def);
+        }
+        Ok(results)
+    }
+
+    #[instrument(skip(self, def))]
+    async fn insert(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
+        sqlx::query(
+            r#"INSERT INTO property_definitions
+            (id, db_ident, title, property_type, cardinality, view_context,
+             public, queryable, hidden, attribute, read_only, status, alias_of,
+             block_count, page_count, first_seen_at, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+        )
+        .bind(uuid_to_blob(&def.id))
+        .bind(&def.db_ident)
+        .bind(&def.title)
+        .bind(def.property_type.as_str())
+        .bind(def.cardinality.as_str())
+        .bind(def.view_context.as_str())
+        .bind(def.public as i64)
+        .bind(def.queryable as i64)
+        .bind(def.hidden as i64)
+        .bind(def.attribute.as_deref())
+        .bind(def.read_only as i64)
+        .bind(def.status.as_str())
+        .bind(def.alias_of.as_deref())
+        .bind(def.block_count as i64)
+        .bind(def.page_count as i64)
+        .bind(def.first_seen_at.as_ref().map(datetime_to_ts))
+        .bind(def.last_seen_at.as_ref().map(datetime_to_ts))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("insert property: {}", e)))?;
+
+        // Closed values are written in a second pass. We replace any
+        // pre-existing rows (idempotent re-insert) so callers can
+        // pass a fully-formed `def` without first calling `delete`.
+        for cv in &def.closed_values {
+            sqlx::query(
+                r#"INSERT OR REPLACE INTO property_closed_values
+                (id, property_id, db_ident, value, icon, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(uuid_to_blob(&cv.id))
+            .bind(uuid_to_blob(&def.id))
+            .bind(&cv.db_ident)
+            .bind(&cv.value)
+            .bind(cv.icon.as_deref())
+            .bind(cv.order)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("insert closed value: {}", e)))?;
+        }
+
+        Ok(())
+    }
+
+    #[instrument(skip(self, def))]
+    async fn update(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
+        let result = sqlx::query(
+            r#"UPDATE property_definitions SET
+            db_ident = ?, title = ?, property_type = ?, cardinality = ?,
+            view_context = ?, public = ?, queryable = ?, hidden = ?,
+            attribute = ?, read_only = ?, status = ?, alias_of = ?,
+            block_count = ?, page_count = ?, first_seen_at = ?, last_seen_at = ?
+            WHERE id = ?"#,
+        )
+        .bind(&def.db_ident)
+        .bind(&def.title)
+        .bind(def.property_type.as_str())
+        .bind(def.cardinality.as_str())
+        .bind(def.view_context.as_str())
+        .bind(def.public as i64)
+        .bind(def.queryable as i64)
+        .bind(def.hidden as i64)
+        .bind(def.attribute.as_deref())
+        .bind(def.read_only as i64)
+        .bind(def.status.as_str())
+        .bind(def.alias_of.as_deref())
+        .bind(def.block_count as i64)
+        .bind(def.page_count as i64)
+        .bind(def.first_seen_at.as_ref().map(datetime_to_ts))
+        .bind(def.last_seen_at.as_ref().map(datetime_to_ts))
+        .bind(uuid_to_blob(&def.id))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("update property: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound("property".to_string()));
+        }
+
+        // Replace closed values atomically: delete all existing, re-insert.
+        // A transaction would be ideal; for V1 the partial state
+        // is acceptable because the trait contract is "the caller's
+        // `def` is the new authoritative state".
+        sqlx::query("DELETE FROM property_closed_values WHERE property_id = ?")
+            .bind(uuid_to_blob(&def.id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("delete closed values: {}", e)))?;
+
+        for cv in &def.closed_values {
+            sqlx::query(
+                r#"INSERT INTO property_closed_values
+                (id, property_id, db_ident, value, icon, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?)"#,
+            )
+            .bind(uuid_to_blob(&cv.id))
+            .bind(uuid_to_blob(&def.id))
+            .bind(&cv.db_ident)
+            .bind(&cv.value)
+            .bind(cv.icon.as_deref())
+            .bind(cv.order)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("insert closed value on update: {}", e)))?;
+        }
+
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
+    async fn get_closed_values(
+        &self,
+        property_id: Uuid,
+    ) -> Result<Vec<ClosedValue>, DomainError> {
+        self.load_closed_values(property_id).await
+    }
+
+    #[instrument(skip(self))]
+    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
+        let result = sqlx::query("DELETE FROM property_definitions WHERE id = ?")
+            .bind(uuid_to_blob(&id))
+            .execute(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("delete property: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(DomainError::NotFound("property".to_string()));
+        }
+        // ON DELETE CASCADE handles property_closed_values rows.
+        Ok(())
+    }
+
+    #[instrument(skip(self, idents))]
+    async fn get_by_db_idents(
+        &self,
+        idents: &[&str],
+    ) -> Result<Vec<PropertyDefinition>, DomainError> {
+        if idents.is_empty() {
+            return Ok(Vec::new());
+        }
+        let clause = Self::build_in_clause(idents);
+        let sql = format!(
+            "SELECT * FROM property_definitions WHERE {} ORDER BY db_ident ASC",
+            clause
+        );
+        let mut query = sqlx::query(&sql);
+        for ident in idents {
+            query = query.bind(*ident);
+        }
+        let rows = query
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("get_by_db_idents: {}", e)))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let mut def = self.row_to_definition(row)?;
+            def.closed_values = self.load_closed_values(def.id).await?;
+            results.push(def);
+        }
+        Ok(results)
+    }
+
+    #[instrument(skip(self))]
+    async fn search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<PropertyDefinition>, DomainError> {
+        if query.is_empty() {
+            return self.list_by_usage(limit).await;
+        }
+        let like = format!("%{}%", query);
+        let rows = sqlx::query(
+            "SELECT * FROM property_definitions \
+             WHERE db_ident LIKE ? OR title LIKE ? \
+             ORDER BY db_ident ASC LIMIT ?",
+        )
+        .bind(&like)
+        .bind(&like)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("search properties: {}", e)))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let mut def = self.row_to_definition(row)?;
+            def.closed_values = self.load_closed_values(def.id).await?;
+            results.push(def);
+        }
+        Ok(results)
+    }
+
+    #[instrument(skip(self))]
+    async fn list_by_usage(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<PropertyDefinition>, DomainError> {
+        let rows = sqlx::query(
+            "SELECT * FROM property_definitions \
+             ORDER BY block_count DESC, db_ident ASC LIMIT ?",
+        )
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("list_by_usage: {}", e)))?;
+
+        let mut results = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let mut def = self.row_to_definition(row)?;
+            def.closed_values = self.load_closed_values(def.id).await?;
+            results.push(def);
+        }
+        Ok(results)
     }
 }
 

@@ -210,9 +210,11 @@ mod tests {
     use super::*;
     use crate::handlers::{
         block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
-        query::QueryToolHandler, resource::GraphResourceProvider, retrieval::RetrievalToolHandler,
-        system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
+        properties::PropertyToolHandler, query::QueryToolHandler, resource::GraphResourceProvider,
+        retrieval::RetrievalToolHandler, system::SystemToolHandler,
+        template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
+    use quilt_application::property::{PropertyService, PropertyServiceTrait};
     use quilt_application::templates::contract::{
         ApplyTemplateWithContractUseCase, ApplyTemplateWithContractUseCaseImpl,
     };
@@ -225,7 +227,8 @@ mod tests {
     };
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
-        SqliteBlockRepository, SqlitePageRepository, SqliteTagRepository,
+        SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository,
+        SqliteTagRepository,
     };
     use quilt_search::SearchService;
     use sqlx::SqlitePool;
@@ -292,6 +295,10 @@ mod tests {
             apply_with_contract_use_cases.clone(),
         );
         let system_handler = SystemToolHandler::new();
+        let property_service: Arc<dyn PropertyServiceTrait> = Arc::new(PropertyService::new(
+            Arc::new(SqlitePropertyRepository::new(pool.clone())),
+        ));
+        let property_handler = PropertyToolHandler::new(property_service);
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -303,6 +310,7 @@ mod tests {
                 Box::new(temporal_handler),
                 Box::new(graph_handler),
                 Box::new(template_handler),
+                Box::new(property_handler),
                 Box::new(system_handler),
             ],
             vec![Box::new(resource_provider)],
@@ -360,7 +368,7 @@ mod tests {
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                assert_eq!(result.tools.len(), 24);
+                assert_eq!(result.tools.len(), 25);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(

@@ -1,0 +1,136 @@
+//! MCP tool handler for property intelligence operations.
+//!
+//! Owns: `quilt_properties_batch`
+
+use crate::handlers::ToolHandler;
+use crate::protocol::Evidence;
+use crate::tools::Tool;
+use async_trait::async_trait;
+use quilt_application::property::{PropertyService, PropertyServiceTrait};
+use serde_json::Value;
+use std::sync::Arc;
+use tracing::instrument;
+
+/// Property tool handler — wraps `PropertyServiceTrait`.
+pub struct PropertyToolHandler {
+    service: Arc<dyn PropertyServiceTrait>,
+}
+
+impl PropertyToolHandler {
+    pub fn new(service: Arc<dyn PropertyServiceTrait>) -> Self {
+        Self { service }
+    }
+}
+
+#[async_trait]
+impl ToolHandler for PropertyToolHandler {
+    fn tools(&self) -> Vec<Tool> {
+        vec![Tool {
+            name: "quilt_properties_batch".to_string(),
+            description:
+                "Batch query property definitions: get by keys, search by name, or list by usage"
+                    .to_string(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "keys": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Property keys to fetch"
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": "Substring search (matches key or title)"
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results",
+                        "default": 50
+                    }
+                }
+            }),
+        }]
+    }
+
+    #[instrument(skip(self, args))]
+    async fn execute(&self, name: &str, args: &Value) -> Result<String, String> {
+        match name {
+            "quilt_properties_batch" => {
+                let limit = args
+                    .get("limit")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(50) as usize;
+                let limit = limit.min(100);
+
+                let keys: Vec<String> = args
+                    .get("keys")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                let query_str = args
+                    .get("query")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                let mut results = Vec::new();
+
+                if !keys.is_empty() {
+                    let by_keys = self.service.batch_get(&keys).await.map_err(|e| e.to_string())?;
+                    results.extend(by_keys);
+                }
+
+                if !query_str.is_empty() {
+                    let searched = self
+                        .service
+                        .search(query_str, limit)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    let existing_keys: std::collections::HashSet<_> =
+                        results.iter().map(|d| d.db_ident.clone()).collect();
+                    for def in searched {
+                        if !existing_keys.contains(&def.db_ident) {
+                            results.push(def);
+                        }
+                    }
+                }
+
+                if keys.is_empty() && query_str.is_empty() {
+                    results = self
+                        .service
+                        .list_by_usage(limit)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
+
+                Ok(serde_json::to_string_pretty(&serde_json::json!({
+                    "count": results.len(),
+                    "definitions": results,
+                }))
+                .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+            }
+
+            _ => Err(format!("Unknown tool: {}", name)),
+        }
+    }
+
+    fn tool_evidence(&self, name: &str, _args: &Value, result: &Value) -> Option<Evidence> {
+        let mut ev = Evidence::universal_fallback(name);
+        if name == "quilt_properties_batch" {
+            if let Some(defs) = result.get("definitions").and_then(|v| v.as_array()) {
+                for def in defs {
+                    if let Some(key) = def.get("db_ident").and_then(|v| v.as_str()) {
+                        ev.matched_terms.push(key.to_string());
+                    }
+                }
+            }
+            Some(ev)
+        } else {
+            None
+        }
+    }
+}

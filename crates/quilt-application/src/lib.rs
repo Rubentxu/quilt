@@ -30,6 +30,9 @@ pub mod query;
 // Migration module (F21) - Quilt markdown import
 pub mod migration;
 
+// Property Intelligence (PI-3) — property service
+pub mod property;
+
 // Re-exports
 pub use bootstrap::AppServices;
 pub use errors::ApplicationError;
