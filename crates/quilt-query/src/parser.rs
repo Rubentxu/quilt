@@ -150,7 +150,8 @@ impl QueryParser {
                 "sample" => self.parse_sample(rest),
                 "aggregate" => self.parse_aggregate(rest),
                 "stats" => self.parse_stats(rest),
-                "group_by" => self.parse_group_by(rest),
+                "group_by" | "group-by" => self.parse_group_by(rest),
+                "sort_by" | "sort-by" => self.parse_sort_by(rest),
                 "analyze" => self.parse_analyze(rest),
                 "page-fuzzy" => self.parse_page_fuzzy(rest),
                 "temporal" => self.parse_temporal(rest),
@@ -270,14 +271,27 @@ impl QueryParser {
 
     fn parse_aggregate(&self, rest: &str) -> Result<QueryAst, ParseError> {
         let args = self.split_args(rest);
-        if args.len() != 3 {
+        if args.len() < 3 {
             return Err(ParseError::Invalid(
-                "aggregate requires (inner), (property ...), and (fn ...)".to_string(),
+                "aggregate requires (inner), property, and function".to_string(),
             ));
         }
         let inner = self.parse_expr(&args[0])?;
-        let prop = Self::extract_property_arg(&args[1])?;
-        let afn = Self::parse_aggregate_fn(&args[2])?;
+
+        // Accept both (property "name") and bare "name"
+        let prop = if args[1].trim().starts_with("(property ") {
+            Self::extract_property_arg(&args[1])?
+        } else {
+            args[1].trim().trim_matches('"').to_string()
+        };
+
+        // Accept both (fn name) and bare name
+        let afn = if args[2].trim().starts_with("(fn ") {
+            Self::parse_aggregate_fn(&args[2])?
+        } else {
+            Self::parse_aggregate_fn_bare(args[2].trim())?
+        };
+
         Ok(QueryAst::Aggregate {
             inner: Box::new(inner),
             group_by: prop,
@@ -302,7 +316,12 @@ impl QueryParser {
             return Err(ParseError::Invalid("expected (fn <name>)".to_string()));
         }
         let inner = &trimmed[4..trimmed.len() - 1];
-        match inner.trim() {
+        Self::parse_aggregate_fn_bare(inner.trim())
+    }
+
+    /// Parse a bare aggregate function name (e.g., "count", "avg").
+    fn parse_aggregate_fn_bare(s: &str) -> Result<AggregateFn, ParseError> {
+        match s {
             "count" => Ok(AggregateFn::Count),
             "avg" => Ok(AggregateFn::Avg),
             "sum" => Ok(AggregateFn::Sum),
@@ -310,7 +329,7 @@ impl QueryParser {
             "max" => Ok(AggregateFn::Max),
             _ => Err(ParseError::Invalid(format!(
                 "unknown aggregate fn: {}",
-                inner
+                s
             ))),
         }
     }
@@ -366,6 +385,33 @@ impl QueryParser {
         Ok(QueryAst::GroupBy {
             inner: Box::new(inner),
             property: prop,
+        })
+    }
+
+    /// Parses `(sort-by "field" asc/desc (inner))` into `QueryAst::SortBy`.
+    fn parse_sort_by(&self, rest: &str) -> Result<QueryAst, ParseError> {
+        let args = self.split_args(rest);
+        if args.len() < 3 {
+            return Err(ParseError::Invalid(
+                "sort-by requires field, direction (asc/desc), and inner query".to_string(),
+            ));
+        }
+        let field = args[0].trim().trim_matches('"').to_string();
+        let direction = match args[1].trim().to_lowercase().as_str() {
+            "asc" => SortDirection::Asc,
+            "desc" => SortDirection::Desc,
+            _ => {
+                return Err(ParseError::Invalid(format!(
+                    "sort-by direction must be 'asc' or 'desc', got: {}",
+                    args[1]
+                )))
+            }
+        };
+        let inner = self.parse_expr(&args[2])?;
+        Ok(QueryAst::SortBy {
+            field,
+            direction,
+            inner: Box::new(inner),
         })
     }
 

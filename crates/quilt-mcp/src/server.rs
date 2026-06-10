@@ -279,7 +279,8 @@ mod tests {
         let page_handler = PageToolHandler::new(page_use_cases.clone());
         let search_use_cases = Arc::new(
             SearchUseCasesImpl::new()
-                .with_search_service(Arc::new(SearchService::new(Arc::new(pool.clone())))),
+                .with_search_service(Arc::new(SearchService::new(Arc::new(pool.clone()))))
+                .with_block_repo(block_repo.clone()),
         );
         let query_handler = QueryToolHandler::new(search_use_cases.clone());
         let retrieval_handler = RetrievalToolHandler::new(search_use_cases.clone());

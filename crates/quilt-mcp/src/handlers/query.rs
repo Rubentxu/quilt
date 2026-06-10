@@ -69,12 +69,25 @@ impl ToolHandler for QueryToolHandler {
                     .await
                     .map_err(|e| e.to_string())?;
 
-                Ok(serde_json::to_string_pretty(&serde_json::json!({
-                    "ast": plan.ast,
-                    "sql": plan.sql,
-                    "params": plan.params,
-                    "note": "Query parsed. AST and SQL generated. Block execution not yet wired — returns plan only."
-                })).unwrap_or_else(|e| format!("Serialization error: {}", e)))
+                if let Some(ref blocks) = plan.blocks {
+                    // Execution path — blocks were fetched from the database
+                    Ok(serde_json::to_string_pretty(&serde_json::json!({
+                        "dsl": dsl,
+                        "count": blocks.len(),
+                        "results": blocks,
+                    }))
+                    .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+                } else {
+                    // Plan-only path — no block repository configured
+                    Ok(serde_json::to_string_pretty(&serde_json::json!({
+                        "dsl": dsl,
+                        "ast": plan.ast,
+                        "sql": plan.sql,
+                        "params": plan.params,
+                        "note": "No block repository configured — returning plan only."
+                    }))
+                    .unwrap_or_else(|e| format!("Serialization error: {}", e)))
+                }
             }
 
             "quilt_search" => {

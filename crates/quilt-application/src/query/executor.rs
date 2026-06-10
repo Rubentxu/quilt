@@ -196,6 +196,13 @@ mod tests {
             // the lens handler never routes through this impl.
             Ok(Vec::new())
         }
+
+        async fn list_distinct_authors(
+            &self,
+            _prefix: Option<&str>,
+        ) -> Result<Vec<String>, DomainError> {
+            Ok(Vec::new())
+        }
     }
 
     fn make_block(page_id: Uuid, content: &str) -> Block {
