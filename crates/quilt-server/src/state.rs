@@ -3,7 +3,7 @@
 //! Holds the database pool, MCP server, search index, and other shared resources.
 
 use axum::extract::FromRef;
-use quilt_application::services::ref_service::RefService;
+use quilt_application::services::ref_service::RefServiceTrait;
 use quilt_application::AppServices;
 
 use quilt_domain::repositories::{
@@ -99,7 +99,7 @@ pub struct AppState {
     /// Last opened graph ID (for deep link navigation)
     pub last_opened_graph: Arc<RwLock<Option<String>>>,
     /// Bidirectional reference service for O(1) backlink queries
-    pub ref_service: Arc<RwLock<RefService>>,
+    pub ref_service: Arc<dyn RefServiceTrait>,
 }
 
 // ── FromRef implementations ─────────────────────────────────────────────────
@@ -167,6 +167,12 @@ impl FromRef<AppState> for Arc<SearchService> {
     }
 }
 
+impl FromRef<AppState> for Arc<dyn RefServiceTrait> {
+    fn from_ref(state: &AppState) -> Self {
+        state.ref_service.clone()
+    }
+}
+
 impl AppState {
     /// Create a new AppState with all repositories wired up
     ///
@@ -186,7 +192,7 @@ impl AppState {
         tour_state_repo: Arc<dyn TourStateRepository>,
         search_service: Arc<SearchService>,
         search_index: Arc<SearchIndexManager>,
-        ref_service: Arc<RwLock<RefService>>,
+        ref_service: Arc<dyn RefServiceTrait>,
         services: Arc<AppServices>,
     ) -> Self {
         // Create broadcast channel for navigation events

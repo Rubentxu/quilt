@@ -3,9 +3,11 @@
 //! Implements [`BlockUseCases`] trait for block CRUD and linking operations.
 
 use crate::errors::ApplicationError;
+use crate::services::ref_service::{parse_refs_from_content, RefServiceTrait};
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate, Page, PageCreate};
 use quilt_domain::repositories::{BlockRepository, BlockRepositoryExt, PageRepository};
+use quilt_domain::references::RefType;
 use quilt_domain::value_objects::{
     BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid,
 };
@@ -20,6 +22,23 @@ use tracing::instrument;
 /// zero-cost abstraction through monomorphization.
 #[async_trait]
 pub trait BlockUseCases: Send + Sync {
+    /// Create a new block on a page.
+    ///
+    /// This is the primary method for creating blocks - it handles
+    /// page resolution, order calculation, property parsing, and
+    /// reference index updates.
+    async fn create_block(
+        &self,
+        page_name: &str,
+        content: &str,
+        parent_id: Option<Uuid>,
+        preceding_block_id: Option<Uuid>,
+        marker: Option<TaskMarker>,
+        block_type: BlockType,
+        created_by: Option<&str>,
+        raw_properties: HashMap<String, serde_json::Value>,
+    ) -> Result<Block, ApplicationError>;
+
     /// Create a new block on a page, creating the page if it doesn't exist.
     async fn create_with_page(
         &self,
@@ -128,20 +147,25 @@ pub struct BlockTree {
 
 /// Implementation of [`BlockUseCases`] for generic repository types.
 ///
-/// Type parameters:
-/// - `BR`: Block repository
-/// - `PR`: Page repository
-pub struct BlockUseCasesImpl<BR: BlockRepository, PR: PageRepository> {
-    block_repo: Arc<BR>,
-    page_repo: Arc<PR>,
+/// Uses `Arc<dyn Trait>` for dependency injection following the pattern
+/// established with MigrationEngine.
+pub struct BlockUseCasesImpl {
+    block_repo: Arc<dyn BlockRepository>,
+    page_repo: Arc<dyn PageRepository>,
+    ref_service: Arc<dyn RefServiceTrait>,
 }
 
-impl<BR: BlockRepository, PR: PageRepository> BlockUseCasesImpl<BR, PR> {
+impl BlockUseCasesImpl {
     /// Create a new BlockUseCasesImpl instance.
-    pub fn new(block_repo: Arc<BR>, page_repo: Arc<PR>) -> Self {
+    pub fn new(
+        block_repo: Arc<dyn BlockRepository>,
+        page_repo: Arc<dyn PageRepository>,
+        ref_service: Arc<dyn RefServiceTrait>,
+    ) -> Self {
         Self {
             block_repo,
             page_repo,
+            ref_service,
         }
     }
 
@@ -179,9 +203,117 @@ impl<BR: BlockRepository, PR: PageRepository> BlockUseCasesImpl<BR, PR> {
 }
 
 #[async_trait]
-impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
-    for BlockUseCasesImpl<BR, PR>
-{
+impl BlockUseCases for BlockUseCasesImpl {
+    #[instrument(skip(self))]
+    async fn create_block(
+        &self,
+        page_name: &str,
+        content: &str,
+        parent_id: Option<Uuid>,
+        preceding_block_id: Option<Uuid>,
+        marker: Option<TaskMarker>,
+        block_type: BlockType,
+        created_by: Option<&str>,
+        raw_properties: HashMap<String, serde_json::Value>,
+    ) -> Result<Block, ApplicationError> {
+        // Find or create the page
+        let page = self.get_or_create_page(page_name).await?;
+
+        // Determine order value
+        let order = if let Some(preceding_id) = preceding_block_id {
+            // Calculate midpoint between preceding block and its next sibling
+            let preceding = self
+                .block_repo
+                .get_or_fail(preceding_id)
+                .await
+                .map_err(ApplicationError::Domain)?;
+
+            let siblings = self
+                .block_repo
+                .get_children(preceding.parent_id.unwrap_or(preceding.id))
+                .await
+                .map_err(ApplicationError::Domain)?;
+
+            let next_sibling = siblings
+                .iter()
+                .find(|b| b.order > preceding.order);
+
+            match next_sibling {
+                Some(next) => (preceding.order + next.order) / 2.0,
+                None => preceding.order + 1000.0,
+            }
+        } else {
+            // Calculate max order + 1.0 for append
+            let existing_blocks = self
+                .block_repo
+                .get_by_page(page.id)
+                .await
+                .map_err(ApplicationError::Domain)?;
+
+            existing_blocks
+                .iter()
+                .map(|b| b.order)
+                .fold(0.0_f64, |a, b| a.max(b)) + 1.0
+        };
+
+        // Parse raw_properties into HashMap<String, PropertyValue>
+        let mut properties: HashMap<String, PropertyValue> = HashMap::new();
+        for (key, value) in raw_properties {
+            if let Some(prop_value) = PropertyValue::from_json(&value) {
+                properties.insert(key, prop_value);
+            }
+        }
+
+        // Apply created_by convention unless already set
+        if let Some(author) = created_by {
+            let trimmed = author.trim();
+            if !trimmed.is_empty() && !properties.contains_key("created_by") {
+                if let Some(value) =
+                    PropertyValue::from_json(&serde_json::Value::String(trimmed.to_string()))
+                {
+                    properties.insert("created_by".to_string(), value);
+                }
+            }
+        }
+
+        // Create the block
+        let block = Block::new(BlockCreate {
+            page_id: page.id,
+            content: content.to_string(),
+            parent_id,
+            order,
+            marker,
+            format: BlockFormat::Markdown,
+            block_type,
+            properties,
+        })
+        .map_err(ApplicationError::Domain)?;
+
+        self.block_repo
+            .insert(&block)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        // Update reference index - parse content for [[page]] and ((uuid)) refs
+        let parsed = parse_refs_from_content(&block.content);
+
+        // Resolve page names to UUIDs via page repository
+        let mut page_refs: Vec<(Uuid, RefType)> = Vec::new();
+        for name in &parsed.page_names {
+            if let Ok(Some(p)) = self.page_repo.get_by_name(name).await {
+                page_refs.push((p.id, RefType::PageRef));
+            }
+        }
+
+        // Call ref_service to update the index
+        self.ref_service
+            .on_block_saved(block.id, &block.content, page_refs)
+            .await
+            .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?;
+
+        Ok(block)
+    }
+
     #[instrument(skip(self))]
     async fn create_with_page(
         &self,
@@ -430,12 +562,33 @@ impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
             .await
             .map_err(ApplicationError::Domain)?;
 
+        // Track whether content changed before applying update
+        let content_changed = update.content.is_some();
+
         block.update(update).map_err(ApplicationError::Domain)?;
 
         self.block_repo
             .update(&block)
             .await
             .map_err(ApplicationError::Domain)?;
+
+        // Update reference index if content changed
+        if content_changed {
+            let parsed = parse_refs_from_content(&block.content);
+
+            // Resolve page names to UUIDs via page repository
+            let mut page_refs: Vec<(Uuid, RefType)> = Vec::new();
+            for name in &parsed.page_names {
+                if let Ok(Some(p)) = self.page_repo.get_by_name(name).await {
+                    page_refs.push((p.id, RefType::PageRef));
+                }
+            }
+
+            self.ref_service
+                .on_block_saved(block.id, &block.content, page_refs)
+                .await
+                .map_err(|e| ApplicationError::Infrastructure(e.to_string()))?;
+        }
 
         Ok(block)
     }

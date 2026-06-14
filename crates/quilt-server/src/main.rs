@@ -11,7 +11,6 @@ use anyhow::Result;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -23,7 +22,7 @@ mod state;
 
 use crate::handlers::metrics;
 use crate::state::AppState;
-use quilt_application::services::ref_service::RefService;
+use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
     ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl, TourStateUseCases,
@@ -124,13 +123,13 @@ async fn main() -> Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to rebuild reference index: {}", e))?;
     info!(
         "Reference index rebuilt with {} entries",
-        ref_service.index().len()
+        ref_service.len()
     );
-    let ref_service = Arc::new(RwLock::new(ref_service));
+    let ref_service: Arc<dyn RefServiceTrait> = Arc::new(ref_service);
 
     // Create use cases
     let block_use_cases: Arc<dyn BlockUseCases> =
-        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone()));
+        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone(), ref_service.clone()));
     let page_use_cases: Arc<dyn PageUseCases> =
         Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
     let resource_use_cases: Arc<dyn ResourceUseCases> = Arc::new(ResourceUseCasesImpl::new(

@@ -8,8 +8,9 @@
 //! The service holds both an in-memory index and a repository reference,
 //! keeping them in sync as changes occur.
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock as StdRwLock};
 
+use async_trait::async_trait;
 use quilt_domain::errors::DomainError;
 use quilt_domain::references::{RefIndex, RefType};
 use quilt_domain::repositories::RefRepository;
@@ -142,10 +143,72 @@ pub fn parse_refs_from_content(content: &str) -> ParsedContentRefs {
 /// # }
 /// ```
 pub struct RefService {
-    /// In-memory bidirectional reference index
-    index: RefIndex,
+    /// In-memory bidirectional reference index (protected by std RwLock for sync access)
+    index: StdRwLock<RefIndex>,
     /// Persistent storage for references
     repo: Arc<dyn RefRepository>,
+}
+
+/// Trait for reference service operations.
+///
+/// This trait is object-safe (`Send + Sync`) and uses `#[async_trait]`
+/// for async ergonomics. It defines the interface for managing bidirectional
+/// references between blocks and pages.
+#[async_trait]
+pub trait RefServiceTrait: Send + Sync {
+    /// Called when a block is saved (created or updated).
+    ///
+    /// This method:
+    /// 1. Parses the content for `((uuid))` and `[[name]]` refs
+    /// 2. Syncs the resolved refs to the repository
+    /// 3. Updates the in-memory index
+    ///
+    /// Note: Page name resolution should be done by the caller before
+    /// calling this method. Pass resolved page refs via the `page_refs`
+    /// parameter.
+    async fn on_block_saved(
+        &self,
+        block_id: Uuid,
+        content: &str,
+        page_refs: Vec<(Uuid, RefType)>,
+    ) -> Result<(), DomainError>;
+
+    /// Get all backlinks for a given target entity.
+    ///
+    /// Returns a list of `(source_id, ref_type)` pairs representing
+    /// all entities that reference the given target.
+    ///
+    /// This is an O(1) index lookup — no database query.
+    fn get_backlinks(&self, target_id: Uuid) -> Vec<(Uuid, RefType)>;
+
+    /// Get all forward references from a given source entity.
+    ///
+    /// Returns a list of `(target_id, ref_type)` pairs representing
+    /// all entities that the given source references.
+    fn get_forward_refs(&self, source_id: Uuid) -> Vec<(Uuid, RefType)>;
+
+    /// Get unlinked references for a page.
+    ///
+    /// Finds blocks whose content text mentions `page_name` but do not have
+    /// an explicit `[[page_name]]` reference. Delegates to the repository
+    /// which uses FTS5 or LIKE for text search.
+    async fn get_page_unlinked_references(
+        &self,
+        page_name: &str,
+        page_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError>;
+
+    /// Create an explicit block-to-block link.
+    ///
+    /// This inserts a `block_ref` into the `refs` table and updates the
+    /// in-memory index. Unlike `on_block_saved`, this does not parse content
+    /// or replace existing refs — it adds one link atomically.
+    ///
+    /// If the link already exists, this is a no-op (idempotent).
+    async fn create_link(&self, source_id: Uuid, target_id: Uuid) -> Result<(), DomainError>;
+
+    /// Get the number of entries in the reference index.
+    fn len(&self) -> usize;
 }
 
 impl RefService {
@@ -155,81 +218,18 @@ impl RefService {
     /// from persistent storage, or lazy-build it as blocks are saved.
     pub fn new(repo: Arc<dyn RefRepository>) -> Self {
         Self {
-            index: RefIndex::new(),
+            index: StdRwLock::new(RefIndex::new()),
             repo,
         }
-    }
-
-    /// Called when a block is saved (created or updated).
-    ///
-    /// This method:
-    /// 1. Parses the content for `((uuid))` and `[[name]]` refs
-    /// 2. Resolves page names to UUIDs via the optional resolver
-    /// 3. Syncs the resolved refs to the repository
-    /// 4. Updates the in-memory index
-    ///
-    /// # Arguments
-    ///
-    /// * `block_id` — UUID of the block being saved
-    /// * `content` — raw content text to parse for references
-    /// * `page_resolver` — optional callback to resolve page names to UUIDs;
-    ///   returns `None` if the page name cannot be resolved
-    #[instrument(skip(self, content, page_resolver), fields(block_id = %block_id))]
-    pub async fn on_block_saved(
-        &mut self,
-        block_id: Uuid,
-        content: &str,
-        page_resolver: Option<&(dyn Fn(&str) -> Option<Uuid> + Sync)>,
-    ) -> Result<(), DomainError> {
-        // Parse content for references
-        let parsed = parse_refs_from_content(content);
-
-        // Collect all resolved refs: direct UUID refs + page name resolutions
-        let mut all_refs: Vec<(Uuid, RefType)> = parsed.resolved;
-
-        // Resolve page names if a resolver is provided
-        if let Some(resolver) = page_resolver {
-            for name in &parsed.page_names {
-                if let Some(uuid) = resolver(name) {
-                    all_refs.push((uuid, RefType::PageRef));
-                }
-            }
-        }
-
-        // Sync to repository (replaces all refs for this source)
-        self.repo.sync_refs(block_id, &all_refs).await?;
-
-        // Update in-memory index: remove old, add new
-        self.index.remove_all_from_source(block_id);
-        for (target, ref_type) in &all_refs {
-            self.index.add_ref(block_id, *target, *ref_type);
-        }
-
-        Ok(())
-    }
-
-    /// Get all backlinks for a given target entity.
-    ///
-    /// Returns a list of `(source_id, ref_type)` pairs representing
-    /// all entities that reference the given target.
-    ///
-    /// This is an O(1) index lookup — no database query.
-    pub fn get_backlinks(&self, target_id: Uuid) -> Vec<(Uuid, RefType)> {
-        self.index.get_backlinks(target_id)
-    }
-
-    /// Get all forward references from a given source entity.
-    ///
-    /// Returns a list of `(target_id, ref_type)` pairs representing
-    /// all entities that the given source references.
-    pub fn get_forward_refs(&self, source_id: Uuid) -> Vec<(Uuid, RefType)> {
-        self.index.get_forward_refs(source_id)
     }
 
     /// Rebuild the in-memory index from the repository.
     ///
     /// This loads all reference rows from persistent storage and
     /// rebuilds the bidirectional index. Call this at startup.
+    ///
+    /// Note: This is an initialization concern, not a use-case concern,
+    /// so it stays on `RefService` directly rather than the trait.
     #[instrument(skip(self))]
     pub async fn rebuild_from_repo(&mut self) -> Result<(), DomainError> {
         let rows = self.repo.rebuild_index().await?;
@@ -239,16 +239,56 @@ impl RefService {
             new_index.add_ref(row.source_id, row.target_id, row.ref_type);
         }
 
-        self.index = new_index;
+        *self.index.write().unwrap() = new_index;
         Ok(())
     }
 
-    /// Get unlinked references for a page.
-    ///
-    /// Finds blocks whose content text mentions `page_name` but do not have
-    /// an explicit `[[page_name]]` reference. Delegates to the repository
-    /// which uses FTS5 or LIKE for text search.
-    pub async fn get_page_unlinked_references(
+    /// Get a reference to the in-memory index for inspection.
+    pub fn index_ref(&self) -> RefIndex {
+        self.index.read().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl RefServiceTrait for RefService {
+    #[instrument(skip(self, content), fields(block_id = %block_id))]
+    async fn on_block_saved(
+        &self,
+        block_id: Uuid,
+        content: &str,
+        page_refs: Vec<(Uuid, RefType)>,
+    ) -> Result<(), DomainError> {
+        // Parse content for references
+        let parsed = parse_refs_from_content(content);
+
+        // Combine resolved refs with pre-resolved page refs
+        let mut all_refs = parsed.resolved;
+        all_refs.extend(page_refs);
+
+        // Sync to repository (replaces all refs for this source)
+        self.repo.sync_refs(block_id, &all_refs).await?;
+
+        // Update in-memory index: remove old, add new
+        let mut index = self.index.write().unwrap();
+        index.remove_all_from_source(block_id);
+        for (target, ref_type) in &all_refs {
+            index.add_ref(block_id, *target, *ref_type);
+        }
+
+        Ok(())
+    }
+
+    fn get_backlinks(&self, target_id: Uuid) -> Vec<(Uuid, RefType)> {
+        let index = self.index.read().unwrap();
+        index.get_backlinks(target_id)
+    }
+
+    fn get_forward_refs(&self, source_id: Uuid) -> Vec<(Uuid, RefType)> {
+        let index = self.index.read().unwrap();
+        index.get_forward_refs(source_id)
+    }
+
+    async fn get_page_unlinked_references(
         &self,
         page_name: &str,
         page_id: Uuid,
@@ -256,29 +296,17 @@ impl RefService {
         self.repo.get_unlinked_references(page_name, page_id).await
     }
 
-    /// Create an explicit block-to-block link.
-    ///
-    /// This inserts a `block_ref` into the `refs` table and updates the
-    /// in-memory index. Unlike `on_block_saved`, this does not parse content
-    /// or replace existing refs — it adds one link atomically.
-    ///
-    /// If the link already exists, this is a no-op (idempotent).
     #[instrument(skip(self))]
-    pub async fn create_link(
-        &mut self,
-        source_id: Uuid,
-        target_id: Uuid,
-    ) -> Result<(), DomainError> {
+    async fn create_link(&self, source_id: Uuid, target_id: Uuid) -> Result<(), DomainError> {
         self.repo
             .insert_ref(source_id, target_id, RefType::BlockRef)
             .await?;
-        self.index.add_ref(source_id, target_id, RefType::BlockRef);
+        self.index.write().unwrap().add_ref(source_id, target_id, RefType::BlockRef);
         Ok(())
     }
 
-    /// Get a reference to the in-memory index for inspection.
-    pub fn index(&self) -> &RefIndex {
-        &self.index
+    fn len(&self) -> usize {
+        self.index.read().unwrap().len()
     }
 }
 
@@ -435,13 +463,13 @@ mod tests {
     #[tokio::test]
     async fn test_add_ref_and_get_backlinks() {
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
         let block_id = Uuid::new_v4();
         let target_id = Uuid::new_v4();
 
         let content = format!("Check this out: (({}))", target_id);
         service
-            .on_block_saved(block_id, &content, None)
+            .on_block_saved(block_id, &content, Vec::new())
             .await
             .unwrap();
 
@@ -454,14 +482,14 @@ mod tests {
     #[tokio::test]
     async fn test_get_forward_refs() {
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
         let block_id = Uuid::new_v4();
         let target1 = Uuid::new_v4();
         let target2 = Uuid::new_v4();
 
         let content = format!("Refs: (({})) and (({}))", target1, target2);
         service
-            .on_block_saved(block_id, &content, None)
+            .on_block_saved(block_id, &content, Vec::new())
             .await
             .unwrap();
 
@@ -496,7 +524,7 @@ mod tests {
     #[tokio::test]
     async fn test_update_existing_block_refs() {
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
         let block_id = Uuid::new_v4();
         let target1 = Uuid::new_v4();
         let target2 = Uuid::new_v4();
@@ -504,7 +532,7 @@ mod tests {
         // First save: reference target1
         let content = format!("Ref: (({}))", target1);
         service
-            .on_block_saved(block_id, &content, None)
+            .on_block_saved(block_id, &content, Vec::new())
             .await
             .unwrap();
         assert_eq!(service.get_forward_refs(block_id).len(), 1);
@@ -513,7 +541,7 @@ mod tests {
         // Second save: reference target2 instead (no longer ref target1)
         let content = format!("Ref: (({}))", target2);
         service
-            .on_block_saved(block_id, &content, None)
+            .on_block_saved(block_id, &content, Vec::new())
             .await
             .unwrap();
 
@@ -529,20 +557,20 @@ mod tests {
     #[tokio::test]
     async fn test_empty_content_clears_refs() {
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
         let block_id = Uuid::new_v4();
         let target_id = Uuid::new_v4();
 
         // First save with ref
         let content = format!("Ref: (({}))", target_id);
         service
-            .on_block_saved(block_id, &content, None)
+            .on_block_saved(block_id, &content, Vec::new())
             .await
             .unwrap();
         assert_eq!(service.get_forward_refs(block_id).len(), 1);
 
         // Save with empty content — should clear refs
-        service.on_block_saved(block_id, "", None).await.unwrap();
+        service.on_block_saved(block_id, "", Vec::new()).await.unwrap();
 
         assert!(service.get_forward_refs(block_id).is_empty());
         assert_eq!(service.get_backlinks(target_id).len(), 0);
@@ -551,20 +579,14 @@ mod tests {
     #[tokio::test]
     async fn test_page_ref_resolution() {
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
         let block_id = Uuid::new_v4();
         let page_id = Uuid::new_v4();
 
-        let resolver = |name: &str| -> Option<Uuid> {
-            match name {
-                "My Page" => Some(page_id),
-                _ => None,
-            }
-        };
-
         let content = "Check [[My Page]]".to_string();
+        // Pre-resolved page refs: "My Page" resolves to page_id
         service
-            .on_block_saved(block_id, &content, Some(&resolver))
+            .on_block_saved(block_id, &content, vec![(page_id, RefType::PageRef)])
             .await
             .unwrap();
 
@@ -582,23 +604,14 @@ mod tests {
     #[tokio::test]
     async fn test_page_ref_with_alias_resolves_to_page_name() {
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
         let block_id = Uuid::new_v4();
         let page_id = Uuid::new_v4();
 
-        // The alias text must NOT match the resolver; only the page name
-        // part is passed to it. If the alias leaked into the lookup, the
-        // resolver would return None and the backlink would not be created.
-        let resolver = |name: &str| -> Option<Uuid> {
-            match name {
-                "My Page" => Some(page_id),
-                _ => None,
-            }
-        };
-
+        // The alias text is stripped before resolution, so "My Page" is what gets resolved
         let content = "Check [[My Page|display alias]]".to_string();
         service
-            .on_block_saved(block_id, &content, Some(&resolver))
+            .on_block_saved(block_id, &content, vec![(page_id, RefType::PageRef)])
             .await
             .unwrap();
 
@@ -616,15 +629,13 @@ mod tests {
     async fn test_page_ref_with_empty_alias_resolves() {
         // `[[Page|]]` is treated as no alias; resolution still works.
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
         let block_id = Uuid::new_v4();
         let page_id = Uuid::new_v4();
 
-        let resolver = |name: &str| -> Option<Uuid> { (name == "Page").then_some(page_id) };
-
         let content = "Check [[Page|]]".to_string();
         service
-            .on_block_saved(block_id, &content, Some(&resolver))
+            .on_block_saved(block_id, &content, vec![(page_id, RefType::PageRef)])
             .await
             .unwrap();
 
@@ -639,25 +650,18 @@ mod tests {
         // 3. Call get_backlinks(test_page_id)
         // 4. Verify backlink exists with correct source and type
         let repo = Arc::new(MockRefRepository::new());
-        let mut service = RefService::new(repo);
+        let service = RefService::new(repo);
 
         let block_id = Uuid::new_v4();
         let test_page_id = Uuid::new_v4();
         let other_page_id = Uuid::new_v4();
 
-        // Resolver that knows about our pages
-        let resolver = |name: &str| -> Option<Uuid> {
-            match name {
-                "TestPage" => Some(test_page_id),
-                "OtherPage" => Some(other_page_id),
-                _ => None,
-            }
-        };
-
         // Write: save a block that references "TestPage"
+        // The ((some-other-uuid)) will parse but won't create a valid ref since it's not a UUID
         let content = "This block links to [[TestPage]] and also ((some-other-uuid))".to_string();
+        // Pre-resolved page refs: "TestPage" -> test_page_id
         service
-            .on_block_saved(block_id, &content, Some(&resolver))
+            .on_block_saved(block_id, &content, vec![(test_page_id, RefType::PageRef)])
             .await
             .unwrap();
 

@@ -19,6 +19,7 @@ use crate::state::AppState;
 use quilt_application::services::ref_service::parse_refs_from_content;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
+use quilt_domain::references::RefType;
 use quilt_domain::value_objects::{BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid};
 use std::collections::HashMap;
 
@@ -381,24 +382,20 @@ pub async fn create_block(
     let parsed = parse_refs_from_content(&block.content);
 
     // Resolve page names to UUIDs via the page repository
-    let mut page_map: HashMap<String, Uuid> = HashMap::new();
+    let mut page_refs: Vec<(Uuid, RefType)> = Vec::new();
     for name in &parsed.page_names {
         if let Ok(Some(page)) = page_repo.get_by_name(name).await {
-            page_map.insert(name.clone(), page.id);
+            page_refs.push((page.id, RefType::PageRef));
         }
     }
 
-    // Build a sync resolver using the pre-resolved map
-    let resolver = |name: &str| -> Option<Uuid> { page_map.get(name).copied() };
-
-    let mut svc = state.ref_service.write().await;
-    if let Err(e) = svc
-        .on_block_saved(block.id, &block.content, Some(&resolver))
+    if let Err(e) = state
+        .ref_service
+        .on_block_saved(block.id, &block.content, page_refs)
         .await
     {
         tracing::error!(%block.id, error = %e, "Failed to update reference index");
     }
-    drop(svc);
 
     Ok((
         StatusCode::CREATED,
@@ -594,23 +591,20 @@ pub async fn update_block(
     if content_changed {
         let parsed = parse_refs_from_content(&block.content);
 
-        let mut page_map: HashMap<String, Uuid> = HashMap::new();
+        let mut page_refs: Vec<(Uuid, RefType)> = Vec::new();
         for name in &parsed.page_names {
             if let Ok(Some(page)) = page_repo.get_by_name(name).await {
-                page_map.insert(name.clone(), page.id);
+                page_refs.push((page.id, RefType::PageRef));
             }
         }
 
-        let resolver = |name: &str| -> Option<Uuid> { page_map.get(name).copied() };
-
-        let mut svc = state.ref_service.write().await;
-        if let Err(e) = svc
-            .on_block_saved(block.id, &block.content, Some(&resolver))
+        if let Err(e) = state
+            .ref_service
+            .on_block_saved(block.id, &block.content, page_refs)
             .await
         {
             tracing::error!(%block.id, error = %e, "Failed to update reference index");
         }
-        drop(svc);
     }
 
     // Resolve page name for the DTO
@@ -798,11 +792,13 @@ pub async fn link_blocks(
         .map_err(map_app_error)?;
 
     // Also update the in-memory ref index for O(1) backlink queries
-    let mut ref_service = state.ref_service.write().await;
-    if let Err(e) = ref_service.create_link(source_uuid, target_uuid).await {
+    if let Err(e) = state
+        .ref_service
+        .create_link(source_uuid, target_uuid)
+        .await
+    {
         tracing::warn!(%source_uuid, %target_uuid, error = %e, "Failed to update ref index");
     }
-    drop(ref_service);
 
     Ok((
         StatusCode::CREATED,

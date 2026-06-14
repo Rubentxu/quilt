@@ -77,13 +77,11 @@ pub async fn get_page_unlinked_references(
         .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
 
     // Query unlinked references via the ref service
-    let unlinked = {
-        let ref_service = state.ref_service.read().await;
-        ref_service
-            .get_page_unlinked_references(&name, page.id)
-            .await
-            .map_err(|e| AppError::Internal(e.to_string()))?
-    };
+    let unlinked = state
+        .ref_service
+        .get_page_unlinked_references(&name, page.id)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     if unlinked.is_empty() {
         return Ok(Json(Vec::new()));
@@ -404,10 +402,7 @@ pub async fn get_page_backlinks(
         .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
 
     // Query the in-memory ref index for O(1) backlinks
-    let backlinks = {
-        let ref_service = state.ref_service.read().await;
-        ref_service.get_backlinks(page.id)
-    };
+    let backlinks = state.ref_service.get_backlinks(page.id);
 
     if backlinks.is_empty() {
         return Ok(Json(Vec::new()));
