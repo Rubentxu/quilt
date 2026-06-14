@@ -41,7 +41,6 @@ pub mod handlers;
 pub mod notifications;
 pub mod protocol;
 pub mod resources;
-pub mod serialization;
 pub mod server;
 pub mod tools;
 

@@ -5,11 +5,10 @@
 
 use crate::handlers::ToolHandler;
 use crate::protocol::{Evidence, SourceAuthority};
-use crate::serialization::block_to_json;
 use crate::tools::Tool;
 use crate::use_cases::{BlockTree, BlockUseCases};
 use async_trait::async_trait;
-use quilt_application::{TaskMarker, Uuid, parse_properties};
+use quilt_application::{BlockDto, TaskMarker, Uuid, parse_properties};
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
@@ -50,8 +49,8 @@ fn parse_optional_marker(args: &Value, key: &str) -> Result<Option<TaskMarker>, 
 /// Convert BlockTree to JSON value.
 fn block_tree_to_json(tree: &BlockTree) -> serde_json::Value {
     serde_json::json!({
-        "block": block_to_json(&tree.root),
-        "children": tree.children.iter().map(block_to_json).collect::<Vec<_>>(),
+        "block": serde_json::to_value(BlockDto::from(tree.root.clone())).unwrap_or_default(),
+        "children": tree.children.iter().map(|b| serde_json::to_value(BlockDto::from(b.clone())).unwrap_or_default()).collect::<Vec<_>>(),
         "children_count": tree.children.len(),
     })
 }
@@ -249,7 +248,7 @@ impl ToolHandler for BlockToolHandler {
                     .map_err(|e| e.to_string())?;
                 Ok(serde_json::to_string_pretty(&serde_json::json!({
                     "block_id": block_id.to_string(),
-                    "backlinks": backlinks.iter().map(block_to_json).collect::<Vec<_>>(),
+                    "backlinks": backlinks.iter().map(|b| serde_json::to_value(BlockDto::from(b.clone())).unwrap_or_default()).collect::<Vec<_>>(),
                     "count": backlinks.len(),
                 }))
                 .unwrap_or_else(|e| e.to_string()))

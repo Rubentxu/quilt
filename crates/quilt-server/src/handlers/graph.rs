@@ -418,14 +418,9 @@ pub async fn get_lens(
     let ref_lookup = move |block_id: Uuid| {
         let svc = ref_service.clone();
         async move {
-            // RefService methods are sync (in-memory index), but
-            // the lookup closure is async to match the BFS shape.
-            // We acquire the read lock once per call and drop it
-            // before returning. For a single BFS run the cost is
-            // ~depth × #visited blocks; negligible at V1 scale.
-            let guard = svc.read().await;
-            guard
-                .get_forward_refs(block_id)
+            // RefService::get_forward_refs is a sync fn (in-memory index),
+            // but the lookup closure is async to match the BFS shape.
+            svc.get_forward_refs(block_id)
                 .into_iter()
                 .map(|(u, _)| u)
                 .collect::<Vec<_>>()

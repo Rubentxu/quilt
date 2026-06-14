@@ -15,6 +15,7 @@
 //! - **Dead cognitive code** — `quilt-analysis` is NOT referenced in any use case code.
 
 pub mod block;
+pub mod dtos;
 pub mod page;
 pub mod resource;
 pub mod search;
@@ -23,6 +24,7 @@ pub mod tour_state;
 
 // Re-exports for convenience
 pub use block::{BlockTree, BlockUseCases, BlockUseCasesImpl};
+pub use dtos::BlockDto;
 pub use page::{PageUseCases, PageUseCasesImpl, PageWithBlocks};
 pub use resource::{
     GraphSnapshot, JournalSummary, PageSummary, ResourceUseCases, ResourceUseCasesImpl, TagSummary,

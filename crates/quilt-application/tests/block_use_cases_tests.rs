@@ -5,17 +5,73 @@
 //! list_by_property, create_task, and page auto-creation behavior.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use async_trait::async_trait;
 use quilt_application::use_cases::{BlockUseCases, BlockUseCasesImpl};
-use quilt_domain::value_objects::{PropertyValue, TaskMarker};
+use quilt_domain::errors::DomainError;
+use quilt_domain::repositories::{RefRepository, RefRow};
+use quilt_domain::references::RefType;
+use quilt_domain::value_objects::{PropertyValue, TaskMarker, Uuid};
 use quilt_test_helpers::{InMemoryBlockRepo, InMemoryPageRepo};
 
 // ── Helpers ──────────────────────────────────────────────────
 
-fn setup() -> BlockUseCasesImpl<InMemoryBlockRepo, InMemoryPageRepo> {
-    let block_repo = InMemoryBlockRepo::new();
-    let page_repo = InMemoryPageRepo::new();
-    BlockUseCasesImpl::new(block_repo, page_repo)
+fn setup() -> impl BlockUseCases {
+    let block_repo: Arc<dyn quilt_domain::repositories::BlockRepository> =
+        Arc::new(InMemoryBlockRepo::new());
+    let page_repo: Arc<dyn quilt_domain::repositories::PageRepository> =
+        Arc::new(InMemoryPageRepo::new());
+    // Create a RefService with a mock ref repository
+    let ref_repo: Arc<dyn RefRepository> = Arc::new(MockRefRepo);
+    let ref_service: Arc<dyn quilt_application::services::ref_service::RefServiceTrait> =
+        Arc::new(quilt_application::services::ref_service::RefService::new(ref_repo));
+    BlockUseCasesImpl::new(block_repo, page_repo, ref_service)
+}
+
+/// A mock RefRepository for testing.
+struct MockRefRepo;
+
+#[async_trait]
+impl RefRepository for MockRefRepo {
+    async fn get_forward_refs(
+        &self,
+        _source_id: Uuid,
+    ) -> Result<Vec<(Uuid, RefType)>, DomainError> {
+        Ok(Vec::new())
+    }
+
+    async fn get_backlinks(&self, _target_id: Uuid) -> Result<Vec<(Uuid, RefType)>, DomainError> {
+        Ok(Vec::new())
+    }
+
+    async fn sync_refs(&self, _source_id: Uuid, _refs: &[(Uuid, RefType)]) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn rebuild_index(&self) -> Result<Vec<RefRow>, DomainError> {
+        Ok(Vec::new())
+    }
+
+    async fn insert_ref(&self, _source_id: Uuid, _target_id: Uuid, _ref_type: RefType) -> Result<(), DomainError> {
+        Ok(())
+    }
+
+    async fn get_unlinked_references(&self, _page_name: &str, _page_id: Uuid) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
+        Ok(Vec::new())
+    }
+
+    async fn set_custom_context(&self, _source_id: Uuid, _target_id: Uuid, _ref_type: RefType, _context: Option<&str>) -> Result<bool, DomainError> {
+        Ok(false)
+    }
+
+    async fn get_custom_context(&self, _source_id: Uuid, _target_id: Uuid, _ref_type: RefType) -> Result<Option<String>, DomainError> {
+        Ok(None)
+    }
+
+    async fn get_custom_contexts_for_target(&self, _target_id: Uuid) -> Result<Vec<(Uuid, RefType, String)>, DomainError> {
+        Ok(Vec::new())
+    }
 }
 
 // ── create_with_page ────────────────────────────────────────

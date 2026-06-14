@@ -42,7 +42,7 @@ pub use errors::ApplicationError;
 
 // Use case traits (re-exported for convenience)
 pub use use_cases::{
-    BlockTree, BlockUseCases, GraphSnapshot, JournalSummary, PageSummary, PageUseCases,
+    BlockDto, BlockTree, BlockUseCases, GraphSnapshot, JournalSummary, PageSummary, PageUseCases,
     PageWithBlocks, QueryPlan, ResourceUseCases, SearchResult, SearchUseCases, TagSummary,
 };
 

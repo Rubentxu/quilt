@@ -3,7 +3,7 @@
 //! Provides common setup utilities for integration tests.
 
 use quilt_application::bootstrap::AppServices;
-use quilt_application::services::ref_service::RefService;
+use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
     ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
@@ -17,7 +17,6 @@ use quilt_infrastructure::database::sqlite::repositories::{
 };
 use quilt_search::{SearchIndexManager, SearchService};
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// Build a minimal AppState for testing.
 ///
@@ -58,7 +57,7 @@ pub async fn build_test_app_state_with_repos(
     let mut ref_service = RefService::new(ref_repo.clone());
     // Note: rebuild_from_repo might fail on empty DB, but we ignore for testing
     let _ = ref_service.rebuild_from_repo();
-    let ref_service = Arc::new(RwLock::new(ref_service));
+    let ref_service: Arc<dyn RefServiceTrait> = Arc::new(ref_service);
 
     // Build repositories
     let block_repo: Arc<SqliteBlockRepository> = Arc::new(SqliteBlockRepository::new(pool.clone()));
@@ -76,7 +75,7 @@ pub async fn build_test_app_state_with_repos(
 
     // Build use cases
     let block_use_cases: Arc<dyn BlockUseCases> =
-        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone()));
+        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone(), ref_service.clone()));
     let page_use_cases: Arc<dyn PageUseCases> =
         Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
     let resource_use_cases: Arc<dyn ResourceUseCases> = Arc::new(ResourceUseCasesImpl::new(

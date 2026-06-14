@@ -4,10 +4,10 @@
 
 use crate::handlers::ToolHandler;
 use crate::protocol::Evidence;
-use crate::serialization::block_to_json;
 use crate::tools::Tool;
 use crate::use_cases::PageUseCases;
 use async_trait::async_trait;
+use quilt_application::BlockDto;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
@@ -105,7 +105,7 @@ impl ToolHandler for PageToolHandler {
                         "name": page_with_blocks.page.name,
                         "updated_at": page_with_blocks.page.updated_at.to_rfc3339(),
                     },
-                    "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
+                    "blocks": page_with_blocks.blocks.iter().map(|b| serde_json::to_value(BlockDto::from(b.clone())).unwrap_or_default()).collect::<Vec<_>>(),
                     "count": page_with_blocks.blocks.len(),
                 }))
                 .unwrap_or_else(|e| e.to_string()))
@@ -140,7 +140,7 @@ impl ToolHandler for PageToolHandler {
                         "journal_day": journal_day,
                         "updated_at": page.updated_at.to_rfc3339(),
                     },
-                    "blocks": page_with_blocks.blocks.iter().map(block_to_json).collect::<Vec<_>>(),
+                    "blocks": page_with_blocks.blocks.iter().map(|b| serde_json::to_value(BlockDto::from(b.clone())).unwrap_or_default()).collect::<Vec<_>>(),
                     "block_count": page_with_blocks.blocks.len(),
                 }))
                 .unwrap_or_else(|e| e.to_string()))

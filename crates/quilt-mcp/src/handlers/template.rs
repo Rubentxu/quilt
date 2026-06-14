@@ -28,7 +28,7 @@ use quilt_application::templates::contract::{
     ApplyTemplateWithContractError, ApplyTemplateWithContractUseCase,
 };
 use quilt_application::templates::reapply::{ReapplyMode, ReapplyTemplateUseCase};
-use quilt_application::TemplateContract;
+use quilt_application::{BlockDto, TemplateContract};
 use serde::Serialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -415,7 +415,7 @@ impl ToolHandler for TemplateToolHandler {
                         let blocks: Vec<Value> = s
                             .blocks
                             .iter()
-                            .map(crate::serialization::block_to_json)
+                            .map(|b| serde_json::to_value(BlockDto::from(b.clone())).unwrap_or_default())
                             .collect();
 
                         let response = TemplateSchemaResponse {
