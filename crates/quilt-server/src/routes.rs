@@ -78,6 +78,7 @@ pub fn create_app(state: AppState) -> Router {
         .layer(axum::Extension(state.property_repo.clone()))
         .layer(axum::Extension(state.tour_state_repo.clone()))
         .layer(axum::Extension(state.search_service.clone()))
+        .layer(axum::Extension(state.ref_service.clone()))
         .layer(cors)
         .layer(middleware::from_fn(
             crate::middleware::auth::auth_middleware,

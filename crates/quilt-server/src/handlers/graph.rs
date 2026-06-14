@@ -56,7 +56,7 @@ use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
-use crate::state::AppState;
+use quilt_application::services::ref_service::RefServiceTrait;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::value_objects::Uuid;
@@ -322,10 +322,10 @@ pub fn routes() -> Router {
 /// # Errors
 /// * 400 — invalid focus prefix, invalid UUID, depth out of range.
 /// * 401 — handled by the global auth middleware.
-#[instrument(skip(state, block_repo, page_repo))]
+#[instrument(skip(ref_service, block_repo, page_repo))]
 pub async fn get_lens(
     Query(params): Query<LensParams>,
-    Extension(state): Extension<AppState>,
+    Extension(ref_service): Extension<Arc<dyn RefServiceTrait>>,
     Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
     Extension(page_repo): Extension<Arc<dyn PageRepository>>,
 ) -> Result<Json<LensResponse>, AppError> {
@@ -414,16 +414,16 @@ pub async fn get_lens(
     };
 
     // 4. Build the ref lookup closure backed by RefService.
-    let ref_service = state.ref_service.clone();
-    let ref_lookup = move |block_id: Uuid| {
+    let ref_lookup = {
         let svc = ref_service.clone();
-        async move {
-            // RefService::get_forward_refs is a sync fn (in-memory index),
-            // but the lookup closure is async to match the BFS shape.
-            svc.get_forward_refs(block_id)
-                .into_iter()
-                .map(|(u, _)| u)
-                .collect::<Vec<_>>()
+        move |block_id: Uuid| {
+            let svc = svc.clone();
+            async move {
+                svc.get_forward_refs(block_id)
+                    .into_iter()
+                    .map(|(u, _)| u)
+                    .collect::<Vec<_>>()
+            }
         }
     };
 

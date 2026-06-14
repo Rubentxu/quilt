@@ -15,6 +15,7 @@ use tracing::instrument;
 use crate::error::AppError;
 use crate::handlers::blocks::map_app_error;
 use crate::state::AppState;
+use quilt_application::services::ref_service::RefServiceTrait;
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::repositories::{
     BlockRepository, PageRepository, RefRepository,
@@ -62,10 +63,10 @@ pub struct CreatePageRequest {
 ///
 /// Returns all blocks whose content text mentions the page name (case-insensitive)
 /// but do NOT have an explicit `[[page]]` reference.
-#[instrument(skip(state, page_repo, block_repo))]
+#[instrument(skip(ref_service, page_repo, block_repo))]
 pub async fn get_page_unlinked_references(
     Path(name): Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(ref_service): Extension<Arc<dyn RefServiceTrait>>,
     Extension(page_repo): Extension<Arc<dyn PageRepository>>,
     Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
 ) -> Result<Json<Vec<BacklinkDto>>, AppError> {
@@ -77,8 +78,7 @@ pub async fn get_page_unlinked_references(
         .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
 
     // Query unlinked references via the ref service
-    let unlinked = state
-        .ref_service
+    let unlinked = ref_service
         .get_page_unlinked_references(&name, page.id)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -386,10 +386,10 @@ pub struct BacklinkDto {
 ///
 /// Returns all blocks that reference the given page.
 /// Uses the in-memory RefIndex for O(1) lookup.
-#[instrument(skip(state, page_repo, block_repo, ref_repo))]
+#[instrument(skip(ref_service, page_repo, block_repo, ref_repo))]
 pub async fn get_page_backlinks(
     Path(name): Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(ref_service): Extension<Arc<dyn RefServiceTrait>>,
     Extension(page_repo): Extension<Arc<dyn PageRepository>>,
     Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
     Extension(ref_repo): Extension<Arc<dyn RefRepository>>,
@@ -402,7 +402,7 @@ pub async fn get_page_backlinks(
         .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
 
     // Query the in-memory ref index for O(1) backlinks
-    let backlinks = state.ref_service.get_backlinks(page.id);
+    let backlinks = ref_service.get_backlinks(page.id);
 
     if backlinks.is_empty() {
         return Ok(Json(Vec::new()));
