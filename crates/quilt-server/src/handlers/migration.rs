@@ -2,84 +2,16 @@
 //!
 //! Endpoints for importing Markdown files into Quilt.
 
-use async_trait::async_trait;
-use axum::{Json, Router, extract::Extension, http::StatusCode, routing::post};
+use axum::{Json, Router,extract::Extension, http::StatusCode, routing::post};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
-use crate::state::AppState;
 use quilt_application::migration::MigrationEngine;
-use quilt_domain::errors::DomainError;
-use quilt_domain::properties::definition::PropertyDefinition;
-use quilt_domain::properties::types::ClosedValue;
-use quilt_domain::repositories::PropertyRepository;
-use quilt_domain::value_objects::Uuid;
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository,
-};
-
-/// Empty property repository for migration engine.
-/// Returns no custom properties, relying entirely on builtin property fallbacks.
-#[derive(Default)]
-struct EmptyPropertyRepo;
-
-#[async_trait]
-impl PropertyRepository for EmptyPropertyRepo {
-    async fn get_by_id(&self, _id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
-        Ok(None)
-    }
-
-    async fn get_by_db_ident(
-        &self,
-        _ident: &str,
-    ) -> Result<Option<PropertyDefinition>, DomainError> {
-        Ok(None)
-    }
-
-    async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
-        Ok(Vec::new())
-    }
-
-    async fn insert(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
-        Ok(())
-    }
-
-    async fn update(&self, _def: &PropertyDefinition) -> Result<(), DomainError> {
-        Ok(())
-    }
-
-    async fn get_closed_values(&self, _property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
-        Ok(Vec::new())
-    }
-
-    async fn delete(&self, _id: Uuid) -> Result<(), DomainError> {
-        Ok(())
-    }
-    async fn get_by_db_idents(&self, _idents: &[&str]) -> Result<Vec<PropertyDefinition>, DomainError> {
-        Ok(Vec::new())
-    }
-    async fn search(&self, _query: &str, _limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
-        Ok(Vec::new())
-    }
-    async fn list_by_usage(&self, _limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
-        Ok(Vec::new())
-    }
-    async fn get_co_occurrences(&self, _limit: usize) -> Result<Vec<quilt_domain::properties::analytics::PropertyCoOccurrence>, DomainError> {
-        Ok(vec![])
-    }
-    async fn get_trends(&self, _period_days: u32, _limit: usize) -> Result<Vec<quilt_domain::properties::analytics::PropertyTrend>, DomainError> {
-        Ok(vec![])
-    }
-    async fn count_distinct_properties(&self) -> Result<u64, DomainError> {
-        Ok(0)
-    }
-    async fn count_blocks_with_properties(&self) -> Result<u64, DomainError> {
-        Ok(0)
-    }
-}
+use quilt_domain::repositories::{BlockRepository, PageRepository, PropertyRepository};
 
 /// Request body for POST /api/v1/migration/md
 #[derive(Debug, Deserialize)]
@@ -97,7 +29,7 @@ pub struct ImportResultDto {
     pub pages_created: usize,
     /// Number of blocks created
     pub blocks_created: usize,
-    /// Warning messages (e.g., page collisions)
+    /// Warning messages (e.g. page collisions)
     pub warnings: Vec<String>,
 }
 
@@ -125,26 +57,80 @@ impl From<quilt_application::migration::ImportResult> for ImportResultDto {
     }
 }
 
+/// Validate a user-provided path against the vault base directory.
+///
+/// Security hardening for path traversal attacks:
+/// 1. Canonicalize the user path to resolve symlinks
+/// 2. Verify the canonical path is within the vault base
+/// 3. Reject symlinks (DOS prevention and security)
+/// 4. Enforce a file count limit to prevent DOS
+fn validate_path(vault_base: &Path, user_path: &str) -> Result<PathBuf, AppError> {
+    // 1. Parse the user path
+    let raw = PathBuf::from(user_path);
+
+    // 2. Canonicalize to resolve symlinks and get absolute path
+    let canonical = raw
+        .canonicalize()
+        .map_err(|_| AppError::BadRequest("Path does not exist or is inaccessible".into()))?;
+
+    // 3. Verify the path is within the vault base
+    let base = vault_base
+        .canonicalize()
+        .map_err(|_| AppError::Internal("Vault base path is invalid".into()))?;
+    if !canonical.starts_with(&base) {
+        return Err(AppError::BadRequest(
+            "Path is outside the allowed vault directory".into(),
+        ));
+    }
+
+    // 4. Reject symlinks (security: prevent traversing symlinks outside vault)
+    let metadata = fs::symlink_metadata(&canonical)
+        .map_err(|_| AppError::Internal("Cannot read path metadata".into()))?;
+    if metadata.file_type().is_symlink() {
+        return Err(AppError::BadRequest("Symlinks are not allowed".into()));
+    }
+
+    // 5. File count limit (DOS prevention)
+    if metadata.is_dir() {
+        let count = fs::read_dir(&canonical)
+            .map_err(|e| AppError::Internal(format!("Cannot read directory: {}", e)))?;
+        const MAX_FILES: usize = 10_000;
+        let file_count = count.count();
+        if file_count > MAX_FILES {
+            return Err(AppError::BadRequest(format!(
+                "Directory contains too many files ({} > {})",
+                file_count, MAX_FILES
+            )));
+        }
+    }
+
+    Ok(canonical)
+}
+
+/// Get the vault base directory.
+///
+/// Uses QUILT_VAULT_BASE environment variable, defaulting to the current directory.
+fn get_vault_base() -> PathBuf {
+    std::env::var("QUILT_VAULT_BASE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("."))
+}
+
 /// POST /api/v1/migration/md
 ///
 /// Import Markdown files from a directory into Quilt.
 ///
 /// The directory should contain `.md` files in Quilt format.
 /// Each file becomes a page, and nested blocks are preserved.
-#[instrument(skip(state))]
+#[instrument(skip(page_repo, block_repo, property_repo))]
 pub async fn migrate_md_import(
-    Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
+    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
     Json(body): Json<ImportMdRequest>,
 ) -> Result<(StatusCode, Json<ImportMdResponse>), AppError> {
-    // Validate path
-    let path = PathBuf::from(&body.path);
-
-    if !path.exists() {
-        return Err(AppError::BadRequest(format!(
-            "Path does not exist: {}",
-            body.path
-        )));
-    }
+    let vault_base = get_vault_base();
+    let path = validate_path(&vault_base, &body.path)?;
 
     if !path.is_dir() {
         return Err(AppError::BadRequest(format!(
@@ -153,15 +139,8 @@ pub async fn migrate_md_import(
         )));
     }
 
-    // Create repositories and migration engine
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-    let property_repo = EmptyPropertyRepo::default();
-    let engine = MigrationEngine::new(
-        Arc::new(page_repo),
-        Arc::new(block_repo),
-        Arc::new(property_repo),
-    );
+    // Create migration engine with injected repositories
+    let engine = MigrationEngine::new(page_repo, block_repo, property_repo);
 
     // Import all files from directory
     let results = engine

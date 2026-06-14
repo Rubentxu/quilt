@@ -14,15 +14,13 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
-use std::sync::Arc;
 use std::sync::Once;
-use tokio::sync::RwLock;
 use tower::ServiceExt;
 
-use quilt_application::services::ref_service::RefService;
-use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
-use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
-use quilt_search::SearchIndexManager;
+use quilt_infrastructure::database::sqlite::connection::create_pool;
+
+mod helpers;
+use helpers::build_test_app_state;
 
 const TEST_API_KEY: &str = "test-api-key-for-integration-tests";
 static INIT_AUTH: Once = Once::new();
@@ -37,16 +35,7 @@ async fn create_test_app() -> Result<Router> {
     init_auth();
 
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
-
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let mut ref_service = RefService::new(ref_repo);
-    ref_service.rebuild_from_repo().await?;
-    let ref_service = Arc::new(RwLock::new(ref_service));
-
-    let state = quilt_server::state::AppState::new(pool, search_index, ref_service);
+    let state = build_test_app_state(pool).await;
     let app = quilt_server::routes::create_app(state);
 
     Ok(app)

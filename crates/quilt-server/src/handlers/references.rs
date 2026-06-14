@@ -19,17 +19,14 @@ use axum::{
     routing::put,
 };
 use serde::Deserialize;
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
 use crate::handlers::pages::BacklinkDto;
-use crate::state::AppState;
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{BlockRepository, PageRepository, RefRepository};
 use quilt_domain::value_objects::Uuid;
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqliteRefRepository,
-};
 
 /// Query string for the editable-context endpoint.
 ///
@@ -93,16 +90,18 @@ pub fn routes() -> Router {
 /// PUT /api/v1/references/abc-...?targetPage=My%20Page
 /// { "context": "A meaningful snippet" }
 /// ```
-#[instrument(skip(state, payload))]
+#[instrument(skip(payload, page_repo, block_repo, ref_repo))]
 pub async fn put_reference_context(
     Path(block_id): Path<String>,
     Query(query): Query<PutReferenceContextQuery>,
-    Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
+    Extension(ref_repo): Extension<Arc<dyn RefRepository>>,
     Json(payload): Json<PutReferenceContextRequest>,
 ) -> Result<Json<BacklinkDto>, AppError> {
     // ---- Validate inputs (400) ------------------------------------
     let source_uuid = Uuid::parse_str(&block_id)
-        .ok_or_else(|| AppError::BadRequest(format!("Invalid source block UUID: {}", block_id)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid source block UUID: {}", block_id)))?;
 
     let target_page_name = query
         .target_page
@@ -127,10 +126,6 @@ pub async fn put_reference_context(
     }
 
     // ---- Verify target + source exist -----------------------------
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-    let ref_repo = SqliteRefRepository::new(state.pool.clone());
-
     let target_page = page_repo
         .get_by_name(&target_page_name)
         .await

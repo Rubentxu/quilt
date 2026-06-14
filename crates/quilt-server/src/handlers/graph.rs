@@ -52,6 +52,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
@@ -59,9 +60,6 @@ use crate::state::AppState;
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::value_objects::Uuid;
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository,
-};
 
 /// Inclusive lower bound for `?depth=`.
 const MIN_DEPTH: u32 = 1;
@@ -158,7 +156,7 @@ impl Focus {
         }
         if let Some(rest) = s.strip_prefix("block:") {
             let uuid = Uuid::parse_str(rest.trim())
-                .ok_or_else(|| format!("Invalid block UUID in focus: '{}'", rest))?;
+                .map_err(|_| format!("Invalid block UUID in focus: '{}'", rest))?;
             return Ok(Some(Focus::Block(uuid)));
         }
         if let Some(rest) = s.strip_prefix("page:") {
@@ -215,8 +213,8 @@ async fn bfs_subgraph<BR, PR, F, Fut>(
     ref_lookup: F,
 ) -> Subgraph
 where
-    BR: BlockRepository,
-    PR: PageRepository,
+    BR: BlockRepository + ?Sized,
+    PR: PageRepository + ?Sized,
     F: Fn(Uuid) -> Fut,
     Fut: std::future::Future<Output = Vec<Uuid>>,
 {
@@ -324,10 +322,12 @@ pub fn routes() -> Router {
 /// # Errors
 /// * 400 — invalid focus prefix, invalid UUID, depth out of range.
 /// * 401 — handled by the global auth middleware.
-#[instrument(skip(state))]
+#[instrument(skip(state, block_repo, page_repo))]
 pub async fn get_lens(
     Query(params): Query<LensParams>,
     Extension(state): Extension<AppState>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
 ) -> Result<Json<LensResponse>, AppError> {
     // 1. Validate depth.
     if params.depth < MIN_DEPTH || params.depth > MAX_DEPTH {
@@ -352,9 +352,6 @@ pub async fn get_lens(
     // 3. Resolve the focus into seed blocks + a closure for
     //    forward-ref lookup. We do this in a match so each branch
     //    can pick the right repo method.
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-
     let (seed_blocks, seed_pages, effective_depth) = match focus {
         Focus::Block(uuid) => {
             let block = match block_repo.get_by_id(uuid).await {
@@ -438,8 +435,8 @@ pub async fn get_lens(
     // 5. Run the BFS. For a property focus the result is just the
     //    seed set (no edges to traverse by definition).
     let graph = bfs_subgraph(
-        &block_repo,
-        &page_repo,
+        block_repo.as_ref(),
+        page_repo.as_ref(),
         seed_blocks,
         seed_pages,
         effective_depth,
@@ -491,7 +488,7 @@ pub async fn get_lens(
         .into_iter()
         .map(|mut n| {
             // Re-parse page_id as Uuid to look up.
-            if let Some(pid) = Uuid::parse_str(&n.page_id) {
+            if let Ok(pid) = Uuid::parse_str(&n.page_id) {
                 if let Some((name, journal)) = page_meta.get(&pid) {
                     n.page_name = name.clone();
                     n.is_journal = *journal;

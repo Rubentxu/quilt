@@ -28,9 +28,7 @@ use axum::{
     http::HeaderMap,
     routing::{get, post},
 };
-use quilt_application::use_cases::{TourStateUseCases, TourStateUseCasesImpl};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tracing::instrument;
 
 /// Router for /api/v1/user/tour-state
@@ -64,8 +62,9 @@ pub async fn get_tour_state(
     headers: HeaderMap,
 ) -> Result<Json<TourStateResponse>, AppError> {
     let user_id = extract_user_id(&headers).map_err(|e| AppError::Unauthorized(e.to_string()))?;
-    let use_cases: Arc<dyn TourStateUseCases> = build_use_cases(&state);
-    let dismissed = use_cases
+    let dismissed = state
+        .services
+        .tour_state
         .get_dismissed_tours(&user_id)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -81,8 +80,9 @@ pub async fn dismiss_tour(
     Json(body): Json<DismissTourRequest>,
 ) -> Result<Json<TourStateResponse>, AppError> {
     let user_id = extract_user_id(&headers).map_err(|e| AppError::Unauthorized(e.to_string()))?;
-    let use_cases: Arc<dyn TourStateUseCases> = build_use_cases(&state);
-    use_cases
+    state
+        .services
+        .tour_state
         .dismiss_tour(&user_id, &body.tour)
         .await
         .map_err(|e| match e {
@@ -91,19 +91,13 @@ pub async fn dismiss_tour(
         })?;
     // Return the updated list so the client doesn't have to make a
     // second round-trip to refresh its cache.
-    let dismissed = use_cases
+    let dismissed = state
+        .services
+        .tour_state
         .get_dismissed_tours(&user_id)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
     Ok(Json(TourStateResponse { dismissed }))
-}
-
-fn build_use_cases(state: &AppState) -> Arc<dyn TourStateUseCases> {
-    Arc::new(TourStateUseCasesImpl::new(Arc::new(
-        quilt_infrastructure::database::sqlite::repositories::SqliteTourStateRepository::new(
-            state.pool.clone(),
-        ),
-    )))
 }
 
 /// Extract the opaque user identifier from the `Authorization: Bearer

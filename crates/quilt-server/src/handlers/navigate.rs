@@ -5,13 +5,13 @@
 use axum::{Json, extract::Extension};
 use axum::{Router, routing::post};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::{AppState, NavigationEvent};
 use quilt_domain::entities::Page;
 use quilt_domain::repositories::PageRepository;
-use quilt_infrastructure::database::sqlite::repositories::SqlitePageRepository;
 
 /// A page returned to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,9 +66,10 @@ pub fn routes() -> Router {
 ///
 /// Navigate to a specific page, updating last_opened_graph and broadcasting
 /// a WebSocket event to all connected clients.
-#[instrument(skip(state))]
+#[instrument(skip(state, page_repo))]
 pub async fn navigate_to_page(
     Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
     Json(payload): Json<NavigateToPageRequest>,
 ) -> Result<Json<PageDto>, AppError> {
     // Update last_opened_graph if graph_id is provided
@@ -78,7 +79,6 @@ pub async fn navigate_to_page(
     }
 
     // Fetch the page
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
     let page = page_repo
         .get_by_name(&payload.page_name)
         .await
@@ -101,7 +101,7 @@ pub async fn navigate_to_page(
 
     // Broadcast navigation event to WebSocket subscribers
     let event = NavigationEvent::page(payload.graph_id.clone(), payload.page_name.clone());
-    if let Err(e) = state.broadcast_navigation(event) {
+    if let Err(e) = state.navigation_tx.send(event) {
         tracing::warn!("No WebSocket subscribers for navigation event: {}", e);
     }
 
@@ -125,7 +125,7 @@ pub async fn navigate_to_block(
 
     // Broadcast navigation event to WebSocket subscribers
     let event = NavigationEvent::block(payload.graph_id, payload.page_name, payload.block_uuid);
-    if let Err(e) = state.broadcast_navigation(event) {
+    if let Err(e) = state.navigation_tx.send(event) {
         tracing::warn!("No WebSocket subscribers for navigation event: {}", e);
     }
 

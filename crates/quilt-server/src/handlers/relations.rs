@@ -3,17 +3,16 @@
 use axum::{
     Extension, Json,
     extract::Query,
-    routing::{get, post, delete},
+    routing::get,
     Router,
 };
+use std::sync::Arc;
 use quilt_domain::properties::relation::{PropertyRelation, RelationType};
 use quilt_domain::repositories::RelationRepository;
 use quilt_domain::value_objects::Uuid;
-use quilt_infrastructure::database::sqlite::repositories::SqliteRelationRepository;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::state::AppState;
 
 pub fn routes() -> Router {
     Router::new()
@@ -52,55 +51,51 @@ pub struct FromQueryParams {
     pub value: String,
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(relation_repo))]
 pub async fn list_relations(
-    Extension(state): Extension<AppState>,
+    Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<RelationListResponse>, AppError> {
-    let repo = SqliteRelationRepository::new(state.pool.clone());
-    let relations = repo.list_all().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let relations = relation_repo.list_all().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = relations.len();
     Ok(Json(RelationListResponse { relations, count }))
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(relation_repo))]
 pub async fn get_relation(
     axum::extract::Path(id_str): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
-    let repo = SqliteRelationRepository::new(state.pool.clone());
-    let rel = repo.get_by_id(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let rel = relation_repo.get_by_id(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     match rel {
         Some(r) => Ok(Json(serde_json::to_value(r).unwrap())),
         None => Err(AppError::BadRequest("Relation not found".to_string())),
     }
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(relation_repo))]
 pub async fn get_relations_by_key(
     axum::extract::Path(key): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<RelationListResponse>, AppError> {
-    let repo = SqliteRelationRepository::new(state.pool.clone());
-    let relations = repo.get_by_key(&key).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let relations = relation_repo.get_by_key(&key).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = relations.len();
     Ok(Json(RelationListResponse { relations, count }))
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(relation_repo))]
 pub async fn get_relations_from(
     Query(params): Query<FromQueryParams>,
-    Extension(state): Extension<AppState>,
+    Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<RelationListResponse>, AppError> {
-    let repo = SqliteRelationRepository::new(state.pool.clone());
-    let relations = repo.get_from(&params.key, &params.value).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let relations = relation_repo.get_from(&params.key, &params.value).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = relations.len();
     Ok(Json(RelationListResponse { relations, count }))
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(relation_repo))]
 pub async fn create_relation(
-    Extension(state): Extension<AppState>,
+    Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
     Json(body): Json<CreateRelationRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let rt = match body.relation_type.as_str() {
@@ -122,18 +117,16 @@ pub async fn create_relation(
         body.confidence,
     );
 
-    let repo = SqliteRelationRepository::new(state.pool.clone());
-    repo.insert(&relation).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    relation_repo.insert(&relation).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     Ok(Json(serde_json::to_value(&relation).unwrap()))
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(relation_repo))]
 pub async fn delete_relation(
     axum::extract::Path(id_str): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
-    let repo = SqliteRelationRepository::new(state.pool.clone());
-    repo.delete(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    relation_repo.delete(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     Ok(Json(serde_json::json!({"deleted": true})))
 }

@@ -16,12 +16,7 @@ use axum::{
     extract::{Extension, Path},
     routing::get,
 };
-use quilt_application::use_cases::{TemplateUseCases, TemplateUseCasesImpl};
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository,
-};
 use serde::Serialize;
-use std::sync::Arc;
 use tracing::instrument;
 
 /// Router for /api/v1/templates/*
@@ -37,8 +32,9 @@ pub fn routes() -> Router {
 pub async fn list_templates(
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<TemplateSummaryResponse>>, AppError> {
-    let use_cases: Arc<dyn TemplateUseCases> = build_use_cases(&state);
-    let templates = use_cases
+    let templates = state
+        .services
+        .template
         .list_templates()
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -53,23 +49,14 @@ pub async fn get_template_schema(
     Extension(state): Extension<AppState>,
     Path(name): Path<String>,
 ) -> Result<Json<TemplateSchemaResponse>, AppError> {
-    let use_cases: Arc<dyn TemplateUseCases> = build_use_cases(&state);
-    let schema = use_cases
+    let schema = state
+        .services
+        .template
         .get_template_schema(&name)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?
         .ok_or_else(|| AppError::NotFound(format!("Template not found: {}", name)))?;
     Ok(Json(schema.into()))
-}
-
-fn build_use_cases(state: &AppState) -> Arc<dyn TemplateUseCases> {
-    // Wrap concrete repos in Arc<concrete> (not Arc<dyn>) so the
-    // generic TemplateUseCasesImpl<SqlitePageRepository, SqliteBlockRepository>
-    // is monomorphized correctly.
-    Arc::new(TemplateUseCasesImpl::new(
-        Arc::new(SqlitePageRepository::new(state.pool.clone())),
-        Arc::new(SqliteBlockRepository::new(state.pool.clone())),
-    ))
 }
 
 // ── Response DTOs (REST layer) ─────────────────────────────────────

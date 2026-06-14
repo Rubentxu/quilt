@@ -8,7 +8,7 @@ use tracing::instrument;
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_domain::entities::UserSettings;
-use quilt_domain::repositories::SettingsRepository;
+
 use quilt_domain::value_objects::BlockFormat;
 
 /// A date format option returned by the `/formats` endpoint
@@ -85,7 +85,7 @@ pub async fn update_settings(
         start_of_week: req.start_of_week.unwrap_or(current.start_of_week),
         preferred_format: req
             .preferred_format
-            .and_then(|f| BlockFormat::parse_str(&f))
+            .and_then(|f| BlockFormat::parse_str(&f).ok())
             .unwrap_or(current.preferred_format),
     };
 

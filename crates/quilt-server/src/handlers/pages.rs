@@ -9,18 +9,17 @@ use axum::{Router, routing::get};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
+use crate::handlers::blocks::map_app_error;
 use crate::state::AppState;
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::repositories::{
-    BlockRepository, PageRepository, RefRepository, SettingsRepository,
+    BlockRepository, PageRepository, RefRepository,
 };
 use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqliteRefRepository,
-};
 
 /// A page returned to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,17 +62,13 @@ pub struct CreatePageRequest {
 ///
 /// Returns all blocks whose content text mentions the page name (case-insensitive)
 /// but do NOT have an explicit `[[page]]` reference.
-#[instrument(skip(state))]
+#[instrument(skip(state, page_repo, block_repo))]
 pub async fn get_page_unlinked_references(
     Path(name): Path<String>,
     Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
 ) -> Result<Json<Vec<BacklinkDto>>, AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-    let block_repo =
-        quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository::new(
-            state.pool.clone(),
-        );
-
     // Look up the page by name
     let page = page_repo
         .get_by_name(&name)
@@ -162,12 +157,12 @@ pub fn routes() -> Router {
 pub async fn list_pages(
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<PageDto>>, AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-
-    let pages = page_repo
-        .get_all()
+    let pages = state
+        .services
+        .page
+        .list()
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
 
     let dtos: Vec<PageDto> = pages.into_iter().map(PageDto::from).collect();
 
@@ -222,9 +217,10 @@ pub struct SearchPagesQuery {
 /// time, so the caller's lowercase-typed query is what gets stored.
 /// This is intentional — page names are case-insensitive throughout
 /// the rest of Quilt.
-#[instrument(skip(state, query), fields(q = %query.q.as_deref().unwrap_or(""), limit = query.limit.unwrap_or(0)))]
+#[instrument(skip(_state, page_repo, query), fields(q = %query.q.as_deref().unwrap_or(""), limit = query.limit.unwrap_or(0)))]
 pub async fn search_pages(
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
     Query(query): Query<SearchPagesQuery>,
 ) -> Result<Json<Vec<PageDto>>, AppError> {
     // Clamp limit to a sane range. `0` means "use the repo default"
@@ -235,17 +231,9 @@ pub async fn search_pages(
         Some(n) => n.clamp(1, 200),
     };
 
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-
     let pages = match query.q.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         Some(q) => {
-            // Match on `name` OR `title` so pages with a custom
-            // display title surface when the user types a fragment
-            // of the title that does not appear in the lowercased
-            // name. The repository's trait-level `search` only
-            // matches on `name`; the HTTP handler uses an
-            // OR-in-SQL inherent helper instead so the post-filter
-            // can stay a single, well-understood step.
+            // Search pages by name or title (S2-03: matches both columns)
             page_repo
                 .search_by_name_or_title(q, limit)
                 .await
@@ -276,12 +264,12 @@ pub async fn get_page(
     Path(name): Path<String>,
     Extension(state): Extension<AppState>,
 ) -> Result<Json<PageDto>, AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-
-    let page = page_repo
+    let page = state
+        .services
+        .page
         .get_by_name(&name)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
 
     match page {
         Some(p) => Ok(Json(PageDto::from(p))),
@@ -290,13 +278,12 @@ pub async fn get_page(
 }
 
 /// POST /api/v1/pages
-#[instrument(skip(state))]
+#[instrument(skip(state, page_repo))]
 pub async fn create_page(
     Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
     Json(payload): Json<CreatePageRequest>,
 ) -> Result<(StatusCode, Json<PageDto>), AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-
     if payload.is_journal.unwrap_or(false) {
         // Create journal page
         let day = if let Some(ref jd) = payload.journal_day {
@@ -345,12 +332,12 @@ pub async fn create_page(
 }
 
 /// GET /api/v1/pages/journal/:date
-#[instrument(skip(state))]
+#[instrument(skip(state, page_repo))]
 pub async fn get_journal(
     Path(date): Path<String>,
     Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
 ) -> Result<Json<PageDto>, AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
     let day = JournalDay::from_str(&date)
         .map_err(|e| AppError::BadRequest(format!("Invalid journal date: {}", e)))?;
 
@@ -401,18 +388,14 @@ pub struct BacklinkDto {
 ///
 /// Returns all blocks that reference the given page.
 /// Uses the in-memory RefIndex for O(1) lookup.
-#[instrument(skip(state))]
+#[instrument(skip(state, page_repo, block_repo, ref_repo))]
 pub async fn get_page_backlinks(
     Path(name): Path<String>,
     Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
+    Extension(ref_repo): Extension<Arc<dyn RefRepository>>,
 ) -> Result<Json<Vec<BacklinkDto>>, AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-    let block_repo =
-        quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository::new(
-            state.pool.clone(),
-        );
-    let ref_repo = SqliteRefRepository::new(state.pool.clone());
-
     // Look up the page by name
     let page = page_repo
         .get_by_name(&name)
@@ -495,28 +478,17 @@ pub async fn get_page_blocks(
     Path(name): Path<String>,
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<crate::handlers::blocks::BlockDto>>, AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-    let block_repo =
-        quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository::new(
-            state.pool.clone(),
-        );
-
-    // Find the page by name
-    let page = page_repo
-        .get_by_name(&name)
+    let page_with_blocks = state
+        .services
+        .page
+        .get_blocks(&name)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .ok_or_else(|| AppError::NotFound(format!("Page not found: {}", name)))?;
+        .map_err(map_app_error)?;
 
-    // Get all blocks for this page
-    let blocks = block_repo
-        .get_by_page(page.id)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-
-    let block_dtos: Vec<crate::handlers::blocks::BlockDto> = blocks
+    let block_dtos: Vec<crate::handlers::blocks::BlockDto> = page_with_blocks
+        .blocks
         .into_iter()
-        .map(|b| (b, Some(page.name.clone())).into())
+        .map(|b| (b, Some(page_with_blocks.page.name.clone())).into())
         .collect();
 
     Ok(Json(block_dtos))
@@ -580,14 +552,13 @@ pub struct FromTemplateResponse {
 ///    `parent_id = None` (root level), then update `parent_id` to point at
 ///    the corresponding new block. The two-pass design avoids needing the
 ///    parent UUID before it has been generated.
-#[instrument(skip(state, req), fields(template_name = %req.template_name, page_name = %req.page_name))]
+#[instrument(skip(_state, page_repo, block_repo, req), fields(template_name = %req.template_name, page_name = %req.page_name))]
 pub async fn create_page_from_template(
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
     Json(req): Json<FromTemplateRequest>,
 ) -> Result<(StatusCode, Json<FromTemplateResponse>), AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-
     // 1. Verify template exists
     let template = page_repo
         .get_by_name(&req.template_name)

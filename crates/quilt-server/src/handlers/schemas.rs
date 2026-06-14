@@ -3,17 +3,17 @@
 use axum::{
     Extension, Json,
     extract::Query,
-    routing::{get, post, delete},
+    routing::{get, post},
     Router,
 };
+use std::sync::Arc;
 use quilt_application::schema::{SchemaService, SchemaServiceTrait};
 use quilt_domain::properties::schema::{AutoDetectParams, PropertySchema};
+use quilt_domain::repositories::{PropertyRepository, SchemaRepository};
 use quilt_domain::value_objects::Uuid;
-use quilt_infrastructure::database::sqlite::repositories::SqliteSchemaRepository;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
-use crate::state::AppState;
 
 pub fn routes() -> Router {
     Router::new()
@@ -66,28 +66,26 @@ pub struct AutoDetectResponse {
 
 // ── Handlers ──
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(schema_repo, property_repo))]
 pub async fn list_schemas(
-    Extension(state): Extension<AppState>,
+    Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
+    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<SchemaListResponse>, AppError> {
-    let schema_repo = std::sync::Arc::new(SqliteSchemaRepository::new(state.pool.clone()));
-    let prop_repo = std::sync::Arc::new(quilt_infrastructure::database::sqlite::repositories::SqlitePropertyRepository::new(state.pool.clone()));
-    let service = SchemaService::new(schema_repo, prop_repo);
+    let service = SchemaService::new(schema_repo, property_repo);
 
     let schemas = service.list_all().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = schemas.len();
     Ok(Json(SchemaListResponse { schemas, count }))
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(schema_repo, property_repo))]
 pub async fn get_schema(
     axum::extract::Path(id_str): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
+    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
-    let schema_repo = std::sync::Arc::new(SqliteSchemaRepository::new(state.pool.clone()));
-    let prop_repo = std::sync::Arc::new(quilt_infrastructure::database::sqlite::repositories::SqlitePropertyRepository::new(state.pool.clone()));
-    let service = SchemaService::new(schema_repo, prop_repo);
+    let service = SchemaService::new(schema_repo, property_repo);
 
     let schema = service.get_by_id(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     match schema {
@@ -96,14 +94,13 @@ pub async fn get_schema(
     }
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(schema_repo, property_repo))]
 pub async fn get_schema_by_name(
     axum::extract::Path(name): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
+    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let schema_repo = std::sync::Arc::new(SqliteSchemaRepository::new(state.pool.clone()));
-    let prop_repo = std::sync::Arc::new(quilt_infrastructure::database::sqlite::repositories::SqlitePropertyRepository::new(state.pool.clone()));
-    let service = SchemaService::new(schema_repo, prop_repo);
+    let service = SchemaService::new(schema_repo, property_repo);
 
     let schema = service.get_by_name(&name).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     match schema {
@@ -112,14 +109,13 @@ pub async fn get_schema_by_name(
     }
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(schema_repo, property_repo))]
 pub async fn create_schema(
-    Extension(state): Extension<AppState>,
+    Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
+    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
     Json(body): Json<CreateSchemaRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let schema_repo = std::sync::Arc::new(SqliteSchemaRepository::new(state.pool.clone()));
-    let prop_repo = std::sync::Arc::new(quilt_infrastructure::database::sqlite::repositories::SqlitePropertyRepository::new(state.pool.clone()));
-    let service = SchemaService::new(schema_repo, prop_repo);
+    let service = SchemaService::new(schema_repo, property_repo);
 
     let schema = PropertySchema::new(
         Uuid::new_v4(),
@@ -133,28 +129,26 @@ pub async fn create_schema(
     Ok(Json(serde_json::to_value(&schema).unwrap()))
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(schema_repo, property_repo))]
 pub async fn delete_schema(
     axum::extract::Path(id_str): axum::extract::Path<String>,
-    Extension(state): Extension<AppState>,
+    Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
+    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
-    let schema_repo = std::sync::Arc::new(SqliteSchemaRepository::new(state.pool.clone()));
-    let prop_repo = std::sync::Arc::new(quilt_infrastructure::database::sqlite::repositories::SqlitePropertyRepository::new(state.pool.clone()));
-    let service = SchemaService::new(schema_repo, prop_repo);
+    let service = SchemaService::new(schema_repo, property_repo);
 
     service.delete(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
     Ok(Json(serde_json::json!({"deleted": true})))
 }
 
-#[tracing::instrument(skip(state))]
+#[tracing::instrument(skip(schema_repo, property_repo))]
 pub async fn auto_detect_schemas(
-    Extension(state): Extension<AppState>,
+    Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
+    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
     Query(params): Query<AutoDetectQueryParams>,
 ) -> Result<Json<AutoDetectResponse>, AppError> {
-    let schema_repo = std::sync::Arc::new(SqliteSchemaRepository::new(state.pool.clone()));
-    let prop_repo = std::sync::Arc::new(quilt_infrastructure::database::sqlite::repositories::SqlitePropertyRepository::new(state.pool.clone()));
-    let service = SchemaService::new(schema_repo, prop_repo);
+    let service = SchemaService::new(schema_repo, property_repo);
 
     let detect_params = AutoDetectParams {
         min_co_occurrence: params.min_co_occurrence,

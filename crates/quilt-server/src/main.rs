@@ -24,8 +24,19 @@ mod state;
 use crate::handlers::metrics;
 use crate::state::AppState;
 use quilt_application::services::ref_service::RefService;
+use quilt_application::use_cases::{
+    BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
+    ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl, TourStateUseCases,
+    TourStateUseCasesImpl,
+};
+use quilt_application::AppServices;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
-use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
+use quilt_infrastructure::database::sqlite::repositories::{
+    SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
+    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository, SqliteTagRepository,
+    SqliteTourStateRepository,
+};
+use quilt_search::SearchService;
 
 /// Ensure the vault directory structure exists (.quilt folder and quilt.db)
 fn ensure_vault_exists(vault_path: &Path) -> Result<PathBuf, anyhow::Error> {
@@ -84,12 +95,29 @@ async fn main() -> Result<()> {
     info!("Vault ready at {:?}", vault_path);
     info!("Database pool created");
 
-    // Create AppState
+    // Create all repository instances as Arc<dyn Trait>
+    let block_repo: Arc<SqliteBlockRepository> = Arc::new(SqliteBlockRepository::new(pool.clone()));
+    let page_repo: Arc<SqlitePageRepository> = Arc::new(SqlitePageRepository::new(pool.clone()));
+    let ref_repo: Arc<SqliteRefRepository> = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let settings_repo: Arc<SqliteSettingsRepository> =
+        Arc::new(SqliteSettingsRepository::new(pool.clone()));
+    let tag_repo: Arc<SqliteTagRepository> = Arc::new(SqliteTagRepository::new(pool.clone()));
+    let relation_repo: Arc<SqliteRelationRepository> =
+        Arc::new(SqliteRelationRepository::new(pool.clone()));
+    let schema_repo: Arc<SqliteSchemaRepository> = Arc::new(SqliteSchemaRepository::new(pool.clone()));
+    let property_repo: Arc<SqlitePropertyRepository> =
+        Arc::new(SqlitePropertyRepository::new(pool.clone()));
+    let tour_state_repo: Arc<SqliteTourStateRepository> =
+        Arc::new(SqliteTourStateRepository::new(pool.clone()));
+
+    // Create search index manager
     let search_index = Arc::new(quilt_search::SearchIndexManager::new(pool.clone()));
 
+    // Create search service
+    let search_service: Arc<SearchService> = Arc::new(SearchService::new(Arc::new(pool.clone())));
+
     // Initialize bidirectional reference service
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let mut ref_service = RefService::new(ref_repo);
+    let mut ref_service = RefService::new(ref_repo.clone());
     ref_service
         .rebuild_from_repo()
         .await
@@ -99,6 +127,36 @@ async fn main() -> Result<()> {
         ref_service.index().len()
     );
     let ref_service = Arc::new(RwLock::new(ref_service));
+
+    // Create use cases
+    let block_use_cases: Arc<dyn BlockUseCases> =
+        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone()));
+    let page_use_cases: Arc<dyn PageUseCases> =
+        Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
+    let resource_use_cases: Arc<dyn ResourceUseCases> = Arc::new(ResourceUseCasesImpl::new(
+        block_repo.clone(),
+        page_repo.clone(),
+        tag_repo.clone(),
+    ));
+    let template_use_cases: Arc<dyn TemplateUseCases> =
+        Arc::new(TemplateUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
+    let tour_state_use_cases: Arc<dyn TourStateUseCases> =
+        Arc::new(TourStateUseCasesImpl::new(tour_state_repo.clone()));
+    let search_use_cases = Arc::new(
+        SearchUseCasesImpl::new()
+            .with_search_service(search_service.clone())
+            .with_block_repo(block_repo.clone()),
+    );
+
+    let services = AppServices::new(
+        block_use_cases,
+        page_use_cases,
+        search_use_cases,
+        resource_use_cases,
+        template_use_cases,
+        tour_state_use_cases,
+    );
+    let services = Arc::new(services);
 
     // Generate or load API key for Bearer token auth
     let api_key = match std::env::var("QUILT_API_KEY") {
@@ -115,7 +173,21 @@ async fn main() -> Result<()> {
     };
     middleware::auth::init(api_key);
 
-    let state = AppState::new(pool, search_index, ref_service);
+    let state = AppState::new_with_repos(
+        block_repo,
+        page_repo,
+        ref_repo,
+        settings_repo,
+        tag_repo,
+        relation_repo,
+        schema_repo,
+        property_repo,
+        tour_state_repo,
+        search_service,
+        search_index,
+        ref_service,
+        services,
+    );
 
     // Create router
     let app = routes::create_app(state);

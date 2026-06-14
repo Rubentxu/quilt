@@ -10,7 +10,6 @@ use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
-use crate::state::AppState;
 use quilt_search::{SearchError, SearchHitProperty, SearchService};
 
 /// One structured property carried inside a [`SearchResultDto`].
@@ -111,13 +110,11 @@ pub fn map_search_error(e: SearchError) -> AppError {
 }
 
 /// GET /api/v1/search?q=...&limit=...
-#[instrument(skip(state))]
+#[instrument(skip(search_service))]
 pub async fn search(
     Query(params): Query<SearchParams>,
-    Extension(state): Extension<AppState>,
+    Extension(search_service): Extension<Arc<SearchService>>,
 ) -> Result<Json<Vec<SearchResultDto>>, AppError> {
-    let search_service = SearchService::new(Arc::new(state.pool.clone()));
-
     let results = search_service
         .search(&params.q, params.limit)
         .await

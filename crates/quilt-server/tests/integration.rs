@@ -2,10 +2,10 @@
 //!
 //! These tests require a running database and full server setup.
 
+mod helpers;
+
 use anyhow::Result;
 use quilt_infrastructure::database::sqlite::connection::create_pool;
-use quilt_search::SearchIndexManager;
-use std::sync::Arc;
 
 /// Test NavigationEvent creation
 #[test]
@@ -42,18 +42,10 @@ fn navigation_event_block() {
 /// Test that AppState can be created
 #[tokio::test]
 async fn app_state_creation() -> Result<()> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
-
     let pool = create_pool(":memory:").await?;
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
+    let state = helpers::build_test_app_state(pool).await;
 
-    let state = quilt_server::state::AppState::new(pool, search_index, ref_service);
-
+    // navigation_tx should have 0 subscribers initially (just the sender itself)
     assert!(state.navigation_tx.receiver_count() == 0);
     Ok(())
 }
@@ -61,22 +53,14 @@ async fn app_state_creation() -> Result<()> {
 /// Test broadcast_navigation sends to subscribers
 #[tokio::test]
 async fn broadcast_navigation() -> Result<()> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
-    use quilt_server::state::{AppState, NavigationEvent};
-    use std::sync::Arc;
-    use tokio::sync::RwLock;
+    use quilt_server::state::NavigationEvent;
 
     let pool = create_pool(":memory:").await?;
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-
-    let state = AppState::new(pool, search_index, ref_service);
+    let state = helpers::build_test_app_state(pool).await;
 
     let mut rx = state.navigation_tx.subscribe();
     let event = NavigationEvent::page(None, "Test".to_string());
-    state.broadcast_navigation(event)?;
+    state.navigation_tx.send(event)?;
 
     let received = rx.recv().await?;
     assert_eq!(received.target.page_name, "Test");

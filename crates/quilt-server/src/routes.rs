@@ -61,12 +61,23 @@ pub fn create_app(state: AppState) -> Router {
 
     // Layers
     // Order (outermost → innermost):
-    //   1. Extension(state)     — state available to all handlers
-    //   2. CorsLayer            — handles OPTIONS preflight before auth
-    //   3. Auth middleware       — Bearer token check for /api/*
-    //   4. TraceLayer           — HTTP tracing (closest to handler)
+    //   1. Extension(state)       — Full AppState for legacy handlers
+    //   2. Extension(repos)       — Individual repository traits for DDD handlers
+    //   3. CorsLayer            — handles OPTIONS preflight before auth
+    //   4. Auth middleware       — Bearer token check for /api/*
+    //   5. TraceLayer           — HTTP tracing (closest to handler)
     router
-        .layer(axum::Extension(state))
+        .layer(axum::Extension(state.clone()))
+        .layer(axum::Extension(state.block_repo.clone()))
+        .layer(axum::Extension(state.page_repo.clone()))
+        .layer(axum::Extension(state.ref_repo.clone()))
+        .layer(axum::Extension(state.settings_repo.clone()))
+        .layer(axum::Extension(state.tag_repo.clone()))
+        .layer(axum::Extension(state.relation_repo.clone()))
+        .layer(axum::Extension(state.schema_repo.clone()))
+        .layer(axum::Extension(state.property_repo.clone()))
+        .layer(axum::Extension(state.tour_state_repo.clone()))
+        .layer(axum::Extension(state.search_service.clone()))
         .layer(cors)
         .layer(middleware::from_fn(
             crate::middleware::auth::auth_middleware,

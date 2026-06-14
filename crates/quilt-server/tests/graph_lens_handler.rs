@@ -25,14 +25,13 @@ use axum::http::{HeaderName, HeaderValue, Request, StatusCode};
 use quilt_domain::entities::{Block, BlockCreate, PageCreate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid};
-use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqliteRefRepository,
-};
-use quilt_search::SearchIndexManager;
+use quilt_infrastructure::database::sqlite::connection::create_pool;
 use std::collections::HashMap;
-use std::sync::{Arc, Once};
+use std::sync::Once;
 use tower::util::ServiceExt;
+
+mod helpers;
+use helpers::build_test_app_state;
 
 const TEST_KEY: &str = "test-key-123";
 
@@ -54,18 +53,9 @@ fn auth_header(mut req: Request<Body>) -> Request<Body> {
 
 /// Build the app with a fresh in-memory DB (no seeded data).
 async fn empty_app() -> Result<axum::Router> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-
-    let state = AppState::new(pool, search_index, ref_service);
+    let state = build_test_app_state(pool).await;
     Ok(quilt_server::routes::create_app(state))
 }
 
@@ -73,13 +63,11 @@ async fn empty_app() -> Result<axum::Router> {
 /// is a root block (parent_id = None) so traversal from `page:p` at
 /// depth 1 yields all of them.
 async fn app_with_n_roots(n: u32) -> Result<(axum::Router, Uuid)> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
+
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _) =
+        helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {
         name: "p".to_string(),
@@ -91,12 +79,8 @@ async fn app_with_n_roots(n: u32) -> Result<(axum::Router, Uuid)> {
         properties: HashMap::new(),
     })
     .unwrap();
-    SqlitePageRepository::new(pool.clone())
-        .insert(&page)
-        .await
-        .unwrap();
+    page_repo.insert(&page).await.unwrap();
 
-    let block_repo = SqliteBlockRepository::new(pool.clone());
     for i in 0..n {
         let block = Block::new(BlockCreate {
             page_id: page.id,
@@ -112,23 +96,17 @@ async fn app_with_n_roots(n: u32) -> Result<(axum::Router, Uuid)> {
         block_repo.insert(&block).await.unwrap();
     }
 
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-    let state = AppState::new(pool, search_index, ref_service);
     Ok((quilt_server::routes::create_app(state), page.id.into()))
 }
 
 /// Build a tree: `root` with two children `c1`, `c2`, where `c1`
 /// has its own child `gc1`. Returns ids: (root, c1, c2, gc1).
 async fn app_with_tree() -> Result<(axum::Router, Vec<Uuid>)> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
+
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _) =
+        helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {
         name: "p".to_string(),
@@ -140,12 +118,8 @@ async fn app_with_tree() -> Result<(axum::Router, Vec<Uuid>)> {
         properties: HashMap::new(),
     })
     .unwrap();
-    SqlitePageRepository::new(pool.clone())
-        .insert(&page)
-        .await
-        .unwrap();
+    page_repo.insert(&page).await.unwrap();
 
-    let block_repo = SqliteBlockRepository::new(pool.clone());
     let mk = |content: &str, parent: Option<Uuid>, order: f64| {
         let content = content.to_string();
         let parent = parent.map(Into::into);
@@ -180,10 +154,6 @@ async fn app_with_tree() -> Result<(axum::Router, Vec<Uuid>)> {
     let gc1_id: Uuid = gc1.id.into();
     block_repo.insert(&gc1).await.unwrap();
 
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-    let state = AppState::new(pool, search_index, ref_service);
     Ok((
         quilt_server::routes::create_app(state),
         vec![root_id, c1_id, c2_id, gc1_id],
@@ -520,13 +490,11 @@ async fn get_lens_page_node_includes_page_name() {
 
 #[tokio::test]
 async fn get_lens_property_returns_blocks_with_that_key() -> Result<()> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
+
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _) =
+        helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {
         name: "p".to_string(),
@@ -538,12 +506,8 @@ async fn get_lens_property_returns_blocks_with_that_key() -> Result<()> {
         properties: HashMap::new(),
     })
     .unwrap();
-    SqlitePageRepository::new(pool.clone())
-        .insert(&page)
-        .await
-        .unwrap();
+    page_repo.insert(&page).await.unwrap();
 
-    let block_repo = SqliteBlockRepository::new(pool.clone());
     // Two blocks with property `status`, one without.
     for (i, has_prop) in [true, true, false].iter().enumerate() {
         let mut props = HashMap::new();
@@ -567,10 +531,6 @@ async fn get_lens_property_returns_blocks_with_that_key() -> Result<()> {
         block_repo.insert(&block).await.unwrap();
     }
 
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-    let state = AppState::new(pool, search_index, ref_service);
     let app = quilt_server::routes::create_app(state);
 
     let res = app

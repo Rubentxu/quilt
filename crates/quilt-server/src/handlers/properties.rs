@@ -26,6 +26,7 @@ use axum::{
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
@@ -35,9 +36,7 @@ use quilt_application::property::{
 };
 use quilt_domain::properties::analytics::AnalyticsParams;
 use quilt_domain::properties::definition::PropertyDefinition;
-use quilt_domain::repositories::BlockRepository;
-use quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository;
-use quilt_infrastructure::database::sqlite::SqlitePropertyRepository;
+use quilt_domain::repositories::{BlockRepository, PropertyRepository};
 
 /// Default page size when `?limit=` is absent.
 fn default_limit() -> u32 {
@@ -102,10 +101,11 @@ pub fn routes() -> Router {
 /// Returns a paginated list of distinct top-level property keys.
 /// Validates inputs *before* calling the repository so the repo
 /// sees only well-formed values.
-#[instrument(skip(state))]
+#[instrument(skip(_state, block_repo))]
 pub async fn list_property_keys(
     Query(params): Query<PropertyKeysParams>,
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
 ) -> Result<Json<PropertyKeysResponse>, AppError> {
     // 1. Validate `limit`. Out-of-range → 400. The trait trusts the
     //    caller for `limit`, so this is the only place we enforce
@@ -127,7 +127,6 @@ pub async fn list_property_keys(
     }
 
     // 3. Query the repository.
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let keys = block_repo
         .list_distinct_keys(params.cursor.as_deref(), params.limit)
         .await
@@ -173,12 +172,12 @@ pub struct PropertiesResponse {
 ///
 /// Accepts optional `keys` to fetch by name, and/or a `query` for
 /// substring search. If both are present, results are merged.
-#[instrument(skip(state))]
+#[instrument(skip(_state, prop_repo))]
 pub async fn batch_properties(
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(prop_repo): Extension<Arc<dyn PropertyRepository>>,
     Json(req): Json<BatchPropertiesRequest>,
 ) -> Result<Json<PropertiesResponse>, AppError> {
-    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
     let service = PropertyService::new(prop_repo);
 
     let limit = req.limit.min(100) as usize;
@@ -229,11 +228,11 @@ pub async fn batch_properties(
 /// `GET /api/v1/properties`
 ///
 /// Returns all property definitions.
-#[instrument(skip(state))]
+#[instrument(skip(_state, prop_repo))]
 pub async fn list_properties(
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(prop_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<PropertiesResponse>, AppError> {
-    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
     let service = PropertyService::new(prop_repo);
 
     let definitions = service
@@ -276,10 +275,11 @@ pub struct SuggestResponse {
 ///
 /// Returns property suggestions ranked by relevance (prefix match >
 /// substring match > usage count). Only active properties are returned.
-#[instrument(skip(state))]
+#[instrument(skip(_state, prop_repo))]
 pub async fn suggest_properties(
     Query(params): Query<SuggestParams>,
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(prop_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<SuggestResponse>, AppError> {
     if params.q.is_empty() {
         return Ok(Json(SuggestResponse {
@@ -289,7 +289,6 @@ pub async fn suggest_properties(
     }
 
     let limit = params.limit.min(50) as usize;
-    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
     let service = PropertyService::new(prop_repo);
 
     let suggestions = service
@@ -334,10 +333,11 @@ fn default_trend_period() -> u32 {
 ///
 /// Returns co-occurrence pairs (with PMI scores), usage trends,
 /// and aggregate statistics about property usage.
-#[instrument(skip(state))]
+#[instrument(skip(_state, prop_repo))]
 pub async fn analytics_properties(
     Query(params): Query<AnalyticsQueryParams>,
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(prop_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<quilt_domain::properties::analytics::PropertyAnalytics>, AppError> {
     let analytics_params = AnalyticsParams {
         co_occurrence_limit: params.co_occurrence_limit.min(100) as usize,
@@ -345,7 +345,6 @@ pub async fn analytics_properties(
         trend_period_days: params.trend_period_days.min(365),
     };
 
-    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
     let service = PropertyService::new(prop_repo);
 
     let result = service
@@ -364,12 +363,12 @@ pub struct DeprecateRequest {
     pub key: String,
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(_state, prop_repo))]
 pub async fn deprecate_property(
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(prop_repo): Extension<Arc<dyn PropertyRepository>>,
     Json(body): Json<DeprecateRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
     let service = PropertyService::new(prop_repo);
     let def = service
         .deprecate(&body.key)
@@ -386,12 +385,12 @@ pub struct MergeRequest {
     pub target_key: String,
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(_state, prop_repo))]
 pub async fn merge_property(
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(prop_repo): Extension<Arc<dyn PropertyRepository>>,
     Json(body): Json<MergeRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
     let service = PropertyService::new(prop_repo);
     let def = service
         .merge(&body.source_key, &body.target_key)
@@ -408,12 +407,12 @@ pub struct AliasRequest {
     pub target_key: String,
 }
 
-#[instrument(skip(state))]
+#[instrument(skip(_state, prop_repo))]
 pub async fn alias_property(
-    Extension(state): Extension<AppState>,
+    Extension(_state): Extension<AppState>,
+    Extension(prop_repo): Extension<Arc<dyn PropertyRepository>>,
     Json(body): Json<AliasRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let prop_repo = std::sync::Arc::new(SqlitePropertyRepository::new(state.pool.clone()));
     let service = PropertyService::new(prop_repo);
     let def = service
         .alias(&body.new_key, &body.target_key)

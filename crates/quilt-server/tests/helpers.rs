@@ -1,0 +1,135 @@
+//! Test helpers for quilt-server tests
+//!
+//! Provides common setup utilities for integration tests.
+
+use quilt_application::bootstrap::AppServices;
+use quilt_application::services::ref_service::RefService;
+use quilt_application::use_cases::{
+    BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
+    ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
+    TourStateUseCases, TourStateUseCasesImpl,
+};
+use quilt_infrastructure::database::sqlite::connection::{run_migrations, DbPool};
+use quilt_infrastructure::database::sqlite::repositories::{
+    SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
+    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository, SqliteTagRepository,
+    SqliteTourStateRepository,
+};
+use quilt_search::{SearchIndexManager, SearchService};
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+/// Build a minimal AppState for testing.
+///
+/// This creates an in-memory database, initializes all repositories,
+/// and bundles them into AppServices.
+pub async fn build_test_app_state(pool: DbPool) -> quilt_server::state::AppState {
+    let (state, _, _, _, _, _, _, _, _, _) = build_test_app_state_with_repos(pool).await;
+    state
+}
+
+/// Build a minimal AppState for testing, returning repositories for seeding.
+///
+/// This creates an in-memory database, initializes all repositories,
+/// and bundles them into AppServices. The concrete repositories are returned
+/// for test functions that need to seed data before the app is used.
+pub async fn build_test_app_state_with_repos(
+    pool: DbPool,
+) -> (
+    quilt_server::state::AppState,
+    Arc<SqliteBlockRepository>,
+    Arc<SqlitePageRepository>,
+    Arc<SqliteRefRepository>,
+    Arc<SqliteTagRepository>,
+    Arc<SqliteSettingsRepository>,
+    Arc<SqliteRelationRepository>,
+    Arc<SqliteSchemaRepository>,
+    Arc<SqlitePropertyRepository>,
+    Arc<SqliteTourStateRepository>,
+) {
+    // Run migrations first
+    run_migrations(&pool).await.expect("Failed to run migrations");
+
+    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
+    let search_service: Arc<SearchService> = Arc::new(SearchService::new(Arc::new(pool.clone())));
+
+    // Initialize bidirectional reference service
+    let ref_repo: Arc<SqliteRefRepository> = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let mut ref_service = RefService::new(ref_repo.clone());
+    // Note: rebuild_from_repo might fail on empty DB, but we ignore for testing
+    let _ = ref_service.rebuild_from_repo();
+    let ref_service = Arc::new(RwLock::new(ref_service));
+
+    // Build repositories
+    let block_repo: Arc<SqliteBlockRepository> = Arc::new(SqliteBlockRepository::new(pool.clone()));
+    let page_repo: Arc<SqlitePageRepository> = Arc::new(SqlitePageRepository::new(pool.clone()));
+    let tag_repo: Arc<SqliteTagRepository> = Arc::new(SqliteTagRepository::new(pool.clone()));
+    let tour_state_repo: Arc<SqliteTourStateRepository> =
+        Arc::new(SqliteTourStateRepository::new(pool.clone()));
+    let settings_repo: Arc<SqliteSettingsRepository> =
+        Arc::new(SqliteSettingsRepository::new(pool.clone()));
+    let relation_repo: Arc<SqliteRelationRepository> =
+        Arc::new(SqliteRelationRepository::new(pool.clone()));
+    let schema_repo: Arc<SqliteSchemaRepository> = Arc::new(SqliteSchemaRepository::new(pool.clone()));
+    let property_repo: Arc<SqlitePropertyRepository> =
+        Arc::new(SqlitePropertyRepository::new(pool.clone()));
+
+    // Build use cases
+    let block_use_cases: Arc<dyn BlockUseCases> =
+        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone()));
+    let page_use_cases: Arc<dyn PageUseCases> =
+        Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
+    let resource_use_cases: Arc<dyn ResourceUseCases> = Arc::new(ResourceUseCasesImpl::new(
+        block_repo.clone(),
+        page_repo.clone(),
+        tag_repo.clone(),
+    ));
+    let template_use_cases: Arc<dyn TemplateUseCases> =
+        Arc::new(TemplateUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
+    let tour_state_use_cases: Arc<dyn TourStateUseCases> =
+        Arc::new(TourStateUseCasesImpl::new(tour_state_repo.clone()));
+
+    let search_use_cases = Arc::new(
+        SearchUseCasesImpl::new()
+            .with_search_service(search_service.clone())
+            .with_block_repo(block_repo.clone()),
+    );
+
+    let services = AppServices::new(
+        block_use_cases,
+        page_use_cases,
+        search_use_cases,
+        resource_use_cases,
+        template_use_cases,
+        tour_state_use_cases,
+    );
+
+    let state = quilt_server::state::AppState::new_with_repos(
+        block_repo.clone(),
+        page_repo.clone(),
+        ref_repo.clone(),
+        settings_repo.clone(),
+        tag_repo.clone(),
+        relation_repo.clone(),
+        schema_repo.clone(),
+        property_repo.clone(),
+        tour_state_repo.clone(),
+        search_service,
+        search_index,
+        ref_service,
+        Arc::new(services),
+    );
+
+    (
+        state,
+        block_repo,
+        page_repo,
+        ref_repo,
+        tag_repo,
+        settings_repo,
+        relation_repo,
+        schema_repo,
+        property_repo,
+        tour_state_repo,
+    )
+}

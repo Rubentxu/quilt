@@ -2,11 +2,18 @@
 //!
 //! Holds the database pool, MCP server, search index, and other shared resources.
 
+use axum::extract::FromRef;
 use quilt_application::services::ref_service::RefService;
-use quilt_infrastructure::database::sqlite::connection::DbPool;
+use quilt_application::AppServices;
+
+use quilt_domain::repositories::{
+    BlockRepository, PageRepository, PropertyRepository, RefRepository,
+    RelationRepository, SchemaRepository, SettingsRepository, TagRepository, TourStateRepository,
+};
+use quilt_search::SearchService;
 use quilt_search::SearchIndexManager;
 use std::sync::Arc;
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{broadcast, RwLock};
 
 /// Navigation event sent to WebSocket clients
 #[derive(Debug, Clone, serde::Serialize)]
@@ -58,13 +65,32 @@ impl NavigationEvent {
 /// Application state shared across all HTTP handlers
 ///
 /// This is passed to handlers via `Extension<AppState>` in Axum.
+/// Individual repositories are accessible via `Extension<Arc<dyn T>>` using
+/// the `FromRef` implementations.
 #[derive(Clone)]
 pub struct AppState {
-    /// SQLite database connection pool
-    pub pool: DbPool,
+    /// Block repository for block data access
+    pub block_repo: Arc<dyn BlockRepository>,
+    /// Page repository for page data access
+    pub page_repo: Arc<dyn PageRepository>,
+    /// Ref repository for reference data access
+    pub ref_repo: Arc<dyn RefRepository>,
     /// Settings repository for user preferences
-    pub settings_repo:
-        quilt_infrastructure::database::sqlite::repositories::SqliteSettingsRepository,
+    pub settings_repo: Arc<dyn SettingsRepository>,
+    /// Tag repository for tag data access
+    pub tag_repo: Arc<dyn TagRepository>,
+    /// Relation repository for property relations
+    pub relation_repo: Arc<dyn RelationRepository>,
+    /// Schema repository for property schemas
+    pub schema_repo: Arc<dyn SchemaRepository>,
+    /// Property repository for property definitions
+    pub property_repo: Arc<dyn PropertyRepository>,
+    /// Tour state repository for tour dismissals
+    pub tour_state_repo: Arc<dyn TourStateRepository>,
+    /// Search service for full-text search
+    pub search_service: Arc<SearchService>,
+    /// Application services (use cases) - wrapped in Arc so AppState can be Clone
+    pub services: Arc<AppServices>,
     /// Search index manager for FTS5 index maintenance
     #[allow(dead_code)]
     pub search_index: Arc<SearchIndexManager>,
@@ -76,27 +102,108 @@ pub struct AppState {
     pub ref_service: Arc<RwLock<RefService>>,
 }
 
+// ── FromRef implementations ─────────────────────────────────────────────────
+//
+// These allow handlers to extract Arc<dyn Repository> directly from AppState
+// using `Extension<Arc<dyn T>>` without depending on concrete implementations.
+
+impl FromRef<AppState> for Arc<dyn BlockRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.block_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn PageRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.page_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn RefRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.ref_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn SettingsRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.settings_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn TagRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.tag_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn RelationRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.relation_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn SchemaRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.schema_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn PropertyRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.property_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn TourStateRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.tour_state_repo.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<SearchService> {
+    fn from_ref(state: &AppState) -> Self {
+        state.search_service.clone()
+    }
+}
+
 impl AppState {
-    /// Create a new AppState
+    /// Create a new AppState with all repositories wired up
     ///
-    /// Initializes database pool, search index, reference service.
+    /// This is the composition root for the HTTP server. Repositories are
+    /// passed as `Arc<dyn Trait>` to enable dynamic dispatch and follow
+    /// the dependency inversion principle (handlers depend on interfaces).
     #[allow(dead_code)]
-    pub fn new(
-        pool: DbPool,
+    pub fn new_with_repos(
+        block_repo: Arc<dyn BlockRepository>,
+        page_repo: Arc<dyn PageRepository>,
+        ref_repo: Arc<dyn RefRepository>,
+        settings_repo: Arc<dyn SettingsRepository>,
+        tag_repo: Arc<dyn TagRepository>,
+        relation_repo: Arc<dyn RelationRepository>,
+        schema_repo: Arc<dyn SchemaRepository>,
+        property_repo: Arc<dyn PropertyRepository>,
+        tour_state_repo: Arc<dyn TourStateRepository>,
+        search_service: Arc<SearchService>,
         search_index: Arc<SearchIndexManager>,
         ref_service: Arc<RwLock<RefService>>,
+        services: Arc<AppServices>,
     ) -> Self {
         // Create broadcast channel for navigation events
         let (navigation_tx, _) = broadcast::channel(100);
 
-        let settings_repo =
-            quilt_infrastructure::database::sqlite::repositories::SqliteSettingsRepository::new(
-                pool.clone(),
-            );
-
         Self {
-            pool,
+            block_repo,
+            page_repo,
+            ref_repo,
             settings_repo,
+            tag_repo,
+            relation_repo,
+            schema_repo,
+            property_repo,
+            tour_state_repo,
+            search_service,
+            services,
             search_index,
             navigation_tx,
             last_opened_graph: Arc::new(RwLock::new(None)),

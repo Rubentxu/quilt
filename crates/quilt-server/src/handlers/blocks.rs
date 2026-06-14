@@ -20,10 +20,6 @@ use quilt_application::services::ref_service::parse_refs_from_content;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::value_objects::{BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid};
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository,
-};
-use quilt_search::SearchService;
 use std::collections::HashMap;
 
 /// A block returned to the frontend
@@ -86,27 +82,7 @@ impl From<(Block, Option<String>)> for BlockDto {
 
 impl From<Block> for BlockDto {
     fn from(block: Block) -> Self {
-        let properties = block
-            .properties
-            .iter()
-            .map(|(k, v)| (k.clone(), v.to_json()))
-            .collect();
-        Self {
-            id: block.id.to_string(),
-            page_id: block.page_id.to_string(),
-            page_name: None,
-            content: block.content,
-            block_type: block.block_type.as_str().to_string(),
-            marker: block.marker.map(|m| format!("{:?}", m)),
-            priority: block.priority.map(|p| format!("{:?}", p)),
-            parent_id: block.parent_id.map(|p| p.to_string()),
-            order: block.order,
-            level: block.level as i32,
-            collapsed: block.collapsed,
-            created_at: block.created_at.to_rfc3339(),
-            updated_at: block.updated_at.to_rfc3339(),
-            properties,
-        }
+        BlockDto::from((block, None))
     }
 }
 
@@ -209,6 +185,25 @@ fn default_by_author_limit() -> usize {
     50
 }
 
+/// Map an [`quilt_application::ApplicationError`] onto the HTTP layer's [`AppError`].
+pub(crate) fn map_app_error(e: quilt_application::ApplicationError) -> AppError {
+    use quilt_application::ApplicationError;
+    use quilt_domain::errors::DomainError;
+    match e {
+        ApplicationError::Validation(msg) => AppError::BadRequest(msg),
+        ApplicationError::NotFound(kind, id) => {
+            AppError::NotFound(format!("{} not found: {}", kind, id))
+        }
+        ApplicationError::Domain(d) => match d {
+            DomainError::InvalidData(msg) => AppError::BadRequest(msg),
+            DomainError::BlockNotFound(id) => AppError::NotFound(format!("Block not found: {}", id)),
+            DomainError::PageNotFound(id) => AppError::NotFound(format!("Page not found: {}", id)),
+            _ => AppError::Internal(d.to_string()),
+        },
+        ApplicationError::Infrastructure(msg) => AppError::Internal(msg),
+    }
+}
+
 /// Create router for /api/v1/blocks
 pub fn routes() -> Router {
     Router::new()
@@ -233,50 +228,33 @@ pub async fn query_blocks(
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<BlockDto>>, AppError> {
     let limit = params.limit;
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
 
     let blocks = if let Some(ref dsl) = params.dsl {
         if dsl.trim().is_empty() {
-            // Empty DSL string = return all blocks
-            let sql = format!(
-                "SELECT * FROM blocks ORDER BY created_at DESC LIMIT {}",
-                limit
-            );
-            block_repo
-                .query_dsl(&sql, &[])
+            // Empty DSL string = return all blocks via "self" query
+            state
+                .services
+                .search
+                .query_dsl("self", limit)
                 .await
-                .map_err(|e| AppError::Internal(e.to_string()))?
+                .map_err(map_app_error)?
         } else {
-            // Parse the DSL query
-            let parser = quilt_query::QueryParser;
-            let expr = parser
-                .parse(dsl)
-                .map_err(|e| AppError::BadRequest(format!("Invalid query DSL: {}", e)))?;
-
-            // Generate SQL with proper parameterization
-            let executor = quilt_query::QueryExecutor::new();
-            let (sql, sql_params) = executor
-                .build_sql(&expr, limit)
-                .map_err(|e| AppError::BadRequest(format!("Query compile error: {}", e)))?;
-
-            // Convert SqlParam values to strings for the repository
-            let str_params: Vec<String> = sql_params.iter().map(|p| p.as_string()).collect();
-
-            block_repo
-                .query_dsl(&sql, &str_params)
+            // Parse and execute the DSL query
+            state
+                .services
+                .search
+                .query_dsl(dsl, limit)
                 .await
-                .map_err(|e| AppError::Internal(e.to_string()))?
+                .map_err(map_app_error)?
         }
     } else {
-        // No DSL param = return all blocks
-        let sql = format!(
-            "SELECT * FROM blocks ORDER BY created_at DESC LIMIT {}",
-            limit
-        );
-        block_repo
-            .query_dsl(&sql, &[])
+        // No DSL param = return all blocks via "self" query
+        state
+            .services
+            .search
+            .query_dsl("self", limit)
             .await
-            .map_err(|e| AppError::Internal(e.to_string()))?
+            .map_err(map_app_error)?
     };
 
     let dtos: Vec<BlockDto> = blocks.into_iter().map(|b| BlockDto::from(b)).collect();
@@ -286,14 +264,13 @@ pub async fn query_blocks(
 /// POST /api/v1/blocks
 ///
 /// Creates a new block on the given page.
-#[instrument(skip(state))]
+#[instrument(skip(state, page_repo, block_repo))]
 pub async fn create_block(
     Extension(state): Extension<AppState>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
     Json(payload): Json<CreateBlockRequest>,
 ) -> Result<(StatusCode, Json<BlockDto>), AppError> {
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-
     // Look up the page by name
     let page = page_repo
         .get_by_name(&payload.page_name)
@@ -315,13 +292,13 @@ pub async fn create_block(
     let parent_uuid = payload
         .parent_id
         .as_deref()
-        .and_then(|s| Uuid::parse_str(s));
+        .and_then(|s| Uuid::parse_str(s).ok());
 
     // Calculate order based on preceding_block_id (insert-after semantics)
     // If not provided, fall back to appending at the end.
     let order = if let Some(ref preceding_id) = payload.preceding_block_id {
         let preceding_uuid = Uuid::parse_str(preceding_id)
-            .ok_or_else(|| AppError::BadRequest("Invalid preceding block UUID".into()))?;
+            .map_err(|_| AppError::BadRequest("Invalid preceding block UUID".into()))?;
 
         if let Some(preceding) = existing_blocks.iter().find(|b| b.id == preceding_uuid) {
             // Find the next sibling (same parent, order > preceding.order)
@@ -435,13 +412,14 @@ pub async fn search_blocks(
     Query(params): Query<SearchBlocksParams>,
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<crate::handlers::search::SearchResultDto>>, AppError> {
-    use crate::handlers::search::map_search_error;
+    use crate::handlers::blocks::map_app_error;
 
-    let search_service = SearchService::new(Arc::new(state.pool.clone()));
-    let results = search_service
+    let results = state
+        .services
+        .search
         .search(&params.query, params.limit)
         .await
-        .map_err(map_search_error)?;
+        .map_err(map_app_error)?;
 
     let dtos: Vec<crate::handlers::search::SearchResultDto> = results
         .into_iter()
@@ -449,14 +427,10 @@ pub async fn search_blocks(
             block_id: r.block_id,
             page_id: String::new(),
             page_name: r.page_name,
-            content: r.content,
+            content: String::new(),
             snippet: r.snippet,
             score: r.score,
-            properties: r
-                .properties
-                .into_iter()
-                .map(crate::handlers::search::to_block_property_dto)
-                .collect(),
+            properties: vec![],
         })
         .collect();
 
@@ -474,14 +448,14 @@ pub async fn search_blocks(
 /// - `409 Conflict` when the block still has children. The caller should
 ///   delete or re-parent the children first. The error message includes the
 ///   child count so the UI can surface an actionable message.
-#[instrument(skip(state))]
+#[instrument(skip(state, block_repo))]
 pub async fn delete_block(
     Path(block_id): Path<String>,
     Extension(state): Extension<AppState>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
 ) -> Result<StatusCode, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let uuid = Uuid::parse_str(&block_id)
-        .ok_or_else(|| AppError::BadRequest(format!("Invalid block UUID: {}", block_id)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid block UUID: {}", block_id)))?;
 
     // Verify the block exists — surface 404 instead of silently no-op'ing.
     let _block = block_repo
@@ -507,10 +481,13 @@ pub async fn delete_block(
         )));
     }
 
-    block_repo
+    // Use the use-case for deletion
+    state
+        .services
+        .block
         .delete(uuid)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -518,17 +495,16 @@ pub async fn delete_block(
 /// PATCH /api/v1/blocks/:id
 ///
 /// Updates an existing block's content, parent, order, level, or collapsed state.
-#[instrument(skip(state))]
+#[instrument(skip(state, block_repo, page_repo))]
 pub async fn update_block(
     Path(block_id): Path<String>,
     Extension(state): Extension<AppState>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
+    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
     Json(payload): Json<UpdateBlockRequest>,
 ) -> Result<Json<BlockDto>, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-    let page_repo = SqlitePageRepository::new(state.pool.clone());
-
     let uuid = Uuid::parse_str(&block_id)
-        .ok_or_else(|| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
 
     let mut block = block_repo
         .get_by_id(uuid)
@@ -543,7 +519,7 @@ pub async fn update_block(
         }
         Some(ref pid) => {
             let uuid = Uuid::parse_str(pid)
-                .ok_or_else(|| AppError::BadRequest(format!("Invalid parent UUID: {}", pid)))?;
+                .map_err(|_| AppError::BadRequest(format!("Invalid parent UUID: {}", pid)))?;
             Some(Some(uuid))
         }
         None => None,
@@ -556,7 +532,7 @@ pub async fn update_block(
     // database (the SQLite CHECK on the column would also reject it,
     // but failing fast at the boundary is better).
     let block_type_update = match payload.block_type.as_deref() {
-        Some(s) => Some(BlockType::parse_str(s).ok_or_else(|| {
+        Some(s) => Some(BlockType::parse_str(s).map_err(|_| {
             AppError::BadRequest(format!(
                 "Invalid blockType: '{}'. Expected one of: paragraph, heading1, heading2, heading3, bullet, numbered, todo, quote, code, divider, image",
                 s
@@ -575,7 +551,7 @@ pub async fn update_block(
     // the slash-menu → status-handler path and leave the user
     // wondering why `/todo` doesn't show a TODO badge.
     let marker_update = match payload.marker.as_deref() {
-        Some(s) => Some(TaskMarker::parse_str(s).ok_or_else(|| {
+        Some(s) => Some(TaskMarker::parse_str(s).map_err(|_| {
             AppError::BadRequest(format!(
                 "Invalid marker: '{}'. Expected one of: now, later, todo, done, cancelled",
                 s
@@ -584,7 +560,7 @@ pub async fn update_block(
         None => None,
     };
     let priority_update = match payload.priority.as_deref() {
-        Some(s) => Some(Priority::parse_str(s).ok_or_else(|| {
+        Some(s) => Some(Priority::parse_str(s).map_err(|_| {
             AppError::BadRequest(format!(
                 "Invalid priority: '{}'. Expected one of: A, B, C",
                 s
@@ -648,14 +624,14 @@ pub async fn update_block(
 }
 
 /// GET /api/v1/blocks/:id/backlinks
-#[instrument(skip(state))]
+#[instrument(skip(state, block_repo))]
 pub async fn get_backlinks(
     Path(block_id): Path<String>,
     Extension(state): Extension<AppState>,
+    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
 ) -> Result<Json<Vec<BlockDto>>, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let uuid = Uuid::parse_str(&block_id)
-        .ok_or_else(|| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
 
     // Verify the target block exists
     block_repo
@@ -664,11 +640,13 @@ pub async fn get_backlinks(
         .map_err(|e| AppError::Internal(e.to_string()))?
         .ok_or_else(|| AppError::NotFound(format!("Block not found: {}", block_id)))?;
 
-    // Get backlinks
-    let backlinks = block_repo
+    // Use the use-case to get backlinks
+    let backlinks = state
+        .services
+        .block
         .get_backlinks(uuid)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
 
     let dtos: Vec<BlockDto> = backlinks.into_iter().map(BlockDto::from).collect();
 
@@ -684,12 +662,12 @@ pub async fn list_blocks_by_author(
     Query(params): Query<ListByAuthorParams>,
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<BlockDto>>, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-
-    let blocks = block_repo
+    let blocks = state
+        .services
+        .block
         .list_by_property("created_by", &params.author, params.limit)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
 
     let dtos: Vec<BlockDto> = blocks.into_iter().map(BlockDto::from).collect();
     Ok(Json(dtos))
@@ -711,11 +689,12 @@ pub async fn list_blocks_by_author(
 pub async fn list_distinct_authors(
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<String>>, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-    let authors = block_repo
+    let authors = state
+        .services
+        .block
         .list_distinct_authors(Some("agent::"))
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
     Ok(Json(authors))
 }
 
@@ -727,18 +706,17 @@ pub async fn get_block_properties(
     Path(block_id): Path<String>,
     Extension(state): Extension<AppState>,
 ) -> Result<Json<HashMap<String, serde_json::Value>>, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let uuid = Uuid::parse_str(&block_id)
-        .ok_or_else(|| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
 
-    let block = block_repo
-        .get_by_id(uuid)
+    let properties = state
+        .services
+        .block
+        .get_properties(uuid)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .ok_or_else(|| AppError::NotFound(format!("Block not found: {}", block_id)))?;
+        .map_err(map_app_error)?;
 
-    let properties: HashMap<String, serde_json::Value> = block
-        .properties
+    let properties: HashMap<String, serde_json::Value> = properties
         .into_iter()
         .map(|(k, v)| (k, v.to_json()))
         .collect();
@@ -757,15 +735,8 @@ pub async fn set_block_property(
     Extension(state): Extension<AppState>,
     Json(body): Json<SetPropertyRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let uuid = Uuid::parse_str(&block_id)
-        .ok_or_else(|| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
-
-    let mut block = block_repo
-        .get_by_id(uuid)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .ok_or_else(|| AppError::NotFound(format!("Block not found: {}", block_id)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
 
     let prop_value = PropertyValue::from_json(&body.value).ok_or_else(|| {
         AppError::BadRequest(format!(
@@ -774,13 +745,12 @@ pub async fn set_block_property(
         ))
     })?;
 
-    block.properties.insert(body.key, prop_value);
-    block.updated_at = chrono::Utc::now();
-
-    block_repo
-        .update(&block)
+    state
+        .services
+        .block
+        .set_property(uuid, body.key, prop_value)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
 
     Ok(Json(serde_json::json!({"updated": true})))
 }
@@ -793,23 +763,15 @@ pub async fn delete_block_property(
     Path((block_id, key)): Path<(String, String)>,
     Extension(state): Extension<AppState>,
 ) -> Result<StatusCode, AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
     let uuid = Uuid::parse_str(&block_id)
-        .ok_or_else(|| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
+        .map_err(|_| AppError::BadRequest(format!("Invalid UUID: {}", block_id)))?;
 
-    let mut block = block_repo
-        .get_by_id(uuid)
+    state
+        .services
+        .block
+        .delete_property(uuid, &key)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .ok_or_else(|| AppError::NotFound(format!("Block not found: {}", block_id)))?;
-
-    block.properties.remove(&key);
-    block.updated_at = chrono::Utc::now();
-
-    block_repo
-        .update(&block)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        .map_err(map_app_error)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -820,47 +782,27 @@ pub async fn link_blocks(
     Extension(state): Extension<AppState>,
     Json(payload): Json<LinkBlocksRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    let block_repo = SqliteBlockRepository::new(state.pool.clone());
-    let source_uuid = Uuid::parse_str(&payload.source_id).ok_or_else(|| {
+    let source_uuid = Uuid::parse_str(&payload.source_id).map_err(|_| {
         AppError::BadRequest(format!("Invalid source UUID: {}", payload.source_id))
     })?;
-    let target_uuid = Uuid::parse_str(&payload.target_id).ok_or_else(|| {
+    let target_uuid = Uuid::parse_str(&payload.target_id).map_err(|_| {
         AppError::BadRequest(format!("Invalid target UUID: {}", payload.target_id))
     })?;
 
-    // Verify target block exists
-    block_repo
-        .get_by_id(target_uuid)
+    // Use the use-case to create the link (verifies both blocks exist)
+    state
+        .services
+        .block
+        .link(source_uuid, target_uuid)
         .await
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .ok_or_else(|| {
-            AppError::NotFound(format!("Target block not found: {}", payload.target_id))
-        })?;
+        .map_err(map_app_error)?;
 
-    // Fetch and validate source block (reuse for update)
-    let mut source_block = block_repo
-        .get_by_id(source_uuid)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?
-        .ok_or_else(|| {
-            AppError::NotFound(format!("Source block not found: {}", payload.source_id))
-        })?;
-
-    // Insert the link into the refs table with block_ref type
+    // Also update the in-memory ref index for O(1) backlink queries
     let mut ref_service = state.ref_service.write().await;
-    ref_service
-        .create_link(source_uuid, target_uuid)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    if let Err(e) = ref_service.create_link(source_uuid, target_uuid).await {
+        tracing::warn!(%source_uuid, %target_uuid, error = %e, "Failed to update ref index");
+    }
     drop(ref_service);
-
-    // Also update the source block's refs field for backward compatibility
-    source_block.add_ref(target_uuid);
-
-    block_repo
-        .update(&source_block)
-        .await
-        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok((
         StatusCode::CREATED,

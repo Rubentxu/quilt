@@ -9,10 +9,12 @@
 use anyhow::Result;
 use axum::body::Body;
 use axum::http::{HeaderName, HeaderValue, Request, StatusCode};
-use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
-use quilt_search::SearchIndexManager;
-use std::sync::{Arc, Once};
+use quilt_infrastructure::database::sqlite::connection::create_pool;
+use std::sync::Once;
 use tower::util::ServiceExt;
+
+mod helpers;
+use helpers::build_test_app_state;
 
 /// The same token used by `middleware::auth::tests`. The global
 /// auth OnceLock is shared by all tests in the same test binary,
@@ -36,19 +38,9 @@ fn init_auth() {
 /// state, auth middleware, all routes — but using a fresh in-memory
 /// DB per test. The caller clones the router for `.oneshot()`.
 async fn build_test_app() -> Result<axum::Router> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_infrastructure::database::sqlite::repositories::SqliteRefRepository;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-
-    let state = AppState::new(pool, search_index, ref_service);
+    let state = build_test_app_state(pool).await;
     Ok(quilt_server::routes::create_app(state))
 }
 

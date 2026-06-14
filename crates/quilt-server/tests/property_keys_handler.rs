@@ -16,14 +16,13 @@ use axum::http::{HeaderName, HeaderValue, Request, StatusCode};
 use quilt_domain::entities::{Block, BlockCreate, PageCreate};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue};
-use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
-use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqliteRefRepository,
-};
-use quilt_search::SearchIndexManager;
+use quilt_infrastructure::database::sqlite::connection::create_pool;
 use std::collections::HashMap;
-use std::sync::{Arc, Once};
+use std::sync::Once;
 use tower::util::ServiceExt;
+
+mod helpers;
+use helpers::build_test_app_state;
 
 const TEST_KEY: &str = "test-key-123";
 
@@ -36,18 +35,9 @@ fn init_auth() {
 }
 
 async fn build_test_app() -> Result<axum::Router> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-
-    let state = AppState::new(pool, search_index, ref_service);
+    let state = build_test_app_state(pool).await;
     Ok(quilt_server::routes::create_app(state))
 }
 
@@ -62,13 +52,11 @@ fn auth_header(mut req: Request<Body>) -> Request<Body> {
 // Helper: build the app, seed `n` blocks on a single page with one
 // distinct property key per block, return the router.
 async fn app_with_n_keys(n: u32) -> Result<axum::Router> {
-    use quilt_application::services::ref_service::RefService;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await?;
-    run_migrations(&pool).await?;
+
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _) =
+        helpers::build_test_app_state_with_repos(pool).await;
 
     // Create a page to host the blocks.
     let page = quilt_domain::entities::Page::new(PageCreate {
@@ -81,13 +69,9 @@ async fn app_with_n_keys(n: u32) -> Result<axum::Router> {
         properties: HashMap::new(),
     })
     .unwrap();
-    SqlitePageRepository::new(pool.clone())
-        .insert(&page)
-        .await
-        .unwrap();
+    page_repo.insert(&page).await.unwrap();
 
     // Insert N blocks, each with a single distinct property key.
-    let block_repo = SqliteBlockRepository::new(pool.clone());
     for i in 0..n {
         let key = format!("key_{i:03}");
         let mut props = HashMap::new();
@@ -106,10 +90,6 @@ async fn app_with_n_keys(n: u32) -> Result<axum::Router> {
         block_repo.insert(&block).await.unwrap();
     }
 
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-    let state = AppState::new(pool, search_index, ref_service);
     Ok(quilt_server::routes::create_app(state))
 }
 
@@ -180,13 +160,11 @@ async fn get_keys_empty_db_returns_empty_array_null_cursor() {
 #[tokio::test]
 async fn get_keys_blocks_with_no_properties_returns_empty_array() {
     // App with one block whose properties map is empty.
-    use quilt_application::services::ref_service::RefService;
-    use quilt_server::state::AppState;
-    use tokio::sync::RwLock;
-
     init_auth();
     let pool = create_pool(":memory:").await.unwrap();
-    run_migrations(&pool).await.unwrap();
+
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _) =
+        helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {
         name: "p".to_string(),
@@ -198,12 +176,8 @@ async fn get_keys_blocks_with_no_properties_returns_empty_array() {
         properties: HashMap::new(),
     })
     .unwrap();
-    SqlitePageRepository::new(pool.clone())
-        .insert(&page)
-        .await
-        .unwrap();
+    page_repo.insert(&page).await.unwrap();
 
-    let block_repo = SqliteBlockRepository::new(pool.clone());
     let block = Block::new(BlockCreate {
         page_id: page.id,
         content: "x".to_string(),
@@ -217,10 +191,6 @@ async fn get_keys_blocks_with_no_properties_returns_empty_array() {
     .unwrap();
     block_repo.insert(&block).await.unwrap();
 
-    let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
-    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
-    let ref_service = Arc::new(RwLock::new(RefService::new(ref_repo)));
-    let state = AppState::new(pool, search_index, ref_service);
     let app = quilt_server::routes::create_app(state);
 
     let res = app

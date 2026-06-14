@@ -6,14 +6,12 @@
 //! Response: `{ results: Block[], total: number, elapsed_ms: number }`
 
 use crate::error::AppError;
+use crate::handlers::blocks::map_app_error;
 use crate::state::AppState;
 use axum::{Json, Router, extract::Extension, routing::post};
-use quilt_application::query::executor::QueryExecutorService;
 use quilt_domain::entities::Block;
-use quilt_infrastructure::database::sqlite::repositories::SqliteBlockRepository;
 use quilt_query::ast::QueryAst;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use std::time::Instant;
 use tracing::instrument;
 
@@ -52,15 +50,13 @@ pub async fn execute_query(
     // Cap limit at 1000 (server-side constraint)
     let effective_limit = req.limit.min(1000);
 
-    // Build the query executor service
-    let block_repo = Arc::new(SqliteBlockRepository::new(state.pool.clone()));
-    let executor = QueryExecutorService::new(block_repo);
-
-    // Execute the query
-    let blocks = executor
-        .execute(&req.ast, effective_limit)
+    // Use SearchUseCases.query_dsl for DSL query execution
+    let blocks = state
+        .services
+        .search
+        .query_dsl(&format!("{:?}", req.ast), effective_limit)
         .await
-        .map_err(|e| AppError::BadRequest(format!("Query error: {}", e)))?;
+        .map_err(map_app_error)?;
 
     let total = blocks.len();
     let elapsed_ms = start.elapsed().as_millis() as u64;
