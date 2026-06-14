@@ -1,5 +1,6 @@
 //! Align value object - alignment for assets
 
+use crate::errors::DomainError;
 use std::fmt;
 
 /// Align represents the alignment of an embedded asset.
@@ -22,12 +23,12 @@ impl Align {
     }
 
     /// Parse from string
-    pub fn parse_str(s: &str) -> Option<Self> {
+    pub fn parse_str(s: &str) -> Result<Self, DomainError> {
         match s.to_lowercase().as_str() {
-            "left" | "l" => Some(Align::Left),
-            "center" | "c" | "centre" => Some(Align::Center),
-            "right" | "r" => Some(Align::Right),
-            _ => None,
+            "left" | "l" => Ok(Align::Left),
+            "center" | "c" | "centre" => Ok(Align::Center),
+            "right" | "r" => Ok(Align::Right),
+            _ => Err(DomainError::ParseError(format!("Invalid align value: {}", s))),
         }
     }
 }
@@ -55,9 +56,9 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        assert_eq!(Align::parse_str("left"), Some(Align::Left));
-        assert_eq!(Align::parse_str("center"), Some(Align::Center));
-        assert_eq!(Align::parse_str("right"), Some(Align::Right));
-        assert_eq!(Align::parse_str("center"), Some(Align::Center));
+        assert_eq!(Align::parse_str("left"), Ok(Align::Left));
+        assert_eq!(Align::parse_str("center"), Ok(Align::Center));
+        assert_eq!(Align::parse_str("right"), Ok(Align::Right));
+        assert_eq!(Align::parse_str("center"), Ok(Align::Center));
     }
 }

@@ -1,5 +1,6 @@
 //! Repository traits — abstractions for data access
 
+mod annotation_repository;
 mod block_repository;
 mod page_repository;
 mod property_repository;
@@ -10,6 +11,7 @@ mod settings_repository;
 mod tag_repository;
 mod tour_state_repository;
 
+pub use annotation_repository::{AnnotationRepository, AnnotationRepositoryExt};
 pub use block_repository::{BlockRepository, BlockRepositoryExt};
 pub use page_repository::{PageRepository, PageRepositoryExt};
 pub use property_repository::{PropertyRepository, PropertyRepositoryExt};

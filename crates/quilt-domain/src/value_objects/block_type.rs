@@ -13,6 +13,7 @@
 //! `BlockType` union exactly. SQLite stores the same lowercase string
 //! in the `blocks.block_type` column.
 
+use crate::errors::DomainError;
 use std::fmt;
 use std::str::FromStr;
 
@@ -76,13 +77,14 @@ impl BlockType {
 
     /// Parse a block type from its lowercase string form.
     ///
-    /// Returns `None` for unknown values so the caller can decide
+    /// Returns `Err` for unknown values so the caller can decide
     /// whether to fall back to a default or surface an error. We
     /// intentionally do NOT silently coerce unknown strings to
     /// [`BlockType::Paragraph`] — that's a domain decision callers
     /// should make explicitly.
-    pub fn parse_str(s: &str) -> Option<Self> {
-        s.parse().ok()
+    pub fn parse_str(s: &str) -> Result<Self, DomainError> {
+        s.parse()
+            .map_err(|_| DomainError::ParseError(format!("Invalid block type: {}", s)))
     }
 
     /// Return every variant in declaration order. Useful for slash
@@ -149,8 +151,7 @@ mod tests {
     fn test_parse_str_accepts_canonical_strings() {
         for variant in BlockType::all() {
             let s = variant.as_str();
-            let parsed =
-                BlockType::parse_str(s).unwrap_or_else(|| panic!("parse_str failed for {:?}", s));
+            let parsed = BlockType::parse_str(s).unwrap();
             assert_eq!(
                 parsed, *variant,
                 "round-trip mismatch for variant {:?} (str = {:?})",
@@ -165,12 +166,12 @@ mod tests {
     /// rejected.
     #[test]
     fn test_parse_str_rejects_unknown_values() {
-        assert_eq!(BlockType::parse_str(""), None);
-        assert_eq!(BlockType::parse_str("Heading1"), None);
-        assert_eq!(BlockType::parse_str("HEADING1"), None);
-        assert_eq!(BlockType::parse_str("paragraph "), None);
-        assert_eq!(BlockType::parse_str("p"), None);
-        assert_eq!(BlockType::parse_str("unknown_kind"), None);
+        assert!(BlockType::parse_str("").is_err());
+        assert!(BlockType::parse_str("Heading1").is_err());
+        assert!(BlockType::parse_str("HEADING1").is_err());
+        assert!(BlockType::parse_str("paragraph ").is_err());
+        assert!(BlockType::parse_str("p").is_err());
+        assert!(BlockType::parse_str("unknown_kind").is_err());
     }
 
     /// `as_str` output must match the TypeScript `BlockType` union

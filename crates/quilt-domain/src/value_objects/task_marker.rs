@@ -1,5 +1,6 @@
 //! TaskMarker value object - task status markers
 
+use crate::errors::DomainError;
 use std::fmt;
 use std::str::FromStr;
 
@@ -71,8 +72,9 @@ impl TaskMarker {
     }
 
     /// Parse from string
-    pub fn parse_str(s: &str) -> Option<Self> {
-        s.parse().ok()
+    pub fn parse_str(s: &str) -> Result<Self, DomainError> {
+        s.parse()
+            .map_err(|_| DomainError::ParseError(format!("Invalid task marker: {}", s)))
     }
 }
 
@@ -131,12 +133,12 @@ mod tests {
 
     #[test]
     fn test_from_str() {
-        assert_eq!(TaskMarker::parse_str("todo"), Some(TaskMarker::Todo));
-        assert_eq!(TaskMarker::parse_str("DONE"), Some(TaskMarker::Done));
+        assert_eq!(TaskMarker::parse_str("todo"), Ok(TaskMarker::Todo));
+        assert_eq!(TaskMarker::parse_str("DONE"), Ok(TaskMarker::Done));
         assert_eq!(
             TaskMarker::parse_str("canceled"),
-            Some(TaskMarker::Cancelled)
+            Ok(TaskMarker::Cancelled)
         );
-        assert_eq!(TaskMarker::parse_str("unknown"), None);
+        assert!(TaskMarker::parse_str("unknown").is_err());
     }
 }

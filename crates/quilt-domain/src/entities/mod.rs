@@ -1,5 +1,6 @@
 //! Domain entities
 
+mod annotation;
 mod asset;
 mod block;
 mod file;
@@ -9,6 +10,7 @@ mod tag;
 mod template_contract;
 mod user_settings;
 
+pub use annotation::{Annotation, AnnotationCreate, AnnotationStatus};
 pub use asset::Asset;
 pub use block::{Block, BlockCreate, BlockUpdate};
 pub use file::File;

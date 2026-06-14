@@ -6,6 +6,7 @@ use crate::properties::entry::DefaultPropertyEntry;
 use crate::value_objects::{JournalDay, PropertyValue, Uuid};
 use async_trait::async_trait;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// PageRepository is the abstraction for page data access.
 #[async_trait]
@@ -52,6 +53,13 @@ pub trait PageRepository: Send + Sync {
     /// Search pages by name
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<Page>, DomainError>;
 
+    /// Search pages by name or title (full-text search across both fields)
+    async fn search_by_name_or_title(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Page>, DomainError>;
+
     /// Update the typed properties of a page (F5 + F8 + F9).
     ///
     /// Behavior:
@@ -97,3 +105,79 @@ pub trait PageRepositoryExt: PageRepository {
 }
 
 impl<T: PageRepository + ?Sized> PageRepositoryExt for T {}
+
+/// Blanket impl so Arc<dyn PageRepository> can be used as PageRepository.
+/// This enables dynamic dispatch.
+#[async_trait]
+impl<T: PageRepository + ?Sized> PageRepository for Arc<T> {
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<Page>, DomainError> {
+        self.as_ref().get_by_id(id).await
+    }
+
+    async fn get_by_name(&self, name: &str) -> Result<Option<Page>, DomainError> {
+        self.as_ref().get_by_name(name).await
+    }
+
+    async fn get_journal(&self, day: JournalDay) -> Result<Option<Page>, DomainError> {
+        self.as_ref().get_journal(day).await
+    }
+
+    async fn get_all(&self) -> Result<Vec<Page>, DomainError> {
+        self.as_ref().get_all().await
+    }
+
+    async fn get_namespace_pages(&self, namespace_id: Uuid) -> Result<Vec<Page>, DomainError> {
+        self.as_ref().get_namespace_pages(namespace_id).await
+    }
+
+    async fn insert(&self, page: &Page) -> Result<(), DomainError> {
+        self.as_ref().insert(page).await
+    }
+
+    async fn update(&self, page: &Page) -> Result<(), DomainError> {
+        self.as_ref().update(page).await
+    }
+
+    async fn rename(&self, id: Uuid, new_name: &str) -> Result<(), DomainError> {
+        self.as_ref().rename(id, new_name).await
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
+        self.as_ref().delete(id).await
+    }
+
+    async fn get_updated_since(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<Page>, DomainError> {
+        self.as_ref().get_updated_since(since).await
+    }
+
+    async fn get_recent(&self, limit: usize) -> Result<Vec<Page>, DomainError> {
+        self.as_ref().get_recent(limit).await
+    }
+
+    async fn count(&self) -> Result<usize, DomainError> {
+        self.as_ref().count().await
+    }
+
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<Page>, DomainError> {
+        self.as_ref().search(query, limit).await
+    }
+
+    async fn search_by_name_or_title(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Page>, DomainError> {
+        self.as_ref().search_by_name_or_title(query, limit).await
+    }
+
+    async fn update_properties(
+        &self,
+        page_id: Uuid,
+        props: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
+    ) -> Result<Page, DomainError> {
+        self.as_ref().update_properties(page_id, props).await
+    }
+}

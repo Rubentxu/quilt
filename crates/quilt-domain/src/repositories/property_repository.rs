@@ -6,6 +6,7 @@ use crate::properties::definition::PropertyDefinition;
 use crate::properties::types::ClosedValue;
 use crate::value_objects::Uuid;
 use async_trait::async_trait;
+use std::sync::Arc;
 
 /// PropertyRepository provides access to property definitions.
 ///
@@ -101,6 +102,67 @@ pub trait PropertyRepositoryExt: PropertyRepository {
 }
 
 impl<T: PropertyRepository + ?Sized> PropertyRepositoryExt for T {}
+
+/// Blanket impl so Arc<dyn PropertyRepository> can be used as PropertyRepository.
+/// This enables dynamic dispatch with PropertyKeyResolver.
+#[async_trait]
+impl<T: PropertyRepository + ?Sized> PropertyRepository for Arc<T> {
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<PropertyDefinition>, DomainError> {
+        self.as_ref().get_by_id(id).await
+    }
+
+    async fn get_by_db_ident(&self, ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+        self.as_ref().get_by_db_ident(ident).await
+    }
+
+    async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
+        self.as_ref().get_all().await
+    }
+
+    async fn insert(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
+        self.as_ref().insert(def).await
+    }
+
+    async fn update(&self, def: &PropertyDefinition) -> Result<(), DomainError> {
+        self.as_ref().update(def).await
+    }
+
+    async fn get_closed_values(&self, property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
+        self.as_ref().get_closed_values(property_id).await
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
+        self.as_ref().delete(id).await
+    }
+
+    async fn get_by_db_idents(&self, idents: &[&str]) -> Result<Vec<PropertyDefinition>, DomainError> {
+        self.as_ref().get_by_db_idents(idents).await
+    }
+
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
+        self.as_ref().search(query, limit).await
+    }
+
+    async fn list_by_usage(&self, limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
+        self.as_ref().list_by_usage(limit).await
+    }
+
+    async fn get_co_occurrences(&self, limit: usize) -> Result<Vec<PropertyCoOccurrence>, DomainError> {
+        self.as_ref().get_co_occurrences(limit).await
+    }
+
+    async fn get_trends(&self, period_days: u32, limit: usize) -> Result<Vec<PropertyTrend>, DomainError> {
+        self.as_ref().get_trends(period_days, limit).await
+    }
+
+    async fn count_distinct_properties(&self) -> Result<u64, DomainError> {
+        self.as_ref().count_distinct_properties().await
+    }
+
+    async fn count_blocks_with_properties(&self) -> Result<u64, DomainError> {
+        self.as_ref().count_blocks_with_properties().await
+    }
+}
 
 #[cfg(test)]
 mod tests {

@@ -4,6 +4,7 @@ use crate::entities::Block;
 use crate::errors::DomainError;
 use crate::value_objects::Uuid;
 use async_trait::async_trait;
+use std::sync::Arc;
 
 /// BlockRepository is the abstraction for block data access.
 ///
@@ -158,3 +159,100 @@ pub trait BlockRepositoryExt: BlockRepository {
 }
 
 impl<T: BlockRepository + ?Sized> BlockRepositoryExt for T {}
+
+/// Blanket impl so Arc<dyn BlockRepository> can be used as BlockRepository.
+/// This enables dynamic dispatch.
+#[async_trait]
+impl<T: BlockRepository + ?Sized> BlockRepository for Arc<T> {
+    async fn get_by_id(&self, id: Uuid) -> Result<Option<Block>, DomainError> {
+        self.as_ref().get_by_id(id).await
+    }
+
+    async fn get_by_page(&self, page_id: Uuid) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().get_by_page(page_id).await
+    }
+
+    async fn get_children(&self, parent_id: Uuid) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().get_children(parent_id).await
+    }
+
+    async fn get_with_refs(&self, id: Uuid) -> Result<(Block, Vec<Uuid>), DomainError> {
+        self.as_ref().get_with_refs(id).await
+    }
+
+    async fn insert(&self, block: &Block) -> Result<(), DomainError> {
+        self.as_ref().insert(block).await
+    }
+
+    async fn update(&self, block: &Block) -> Result<(), DomainError> {
+        self.as_ref().update(block).await
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<(), DomainError> {
+        self.as_ref().delete(id).await
+    }
+
+    async fn move_block(
+        &self,
+        id: Uuid,
+        new_parent: Option<Uuid>,
+        new_order: f64,
+    ) -> Result<(), DomainError> {
+        self.as_ref().move_block(id, new_parent, new_order).await
+    }
+
+    async fn get_backlinks(&self, block_id: Uuid) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().get_backlinks(block_id).await
+    }
+
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().search(query, limit).await
+    }
+
+    async fn get_updated_since(
+        &self,
+        since: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().get_updated_since(since).await
+    }
+
+    async fn count_by_page(&self, page_id: Uuid) -> Result<usize, DomainError> {
+        self.as_ref().count_by_page(page_id).await
+    }
+
+    async fn count_all(&self) -> Result<usize, DomainError> {
+        self.as_ref().count_all().await
+    }
+
+    async fn query_dsl(&self, sql: &str, params: &[String]) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().query_dsl(sql, params).await
+    }
+
+    async fn list_by_property(
+        &self,
+        key: &str,
+        value: &str,
+        limit: usize,
+    ) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().list_by_property(key, value, limit).await
+    }
+
+    async fn list_distinct_keys(
+        &self,
+        cursor: Option<&str>,
+        limit: u32,
+    ) -> Result<Vec<String>, DomainError> {
+        self.as_ref().list_distinct_keys(cursor, limit).await
+    }
+
+    async fn list_by_property_key(&self, key: &str, limit: u32) -> Result<Vec<Block>, DomainError> {
+        self.as_ref().list_by_property_key(key, limit).await
+    }
+
+    async fn list_distinct_authors(
+        &self,
+        prefix: Option<&str>,
+    ) -> Result<Vec<String>, DomainError> {
+        self.as_ref().list_distinct_authors(prefix).await
+    }
+}

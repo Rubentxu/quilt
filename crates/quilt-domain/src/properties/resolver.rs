@@ -11,10 +11,8 @@
 //!
 //! No aliasing, no fuzzy matching, no rewriting — those are V2 concerns.
 //!
-//! The resolver is generic over the concrete `P: PropertyRepository`, matching
-//! the `PropertyValidator<P>` pattern in `validator.rs:17`. This keeps the
-//! resolver statically dispatched and easy to test with a mock repo (see the
-//! `tests` module below).
+//! The resolver uses dynamic dispatch via `Arc<dyn PropertyRepository>` for
+//! flexibility and easier testing (see the `tests` module below).
 //!
 //! [`PropertyRepository`]: crate::repositories::PropertyRepository
 //! [`PropertyRepositoryExt::find_or_builtin`]: crate::repositories::PropertyRepositoryExt
@@ -26,14 +24,14 @@ use std::sync::Arc;
 
 /// Resolves property keys case-insensitively against a `PropertyRepository`,
 /// falling back to the static `BUILTIN_PROPERTIES` map.
-pub struct PropertyKeyResolver<P: PropertyRepository> {
-    repo: Arc<P>,
+pub struct PropertyKeyResolver {
+    repo: Arc<dyn PropertyRepository>,
 }
 
-impl<P: PropertyRepository> PropertyKeyResolver<P> {
+impl PropertyKeyResolver {
     /// Create a new resolver that consults the given repository first, then
     /// the builtin map.
-    pub fn new(repo: Arc<P>) -> Self {
+    pub fn new(repo: Arc<dyn PropertyRepository>) -> Self {
         Self { repo }
     }
 

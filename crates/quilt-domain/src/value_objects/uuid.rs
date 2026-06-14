@@ -1,5 +1,6 @@
 //! Uuid value object - wrapper around UUID with convenience methods
 
+use crate::errors::DomainError;
 use std::fmt;
 use std::str::FromStr;
 
@@ -19,8 +20,10 @@ impl Uuid {
     }
 
     /// Create a UUID from a string (any valid format)
-    pub fn parse_str(s: &str) -> Option<Self> {
-        uuid::Uuid::parse_str(s).ok().map(Uuid)
+    pub fn parse_str(s: &str) -> Result<Self, DomainError> {
+        uuid::Uuid::parse_str(s)
+            .map(Uuid)
+            .map_err(|e| DomainError::ParseError(format!("Invalid UUID: {} - {}", s, e)))
     }
 
     /// Get the underlying UUID as bytes
