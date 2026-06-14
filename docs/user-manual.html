@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quilt — User Manual</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent: #58a6ff;
+    --accent-subtle: rgba(88,166,255,0.12);
+    --success: #3fb950;
+    --warning: #d2991d;
+    --danger: #f85149;
+    --radius: 6px;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); line-height: 1.6; }
+  .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 1.5rem; margin-bottom: 2rem; }
+  h1 { font-size: 2rem; font-weight: 700; color: var(--accent); }
+  h2 { font-size: 1.4rem; margin-top: 2.5rem; margin-bottom: 0.75rem; padding-bottom: 0.25rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1.1rem; margin-top: 1.5rem; margin-bottom: 0.5rem; color: var(--accent); }
+  p { margin-bottom: 0.75rem; }
+  code { font-family: var(--mono); background: var(--surface); padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
+  pre { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; overflow-x: auto; margin: 1rem 0; font-family: var(--mono); font-size: 0.85rem; line-height: 1.5; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  th { font-weight: 600; color: var(--text-muted); }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .tag-green { background: rgba(63,185,80,0.15); color: var(--success); }
+  .tag-blue { background: var(--accent-subtle); color: var(--accent); }
+  .tag-yellow { background: rgba(210,153,29,0.15); color: var(--warning); }
+  .tag-red { background: rgba(248,81,73,0.15); color: var(--danger); }
+  nav { position: sticky; top: 0; background: var(--bg); padding: 0.75rem 0; border-bottom: 1px solid var(--border); margin-bottom: 1rem; z-index: 10; }
+  nav a { color: var(--text-muted); text-decoration: none; margin-right: 1.25rem; font-size: 0.85rem; }
+  nav a:hover { color: var(--accent); }
+  .footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text-muted); }
+  @media print { body { background: #fff; color: #000; } nav { display: none; } }
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="#overview">Overview</a>
+  <a href="#getting-started">Getting Started</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#concepts">Concepts</a>
+  <a href="#mcp-tools">MCP Tools</a>
+  <a href="#frontend">Frontend</a>
+  <a href="#api">REST API</a>
+  <a href="#graph">Graph</a>
+  <a href="#dev">Development</a>
+</nav>
+
+<div class="container">
+
+<header>
+  <h1>Quilt — AI-first Knowledge Graph</h1>
+  <p style="color: var(--text-muted); font-size: 1.1rem;">User Manual &amp; Reference — v0.1.0</p>
+</header>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="overview">
+<h2>1. Overview</h2>
+
+<p>Quilt is an <strong>AI-first knowledge graph</strong> built in Rust with a React frontend.
+It inherits the Logseq block-outliner model and reimagines it with a clean
+hexagonal architecture, first-class MCP protocol support, and graph algorithms
+powered by petgraph.</p>
+
+<p><strong>Key principles:</strong></p>
+<ul>
+  <li><strong>MCP-first</strong> — all operations are MCP tools. AI agents are first-class users.</li>
+  <li><strong>Type safety</strong> — properties are typed, not strings in frontmatter.</li>
+  <li><strong>Clean architecture</strong> — Domain → Application → Infrastructure → Presentation.</li>
+  <li><strong>Graph-native</strong> — petgraph powers 8 graph analysis tools.</li>
+  <li><strong>WASM-compatible</strong> — quilt-core compiles to wasm32-unknown-unknown.</li>
+</ul>
+
+<table>
+  <tr><th>Stack</th><td>Rust 2024, SQLite, Tokio, Axum, React 19, TypeScript, TipTap 2, Vite</td></tr>
+  <tr><th>Server port</th><td>3737</td></tr>
+  <tr><th>Dev port</th><td>5173 (Vite HMR)</td></tr>
+  <tr><th>MCP tools</th><td>49</td></tr>
+  <tr><th>License</th><td>MIT / Apache-2.0</td></tr>
+</table>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="getting-started">
+<h2>2. Getting Started</h2>
+
+<h3>Prerequisites</h3>
+<pre>Rust 1.85+ | Node 20+ | just (optional)</pre>
+
+<h3>Quick Start</h3>
+<pre>
+<span style="color:var(--text-muted)"># Clone and run</span>
+git clone &lt;repo&gt; quilt
+cd quilt
+just dev
+</pre>
+
+<p>A single command starts the full dev environment:</p>
+<table>
+  <tr><th>Component</th><th>Port</th><th>What</th></tr>
+  <tr><td>Rust server</td><td>3737</td><td>API + WebSocket + serves SPA</td></tr>
+  <tr><td>Vite dev</td><td>5173</td><td>React SPA with HMR</td></tr>
+  <tr><td>WASM watcher</td><td>—</td><td>Rebuilds quilt-core on edit</td></tr>
+  <tr><td>Node asset watcher</td><td>—</td><td>Syncs prod bundle to wasm_assets/</td></tr>
+</table>
+
+<h3>Auth</h3>
+<p>The server auto-generates a UUID v4 API key on first start and prints it to the console.
+Copy it to <code>quilt-ui/.env</code> as <code>VITE_QUILT_API_KEY=&lt;key&gt;</code>.
+All API calls require <code>Authorization: Bearer &lt;key&gt;</code>.</p>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="architecture">
+<h2>3. Architecture</h2>
+
+<h3>Crate Layers</h3>
+<table>
+  <tr><th>Layer</th><th>Crates</th><th>Role</th></tr>
+  <tr><td>Domain</td><td><code>quilt-domain</code>, <code>quilt-query</code>, <code>quilt-search</code>, <code>quilt-core</code></td><td>Entities, traits, DSL, FTS5, WASM</td></tr>
+  <tr><td>Application</td><td><code>quilt-application</code>, <code>quilt-mcp</code></td><td>Use cases, DTOs, MCP protocol</td></tr>
+  <tr><td>Infrastructure</td><td><code>quilt-infrastructure</code></td><td>SQLite, repositories</td></tr>
+  <tr><td>Presentation</td><td><code>quilt-server</code>, <code>quilt-platform</code>, <code>quilt-bin</code></td><td>Axum HTTP, CLI, binaries</td></tr>
+  <tr><td>Cognitive</td><td><code>quilt-analysis</code></td><td>Graph analysis, structure mapping</td></tr>
+  <tr><td>Frontend</td><td><code>quilt-ui/</code></td><td>React 19 + TipTap + Vite</td></tr>
+</table>
+
+<h3>Data Flow</h3>
+<pre>
+Agent (MCP client) ──▶ quilt-mcp ──▶ quilt-application ──▶ quilt-infrastructure ──▶ SQLite
+                              │
+Browser ──▶ quilt-server (Axum) ──▶ quilt-application ──▶ quilt-infrastructure ──▶ SQLite
+                │
+                └──▶ serves quilt-ui/ SPA (Vite build)
+</pre>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="concepts">
+<h2>4. Core Concepts</h2>
+
+<h3>Blocks</h3>
+<p>The fundamental unit. Every piece of content is a block. Blocks form a tree via
+<code>parent_id</code>. Properties are typed key-value pairs stored as JSON.</p>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td>id</td><td>UUID</td><td>Unique identifier</td></tr>
+  <tr><td>content</td><td>String</td><td>Markdown text content</td></tr>
+  <tr><td>parent_id</td><td>UUID?</td><td>Parent block (null = top-level)</td></tr>
+  <tr><td>order</td><td>f32</td><td>Sort order among siblings</td></tr>
+  <tr><td>level</td><td>i32</td><td>Nesting depth</td></tr>
+  <tr><td>marker</td><td>enum</td><td>Todo / Doing / Done / Now / Later / Cancelled</td></tr>
+  <tr><td>priority</td><td>enum</td><td>A / B / C</td></tr>
+  <tr><td>properties</td><td>JSON</td><td>Typed key-value pairs</td></tr>
+</table>
+
+<h3>Pages</h3>
+<p>A page is a named collection of blocks. Journal pages are date-based
+(<code>2026-06-11</code>). Regular pages are named (<code>My Project</code>).</p>
+
+<h3>Properties</h3>
+<p>Properties are <strong>typed</strong> key-value pairs on blocks. Types include:
+<code>text</code>, <code>number</code>, <code>date</code>, <code>url</code>, <code>checkbox</code>, <code>node</code>.
+Properties are stored as JSON in the blocks table and indexed via VIRTUAL generated columns.</p>
+
+<h3>Annotations</h3>
+<p>Unified comment system with <code>scope:: block</code> (whole-block comment)
+and <code>scope:: inline</code> (text-range annotation). Threaded replies via <code>parent_annotation_id</code>.
+Status lifecycle: <code>pending → in_progress → resolved | dismissed</code>.</p>
+
+<h3>References</h3>
+<p>Bidirectional block references. <code>[[Page Name]]</code> creates page refs,
+<code>((block-id))</code> creates block refs. The <code>refs</code> table maintains
+bidirectional links with a reverse index.</p>
+
+<h3>Intent Search</h3>
+<p>Heuristic natural-language-to-DSL transformer (no LLM).
+Type queries like "open tasks by project" and Quilt generates DSL queries.
+7 text rules + 4 graph-aware rules. Always shows the generated DSL for editing.</p>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="mcp-tools">
+<h2>5. MCP Tools Reference</h2>
+<p>49 tools across 8 domains. All tools are available to MCP clients (AI agents).</p>
+
+<h3>5.1 Blocks</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th></tr>
+  <tr><td><code>quilt_create_block</code></td><td>Create a new block</td></tr>
+  <tr><td><code>quilt_get_block</code></td><td>Get block by UUID</td></tr>
+  <tr><td><code>quilt_update_block</code></td><td>Update block content/properties</td></tr>
+  <tr><td><code>quilt_delete_block</code></td><td>Delete a block</td></tr>
+  <tr><td><code>quilt_list_blocks</code></td><td>List blocks on a page</td></tr>
+  <tr><td><code>quilt_search</code></td><td>Full-text search (FTS5)</td></tr>
+  <tr><td><code>quilt_query</code></td><td>Execute DSL queries</td></tr>
+</table>
+
+<h3>5.2 Pages</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th></tr>
+  <tr><td><code>quilt_create_page</code></td><td>Create a new page</td></tr>
+  <tr><td><code>quilt_get_page</code></td><td>Get page by name</td></tr>
+  <tr><td><code>quilt_list_pages</code></td><td>List all pages</td></tr>
+  <tr><td><code>quilt_delete_page</code></td><td>Delete a page</td></tr>
+</table>
+
+<h3>5.3 Properties</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th></tr>
+  <tr><td><code>quilt_get_block_properties</code></td><td>Get properties of a block</td></tr>
+  <tr><td><code>quilt_set_block_property</code></td><td>Set a property value</td></tr>
+  <tr><td><code>quilt_properties_batch</code></td><td>Batch property operations</td></tr>
+  <tr><td><code>quilt_list_property_keys</code></td><td>List all known property keys</td></tr>
+  <tr><td><code>quilt_get_property_schema</code></td><td>Get property type schema</td></tr>
+</table>
+
+<h3>5.4 Annotations</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th></tr>
+  <tr><td><code>quilt_create_annotation</code></td><td>Create annotation on a block</td></tr>
+  <tr><td><code>quilt_list_annotations</code></td><td>List annotations with filters</td></tr>
+  <tr><td><code>quilt_get_annotation</code></td><td>Get annotation by ID</td></tr>
+  <tr><td><code>quilt_update_annotation_status</code></td><td>Update status (pending→resolved)</td></tr>
+  <tr><td><code>quilt_delete_annotation</code></td><td>Delete annotation</td></tr>
+</table>
+
+<h3>5.5 Search &amp; Intent</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th></tr>
+  <tr><td><code>quilt_search</code></td><td>FTS5 full-text search</td></tr>
+  <tr><td><code>quilt_intent_search</code></td><td>NL-to-DSL heuristic search</td></tr>
+  <tr><td><code>quilt_query</code></td><td>Execute DSL queries</td></tr>
+</table>
+
+<h3>5.6 Graph Analysis <span class="tag tag-green">petgraph 0.8</span></h3>
+<table>
+  <tr><th>Tool</th><th>Algorithm</th><th>Description</th></tr>
+  <tr><td><code>quilt_graph_edges</code></td><td>Neighbor traversal</td><td>Get edges from a block</td></tr>
+  <tr><td><code>quilt_graph_shortest_path</code></td><td>Dijkstra</td><td>Find path between two blocks</td></tr>
+  <tr><td><code>quilt_graph_components</code></td><td>Tarjan SCC</td><td>Find connected components</td></tr>
+  <tr><td><code>quilt_graph_centrality</code></td><td>Eigenvector</td><td>PageRank importance scores</td></tr>
+  <tr><td><code>quilt_graph_bridges</code></td><td>Bridge edges <span class="tag tag-blue">new</span></td><td>Critical connections</td></tr>
+  <tr><td><code>quilt_graph_articulation_points</code></td><td>Articulation <span class="tag tag-blue">new</span></td><td>Critical blocks</td></tr>
+  <tr><td><code>quilt_graph_cliques</code></td><td>Bron-Kerbosch <span class="tag tag-blue">new</span></td><td>Dense concept clusters</td></tr>
+  <tr><td><code>quilt_graph_max_flow</code></td><td>Dinic <span class="tag tag-blue">new</span></td><td>Information flow</td></tr>
+</table>
+
+<h3>5.7 Cognitive Analysis <span class="tag tag-yellow">new</span></h3>
+<table>
+  <tr><th>Tool</th><th>Engine</th><th>Description</th></tr>
+  <tr><td><code>quilt_analyze_connections</code></td><td>ConnectionEngine</td><td>Find block connections</td></tr>
+  <tr><td><code>quilt_analyze_clusters</code></td><td>StructuralMirror</td><td>Detect knowledge clusters</td></tr>
+  <tr><td><code>quilt_analyze_centrality</code></td><td>StructuralMirror</td><td>PageRank importance</td></tr>
+  <tr><td><code>quilt_analyze_structure</code></td><td>StructureMapper</td><td>Analyze block structure</td></tr>
+  <tr><td><code>quilt_garden_health</code></td><td>StructureGardener</td><td>Template/structure health</td></tr>
+</table>
+
+<h3>5.8 Templates &amp; Resources</h3>
+<table>
+  <tr><th>Tool</th><th>Description</th></tr>
+  <tr><td><code>quilt_list_templates</code></td><td>List available templates</td></tr>
+  <tr><td><code>quilt_get_template_schema</code></td><td>Get template property schema</td></tr>
+  <tr><td><code>quilt_create_from_template</code></td><td>Create page from template</td></tr>
+  <tr><td><code>quilt_get_page_backlinks</code></td><td>Get backlinks for a page</td></tr>
+  <tr><td><code>quilt_get_block_authors</code></td><td>List block authors</td></tr>
+</table>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="frontend">
+<h2>6. Frontend</h2>
+
+<h3>Feature Map</h3>
+<table>
+  <tr><th>Feature</th><th>Path</th><th>Status</th></tr>
+  <tr><td>Block outliner</td><td><code>features/outliner-tiptap/</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>Properties panel</td><td><code>features/properties/</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>Search modal</td><td><code>features/search/</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>References panel</td><td><code>features/references/</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>Comments / Annotations</td><td><code>features/annotations/</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>Cognitive panel</td><td><code>features/cognitive/</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>Sidebar navigation</td><td><code>features/sidebar/</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>Graph visualization</td><td><code>pages/GraphViewPage.tsx</code></td><td><span class="tag tag-yellow">basic</span></td></tr>
+  <tr><td>Templates</td><td><code>features/outliner-tiptap/TemplatePicker.tsx</code></td><td><span class="tag tag-green">live</span></td></tr>
+  <tr><td>Dashboard</td><td><code>pages/DashboardPage.tsx</code></td><td><span class="tag tag-green">live</span></td></tr>
+</table>
+
+<h3>Slash Commands (31)</h3>
+<p>Type <code>/</code> at the start of a block to access commands:</p>
+<table>
+  <tr><th>Category</th><th>Commands</th></tr>
+  <tr><td>Status</td><td><code>/todo</code> <code>/doing</code> <code>/done</code> <code>/now</code> <code>/later</code> <code>/cancelled</code></td></tr>
+  <tr><td>Priority</td><td><code>/priority A</code> <code>/B</code> <code>/C</code></td></tr>
+  <tr><td>Dates</td><td><code>/today</code> <code>/tomorrow</code> <code>/deadline</code> <code>/scheduled</code></td></tr>
+  <tr><td>References</td><td><code>/page reference</code> <code>/block embed</code></td></tr>
+  <tr><td>Block types</td><td><code>/text</code> <code>/h1</code>-<code>/h3</code> <code>/bullet</code> <code>/numbered</code> <code>/quote</code> <code>/code</code></td></tr>
+  <tr><td>Roles</td><td><code>/task</code> <code>/query</code> <code>/card</code></td></tr>
+  <tr><td>Other</td><td><code>/add comment</code> <code>/new from template</code></td></tr>
+</table>
+
+<h3>Keyboard Shortcuts</h3>
+<table>
+  <tr><th>Key</th><th>Action</th></tr>
+  <tr><td><code>Enter</code></td><td>Create sibling block</td></tr>
+  <tr><td><code>Shift+Enter</code></td><td>Line break within block</td></tr>
+  <tr><td><code>Tab</code></td><td>Indent block</td></tr>
+  <tr><td><code>Shift+Tab</code></td><td>Outdent block</td></tr>
+  <tr><td><code>Backspace</code> (at start)</td><td>Merge with previous block</td></tr>
+  <tr><td><code>Cmd+Z</code></td><td>Undo</td></tr>
+  <tr><td><code>Cmd+Shift+Z</code></td><td>Redo</td></tr>
+  <tr><td><code>Cmd+K</code></td><td>Search modal</td></tr>
+  <tr><td><code>Cmd+Shift+K</code></td><td>Command palette</td></tr>
+  <tr><td><code>Cmd+Enter</code></td><td>Toggle task done</td></tr>
+  <tr><td><code>Cmd+B</code></td><td>Bold</td></tr>
+  <tr><td><code>Cmd+I</code></td><td>Italic</td></tr>
+</table>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="api">
+<h2>7. REST API</h2>
+
+<p>All endpoints are under <code>/api/v1/</code> and require
+<code>Authorization: Bearer &lt;key&gt;</code> (except <code>/health</code> and <code>/metrics</code>).</p>
+
+<h3>Blocks</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+  <tr><td><code>POST</code></td><td><code>/api/v1/blocks</code></td><td>Create block</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/blocks/:id</code></td><td>Get block</td></tr>
+  <tr><td><code>PATCH</code></td><td><code>/api/v1/blocks/:id</code></td><td>Update block</td></tr>
+  <tr><td><code>DELETE</code></td><td><code>/api/v1/blocks/:id</code></td><td>Delete block</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/pages/:name/blocks</code></td><td>List blocks on page</td></tr>
+</table>
+
+<h3>Annotations</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+  <tr><td><code>POST</code></td><td><code>/api/v1/annotations</code></td><td>Create annotation</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/annotations</code></td><td>List annotations (filters: block_id, status, scope)</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/annotations/:id</code></td><td>Get annotation</td></tr>
+  <tr><td><code>PATCH</code></td><td><code>/api/v1/annotations/:id/status</code></td><td>Update status</td></tr>
+  <tr><td><code>DELETE</code></td><td><code>/api/v1/annotations/:id</code></td><td>Delete annotation</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/blocks/:id/annotations</code></td><td>List annotations for block</td></tr>
+</table>
+
+<h3>Search &amp; Intent</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/search?q=...</code></td><td>Full-text search (FTS5)</td></tr>
+  <tr><td><code>POST</code></td><td><code>/api/v1/search/intent</code></td><td>Intent search (NL→DSL)</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/pages/search?q=...</code></td><td>Search pages server-side</td></tr>
+</table>
+
+<h3>Properties &amp; Templates</h3>
+<table>
+  <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/properties/keys</code></td><td>List property keys</td></tr>
+  <tr><td><code>POST</code></td><td><code>/api/v1/properties/batch</code></td><td>Batch property operations</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/blocks/authors</code></td><td>List block authors</td></tr>
+  <tr><td><code>GET</code></td><td><code>/api/v1/pages/:name/backlinks</code></td><td>Get page backlinks</td></tr>
+</table>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="graph">
+<h2>8. Graph Engine</h2>
+
+<p>Quilt uses <strong>petgraph 0.8.3</strong> for all graph algorithms. The graph is built lazily
+from block references and analyzed on demand.</p>
+
+<h3>Graph Analysis Pipeline</h3>
+<pre>
+Blocks + Refs ──▶ build DiGraph ──▶ Algorithm ──▶ MCP Tool Response
+                       │
+                       ├── dijkstra ──▶ shortest_path
+                       ├── tarjan_scc ──▶ components
+                       ├── eigenvector ──▶ centrality
+                       ├── bridges ──▶ critical connections
+                       ├── articulation_points ──▶ critical nodes
+                       ├── maximal_cliques ──▶ dense clusters
+                       └── dinics ──▶ max flow
+</pre>
+
+<h3>Example: Find Critical Blocks</h3>
+<pre>
+<span style="color:var(--text-muted)"># MCP call</span>
+quilt_graph_articulation_points()
+
+<span style="color:var(--text-muted)"># Response</span>
+{
+  "articulation_count": 3,
+  "block_ids": ["uuid-1", "uuid-2", "uuid-3"]
+}
+<span style="color:var(--text-muted)"># These 3 blocks, if removed, would disconnect the knowledge graph.</span>
+</pre>
+
+<h3>Example: Dense Concept Clusters</h3>
+<pre>
+<span style="color:var(--text-muted)"># MCP call</span>
+quilt_graph_cliques(min_size: 3)
+
+<span style="color:var(--text-muted)"># Response</span>
+{
+  "clique_count": 2,
+  "cliques": [
+    { "size": 4, "members": ["a", "b", "c", "d"] },
+    { "size": 3, "members": ["e", "f", "g"] }
+  ]
+}
+</pre>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<section id="dev">
+<h2>9. Development</h2>
+
+<h3>Commands</h3>
+<table>
+  <tr><th>Command</th><th>Purpose</th></tr>
+  <tr><td><code>just dev</code></td><td>Full hot-reload dev environment</td></tr>
+  <tr><td><code>just check</code></td><td>Fast <code>cargo check</code></td></tr>
+  <tr><td><code>just ci</code></td><td>Format + clippy + tests</td></tr>
+  <tr><td><code>cargo test</code></td><td>All Rust tests</td></tr>
+  <tr><td><code>cargo test -p &lt;crate&gt;</code></td><td>Single crate tests</td></tr>
+  <tr><td><code>cd quilt-ui &amp;&amp; npx vitest run</code></td><td>Frontend tests</td></tr>
+  <tr><td><code>npx playwright test</code></td><td>E2E tests</td></tr>
+</table>
+
+<h3>Project Structure</h3>
+<pre>
+quilt/
+├── crates/
+│   ├── quilt-domain/          Entities, traits, errors
+│   ├── quilt-application/     Use cases, services, DTOs
+│   ├── quilt-infrastructure/  SQLite pool, repos
+│   ├── quilt-query/           DSL parser (pest), AST, executor, heuristic
+│   ├── quilt-search/          FTS5 query builder
+│   ├── quilt-mcp/             MCP protocol, 49 tool handlers
+│   ├── quilt-server/          Axum HTTP, REST handlers
+│   ├── quilt-core/            Outliner, parser, WASM target
+│   ├── quilt-analysis/        Cognitive engines, graph analysis
+│   ├── quilt-platform/        CLI adapter (clap)
+│   ├── quilt-bin/             CLI binary + migration binaries
+│   └── quilt-test-helpers/    InMemory repos, factories
+├── quilt-ui/                  React 19 + Vite frontend
+├── tests/e2e/                 Playwright E2E specs
+├── docs/                      ADRs, roadmap, research, this manual
+└── openspec/                  SDD specs and change archives
+</pre>
+
+<h3>Testing Strategy</h3>
+<table>
+  <tr><th>Layer</th><th>Tool</th><th>Location</th></tr>
+  <tr><td>Unit</td><td>Rust <code>#[cfg(test)]</code></td><td>Inline next to code</td></tr>
+  <tr><td>Integration</td><td>Rust <code>tests/</code></td><td>Per-crate test directory</td></tr>
+  <tr><td>Property</td><td><code>proptest</code></td><td>Domain + query crates</td></tr>
+  <tr><td>Component</td><td>Vitest + Testing Library</td><td><code>quilt-ui/src/**/\_\_tests\_\_/</code></td></tr>
+  <tr><td>E2E</td><td>Playwright</td><td><code>tests/e2e/spec/</code></td></tr>
+</table>
+</section>
+
+<!-- ─────────────────────────────────────────────── -->
+<div class="footer">
+  <p>Quilt v0.1.0 — AI-first Knowledge Graph. Built with Rust 2024, React 19, petgraph 0.8.3, SQLite.
+  <br>49 MCP tools. Clean hexagonal architecture. WASM-compatible core.
+  <br>Last updated: 2026-06-11</p>
+</div>
+
+</div>
+</body>
+</html>
