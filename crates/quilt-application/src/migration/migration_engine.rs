@@ -39,17 +39,19 @@ pub enum MigrationError {
     Io(#[from] std::io::Error),
 }
 
-/// Migration engine - generic over page, block, and property repositories.
-pub struct MigrationEngine<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository> {
-    page_repo: Arc<PR>,
-    block_repo: Arc<BR>,
-    property_repo: Arc<PropR>,
+/// Migration engine - non-generic, uses trait objects for dependency injection.
+pub struct MigrationEngine {
+    page_repo: Arc<dyn PageRepository>,
+    block_repo: Arc<dyn BlockRepository>,
+    property_repo: Arc<dyn PropertyRepository>,
 }
 
-impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository>
-    MigrationEngine<PR, BR, PropR>
-{
-    pub fn new(page_repo: Arc<PR>, block_repo: Arc<BR>, property_repo: Arc<PropR>) -> Self {
+impl MigrationEngine {
+    pub fn new(
+        page_repo: Arc<dyn PageRepository>,
+        block_repo: Arc<dyn BlockRepository>,
+        property_repo: Arc<dyn PropertyRepository>,
+    ) -> Self {
         Self {
             page_repo,
             block_repo,
@@ -152,9 +154,9 @@ impl<PR: PageRepository, BR: BlockRepository, PropR: PropertyRepository>
 
 /// Create blocks from parsed raw blocks using iterative approach with a work stack.
 /// Uses PropertyKeyResolver to normalize property keys (case-insensitive, builtin match).
-async fn create_blocks_from_raw<BR: BlockRepository, PropR: PropertyRepository>(
-    block_repo: &BR,
-    resolver: &PropertyKeyResolver<PropR>,
+async fn create_blocks_from_raw(
+    block_repo: &dyn BlockRepository,
+    resolver: &PropertyKeyResolver,
     raw_blocks: &[RawBlock],
     page_id: Uuid,
 ) -> Result<usize, MigrationError> {

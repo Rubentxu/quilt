@@ -25,20 +25,15 @@
 //! // bus.publish(event);
 //! ```
 
-#[cfg(feature = "tokio-runtime")]
 use quilt_domain::events::AppEvent;
-#[cfg(feature = "tokio-runtime")]
 use thiserror::Error;
-#[cfg(feature = "tokio-runtime")]
 use tokio::sync::broadcast;
-#[cfg(feature = "tokio-runtime")]
 use tracing::instrument;
 
 /// Maximum number of subscribers that can receive events simultaneously.
 /// This is the buffer size for the broadcast channel.
 const BROADCAST_CHANNEL_SIZE: usize = 1000;
 
-#[cfg(feature = "tokio-runtime")]
 /// Errors that can occur when working with the EventBus.
 #[derive(Debug, Error)]
 pub enum EventBusError {
@@ -67,12 +62,10 @@ pub enum EventBusError {
 /// // In another task, publish events
 /// bus.publish(AppEvent::BlockCreated(...));
 /// ```
-#[cfg(feature = "tokio-runtime")]
 pub struct EventBus {
     sender: broadcast::Sender<AppEvent>,
 }
 
-#[cfg(feature = "tokio-runtime")]
 impl EventBus {
     /// Creates a new EventBus with a default channel size.
     ///
@@ -153,7 +146,6 @@ impl EventBus {
     }
 }
 
-#[cfg(feature = "tokio-runtime")]
 impl Default for EventBus {
     fn default() -> Self {
         Self::new()
@@ -174,7 +166,6 @@ fn event_name(event: &AppEvent) -> &'static str {
     }
 }
 
-#[cfg(feature = "tokio-runtime")]
 #[cfg(test)]
 mod tests {
     use super::*;

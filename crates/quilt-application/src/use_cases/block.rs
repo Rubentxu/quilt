@@ -30,6 +30,18 @@ pub trait BlockUseCases: Send + Sync {
         properties: HashMap<String, PropertyValue>,
     ) -> Result<Block, ApplicationError>;
 
+    /// Create a new block and insert it after a given sibling block.
+    ///
+    /// Calculates the new order based on the sibling's order and the next sibling (if any).
+    async fn create_with_insert_after(
+        &self,
+        page_name: &str,
+        content: &str,
+        after_block_id: Uuid,
+        marker: Option<TaskMarker>,
+        properties: HashMap<String, PropertyValue>,
+    ) -> Result<Block, ApplicationError>;
+
     /// Create a new task block on a page.
     async fn create_task(
         &self,
@@ -37,6 +49,13 @@ pub trait BlockUseCases: Send + Sync {
         content: &str,
         deadline: Option<chrono::NaiveDate>,
         priority: Option<&str>,
+    ) -> Result<Block, ApplicationError>;
+
+    /// Update an existing block with the given update.
+    async fn update_block(
+        &self,
+        block_id: Uuid,
+        update: BlockUpdate,
     ) -> Result<Block, ApplicationError>;
 
     /// Delete a block by ID.
@@ -63,6 +82,36 @@ pub trait BlockUseCases: Send + Sync {
         value: &str,
         limit: usize,
     ) -> Result<Vec<Block>, ApplicationError>;
+
+    /// List distinct author identifiers from block properties.
+    ///
+    /// Returns unique `author` property values found across all blocks,
+    /// optionally filtered by prefix (e.g., `agent::` for AI authors).
+    async fn list_distinct_authors(
+        &self,
+        prefix: Option<&str>,
+    ) -> Result<Vec<String>, ApplicationError>;
+
+    /// Set a property on a block.
+    async fn set_property(
+        &self,
+        block_id: Uuid,
+        key: String,
+        value: PropertyValue,
+    ) -> Result<Block, ApplicationError>;
+
+    /// Delete a property from a block.
+    async fn delete_property(
+        &self,
+        block_id: Uuid,
+        key: &str,
+    ) -> Result<Block, ApplicationError>;
+
+    /// Get all properties of a block.
+    async fn get_properties(
+        &self,
+        block_id: Uuid,
+    ) -> Result<HashMap<String, PropertyValue>, ApplicationError>;
 }
 
 /// Block tree structure returned by [`BlockUseCases::get_tree`].
@@ -312,5 +361,152 @@ impl<BR: BlockRepository + 'static, PR: PageRepository + 'static> BlockUseCases
             .list_by_property(key, value, limit)
             .await
             .map_err(ApplicationError::Domain)
+    }
+
+    #[instrument(skip(self))]
+    async fn create_with_insert_after(
+        &self,
+        page_name: &str,
+        content: &str,
+        after_block_id: Uuid,
+        marker: Option<TaskMarker>,
+        properties: HashMap<String, PropertyValue>,
+    ) -> Result<Block, ApplicationError> {
+        // Find or create the page
+        let page = self.get_or_create_page(page_name).await?;
+
+        // Get the after block to find its order
+        let after_block = self
+            .block_repo
+            .get_or_fail(after_block_id)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        // Get siblings to calculate order (same parent)
+        let siblings = self
+            .block_repo
+            .get_children(after_block.parent_id.unwrap_or(after_block.id))
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        // Calculate new order: midpoint between after_block and next sibling
+        let after_order = after_block.order;
+        let next_sibling = siblings.iter().find(|b| b.order > after_order);
+        let new_order = match next_sibling {
+            Some(next) => (after_order + next.order) / 2.0,
+            None => after_order + 1000.0,
+        };
+
+        // Create the block
+        let block = Block::new(BlockCreate {
+            page_id: page.id,
+            content: content.to_string(),
+            parent_id: after_block.parent_id,
+            order: new_order,
+            marker,
+            format: BlockFormat::Markdown,
+            block_type: BlockType::Paragraph,
+            properties,
+        })
+        .map_err(ApplicationError::Domain)?;
+
+        self.block_repo
+            .insert(&block)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(block)
+    }
+
+    #[instrument(skip(self))]
+    async fn update_block(
+        &self,
+        block_id: Uuid,
+        update: BlockUpdate,
+    ) -> Result<Block, ApplicationError> {
+        let mut block = self
+            .block_repo
+            .get_or_fail(block_id)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        block.update(update).map_err(ApplicationError::Domain)?;
+
+        self.block_repo
+            .update(&block)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(block)
+    }
+
+    #[instrument(skip(self))]
+    async fn list_distinct_authors(
+        &self,
+        prefix: Option<&str>,
+    ) -> Result<Vec<String>, ApplicationError> {
+        self.block_repo
+            .list_distinct_authors(prefix)
+            .await
+            .map_err(ApplicationError::Domain)
+    }
+
+    #[instrument(skip(self, key, value))]
+    async fn set_property(
+        &self,
+        block_id: Uuid,
+        key: String,
+        value: PropertyValue,
+    ) -> Result<Block, ApplicationError> {
+        let mut block = self
+            .block_repo
+            .get_or_fail(block_id)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        block.properties.insert(key, value);
+
+        self.block_repo
+            .update(&block)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(block)
+    }
+
+    #[instrument(skip(self))]
+    async fn delete_property(
+        &self,
+        block_id: Uuid,
+        key: &str,
+    ) -> Result<Block, ApplicationError> {
+        let mut block = self
+            .block_repo
+            .get_or_fail(block_id)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        block.properties.remove(key);
+
+        self.block_repo
+            .update(&block)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(block)
+    }
+
+    #[instrument(skip(self))]
+    async fn get_properties(
+        &self,
+        block_id: Uuid,
+    ) -> Result<HashMap<String, PropertyValue>, ApplicationError> {
+        let block = self
+            .block_repo
+            .get_or_fail(block_id)
+            .await
+            .map_err(ApplicationError::Domain)?;
+
+        Ok(block.properties)
     }
 }

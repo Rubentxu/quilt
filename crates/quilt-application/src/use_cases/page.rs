@@ -22,8 +22,14 @@ pub trait PageUseCases: Send + Sync {
     /// Create a new page with the given name.
     async fn create(&self, name: &str, title: Option<&str>) -> Result<Page, ApplicationError>;
 
+    /// Get a page by name (case-insensitive).
+    async fn get_by_name(&self, name: &str) -> Result<Option<Page>, ApplicationError>;
+
     /// List all pages.
     async fn list(&self) -> Result<Vec<Page>, ApplicationError>;
+
+    /// Search pages by name query.
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<Page>, ApplicationError>;
 
     /// Get a page with its blocks by page name.
     async fn get_blocks(&self, page_name: &str) -> Result<PageWithBlocks, ApplicationError>;
@@ -107,6 +113,22 @@ impl<PR: PageRepository + 'static, BR: BlockRepository + 'static> PageUseCases
     async fn list(&self) -> Result<Vec<Page>, ApplicationError> {
         self.page_repo
             .get_all()
+            .await
+            .map_err(ApplicationError::Domain)
+    }
+
+    #[instrument(skip(self))]
+    async fn get_by_name(&self, name: &str) -> Result<Option<Page>, ApplicationError> {
+        self.page_repo
+            .get_by_name(name)
+            .await
+            .map_err(ApplicationError::Domain)
+    }
+
+    #[instrument(skip(self))]
+    async fn search(&self, query: &str, limit: usize) -> Result<Vec<Page>, ApplicationError> {
+        self.page_repo
+            .search(query, limit)
             .await
             .map_err(ApplicationError::Domain)
     }

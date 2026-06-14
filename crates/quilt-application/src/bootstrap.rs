@@ -3,7 +3,9 @@
 //! Presentation layers (MCP, CLI, REST) use `AppServices` to access
 //! all use cases through a single struct.
 
-use crate::use_cases::{BlockUseCases, PageUseCases, ResourceUseCases, SearchUseCases};
+use crate::use_cases::{
+    BlockUseCases, PageUseCases, ResourceUseCases, SearchUseCases, TemplateUseCases, TourStateUseCases,
+};
 use std::sync::Arc;
 
 /// Wired application services ready for use by presentation layers.
@@ -18,6 +20,10 @@ pub struct AppServices {
     pub search: Arc<dyn SearchUseCases>,
     /// Resource use cases (graph snapshot, page/tag info)
     pub resource: Arc<dyn ResourceUseCases>,
+    /// Template use cases (list templates, get schema)
+    pub template: Arc<dyn TemplateUseCases>,
+    /// Tour state use cases (get/dismiss tours)
+    pub tour_state: Arc<dyn TourStateUseCases>,
 }
 
 impl AppServices {
@@ -31,12 +37,16 @@ impl AppServices {
         page: Arc<dyn PageUseCases>,
         search: Arc<dyn SearchUseCases>,
         resource: Arc<dyn ResourceUseCases>,
+        template: Arc<dyn TemplateUseCases>,
+        tour_state: Arc<dyn TourStateUseCases>,
     ) -> Self {
         Self {
             block,
             page,
             search,
             resource,
+            template,
+            tour_state,
         }
     }
 }

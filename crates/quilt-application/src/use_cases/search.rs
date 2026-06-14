@@ -57,6 +57,12 @@ pub trait SearchUseCases: Send + Sync {
     /// Parse a DSL query string and generate SQL with parameters.
     async fn query(&self, dsl: &str, limit: usize) -> Result<QueryPlan, ApplicationError>;
 
+    /// Execute a DSL query and return the resulting blocks.
+    ///
+    /// This is a convenience method that calls `query` and extracts
+    /// the blocks from the returned `QueryPlan`.
+    async fn query_dsl(&self, dsl: &str, limit: usize) -> Result<Vec<Block>, ApplicationError>;
+
     /// Resolve a name to matching pages/blocks via fuzzy matching.
     ///
     /// G5: Named-thing retrieval foundation. Delegates to a `NameResolver`
@@ -195,6 +201,14 @@ impl SearchUseCases for SearchUseCasesImpl {
             sql,
             params: param_strings,
             blocks,
+        })
+    }
+
+    #[instrument(skip(self))]
+    async fn query_dsl(&self, dsl: &str, limit: usize) -> Result<Vec<Block>, ApplicationError> {
+        let plan = self.query(dsl, limit).await?;
+        plan.blocks.ok_or_else(|| {
+            ApplicationError::Validation("Block repository not configured for query_dsl".to_string())
         })
     }
 

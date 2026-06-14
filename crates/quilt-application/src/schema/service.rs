@@ -246,7 +246,7 @@ impl ClusterBuilder {
             std::collections::HashMap::new();
         for key in self.parent.keys() {
             // Need a mutable copy to find
-            let mut temp_parent = self.parent.clone();
+            let temp_parent = self.parent.clone();
             let root = if let Some(p) = temp_parent.get(key) {
                 // Trace to root
                 let mut current = p.clone();
