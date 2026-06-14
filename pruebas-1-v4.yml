@@ -1,0 +1,425 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - generic [ref=e9]: Q
+          - generic [ref=e10]: Quilt Workspace
+        - button "Workspace options" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+      - generic [ref=e15]:
+        - img [ref=e16]
+        - textbox "Buscar" [ref=e19] [cursor=pointer]
+        - generic [ref=e20]: Ctrl K
+      - navigation [ref=e21]:
+        - generic [ref=e22]:
+          - heading "Diarios" [level=3] [ref=e23]
+          - link "Diarios" [ref=e25] [cursor=pointer]:
+            - /url: /journal/2026-06-10
+            - img [ref=e27]
+            - generic [ref=e29]: Diarios
+        - generic [ref=e30]:
+          - heading "Browse" [level=3] [ref=e31]
+          - generic [ref=e32]:
+            - link "Lista de páginas" [ref=e33] [cursor=pointer]:
+              - /url: /pages
+              - img [ref=e35]
+              - generic [ref=e38]: Lista de páginas
+            - link "Vista de Grafo" [ref=e39] [cursor=pointer]:
+              - /url: /graph
+              - img [ref=e41]
+              - generic [ref=e46]: Vista de Grafo
+        - generic [ref=e47]:
+          - heading "Favoritos" [level=3] [ref=e48]
+          - paragraph [ref=e49]:
+            - img [ref=e50]
+            - generic [ref=e52]: Click the star on any page to favorite it
+        - generic [ref=e53]:
+          - heading "Páginas" [level=3] [ref=e54]
+          - list [ref=e55]:
+            - listitem [ref=e56]:
+              - link "verify-props-1781084347" [ref=e57] [cursor=pointer]:
+                - /url: /page/verify-props-1781084347
+                - img [ref=e59]
+                - generic [ref=e62]: verify-props-1781084347
+            - listitem [ref=e63]:
+              - link "props-test-1781083673" [ref=e64] [cursor=pointer]:
+                - /url: /page/props-test-1781083673
+                - img [ref=e66]
+                - generic [ref=e69]: props-test-1781083673
+            - listitem [ref=e70]:
+              - link "vv-1781083607037" [ref=e71] [cursor=pointer]:
+                - /url: /page/vv-1781083607037
+                - img [ref=e73]
+                - generic [ref=e76]: vv-1781083607037
+            - listitem [ref=e77]:
+              - link "vv-1781082871090" [ref=e78] [cursor=pointer]:
+                - /url: /page/vv-1781082871090
+                - img [ref=e80]
+                - generic [ref=e83]: vv-1781082871090
+            - listitem [ref=e84]:
+              - link "pruebas-1" [ref=e85] [cursor=pointer]:
+                - /url: /page/pruebas-1
+                - img [ref=e87]
+                - generic [ref=e90]: pruebas-1
+          - link "Ver todas (150)" [ref=e91] [cursor=pointer]:
+            - /url: /pages
+        - generic [ref=e92]:
+          - generic [ref=e93]:
+            - heading "Plantillas" [level=3] [ref=e94]
+            - button "New template" [ref=e95] [cursor=pointer]:
+              - img [ref=e96]
+          - list [ref=e97]:
+            - listitem [ref=e98]:
+              - 'button "Create page from template: mcp-seed-1780773584056-vz1h" [ref=e99] [cursor=pointer]':
+                - img [ref=e101]
+                - generic [ref=e104]: mcp-seed-1780773584056-vz1h
+            - listitem [ref=e105]:
+              - 'button "Create page from template: mcp-seed-1780773721871-15ju" [ref=e106] [cursor=pointer]':
+                - img [ref=e108]
+                - generic [ref=e111]: mcp-seed-1780773721871-15ju
+            - listitem [ref=e112]:
+              - 'button "Create page from template: mcp-seed-1780773813063-a5h1" [ref=e113] [cursor=pointer]':
+                - img [ref=e115]
+                - generic [ref=e118]: mcp-seed-1780773813063-a5h1
+            - listitem [ref=e119]:
+              - 'button "Create page from template: mcp-seed-1780773860020-bkd4" [ref=e120] [cursor=pointer]':
+                - img [ref=e122]
+                - generic [ref=e125]: mcp-seed-1780773860020-bkd4
+            - listitem [ref=e126]:
+              - 'button "Create page from template: pruebas" [ref=e127] [cursor=pointer]':
+                - img [ref=e129]
+                - generic [ref=e132]: pruebas
+            - listitem [ref=e133]:
+              - 'button "Create page from template: t1-tpl-1780773721804-2ic4" [ref=e134] [cursor=pointer]':
+                - img [ref=e136]
+                - generic [ref=e139]: t1-tpl-1780773721804-2ic4
+            - listitem [ref=e140]:
+              - 'button "Create page from template: t1-tpl-1780773812833-8v0x" [ref=e141] [cursor=pointer]':
+                - img [ref=e143]
+                - generic [ref=e146]: t1-tpl-1780773812833-8v0x
+            - listitem [ref=e147]:
+              - 'button "Create page from template: t1-tpl-1780773859720-m266" [ref=e148] [cursor=pointer]':
+                - img [ref=e150]
+                - generic [ref=e153]: t1-tpl-1780773859720-m266
+            - listitem [ref=e154]:
+              - 'button "Create page from template: t1-tpl-1780774018248-ufrn" [ref=e155] [cursor=pointer]':
+                - img [ref=e157]
+                - generic [ref=e160]: t1-tpl-1780774018248-ufrn
+            - listitem [ref=e161]:
+              - 'button "Create page from template: t1-tpl-1780774074539-kp21" [ref=e162] [cursor=pointer]':
+                - img [ref=e164]
+                - generic [ref=e167]: t1-tpl-1780774074539-kp21
+            - listitem [ref=e168]:
+              - 'button "Create page from template: t1-tpl-1780774125898-c17y" [ref=e169] [cursor=pointer]':
+                - img [ref=e171]
+                - generic [ref=e174]: t1-tpl-1780774125898-c17y
+            - listitem [ref=e175]:
+              - 'button "Create page from template: t2-a-1780773721815-xwta" [ref=e176] [cursor=pointer]':
+                - img [ref=e178]
+                - generic [ref=e181]: t2-a-1780773721815-xwta
+            - listitem [ref=e182]:
+              - 'button "Create page from template: t2-a-1780773813324-7rkw" [ref=e183] [cursor=pointer]':
+                - img [ref=e185]
+                - generic [ref=e188]: t2-a-1780773813324-7rkw
+            - listitem [ref=e189]:
+              - 'button "Create page from template: t2-a-1780773859888-t0np" [ref=e190] [cursor=pointer]':
+                - img [ref=e192]
+                - generic [ref=e195]: t2-a-1780773859888-t0np
+            - listitem [ref=e196]:
+              - 'button "Create page from template: t2-a-1780774018179-ytq8" [ref=e197] [cursor=pointer]':
+                - img [ref=e199]
+                - generic [ref=e202]: t2-a-1780774018179-ytq8
+            - listitem [ref=e203]:
+              - 'button "Create page from template: t2-a-1780774074536-auoo" [ref=e204] [cursor=pointer]':
+                - img [ref=e206]
+                - generic [ref=e209]: t2-a-1780774074536-auoo
+            - listitem [ref=e210]:
+              - 'button "Create page from template: t2-a-1780774137407-wfui" [ref=e211] [cursor=pointer]':
+                - img [ref=e213]
+                - generic [ref=e216]: t2-a-1780774137407-wfui
+            - listitem [ref=e217]:
+              - 'button "Create page from template: t2-b-1780773721815-xwta" [ref=e218] [cursor=pointer]':
+                - img [ref=e220]
+                - generic [ref=e223]: t2-b-1780773721815-xwta
+            - listitem [ref=e224]:
+              - 'button "Create page from template: t2-b-1780773813324-7rkw" [ref=e225] [cursor=pointer]':
+                - img [ref=e227]
+                - generic [ref=e230]: t2-b-1780773813324-7rkw
+            - listitem [ref=e231]:
+              - 'button "Create page from template: t2-b-1780773859888-t0np" [ref=e232] [cursor=pointer]':
+                - img [ref=e234]
+                - generic [ref=e237]: t2-b-1780773859888-t0np
+            - listitem [ref=e238]:
+              - 'button "Create page from template: t2-b-1780774018179-ytq8" [ref=e239] [cursor=pointer]':
+                - img [ref=e241]
+                - generic [ref=e244]: t2-b-1780774018179-ytq8
+            - listitem [ref=e245]:
+              - 'button "Create page from template: t2-b-1780774074536-auoo" [ref=e246] [cursor=pointer]':
+                - img [ref=e248]
+                - generic [ref=e251]: t2-b-1780774074536-auoo
+            - listitem [ref=e252]:
+              - 'button "Create page from template: t2-b-1780774137407-wfui" [ref=e253] [cursor=pointer]':
+                - img [ref=e255]
+                - generic [ref=e258]: t2-b-1780774137407-wfui
+            - listitem [ref=e259]:
+              - 'button "Create page from template: t3-tpl-1780773723224-zhqv" [ref=e260] [cursor=pointer]':
+                - img [ref=e262]
+                - generic [ref=e265]: t3-tpl-1780773723224-zhqv
+            - listitem [ref=e266]:
+              - 'button "Create page from template: t3-tpl-1780773813257-0gmt" [ref=e267] [cursor=pointer]':
+                - img [ref=e269]
+                - generic [ref=e272]: t3-tpl-1780773813257-0gmt
+            - listitem [ref=e273]:
+              - 'button "Create page from template: t3-tpl-1780773859890-beds" [ref=e274] [cursor=pointer]':
+                - img [ref=e276]
+                - generic [ref=e279]: t3-tpl-1780773859890-beds
+            - listitem [ref=e280]:
+              - 'button "Create page from template: t3-tpl-1780774018166-jf0j" [ref=e281] [cursor=pointer]':
+                - img [ref=e283]
+                - generic [ref=e286]: t3-tpl-1780774018166-jf0j
+            - listitem [ref=e287]:
+              - 'button "Create page from template: t3-tpl-1780774074545-p16z" [ref=e288] [cursor=pointer]':
+                - img [ref=e290]
+                - generic [ref=e293]: t3-tpl-1780774074545-p16z
+            - listitem [ref=e294]:
+              - 'button "Create page from template: t3-tpl-1780774148942-8bgn" [ref=e295] [cursor=pointer]':
+                - img [ref=e297]
+                - generic [ref=e300]: t3-tpl-1780774148942-8bgn
+            - listitem [ref=e301]:
+              - 'button "Create page from template: t5-tpl-1780773723451-w4uv" [ref=e302] [cursor=pointer]':
+                - img [ref=e304]
+                - generic [ref=e307]: t5-tpl-1780773723451-w4uv
+            - listitem [ref=e308]:
+              - 'button "Create page from template: t5-tpl-1780773813157-cpre" [ref=e309] [cursor=pointer]':
+                - img [ref=e311]
+                - generic [ref=e314]: t5-tpl-1780773813157-cpre
+            - listitem [ref=e315]:
+              - 'button "Create page from template: t5-tpl-1780773859629-m8v3" [ref=e316] [cursor=pointer]':
+                - img [ref=e318]
+                - generic [ref=e321]: t5-tpl-1780773859629-m8v3
+            - listitem [ref=e322]:
+              - 'button "Create page from template: t5-tpl-1780774018177-40b8" [ref=e323] [cursor=pointer]':
+                - img [ref=e325]
+                - generic [ref=e328]: t5-tpl-1780774018177-40b8
+            - listitem [ref=e329]:
+              - 'button "Create page from template: t5-tpl-1780774074581-ox1d" [ref=e330] [cursor=pointer]':
+                - img [ref=e332]
+                - generic [ref=e335]: t5-tpl-1780774074581-ox1d
+            - listitem [ref=e336]:
+              - 'button "Create page from template: t5-tpl-1780774171982-o1uq" [ref=e337] [cursor=pointer]':
+                - img [ref=e339]
+                - generic [ref=e342]: t5-tpl-1780774171982-o1uq
+            - listitem [ref=e343]:
+              - 'button "Create page from template: t6-tpl-1780773723558-x8or" [ref=e344] [cursor=pointer]':
+                - img [ref=e346]
+                - generic [ref=e349]: t6-tpl-1780773723558-x8or
+            - listitem [ref=e350]:
+              - 'button "Create page from template: t6-tpl-1780773814644-qu9c" [ref=e351] [cursor=pointer]':
+                - img [ref=e353]
+                - generic [ref=e356]: t6-tpl-1780773814644-qu9c
+            - listitem [ref=e357]:
+              - 'button "Create page from template: t6-tpl-1780773861356-r4of" [ref=e358] [cursor=pointer]':
+                - img [ref=e360]
+                - generic [ref=e363]: t6-tpl-1780773861356-r4of
+            - listitem [ref=e364]:
+              - 'button "Create page from template: t6-tpl-1780774018159-3jwt" [ref=e365] [cursor=pointer]':
+                - img [ref=e367]
+                - generic [ref=e370]: t6-tpl-1780774018159-3jwt
+            - listitem [ref=e371]:
+              - 'button "Create page from template: t6-tpl-1780774074539-ik22" [ref=e372] [cursor=pointer]':
+                - img [ref=e374]
+                - generic [ref=e377]: t6-tpl-1780774074539-ik22
+            - listitem [ref=e378]:
+              - 'button "Create page from template: t6-tpl-1780774183493-z3e8" [ref=e379] [cursor=pointer]':
+                - img [ref=e381]
+                - generic [ref=e384]: t6-tpl-1780774183493-z3e8
+            - listitem [ref=e385]:
+              - 'button "Create page from template: tpl-1780773582808-58xu" [ref=e386] [cursor=pointer]':
+                - img [ref=e388]
+                - generic [ref=e391]: tpl-1780773582808-58xu
+            - listitem [ref=e392]:
+              - 'button "Create page from template: tpl-1780773721684-hans" [ref=e393] [cursor=pointer]':
+                - img [ref=e395]
+                - generic [ref=e398]: tpl-1780773721684-hans
+            - listitem [ref=e399]:
+              - 'button "Create page from template: tpl-1780773813119-sanq" [ref=e400] [cursor=pointer]':
+                - img [ref=e402]
+                - generic [ref=e405]: tpl-1780773813119-sanq
+            - listitem [ref=e406]:
+              - 'button "Create page from template: tpl-1780773859510-upfa" [ref=e407] [cursor=pointer]':
+                - img [ref=e409]
+                - generic [ref=e412]: tpl-1780773859510-upfa
+        - generic [ref=e413]:
+          - heading "Recientes" [level=3] [ref=e414]
+          - list [ref=e415]:
+            - listitem [ref=e416]:
+              - button "pruebas-1" [ref=e417] [cursor=pointer]:
+                - img [ref=e419]
+                - generic [ref=e422]: pruebas-1
+      - generic [ref=e423]:
+        - button "New page" [ref=e424] [cursor=pointer]:
+          - img [ref=e425]
+          - text: Nueva página
+        - button "Agent activity" [ref=e426] [cursor=pointer]:
+          - img [ref=e427]
+          - text: Agent activity
+  - generic [ref=e430]:
+    - banner [ref=e431]:
+      - button "Close sidebar" [ref=e432] [cursor=pointer]:
+        - img [ref=e433]
+      - generic [ref=e434]: pruebas-1
+      - generic [ref=e435]:
+        - button "Layout" [ref=e437] [cursor=pointer]:
+          - img [ref=e438]
+        - button "More actions" [ref=e444] [cursor=pointer]:
+          - img [ref=e445]
+      - button "Close backlinks panel" [ref=e449] [cursor=pointer]:
+        - img [ref=e450]
+      - button "Switch to dark theme" [ref=e453] [cursor=pointer]:
+        - img [ref=e454]
+      - link "Settings" [ref=e456] [cursor=pointer]:
+        - /url: /settings
+        - img [ref=e457]
+      - generic "Polling mode" [ref=e460]:
+        - generic [ref=e462]: Polling
+      - button "User menu" [ref=e463] [cursor=pointer]: U
+    - generic [ref=e464]:
+      - generic [ref=e465] [cursor=pointer]:
+        - img [ref=e466]
+        - generic [ref=e469]: pruebas-1
+        - button "Close pruebas-1 tab" [ref=e470]:
+          - img [ref=e471]
+      - button "Open new tab" [ref=e474] [cursor=pointer]:
+        - img [ref=e475]
+    - main [ref=e476]:
+      - generic [ref=e478]:
+        - generic [ref=e480]:
+          - heading "pruebas-1" [level=1] [ref=e481]
+          - button "Add to favorites" [ref=e482] [cursor=pointer]:
+            - img [ref=e483]
+        - generic [ref=e486]:
+          - generic [ref=e489]:
+            - button [ref=e490]:
+              - img [ref=e491]
+            - button "Bullet" [ref=e498]
+            - generic [ref=e501]:
+              - generic [ref=e502] [cursor=pointer]:
+                - generic [ref=e503]: sdfasdf
+                - generic [ref=e504]: ●
+                - generic [ref=e505]: sdf
+              - generic [ref=e506] [cursor=pointer]:
+                - generic [ref=e507]: property1
+                - generic [ref=e508]: ●
+                - generic [ref=e509]: as
+            - generic [ref=e510]:
+              - button "Add comment" [ref=e511] [cursor=pointer]:
+                - img [ref=e512]
+              - button "Add child block" [ref=e514] [cursor=pointer]:
+                - img [ref=e515]
+              - button "More actions" [ref=e516] [cursor=pointer]:
+                - img [ref=e517]
+              - button "Show properties" [ref=e521] [cursor=pointer]:
+                - img [ref=e522]
+          - generic [ref=e527]:
+            - button [ref=e528]:
+              - img [ref=e529]
+            - button "Collapse block" [ref=e536] [cursor=pointer]:
+              - img [ref=e537]
+            - generic [ref=e541] [cursor=pointer]:
+              - generic [ref=e542]: property2
+              - generic [ref=e543]: ●
+              - generic [ref=e544]: sdf
+            - generic [ref=e545]:
+              - button "Add comment" [ref=e546] [cursor=pointer]:
+                - img [ref=e547]
+              - button "Add child block" [ref=e549] [cursor=pointer]:
+                - img [ref=e550]
+              - button "More actions" [ref=e551] [cursor=pointer]:
+                - img [ref=e552]
+              - button "Show properties" [ref=e556] [cursor=pointer]:
+                - img [ref=e557]
+          - generic [ref=e562]:
+            - button [ref=e563]:
+              - img [ref=e564]
+            - button "Collapse block" [ref=e571] [cursor=pointer]:
+              - img [ref=e572]
+            - generic [ref=e575]:
+              - text: sdf asd fasd fasd fasd fasdf asd fasd fasd fasd fasd fasd fsdf asdf asd fasd fasd fasd fasdf asd fasd fasd fasd fasd fasd fasd fasd fasd fasd fsdf
+              - text: sd sd sdf s
+              - text: s fasd fas
+            - generic [ref=e576]:
+              - button "Add comment" [ref=e577] [cursor=pointer]:
+                - img [ref=e578]
+              - button "Add child block" [ref=e580] [cursor=pointer]:
+                - img [ref=e581]
+              - button "More actions" [ref=e582] [cursor=pointer]:
+                - img [ref=e583]
+              - button "Show properties" [ref=e587] [cursor=pointer]:
+                - img [ref=e588]
+          - generic [ref=e593]:
+            - button [ref=e594]:
+              - img [ref=e595]
+            - button "Bullet" [ref=e602]
+            - generic [ref=e605]: "# Pruebas"
+            - generic [ref=e606]:
+              - button "Add comment" [ref=e607] [cursor=pointer]:
+                - img [ref=e608]
+              - button "Add child block" [ref=e610] [cursor=pointer]:
+                - img [ref=e611]
+              - button "More actions" [ref=e612] [cursor=pointer]:
+                - img [ref=e613]
+              - button "Show properties" [ref=e617] [cursor=pointer]:
+                - img [ref=e618]
+          - generic [ref=e623]:
+            - button [ref=e624]:
+              - img [ref=e625]
+            - button "Bullet" [ref=e632]
+            - generic [ref=e635]:
+              - button "Add comment" [ref=e636] [cursor=pointer]:
+                - img [ref=e637]
+              - button "Add child block" [ref=e639] [cursor=pointer]:
+                - img [ref=e640]
+              - button "More actions" [ref=e641] [cursor=pointer]:
+                - img [ref=e642]
+              - button "Show properties" [ref=e646] [cursor=pointer]:
+                - img [ref=e647]
+          - generic [ref=e652]:
+            - button [ref=e653]:
+              - img [ref=e654]
+            - button "Bullet" [ref=e661]
+            - generic [ref=e663]:
+              - generic [ref=e664]:
+                - text: sdfasdf
+                - text: "sdf property1:: as"
+              - generic [ref=e666] [cursor=pointer]:
+                - generic [ref=e667]: property2
+                - generic [ref=e668]: ●
+                - generic [ref=e669]: sdf
+            - generic [ref=e670]:
+              - button "Add comment" [ref=e671] [cursor=pointer]:
+                - img [ref=e672]
+              - button "Add child block" [ref=e674] [cursor=pointer]:
+                - img [ref=e675]
+              - button "More actions" [ref=e676] [cursor=pointer]:
+                - img [ref=e677]
+              - button "Show properties" [ref=e681] [cursor=pointer]:
+                - img [ref=e682]
+        - generic [ref=e685]:
+          - button "Add new block" [ref=e686] [cursor=pointer]:
+            - img [ref=e687]
+            - generic [ref=e688]: Add a block
+          - button "Add reference" [ref=e689] [cursor=pointer]:
+            - img [ref=e690]
+            - generic [ref=e693]: Reference
+          - button "Add documentation" [ref=e694] [cursor=pointer]:
+            - img [ref=e695]
+            - generic [ref=e698]: Documentation
+  - complementary [ref=e699]:
+    - button "Linked References 0" [ref=e700] [cursor=pointer]:
+      - img [ref=e701]
+      - img [ref=e703]
+      - generic [ref=e706]: Linked References
+      - generic [ref=e707]: "0"
+  - button "Help & keyboard shortcuts" [ref=e708] [cursor=pointer]:
+    - img [ref=e709]
