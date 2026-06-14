@@ -18,7 +18,7 @@ use crate::state::AppState;
 use quilt_application::services::ref_service::RefServiceTrait;
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::repositories::{
-    BlockRepository, PageRepository, RefRepository,
+    BlockRepository, PageRepository, RefRepository, SettingsRepository,
 };
 use quilt_domain::value_objects::{BlockFormat, JournalDay, Uuid};
 
@@ -276,10 +276,10 @@ pub async fn get_page(
 }
 
 /// POST /api/v1/pages
-#[instrument(skip(state, page_repo))]
+#[instrument(skip(page_repo, settings_repo))]
 pub async fn create_page(
-    Extension(state): Extension<AppState>,
     Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(settings_repo): Extension<Arc<dyn SettingsRepository>>,
     Json(payload): Json<CreatePageRequest>,
 ) -> Result<(StatusCode, Json<PageDto>), AppError> {
     if payload.is_journal.unwrap_or(false) {
@@ -292,8 +292,7 @@ pub async fn create_page(
                 .map_err(|e| AppError::BadRequest(format!("Invalid journal date: {}", e)))?
         };
 
-        let settings = state
-            .settings_repo
+        let settings = settings_repo
             .get_user_settings()
             .await
             .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -330,11 +329,11 @@ pub async fn create_page(
 }
 
 /// GET /api/v1/pages/journal/:date
-#[instrument(skip(state, page_repo))]
+#[instrument(skip(page_repo, settings_repo))]
 pub async fn get_journal(
     Path(date): Path<String>,
-    Extension(state): Extension<AppState>,
     Extension(page_repo): Extension<Arc<dyn PageRepository>>,
+    Extension(settings_repo): Extension<Arc<dyn SettingsRepository>>,
 ) -> Result<Json<PageDto>, AppError> {
     let day = JournalDay::from_str(&date)
         .map_err(|e| AppError::BadRequest(format!("Invalid journal date: {}", e)))?;
@@ -343,8 +342,7 @@ pub async fn get_journal(
         Ok(Some(p)) => p,
         Ok(None) => {
             // Read user's journal format setting
-            let settings = state
-                .settings_repo
+            let settings = settings_repo
                 .get_user_settings()
                 .await
                 .map_err(|e| AppError::Internal(e.to_string()))?;

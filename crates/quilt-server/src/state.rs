@@ -15,6 +15,50 @@ use quilt_search::SearchIndexManager;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};
 
+/// Bundles all repository traits into a single cloneable struct.
+///
+/// This reduces boilerplate in `AppState` by grouping the 9 repository Arc fields
+/// into one field, while still preserving ISP (each repository is a separate trait).
+#[derive(Clone)]
+pub struct RepositoryBundle {
+    pub block: Arc<dyn BlockRepository>,
+    pub page: Arc<dyn PageRepository>,
+    pub ref_repo: Arc<dyn RefRepository>,
+    pub settings: Arc<dyn SettingsRepository>,
+    pub tag: Arc<dyn TagRepository>,
+    pub relation: Arc<dyn RelationRepository>,
+    pub schema: Arc<dyn SchemaRepository>,
+    pub property: Arc<dyn PropertyRepository>,
+    pub tour_state: Arc<dyn TourStateRepository>,
+}
+
+impl RepositoryBundle {
+    #[allow(dead_code)]
+    pub fn new(
+        block: Arc<dyn BlockRepository>,
+        page: Arc<dyn PageRepository>,
+        ref_repo: Arc<dyn RefRepository>,
+        settings: Arc<dyn SettingsRepository>,
+        tag: Arc<dyn TagRepository>,
+        relation: Arc<dyn RelationRepository>,
+        schema: Arc<dyn SchemaRepository>,
+        property: Arc<dyn PropertyRepository>,
+        tour_state: Arc<dyn TourStateRepository>,
+    ) -> Self {
+        Self {
+            block,
+            page,
+            ref_repo,
+            settings,
+            tag,
+            relation,
+            schema,
+            property,
+            tour_state,
+        }
+    }
+}
+
 /// Navigation event sent to WebSocket clients
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,24 +113,8 @@ impl NavigationEvent {
 /// the `FromRef` implementations.
 #[derive(Clone)]
 pub struct AppState {
-    /// Block repository for block data access
-    pub block_repo: Arc<dyn BlockRepository>,
-    /// Page repository for page data access
-    pub page_repo: Arc<dyn PageRepository>,
-    /// Ref repository for reference data access
-    pub ref_repo: Arc<dyn RefRepository>,
-    /// Settings repository for user preferences
-    pub settings_repo: Arc<dyn SettingsRepository>,
-    /// Tag repository for tag data access
-    pub tag_repo: Arc<dyn TagRepository>,
-    /// Relation repository for property relations
-    pub relation_repo: Arc<dyn RelationRepository>,
-    /// Schema repository for property schemas
-    pub schema_repo: Arc<dyn SchemaRepository>,
-    /// Property repository for property definitions
-    pub property_repo: Arc<dyn PropertyRepository>,
-    /// Tour state repository for tour dismissals
-    pub tour_state_repo: Arc<dyn TourStateRepository>,
+    /// All repositories bundled into a single cloneable struct
+    pub repos: RepositoryBundle,
     /// Search service for full-text search
     pub search_service: Arc<SearchService>,
     /// Application services (use cases) - wrapped in Arc so AppState can be Clone
@@ -109,55 +137,55 @@ pub struct AppState {
 
 impl FromRef<AppState> for Arc<dyn BlockRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.block_repo.clone()
+        state.repos.block.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn PageRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.page_repo.clone()
+        state.repos.page.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn RefRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.ref_repo.clone()
+        state.repos.ref_repo.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn SettingsRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.settings_repo.clone()
+        state.repos.settings.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn TagRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.tag_repo.clone()
+        state.repos.tag.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn RelationRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.relation_repo.clone()
+        state.repos.relation.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn SchemaRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.schema_repo.clone()
+        state.repos.schema.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn PropertyRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.property_repo.clone()
+        state.repos.property.clone()
     }
 }
 
 impl FromRef<AppState> for Arc<dyn TourStateRepository> {
     fn from_ref(state: &AppState) -> Self {
-        state.tour_state_repo.clone()
+        state.repos.tour_state.clone()
     }
 }
 
@@ -181,15 +209,7 @@ impl AppState {
     /// the dependency inversion principle (handlers depend on interfaces).
     #[allow(dead_code)]
     pub fn new_with_repos(
-        block_repo: Arc<dyn BlockRepository>,
-        page_repo: Arc<dyn PageRepository>,
-        ref_repo: Arc<dyn RefRepository>,
-        settings_repo: Arc<dyn SettingsRepository>,
-        tag_repo: Arc<dyn TagRepository>,
-        relation_repo: Arc<dyn RelationRepository>,
-        schema_repo: Arc<dyn SchemaRepository>,
-        property_repo: Arc<dyn PropertyRepository>,
-        tour_state_repo: Arc<dyn TourStateRepository>,
+        repos: RepositoryBundle,
         search_service: Arc<SearchService>,
         search_index: Arc<SearchIndexManager>,
         ref_service: Arc<dyn RefServiceTrait>,
@@ -199,15 +219,7 @@ impl AppState {
         let (navigation_tx, _) = broadcast::channel(100);
 
         Self {
-            block_repo,
-            page_repo,
-            ref_repo,
-            settings_repo,
-            tag_repo,
-            relation_repo,
-            schema_repo,
-            property_repo,
-            tour_state_repo,
+            repos,
             search_service,
             services,
             search_index,

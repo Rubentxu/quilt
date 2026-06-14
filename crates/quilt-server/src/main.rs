@@ -21,7 +21,7 @@ mod routes;
 mod state;
 
 use crate::handlers::metrics;
-use crate::state::AppState;
+use crate::state::{AppState, RepositoryBundle};
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
@@ -172,7 +172,8 @@ async fn main() -> Result<()> {
     };
     middleware::auth::init(api_key);
 
-    let state = AppState::new_with_repos(
+    // Bundle all repositories
+    let repos = RepositoryBundle::new(
         block_repo,
         page_repo,
         ref_repo,
@@ -182,6 +183,10 @@ async fn main() -> Result<()> {
         schema_repo,
         property_repo,
         tour_state_repo,
+    );
+
+    let state = AppState::new_with_repos(
+        repos,
         search_service,
         search_index,
         ref_service,

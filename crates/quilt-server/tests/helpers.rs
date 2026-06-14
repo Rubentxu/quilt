@@ -16,6 +16,7 @@ use quilt_infrastructure::database::sqlite::repositories::{
     SqliteTourStateRepository,
 };
 use quilt_search::{SearchIndexManager, SearchService};
+use quilt_server::state::RepositoryBundle;
 use std::sync::Arc;
 
 /// Build a minimal AppState for testing.
@@ -103,7 +104,8 @@ pub async fn build_test_app_state_with_repos(
         tour_state_use_cases,
     );
 
-    let state = quilt_server::state::AppState::new_with_repos(
+    // Bundle all repositories
+    let repos = RepositoryBundle::new(
         block_repo.clone(),
         page_repo.clone(),
         ref_repo.clone(),
@@ -113,6 +115,10 @@ pub async fn build_test_app_state_with_repos(
         schema_repo.clone(),
         property_repo.clone(),
         tour_state_repo.clone(),
+    );
+
+    let state = quilt_server::state::AppState::new_with_repos(
+        repos,
         search_service,
         search_index,
         ref_service,

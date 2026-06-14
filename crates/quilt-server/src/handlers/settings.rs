@@ -6,8 +6,9 @@ use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::error::AppError;
-use crate::state::AppState;
 use quilt_domain::entities::UserSettings;
+use quilt_domain::repositories::SettingsRepository;
+use std::sync::Arc;
 
 use quilt_domain::value_objects::BlockFormat;
 
@@ -42,12 +43,11 @@ pub async fn get_date_formats() -> Json<Vec<DateFormatOption>> {
 }
 
 /// GET /api/v1/settings
-#[instrument(skip(state))]
+#[instrument(skip(settings_repo))]
 pub async fn get_settings(
-    Extension(state): Extension<AppState>,
+    Extension(settings_repo): Extension<Arc<dyn SettingsRepository>>,
 ) -> Result<Json<UserSettings>, AppError> {
-    let settings = state
-        .settings_repo
+    let settings = settings_repo
         .get_user_settings()
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -66,14 +66,13 @@ pub struct UpdateSettingsRequest {
 /// PUT /api/v1/settings
 ///
 /// Partial update: only provided fields are updated. Missing fields keep their current value.
-#[instrument(skip(state))]
+#[instrument(skip(settings_repo))]
 pub async fn update_settings(
-    Extension(state): Extension<AppState>,
+    Extension(settings_repo): Extension<Arc<dyn SettingsRepository>>,
     Json(req): Json<UpdateSettingsRequest>,
 ) -> Result<Json<UserSettings>, AppError> {
     // Fetch current settings
-    let current = state
-        .settings_repo
+    let current = settings_repo
         .get_user_settings()
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -93,8 +92,7 @@ pub async fn update_settings(
         .validate()
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
-    state
-        .settings_repo
+    settings_repo
         .update_user_settings(&updated)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
