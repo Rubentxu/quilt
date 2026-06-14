@@ -455,7 +455,7 @@ impl ToolHandler for TemplateToolHandler {
                     .and_then(|v| v.as_str())
                     .ok_or("Missing 'block_id'")?;
                 let block_uuid = quilt_domain::value_objects::Uuid::parse_str(block_id_str)
-                    .ok_or_else(|| format!("Invalid block_id format: {}", block_id_str))?;
+                    .map_err(|_| format!("Invalid block_id format: {}", block_id_str))?;
 
                 let mode_str = args
                     .get("mode")
@@ -540,7 +540,7 @@ impl ToolHandler for TemplateToolHandler {
                 // Rich tier: block_ids in evidence
                 let mut ev = Evidence::universal_fallback(name);
                 if let Some(block_id_str) = args.get("block_id").and_then(|v| v.as_str())
-                    && let Some(uuid) = quilt_domain::value_objects::Uuid::parse_str(block_id_str)
+                    && let Some(uuid) = quilt_domain::value_objects::Uuid::parse_str(block_id_str).ok()
                 {
                     ev.block_ids = vec![uuid.into()];
                 }
@@ -557,7 +557,7 @@ impl ToolHandler for TemplateToolHandler {
                 // Rich tier: block_ids in evidence
                 let mut ev = Evidence::universal_fallback(name);
                 if let Some(block_id_str) = args.get("block_id").and_then(|v| v.as_str())
-                    && let Some(uuid) = quilt_domain::value_objects::Uuid::parse_str(block_id_str)
+                    && let Some(uuid) = quilt_domain::value_objects::Uuid::parse_str(block_id_str).ok()
                 {
                     ev.block_ids = vec![uuid.into()];
                 }
@@ -633,7 +633,7 @@ impl TemplateToolHandler {
                 serde_json::to_string_pretty(&err).unwrap_or_default()
             })?;
 
-        let template_id = quilt_domain::value_objects::Uuid::parse_str(template_id_str).ok_or_else(|| {
+        let template_id = quilt_domain::value_objects::Uuid::parse_str(template_id_str).map_err(|_| {
             let err = ContractErrorWire {
                 error: "invalid_argument",
                 property: None,
@@ -796,7 +796,7 @@ impl TemplateToolHandler {
                 };
                 serde_json::to_string_pretty(&err).unwrap_or_default()
             })?;
-        let block_uuid = quilt_domain::value_objects::Uuid::parse_str(block_id_str).ok_or_else(|| {
+        let block_uuid = quilt_domain::value_objects::Uuid::parse_str(block_id_str).map_err(|_| {
             let err = ContractErrorWire {
                 error: "invalid_argument",
                 property: None,
@@ -811,7 +811,7 @@ impl TemplateToolHandler {
 
         // 2. Resolve template id (prefer template_id, fallback to template_name)
         let template_id = if let Some(tid_str) = args.get("template_id").and_then(|v| v.as_str()) {
-            quilt_domain::value_objects::Uuid::parse_str(tid_str).ok_or_else(|| {
+            quilt_domain::value_objects::Uuid::parse_str(tid_str).map_err(|_| {
                 let err = ContractErrorWire {
                     error: "invalid_argument",
                     property: None,

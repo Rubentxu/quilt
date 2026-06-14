@@ -74,7 +74,7 @@ impl ToolHandler for GraphToolHandler {
 
                 // Parse block UUID
                 let block_id = Uuid::parse_str(block_id_str)
-                    .ok_or_else(|| "Invalid block_id: must be a UUID")?;
+                    .map_err(|_| "Invalid block_id: must be a UUID")?;
 
                 // Get block tree at depth=1 (immediate children)
                 let tree = self
@@ -120,12 +120,12 @@ impl ToolHandler for GraphToolHandler {
                 if let Some(edges) = result.get("edges").and_then(|v| v.as_array()) {
                     for edge in edges {
                         if let Some(from) = edge.get("from").and_then(|v| v.as_str()) {
-                            if let Some(uuid) = Uuid::parse_str(from) {
+                            if let Some(uuid) = Uuid::parse_str(from).ok() {
                                 ev.block_ids.push(uuid.into()); // domain Uuid → uuid::Uuid
                             }
                         }
                         if let Some(to) = edge.get("to").and_then(|v| v.as_str()) {
-                            if let Some(uuid) = Uuid::parse_str(to) {
+                            if let Some(uuid) = Uuid::parse_str(to).ok() {
                                 ev.block_ids.push(uuid.into()); // domain Uuid → uuid::Uuid
                             }
                         }

@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use quilt_application::ApplicationError;
 use quilt_application::use_cases::{BlockTree, BlockUseCases};
-use quilt_domain::entities::Block;
+use quilt_domain::entities::{Block, BlockUpdate};
 use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, TaskMarker, Uuid};
 use quilt_mcp::handlers::ToolHandler;
 use quilt_mcp::handlers::block::BlockToolHandler;
@@ -168,6 +168,88 @@ impl BlockUseCases for MockBlockUseCases {
             ));
         }
         Ok(vec![])
+    }
+
+    async fn create_with_insert_after(
+        &self,
+        _page_name: &str,
+        content: &str,
+        _after_block_id: Uuid,
+        _marker: Option<TaskMarker>,
+        _properties: HashMap<String, PropertyValue>,
+    ) -> Result<Block, ApplicationError> {
+        if let Some(err) = self.inject_error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        let block = Self::make_block(Uuid::new_v4(), content);
+        self.created_blocks.lock().unwrap().push(block.clone());
+        Ok(block)
+    }
+
+    async fn update_block(
+        &self,
+        _block_id: Uuid,
+        _update: BlockUpdate,
+    ) -> Result<Block, ApplicationError> {
+        if let Some(err) = self.inject_error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        Ok(Self::make_block(Uuid::new_v4(), "updated"))
+    }
+
+    async fn list_distinct_authors(
+        &self,
+        _prefix: Option<&str>,
+    ) -> Result<Vec<String>, ApplicationError> {
+        if let Some(err) = self.inject_error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        Ok(vec![])
+    }
+
+    async fn set_property(
+        &self,
+        _block_id: Uuid,
+        _key: String,
+        _value: PropertyValue,
+    ) -> Result<Block, ApplicationError> {
+        if let Some(err) = self.inject_error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        Ok(Self::make_block(Uuid::new_v4(), "property set"))
+    }
+
+    async fn delete_property(
+        &self,
+        _block_id: Uuid,
+        _key: &str,
+    ) -> Result<Block, ApplicationError> {
+        if let Some(err) = self.inject_error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        Ok(Self::make_block(Uuid::new_v4(), "property deleted"))
+    }
+
+    async fn get_properties(
+        &self,
+        _block_id: Uuid,
+    ) -> Result<HashMap<String, PropertyValue>, ApplicationError> {
+        if let Some(err) = self.inject_error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        Ok(HashMap::new())
     }
 }
 

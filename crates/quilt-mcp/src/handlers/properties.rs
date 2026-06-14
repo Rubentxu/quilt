@@ -7,7 +7,7 @@ use crate::protocol::Evidence;
 use crate::tools::Tool;
 use async_trait::async_trait;
 use quilt_application::property::{
-    PropertyService, PropertyServiceTrait, PropertySuggestion,
+    PropertyServiceTrait,
 };
 use quilt_domain::properties::analytics::AnalyticsParams;
 use serde_json::Value;

@@ -5,7 +5,7 @@ use quilt_application::schema::{SchemaService, SchemaServiceTrait};
 use quilt_domain::properties::schema::{AutoDetectParams, PropertySchema};
 use quilt_domain::value_objects::Uuid;
 use serde_json::Value;
-use std::sync::Arc;
+
 
 use crate::handlers::ToolHandler;
 use crate::protocol::Evidence;

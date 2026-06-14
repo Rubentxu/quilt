@@ -143,6 +143,24 @@ impl PageUseCases for MockPageUseCases {
         .unwrap();
         Ok(page)
     }
+
+    async fn get_by_name(&self, name: &str) -> Result<Option<Page>, ApplicationError> {
+        if let Some(err) = self.error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        Ok(self.pages.lock().unwrap().iter().find(|p| p.name == name).cloned())
+    }
+
+    async fn search(&self, _query: &str, _limit: usize) -> Result<Vec<Page>, ApplicationError> {
+        if let Some(err) = self.error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        Ok(self.pages.lock().unwrap().clone())
+    }
 }
 
 // ── Helpers ──────────────────────────────────────────────────

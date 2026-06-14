@@ -20,14 +20,14 @@ fn parse_uuid(args: &Value, key: &str) -> Result<Uuid, String> {
         .get(key)
         .and_then(|v| v.as_str())
         .ok_or_else(|| format!("Missing '{}' parameter", key))?;
-    Uuid::parse_str(s).ok_or_else(|| format!("Invalid UUID: {}", s))
+    Uuid::parse_str(s).map_err(|e| format!("Invalid UUID: {} - {}", s, e))
 }
 
 /// Parse an optional UUID from JSON args.
 fn parse_optional_uuid(args: &Value, key: &str) -> Result<Option<Uuid>, String> {
     match args.get(key).and_then(|v| v.as_str()) {
         Some(s) if !s.is_empty() => Ok(Some(
-            Uuid::parse_str(s).ok_or_else(|| format!("Invalid UUID: {}", s))?,
+            Uuid::parse_str(s).map_err(|e| format!("Invalid UUID: {} - {}", s, e))?,
         )),
         _ => Ok(None),
     }
@@ -339,7 +339,7 @@ impl ToolHandler for BlockToolHandler {
                 if let Some(uuid) = result
                     .get("id")
                     .and_then(|v| v.as_str())
-                    .and_then(Uuid::parse_str)
+                    .and_then(|s| Uuid::parse_str(s).ok())
                 {
                     ev.block_ids.push(uuid.into());
                 }
@@ -348,7 +348,7 @@ impl ToolHandler for BlockToolHandler {
                 if let Some(uuid) = result
                     .get("block_id")
                     .and_then(|v| v.as_str())
-                    .and_then(Uuid::parse_str)
+                    .and_then(|s| Uuid::parse_str(s).ok())
                 {
                     ev.block_ids.push(uuid.into());
                 }
@@ -358,7 +358,7 @@ impl ToolHandler for BlockToolHandler {
                     if let Some(uuid) = result
                         .get(k)
                         .and_then(|v| v.as_str())
-                        .and_then(Uuid::parse_str)
+                        .and_then(|s| Uuid::parse_str(s).ok())
                     {
                         ev.block_ids.push(uuid.into());
                     }
@@ -369,7 +369,7 @@ impl ToolHandler for BlockToolHandler {
                     .get("block")
                     .and_then(|b| b.get("id"))
                     .and_then(|v| v.as_str())
-                    .and_then(Uuid::parse_str)
+                    .and_then(|s| Uuid::parse_str(s).ok())
                 {
                     ev.block_ids.push(uuid.into());
                 }
@@ -379,7 +379,7 @@ impl ToolHandler for BlockToolHandler {
                             if let Some(uuid) = b
                                 .get("id")
                                 .and_then(|v| v.as_str())
-                                .and_then(Uuid::parse_str)
+                                .and_then(|s| Uuid::parse_str(s).ok())
                             {
                                 ev.block_ids.push(uuid.into());
                             }
@@ -393,7 +393,7 @@ impl ToolHandler for BlockToolHandler {
                         if let Some(uuid) = b
                             .get("id")
                             .and_then(|v| v.as_str())
-                            .and_then(Uuid::parse_str)
+                            .and_then(|s| Uuid::parse_str(s).ok())
                         {
                             ev.block_ids.push(uuid.into());
                         }
@@ -507,6 +507,51 @@ mod tests {
             Err(quilt_application::ApplicationError::Validation(
                 "noop".into(),
             ))
+        }
+        async fn create_with_insert_after(
+            &self,
+            _page_name: &str,
+            _content: &str,
+            _after_block_id: quilt_application::Uuid,
+            _marker: Option<quilt_application::TaskMarker>,
+            _properties: std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>,
+        ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn update_block(
+            &self,
+            _block_id: quilt_application::Uuid,
+            _update: quilt_domain::entities::BlockUpdate,
+        ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn list_distinct_authors(
+            &self,
+            _prefix: Option<&str>,
+        ) -> Result<Vec<String>, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn set_property(
+            &self,
+            _block_id: quilt_application::Uuid,
+            _key: String,
+            _value: quilt_domain::value_objects::PropertyValue,
+        ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn delete_property(
+            &self,
+            _block_id: quilt_application::Uuid,
+            _key: &str,
+        ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+        async fn get_properties(
+            &self,
+            _block_id: quilt_application::Uuid,
+        ) -> Result<std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>, quilt_application::ApplicationError>
+        {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
         }
     }
 
