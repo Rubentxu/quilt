@@ -146,7 +146,7 @@ impl QuiltCLI {
         parent_id: Option<&str>,
     ) -> Result<()> {
         let parent_uuid = parent_id
-            .map(|s| Uuid::parse_str(s).ok_or_else(|| anyhow::anyhow!("Invalid UUID: {}", s)))
+            .map(|s| Uuid::parse_str(s).map_err(|e| anyhow::anyhow!("Invalid UUID: {}", e)))
             .transpose()?;
 
         block_uc

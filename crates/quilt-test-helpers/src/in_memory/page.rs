@@ -156,6 +156,27 @@ impl PageRepository for InMemoryPageRepo {
             .collect())
     }
 
+    async fn search_by_name_or_title(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Page>, DomainError> {
+        let query_lower = query.to_lowercase();
+        let repo = self.repo.read();
+        Ok(repo
+            .values()
+            .filter(|p| {
+                p.name.to_lowercase().contains(&query_lower)
+                    || p.title
+                        .as_ref()
+                        .map(|t| t.to_lowercase().contains(&query_lower))
+                        .unwrap_or(false)
+            })
+            .take(limit)
+            .cloned()
+            .collect())
+    }
+
     async fn update_properties(
         &self,
         page_id: Uuid,
