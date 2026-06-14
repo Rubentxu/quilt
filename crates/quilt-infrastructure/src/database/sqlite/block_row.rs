@@ -200,7 +200,7 @@ pub(crate) fn parse_uuid_list(blob: &[u8]) -> Vec<Uuid> {
     }
     serde_json::from_slice::<Vec<String>>(blob)
         .ok()
-        .map(|v| v.iter().filter_map(|s| Uuid::parse_str(s)).collect())
+        .map(|v| v.iter().filter_map(|s| Uuid::parse_str(s).ok()).collect())
         .unwrap_or_default()
 }
 

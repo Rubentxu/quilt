@@ -135,7 +135,7 @@ fn format_to_str(f: &BlockFormat) -> &'static str {
 }
 
 fn parse_block_type(s: &str) -> Option<BlockType> {
-    BlockType::parse_str(s)
+    BlockType::parse_str(s).ok()
 }
 
 fn block_type_to_str(t: &BlockType) -> &'static str {
@@ -176,7 +176,7 @@ fn parse_uuid_list(blob: &[u8]) -> Vec<Uuid> {
     }
     serde_json::from_slice::<Vec<String>>(blob)
         .ok()
-        .map(|v| v.iter().filter_map(|s| Uuid::parse_str(s)).collect())
+        .map(|v| v.iter().filter_map(|s| Uuid::parse_str(s).ok()).collect())
         .unwrap_or_default()
 }
 
@@ -869,45 +869,7 @@ impl SqlitePageRepository {
         }
     }
 
-    /// Search pages whose `name` OR `title` contains the query
-    /// substring (case-insensitive `LIKE '%q%'`). S2-03 — the
-    /// server-side page search endpoint needs to match on both
-    /// columns because pages with a custom display title should
-    /// surface when the user types a fragment of the title that
-    /// does not appear in the (lowercased) name.
-    ///
-    /// The trait's `search(query, limit)` only matches on `name`,
-    /// which is what the rest of the codebase uses; this inherent
-    /// helper exists to give the HTTP handler an OR query without
-    /// widening the trait contract.
-    ///
-    /// `query` is the raw user input. The SQL is built with
-    /// `lower(...) LIKE lower('%query%')` so the comparison is
-    /// case-insensitive even for the `title` column (which is
-    /// stored as-typed, unlike `name` which the `Page` entity
-    /// lowercases on write).
-    pub async fn search_by_name_or_title(
-        &self,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<Page>, DomainError> {
-        let like = format!("%{}%", query.to_lowercase());
-        let rows = sqlx::query(
-            "SELECT * FROM pages \
-             WHERE lower(name) LIKE ? OR lower(IFNULL(title, '')) LIKE ? \
-             ORDER BY name LIMIT ?",
-        )
-        .bind(&like)
-        .bind(&like)
-        .bind(limit as i64)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::Storage(format!("search_by_name_or_title: {}", e)))?;
 
-        rows.iter()
-            .map(|r| PageRow::from_row(r)?.to_page())
-            .collect()
-    }
 
     /// Check whether a key resolves to a read-only PropertyDefinition.
     async fn is_read_only_key(&self, key: &str) -> bool {
@@ -1111,6 +1073,29 @@ impl PageRepository for SqlitePageRepository {
             .fetch_all(&self.pool)
             .await
             .map_err(|e| DomainError::Storage(format!("search: {}", e)))?;
+
+        rows.iter()
+            .map(|r| PageRow::from_row(r)?.to_page())
+            .collect()
+    }
+
+    async fn search_by_name_or_title(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Page>, DomainError> {
+        let like = format!("%{}%", query.to_lowercase());
+        let rows = sqlx::query(
+            "SELECT * FROM pages \
+             WHERE lower(name) LIKE ? OR lower(IFNULL(title, '')) LIKE ? \
+             ORDER BY name LIMIT ?",
+        )
+        .bind(&like)
+        .bind(&like)
+        .bind(limit as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("search_by_name_or_title: {}", e)))?;
 
         rows.iter()
             .map(|r| PageRow::from_row(r)?.to_page())
