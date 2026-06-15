@@ -53,7 +53,7 @@ export function parseAnnotationFlag(raw: string | undefined): boolean {
 
 /** Raw env-var read for projection flag — exported only for tests. */
 export function parseProjectionFlag(raw: string | undefined): boolean {
-  if (raw === undefined) return false // Default to OFF for backward compatibility
+  if (raw === undefined) return true // Default to ON — ADR-0025 projection renderer is the new standard path
   const normalized = raw.trim().toLowerCase()
   if (normalized === '') return false
   if (TRUTHY.has(normalized)) return true
