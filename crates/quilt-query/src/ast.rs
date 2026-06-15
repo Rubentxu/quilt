@@ -160,6 +160,22 @@ pub enum VirtualColumn {
     BlockAgeDays,
 }
 
+/// Date predicate for scheduled/deadline queries (T5).
+///
+/// Represents the different ways to specify a date in `(scheduled ...)` and
+/// `(deadline ...)` predicates.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum DatePredicate {
+    /// The current day (today)
+    Today,
+    /// The next day (tomorrow)
+    Tomorrow,
+    /// The previous day (yesterday)
+    Yesterday,
+    /// A relative offset from today (e.g., `-3d`, `+1w`)
+    Relative(crate::time_helpers::TimeOffset),
+}
+
 /// Abstract Syntax Tree (AST) for query expressions.
 ///
 /// Each variant represents a different query operation that can be
@@ -281,6 +297,38 @@ pub enum QueryAst {
         /// Inner expression
         inner: Box<QueryAst>,
     },
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // T5: Journal Aggregation Predicates
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Filter by scheduled date predicate (T5).
+    ///
+    /// `(scheduled today)`, `(scheduled tomorrow)`, `(scheduled yesterday)`,
+    /// `(scheduled -3d)`, etc.
+    Scheduled {
+        /// The date predicate to match
+        predicate: DatePredicate,
+    },
+
+    /// Filter by deadline date predicate (T5).
+    ///
+    /// `(deadline today)`, `(deadline tomorrow)`, `(deadline yesterday)`,
+    /// `(deadline +1w)`, etc.
+    Deadline {
+        /// The date predicate to match
+        predicate: DatePredicate,
+    },
+
+    /// Filter to overdue blocks (T5).
+    ///
+    /// `(overdue)` — blocks where `deadline < now` AND `marker NOT IN (done, cancelled)`.
+    Overdue,
+
+    /// Filter to in-progress blocks (T5).
+    ///
+    /// `(in-progress)` — blocks where `marker IN (now, doing)`.
+    InProgress,
 }
 
 /// Type alias for backward compatibility

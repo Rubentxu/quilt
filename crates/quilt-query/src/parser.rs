@@ -156,10 +156,20 @@ impl QueryParser {
                 "page-fuzzy" => self.parse_page_fuzzy(rest),
                 "temporal" => self.parse_temporal(rest),
                 "virtual-select" => self.parse_virtual_select(rest),
+                // T5: Journal Aggregation Predicates
+                "scheduled" => self.parse_scheduled(rest),
+                "deadline" => self.parse_deadline(rest),
+                "overdue" => self.parse_overdue(),
+                "in-progress" => self.parse_in_progress(),
                 _ => Err(ParseError::Invalid(format!("Unknown operator: {}", op))),
             }
         } else {
-            Err(ParseError::Invalid("Expected operator".to_string()))
+            // Handle no-argument predicates: (overdue), (in-progress)
+            match trimmed {
+                "overdue" => self.parse_overdue(),
+                "in-progress" => self.parse_in_progress(),
+                _ => Err(ParseError::Invalid("Expected operator".to_string())),
+            }
         }
     }
 
@@ -682,6 +692,63 @@ impl QueryParser {
                 "Unknown analysis kind: {}",
                 kind_str
             ))),
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // T5: Journal Aggregation Predicates
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Parses `(scheduled today)`, `(scheduled tomorrow)`, `(scheduled -3d)`, etc.
+    fn parse_scheduled(&self, rest: &str) -> Result<QueryAst, ParseError> {
+        let predicate = self.parse_date_predicate(rest, "scheduled")?;
+        Ok(QueryAst::Scheduled { predicate })
+    }
+
+    /// Parses `(deadline today)`, `(deadline tomorrow)`, `(deadline +1w)`, etc.
+    fn parse_deadline(&self, rest: &str) -> Result<QueryAst, ParseError> {
+        let predicate = self.parse_date_predicate(rest, "deadline")?;
+        Ok(QueryAst::Deadline { predicate })
+    }
+
+    /// Parses `(overdue)` — no arguments.
+    fn parse_overdue(&self) -> Result<QueryAst, ParseError> {
+        Ok(QueryAst::Overdue)
+    }
+
+    /// Parses `(in-progress)` — no arguments.
+    fn parse_in_progress(&self) -> Result<QueryAst, ParseError> {
+        Ok(QueryAst::InProgress)
+    }
+
+    /// Parses a date predicate string into a `DatePredicate`.
+    ///
+    /// Handles: `today`, `tomorrow`, `yesterday`, and relative offsets like `-3d`, `+1w`.
+    fn parse_date_predicate(&self, rest: &str, predicate_name: &str) -> Result<crate::ast::DatePredicate, ParseError> {
+        let trimmed = rest.trim();
+        if trimmed.is_empty() {
+            return Err(ParseError::Invalid(format!(
+                "{} requires a date argument (e.g., today, tomorrow, -3d)",
+                predicate_name
+            )));
+        }
+
+        match trimmed.to_lowercase().as_str() {
+            "today" => Ok(crate::ast::DatePredicate::Today),
+            "tomorrow" => Ok(crate::ast::DatePredicate::Tomorrow),
+            "yesterday" => Ok(crate::ast::DatePredicate::Yesterday),
+            _ => {
+                // Try parsing as a relative time offset
+                let offset = crate::time_helpers::TimeOffset::parse(trimmed)
+                    .ok_or_else(|| {
+                        ParseError::Invalid(format!(
+                            "invalid date for {}: {} (expected today, tomorrow, yesterday, or a relative offset like -3d)",
+                            predicate_name,
+                            trimmed
+                        ))
+                    })?;
+                Ok(crate::ast::DatePredicate::Relative(offset))
+            }
         }
     }
 
@@ -1434,6 +1501,128 @@ mod tests {
     fn test_parse_virtual_select_requires_at_least_one_column() {
         let err = parse_err("(virtual-select [] (page \"x\"))");
         assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // T5: Journal Aggregation Predicates
+    // ─────────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_parse_scheduled_today() {
+        let result = parse("(scheduled today)");
+        match result {
+            QueryAst::Scheduled { predicate } => {
+                assert!(matches!(predicate, crate::ast::DatePredicate::Today));
+            }
+            other => panic!("expected Scheduled predicate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_scheduled_tomorrow() {
+        let result = parse("(scheduled tomorrow)");
+        match result {
+            QueryAst::Scheduled { predicate } => {
+                assert!(matches!(predicate, crate::ast::DatePredicate::Tomorrow));
+            }
+            other => panic!("expected Scheduled predicate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_scheduled_yesterday() {
+        let result = parse("(scheduled yesterday)");
+        match result {
+            QueryAst::Scheduled { predicate } => {
+                assert!(matches!(predicate, crate::ast::DatePredicate::Yesterday));
+            }
+            other => panic!("expected Scheduled predicate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_scheduled_relative() {
+        let result = parse("(scheduled -3d)");
+        match result {
+            QueryAst::Scheduled { predicate } => {
+                assert!(matches!(predicate, crate::ast::DatePredicate::Relative(crate::time_helpers::TimeOffset::Days(-3))));
+            }
+            other => panic!("expected Scheduled predicate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_deadline_today() {
+        let result = parse("(deadline today)");
+        match result {
+            QueryAst::Deadline { predicate } => {
+                assert!(matches!(predicate, crate::ast::DatePredicate::Today));
+            }
+            other => panic!("expected Deadline predicate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_deadline_tomorrow() {
+        let result = parse("(deadline tomorrow)");
+        match result {
+            QueryAst::Deadline { predicate } => {
+                assert!(matches!(predicate, crate::ast::DatePredicate::Tomorrow));
+            }
+            other => panic!("expected Deadline predicate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_overdue() {
+        let result = parse("(overdue)");
+        assert_eq!(result, QueryAst::Overdue);
+    }
+
+    #[test]
+    fn test_parse_in_progress() {
+        let result = parse("(in-progress)");
+        assert_eq!(result, QueryAst::InProgress);
+    }
+
+    #[test]
+    fn test_parse_scheduled_no_args_error() {
+        // (scheduled) without a value should fail
+        let err = parse_err("(scheduled)");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    #[test]
+    fn test_parse_deadline_no_args_error() {
+        // (deadline) without a value should fail
+        let err = parse_err("(deadline)");
+        assert!(matches!(err, ParseError::Invalid(_)));
+    }
+
+    #[test]
+    fn test_parse_predicates_compose_with_and() {
+        let result = parse("(and (scheduled today) (task todo))");
+        match result {
+            QueryAst::And(exprs) => {
+                assert_eq!(exprs.len(), 2);
+                assert!(matches!(&exprs[0], QueryAst::Scheduled { .. }));
+                assert!(matches!(&exprs[1], QueryAst::Task(_)));
+            }
+            other => panic!("expected And, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_predicates_compose_with_or() {
+        let result = parse("(or (deadline today) (in-progress))");
+        match result {
+            QueryAst::Or(exprs) => {
+                assert_eq!(exprs.len(), 2);
+                assert!(matches!(&exprs[0], QueryAst::Deadline { .. }));
+                assert!(matches!(&exprs[1], QueryAst::InProgress));
+            }
+            other => panic!("expected Or, got {:?}", other),
+        }
     }
 }
 

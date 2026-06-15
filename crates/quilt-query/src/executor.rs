@@ -328,6 +328,89 @@ where
             QueryAst::VirtualSelect { .. } => Err(CompilerError::UnsupportedOperator {
                 op: "VirtualSelect",
             }),
+
+            // T5 — Journal Aggregation Predicates
+
+            // T5: Journal Aggregation Predicates
+            QueryAst::Scheduled { predicate } => {
+                self.build_date_predicate_where("scheduled", predicate)
+            }
+
+            QueryAst::Deadline { predicate } => {
+                self.build_date_predicate_where("deadline", predicate)
+            }
+
+            QueryAst::Overdue => {
+                let sql = "b.deadline < strftime('%s','now') * 1000 AND b.marker NOT IN (?, ?)";
+                Ok((sql.to_string(), vec![
+                    SqlParam::String("done".to_string()),
+                    SqlParam::String("cancelled".to_string()),
+                ]))
+            }
+
+            QueryAst::InProgress => {
+                let sql = "b.marker IN (?, ?)";
+                Ok((sql.to_string(), vec![
+                    SqlParam::String("now".to_string()),
+                    SqlParam::String("doing".to_string()),
+                ]))
+            }
+        }
+    }
+
+    /// Builds a WHERE clause for a date predicate on a given column.
+    ///
+    /// Handles: `Today`, `Tomorrow`, `Yesterday`, and `Relative` offsets.
+    fn build_date_predicate_where(
+        &self,
+        column: &str,
+        predicate: &crate::ast::DatePredicate,
+    ) -> Result<(String, Vec<SqlParam>), CompilerError> {
+        use crate::ast::DatePredicate;
+        use crate::executor::SqlParam;
+        use chrono::Local;
+
+        let today = Local::now().date_naive();
+
+        match predicate {
+            DatePredicate::Today => {
+                let date_str = today.format("%Y-%m-%d").to_string();
+                let sql = format!(
+                    "date(b.{column} / 1000, 'unixepoch', 'localtime') = date(?,'localtime')"
+                );
+                Ok((sql, vec![SqlParam::String(date_str)]))
+            }
+            DatePredicate::Tomorrow => {
+                let tomorrow = today + chrono::Duration::days(1);
+                let date_str = tomorrow.format("%Y-%m-%d").to_string();
+                let sql = format!(
+                    "date(b.{column} / 1000, 'unixepoch', 'localtime') = date(?,'localtime')"
+                );
+                Ok((sql, vec![SqlParam::String(date_str)]))
+            }
+            DatePredicate::Yesterday => {
+                let yesterday = today - chrono::Duration::days(1);
+                let date_str = yesterday.format("%Y-%m-%d").to_string();
+                let sql = format!(
+                    "date(b.{column} / 1000, 'unixepoch', 'localtime') = date(?,'localtime')"
+                );
+                Ok((sql, vec![SqlParam::String(date_str)]))
+            }
+            DatePredicate::Relative(offset) => {
+                let base_date = match offset {
+                    crate::time_helpers::TimeOffset::Days(n) => today - chrono::Duration::days(*n),
+                    crate::time_helpers::TimeOffset::Weeks(n) => today - chrono::Duration::weeks(*n),
+                    crate::time_helpers::TimeOffset::Months(n) => today - chrono::Duration::days(n * 30),
+                    crate::time_helpers::TimeOffset::Years(n) => today - chrono::Duration::days(n * 365),
+                    crate::time_helpers::TimeOffset::Hours(n) => today - chrono::Duration::hours(*n),
+                    crate::time_helpers::TimeOffset::Minutes(n) => today - chrono::Duration::minutes(*n),
+                };
+                let date_str = base_date.format("%Y-%m-%d").to_string();
+                let sql = format!(
+                    "date(b.{column} / 1000, 'unixepoch', 'localtime') = date(?,'localtime')"
+                );
+                Ok((sql, vec![SqlParam::String(date_str)]))
+            }
         }
     }
 

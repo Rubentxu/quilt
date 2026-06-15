@@ -22,6 +22,13 @@ sample = { "(" ~ "sample" ~ integer ~ ")" }
 task_marker = { "now" | "later" | "todo" | "doing" | "done" | "cancelled" | "waiting" }
 priority_level = { "a" | "b" | "c" }
 
+// T5: Journal Aggregation Predicates
+scheduled_pred = { "(" ~ "scheduled" ~ (time_helper | date_keyword) ~ ")" }
+deadline_pred = { "(" ~ "deadline" ~ (time_helper | date_keyword) ~ ")" }
+overdue_pred = { "(" ~ "overdue" ~ ")" }
+in_progress_pred = { "(" ~ "in-progress" ~ ")" }
+date_keyword = { "today" | "tomorrow" | "yesterday" }
+
 value = { string | integer | date | time_helper | boolean }
 string = { "\"" ~ quoted_string ~ "\"" }
 quoted_string = { (!"\"" ~ ANY)* }

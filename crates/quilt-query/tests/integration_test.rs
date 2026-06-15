@@ -413,3 +413,273 @@ async fn test_e2e_self_ref() {
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
     assert_eq!(result_count, 2, "SelfRef should match all blocks");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T5: DSL Predicates for Journal Aggregation
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_e2e_scheduled_today() {
+    let pool = setup_test_db().await;
+    let (page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
+
+    // Insert a block scheduled for today (at noon local time)
+    let scheduled_block_id = Uuid::new_v4();
+    let local_now = chrono::Local::now();
+    let local_date = local_now.date_naive();
+    let noon = local_date.and_hms_opt(12, 0, 0).unwrap();
+    let offset_secs = local_now.offset().local_minus_utc();
+    let utc_dt = noon - chrono::Duration::seconds(offset_secs as i64);
+    let today_ms = utc_dt.and_utc().timestamp_millis();
+
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, content, marker, format, level, scheduled, created_at, updated_at) VALUES (?, ?, ?, ?, 'markdown', 1, ?, ?, ?)",
+    )
+    .bind(scheduled_block_id.to_string())
+    .bind(page_id.to_string())
+    .bind("A scheduled task")
+    .bind("todo")
+    .bind(today_ms)
+    .bind(today_ms)
+    .bind(today_ms)
+    .execute(&pool)
+    .await
+    .expect("failed to insert scheduled block");
+
+    // Update FTS
+    sqlx::query("INSERT INTO blocks_fts(rowid, content) SELECT rowid, content FROM blocks")
+        .execute(&pool)
+        .await
+        .expect("failed to populate FTS");
+
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(scheduled today)", 100)
+        .await
+        .expect("query failed");
+
+    let result_count = execute_query(&pool, &result.sql, &result.params).await;
+    assert_eq!(result_count, 1, "Should find exactly 1 block scheduled for today");
+}
+
+#[tokio::test]
+async fn test_e2e_deadline_today() {
+    let pool = setup_test_db().await;
+    let (page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
+
+    // Insert a block with deadline at noon local time today (safe from date boundary issues)
+    let deadline_block_id = Uuid::new_v4();
+    let local_now = chrono::Local::now();
+    let local_date = local_now.date_naive();
+    // Use noon to avoid any date boundary issues
+    let noon = local_date.and_hms_opt(12, 0, 0).unwrap();
+    // Convert local naive datetime to UTC by subtracting the local offset
+    let offset_secs = local_now.offset().local_minus_utc();
+    let utc_dt = noon - chrono::Duration::seconds(offset_secs as i64);
+    let today_ms = utc_dt.and_utc().timestamp_millis();
+
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, content, marker, format, level, deadline, created_at, updated_at) VALUES (?, ?, ?, ?, 'markdown', 1, ?, ?, ?)",
+    )
+    .bind(deadline_block_id.to_string())
+    .bind(page_id.to_string())
+    .bind("A deadline task")
+    .bind("todo")
+    .bind(today_ms)
+    .bind(today_ms)
+    .bind(today_ms)
+    .execute(&pool)
+    .await
+    .expect("failed to insert deadline block");
+
+    // Update FTS
+    sqlx::query("INSERT INTO blocks_fts(rowid, content) SELECT rowid, content FROM blocks")
+        .execute(&pool)
+        .await
+        .expect("failed to populate FTS");
+
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(deadline today)", 100)
+        .await
+        .expect("query failed");
+
+    let result_count = execute_query(&pool, &result.sql, &result.params).await;
+    assert_eq!(result_count, 1, "Should find exactly 1 block with deadline today");
+}
+
+#[tokio::test]
+async fn test_e2e_overdue() {
+    let pool = setup_test_db().await;
+    let (page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
+
+    // Insert an overdue block (deadline yesterday, not done/cancelled)
+    let overdue_block_id = Uuid::new_v4();
+    let yesterday = chrono::Utc::now() - chrono::Duration::days(1);
+    let yesterday_ms = yesterday.timestamp_millis();
+
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, content, marker, format, level, deadline, created_at, updated_at) VALUES (?, ?, ?, ?, 'markdown', 1, ?, ?, ?)",
+    )
+    .bind(overdue_block_id.to_string())
+    .bind(page_id.to_string())
+    .bind("An overdue task")
+    .bind("todo")
+    .bind(yesterday_ms)
+    .bind(yesterday_ms)
+    .bind(yesterday_ms)
+    .execute(&pool)
+    .await
+    .expect("failed to insert overdue block");
+
+    // Insert a done block that is also past deadline (should NOT appear in overdue)
+    let done_overdue_block_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, content, marker, format, level, deadline, created_at, updated_at) VALUES (?, ?, ?, ?, 'markdown', 1, ?, ?, ?)",
+    )
+    .bind(done_overdue_block_id.to_string())
+    .bind(page_id.to_string())
+    .bind("Done but overdue")
+    .bind("done")
+    .bind(yesterday_ms)
+    .bind(yesterday_ms)
+    .bind(yesterday_ms)
+    .execute(&pool)
+    .await
+    .expect("failed to insert done-but-overdue block");
+
+    // Update FTS
+    sqlx::query("INSERT INTO blocks_fts(rowid, content) SELECT rowid, content FROM blocks")
+        .execute(&pool)
+        .await
+        .expect("failed to populate FTS");
+
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(overdue)", 100)
+        .await
+        .expect("query failed");
+
+    let result_count = execute_query(&pool, &result.sql, &result.params).await;
+    assert_eq!(result_count, 1, "Should find exactly 1 overdue block (not done)");
+}
+
+#[tokio::test]
+async fn test_e2e_in_progress() {
+    let pool = setup_test_db().await;
+    let (page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
+
+    // Insert a doing block
+    let doing_block_id = Uuid::new_v4();
+    let now = chrono::Utc::now().timestamp_millis();
+
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, content, marker, format, level, created_at, updated_at) VALUES (?, ?, ?, ?, 'markdown', 1, ?, ?)",
+    )
+    .bind(doing_block_id.to_string())
+    .bind(page_id.to_string())
+    .bind("A doing task")
+    .bind("doing")
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .expect("failed to insert doing block");
+
+    // Update FTS
+    sqlx::query("INSERT INTO blocks_fts(rowid, content) SELECT rowid, content FROM blocks")
+        .execute(&pool)
+        .await
+        .expect("failed to populate FTS");
+
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(in-progress)", 100)
+        .await
+        .expect("query failed");
+
+    let result_count = execute_query(&pool, &result.sql, &result.params).await;
+    assert_eq!(result_count, 1, "Should find exactly 1 in-progress block");
+}
+
+#[tokio::test]
+async fn test_e2e_scheduled_tomorrow() {
+    let pool = setup_test_db().await;
+    let (page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
+
+    // Insert a block scheduled for tomorrow
+    let scheduled_block_id = Uuid::new_v4();
+    let tomorrow = chrono::Utc::now() + chrono::Duration::days(1);
+    let tomorrow_start = tomorrow.date_naive().and_hms_opt(0, 0, 0).unwrap();
+    let tomorrow_ms = tomorrow_start.and_utc().timestamp_millis();
+
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, content, marker, format, level, scheduled, created_at, updated_at) VALUES (?, ?, ?, ?, 'markdown', 1, ?, ?, ?)",
+    )
+    .bind(scheduled_block_id.to_string())
+    .bind(page_id.to_string())
+    .bind("Tomorrow's task")
+    .bind("todo")
+    .bind(tomorrow_ms)
+    .bind(tomorrow_ms)
+    .bind(tomorrow_ms)
+    .execute(&pool)
+    .await
+    .expect("failed to insert tomorrow's block");
+
+    // Update FTS
+    sqlx::query("INSERT INTO blocks_fts(rowid, content) SELECT rowid, content FROM blocks")
+        .execute(&pool)
+        .await
+        .expect("failed to populate FTS");
+
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(scheduled tomorrow)", 100)
+        .await
+        .expect("query failed");
+
+    let result_count = execute_query(&pool, &result.sql, &result.params).await;
+    assert_eq!(result_count, 1, "Should find exactly 1 block scheduled for tomorrow");
+}
+
+#[tokio::test]
+async fn test_e2e_predicates_compose_with_and() {
+    let pool = setup_test_db().await;
+    let (page_id, _todo_block_id, _done_block_id) = seed_test_data(&pool).await;
+
+    // Insert a block scheduled for today AND doing
+    let combined_block_id = Uuid::new_v4();
+    let today = chrono::Utc::now();
+    let today_start = today.date_naive().and_hms_opt(0, 0, 0).unwrap();
+    let today_ms = today_start.and_utc().timestamp_millis();
+
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, content, marker, format, level, scheduled, created_at, updated_at) VALUES (?, ?, ?, ?, 'markdown', 1, ?, ?, ?)",
+    )
+    .bind(combined_block_id.to_string())
+    .bind(page_id.to_string())
+    .bind("Combined task")
+    .bind("doing")
+    .bind(today_ms)
+    .bind(today_ms)
+    .bind(today_ms)
+    .execute(&pool)
+    .await
+    .expect("failed to insert combined block");
+
+    // Update FTS
+    sqlx::query("INSERT INTO blocks_fts(rowid, content) SELECT rowid, content FROM blocks")
+        .execute(&pool)
+        .await
+        .expect("failed to populate FTS");
+
+    let use_cases = quilt_application::use_cases::SearchUseCasesImpl::new();
+    let result = use_cases
+        .query("(and (scheduled today) (in-progress))", 100)
+        .await
+        .expect("query failed");
+
+    let result_count = execute_query(&pool, &result.sql, &result.params).await;
+    assert_eq!(result_count, 1, "Should find exactly 1 block matching both predicates");
+}
