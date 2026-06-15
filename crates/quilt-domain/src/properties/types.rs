@@ -270,7 +270,7 @@ impl PropertyVisibility {
     /// Block → Inline, Page → Panel, Never → System.
     /// This is the migration path for existing serialized definitions.
     #[must_use]
-    pub fn from_view_context(vc: ViewContext) -> Self {
+    pub fn from_view_context(vc: &ViewContext) -> Self {
         match vc {
             ViewContext::Block => PropertyVisibility::Inline,
             ViewContext::Page => PropertyVisibility::Panel,
@@ -586,15 +586,15 @@ mod tests {
     #[test]
     fn test_property_visibility_from_view_context() {
         assert_eq!(
-            PropertyVisibility::from_view_context(ViewContext::Block),
+            PropertyVisibility::from_view_context(&ViewContext::Block),
             PropertyVisibility::Inline
         );
         assert_eq!(
-            PropertyVisibility::from_view_context(ViewContext::Page),
+            PropertyVisibility::from_view_context(&ViewContext::Page),
             PropertyVisibility::Panel
         );
         assert_eq!(
-            PropertyVisibility::from_view_context(ViewContext::Never),
+            PropertyVisibility::from_view_context(&ViewContext::Never),
             PropertyVisibility::System
         );
     }

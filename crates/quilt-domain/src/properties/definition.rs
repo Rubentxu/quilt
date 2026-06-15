@@ -1,6 +1,10 @@
 //! PropertyDefinition - schema for typed properties
 
-use super::types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext};
+use super::types::{
+    Cardinality, ClosedValue, DerivedSource, MergePolicy, PropertyMutability, PropertyStatus,
+    PropertyType, PropertyVisibility, ViewContext,
+};
+use crate::errors::DomainError;
 use crate::value_objects::Uuid;
 use chrono::{DateTime, Utc};
 
@@ -28,18 +32,26 @@ pub struct PropertyDefinition {
     pub cardinality: Cardinality,
     /// Predefined values for closed-set properties
     pub closed_values: Vec<ClosedValue>,
-    /// Where to display this property in the UI
+
+    // ── PI-1: Legacy visibility/mutability fields (deprecated) ──
+
+    /// Where to display this property in the UI (legacy).
+    #[deprecated(note = "use visibility: PropertyVisibility instead")]
     pub view_context: ViewContext,
-    /// Whether this property is publicly visible
+    /// Whether this property is publicly visible (legacy).
+    #[deprecated(note = "use visibility: PropertyVisibility instead")]
     pub public: bool,
-    /// Whether this property is queryable (searchable)
+    /// Whether this property is queryable (searchable) (legacy).
+    #[deprecated(note = "use visibility: PropertyVisibility instead")]
     pub queryable: bool,
-    /// Whether this property is hidden in UI
+    /// Whether this property is hidden in UI (legacy).
+    #[deprecated(note = "use visibility: PropertyVisibility instead")]
     pub hidden: bool,
     /// Optional attribute for custom external storage paths
     pub attribute: Option<String>,
-    /// Whether this property is read-only (system/computed).
+    /// Whether this property is read-only (system/computed) (legacy).
     #[serde(default)]
+    #[deprecated(note = "use mutability: PropertyMutability instead")]
     pub read_only: bool,
 
     // ── PI-2: Lifecycle & usage metadata ──
@@ -62,6 +74,21 @@ pub struct PropertyDefinition {
     /// When this property was last used.
     #[serde(default)]
     pub last_seen_at: Option<DateTime<Utc>>,
+
+    // ── ADR-0025: First-class configuration fields ──
+
+    /// First-class visibility tier (ADR-0025). Defaults to `Inline`.
+    #[serde(default)]
+    pub visibility: PropertyVisibility,
+    /// First-class mutability (ADR-0025). Defaults to `Mutable`.
+    #[serde(default)]
+    pub mutability: PropertyMutability,
+    /// Source of a derived property (ADR-0025). `None` for user-authored.
+    #[serde(default)]
+    pub derived_from: Option<DerivedSource>,
+    /// Merge policy for property patches (ADR-0025). Defaults to `SetIfMissing`.
+    #[serde(default)]
+    pub merge_policy: MergePolicy,
 }
 
 impl PropertyDefinition {
@@ -94,6 +121,11 @@ impl PropertyDefinition {
             page_count: 0,
             first_seen_at: None,
             last_seen_at: None,
+            // ADR-0025: first-class configuration fields
+            visibility: PropertyVisibility::default(),
+            mutability: PropertyMutability::default(),
+            derived_from: None,
+            merge_policy: MergePolicy::default(),
         }
     }
 
@@ -175,17 +207,53 @@ impl PropertyDefinition {
         self
     }
 
-    /// Set view context
+    /// Set view context (legacy).
+    #[deprecated(note = "use with_visibility(PropertyVisibility) instead")]
     pub fn with_view_context(mut self, view_context: ViewContext) -> Self {
         self.view_context = view_context;
         self
     }
 
-    /// Set visibility flags
-    pub fn with_visibility(mut self, public: bool, queryable: bool, hidden: bool) -> Self {
+    /// Set the first-class visibility tier (ADR-0025).
+    ///
+    /// This is the preferred builder for visibility. The legacy
+    /// `with_visibility(bool, bool, bool)` is deprecated.
+    #[must_use]
+    pub fn with_visibility(mut self, visibility: PropertyVisibility) -> Self {
+        self.visibility = visibility;
+        self
+    }
+
+    /// Set visibility using the legacy three-flag form (deprecated).
+    ///
+    /// Derives the new `visibility` field from the flags:
+    /// - `hidden = true` → `PropertyVisibility::Hidden` (dominant)
+    /// - else `public = true` → `PropertyVisibility::Inline` (or `Panel` depending on `view_context`)
+    /// - else → `PropertyVisibility::System`
+    ///
+    /// NOTE: This is the legacy builder preserved for backward compatibility.
+    /// New code should use `with_visibility(PropertyVisibility)` directly.
+    #[deprecated(note = "use with_visibility(PropertyVisibility) instead")]
+    pub fn with_visibility_flags(
+        mut self,
+        public: bool,
+        queryable: bool,
+        hidden: bool,
+    ) -> Self {
         self.public = public;
         self.queryable = queryable;
         self.hidden = hidden;
+        // Derive the new visibility field from legacy flags:
+        // hidden is the dominant signal
+        if hidden {
+            self.visibility = PropertyVisibility::Hidden;
+        } else if public {
+            // Default to Inline for public properties (Block context → Inline, Page context → Panel
+            // would require knowing view_context; conservatively use Inline)
+            self.visibility = PropertyVisibility::Inline;
+        } else {
+            self.visibility = PropertyVisibility::System;
+        }
         self
     }
 
@@ -195,12 +263,136 @@ impl PropertyDefinition {
         self
     }
 
-    /// Mark this property as read-only (or back to writable). System/computed
-    /// properties like `id`, `created_at`, `updated_at` are registered with
-    /// `read_only: true` in `BUILTIN_PROPERTIES`.
+    /// Mark this property as read-only (or back to writable) using the legacy bool
+    /// (deprecated — use `with_mutability` instead).
+    ///
+    /// System/computed properties like `id`, `created_at`, `updated_at` are
+    /// registered with `read_only: true` in `BUILTIN_PROPERTIES`.
+    #[deprecated(note = "use with_mutability(PropertyMutability) instead")]
     pub fn with_read_only(mut self, read_only: bool) -> Self {
         self.read_only = read_only;
+        self.mutability = PropertyMutability::from_read_only(read_only);
         self
+    }
+
+    // ── ADR-0025: First-class configuration builders ──
+
+    /// Set the first-class mutability tier (ADR-0025).
+    ///
+    /// Immutable properties are read-only in the UI; changes come from
+    /// system rules, importers, or privileged operations.
+    #[must_use]
+    pub fn with_mutability(mut self, mutability: PropertyMutability) -> Self {
+        self.mutability = mutability;
+        self
+    }
+
+    /// Set the derived-source provenance (ADR-0025).
+    ///
+    /// Setting a derived source also sets `mutability = Immutable` as a
+    /// side-effect, per the ADR-0025 invariant
+    /// `derived_from.is_some() ⇒ mutability == Immutable`.
+    #[must_use]
+    pub fn with_derived_from(mut self, source: DerivedSource) -> Self {
+        self.derived_from = Some(source);
+        self.mutability = PropertyMutability::Immutable;
+        self
+    }
+
+    /// Set the merge policy for property patches (ADR-0025).
+    #[must_use]
+    pub fn with_merge_policy(mut self, policy: MergePolicy) -> Self {
+        self.merge_policy = policy;
+        self
+    }
+
+    // ── ADR-0025: Derived getters and invariants ──
+
+    /// Returns `true` if this property is queryable (searchable).
+    ///
+    /// Per ADR-0025: `Hidden` properties ARE still queryable (they hide from
+    /// UI but are searchable). `System` properties are NOT queryable
+    /// (they are the non-searchable tier).
+    ///
+    /// Defined as `self.visibility != PropertyVisibility::System`.
+    pub fn is_queryable(&self) -> bool {
+        self.visibility != PropertyVisibility::System
+    }
+
+    /// Assert that the domain invariants hold for this property definition.
+    ///
+    /// Currently enforces:
+    /// - `derived_from.is_some() ⇒ mutability == Immutable` (ADR-0025)
+    ///
+    /// Returns `Ok(())` if invariants hold, or `Err(DomainError::InvariantViolation)`
+    /// describing which invariant was violated.
+    pub fn assert_invariants(&self) -> Result<(), DomainError> {
+        if let Some(ref _source) = self.derived_from {
+            if self.mutability != PropertyMutability::Immutable {
+                return Err(DomainError::InvariantViolation(
+                    "derived property must be immutable",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Construct a `PropertyDefinition` from the legacy field set.
+    ///
+    /// This is the infallible migration path for loading existing serialized
+    /// data. The invariant check (`assert_invariants`) is a **separate**
+    /// surface — callers who bypass builders (e.g., struct literals or
+    /// row mappers) should call it separately.
+    ///
+    /// Visibility derivation:
+    /// - `hidden = true` → `PropertyVisibility::Hidden` (dominant, regardless of `view_context`)
+    /// - else `view_context = Block` → `PropertyVisibility::Inline`
+    /// - else `view_context = Page` → `PropertyVisibility::Panel`
+    /// - else `view_context = Never` → `PropertyVisibility::System`
+    #[must_use]
+    #[allow(deprecated)]
+    pub fn from_legacy_fields(
+        id: Uuid,
+        db_ident: impl Into<String>,
+        title: impl Into<String>,
+        property_type: PropertyType,
+        view_context: ViewContext,
+        public: bool,
+        queryable: bool,
+        hidden: bool,
+        read_only: bool,
+    ) -> Self {
+        let visibility = if hidden {
+            PropertyVisibility::Hidden
+        } else {
+            PropertyVisibility::from_view_context(&view_context)
+        };
+
+        Self {
+            id,
+            db_ident: db_ident.into(),
+            title: title.into(),
+            property_type,
+            cardinality: Cardinality::One,
+            closed_values: Vec::new(),
+            view_context,
+            public,
+            queryable,
+            hidden,
+            attribute: None,
+            read_only,
+            status: PropertyStatus::default(),
+            alias_of: None,
+            block_count: 0,
+            page_count: 0,
+            first_seen_at: None,
+            last_seen_at: None,
+            // ADR-0025: first-class fields derived from legacy inputs
+            visibility,
+            mutability: PropertyMutability::from_read_only(read_only),
+            derived_from: None,
+            merge_policy: MergePolicy::SetIfMissing,
+        }
     }
 
     // ── PI-2: Lifecycle builders ──
@@ -545,5 +737,496 @@ mod tests {
         assert_eq!(def.page_count, 0);
         assert!(def.first_seen_at.is_none());
         assert!(def.last_seen_at.is_none());
+    }
+
+    // ── ADR-0025: T3 — new field defaults ──
+
+    #[test]
+    fn new_definition_defaults_to_inline_visibility() {
+        // New PropertyDefinition has Inline visibility (per spec)
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text);
+        assert_eq!(def.visibility, PropertyVisibility::Inline);
+    }
+
+    #[test]
+    fn new_definition_defaults_to_mutable() {
+        // New PropertyDefinition is Mutable (per spec)
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text);
+        assert_eq!(def.mutability, PropertyMutability::Mutable);
+    }
+
+    #[test]
+    fn new_definition_defaults_to_no_derived_from() {
+        // New PropertyDefinition has derived_from = None (per spec)
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text);
+        assert!(def.derived_from.is_none());
+    }
+
+    #[test]
+    fn new_definition_defaults_to_set_if_missing() {
+        // New PropertyDefinition has SetIfMissing policy (per spec)
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text);
+        assert_eq!(def.merge_policy, MergePolicy::SetIfMissing);
+    }
+
+    // ── ADR-0025: T3 — is_queryable semantics ──
+
+    #[test]
+    fn is_queryable_for_inline_and_panel() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text);
+        assert!(def.is_queryable()); // Inline → queryable
+        let def2 = def.with_visibility(PropertyVisibility::Panel);
+        assert!(def2.is_queryable()); // Panel → queryable
+    }
+
+    #[test]
+    fn is_queryable_for_system_and_hidden() {
+        let def_sys = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_visibility(PropertyVisibility::System);
+        assert!(!def_sys.is_queryable()); // System → NOT queryable
+
+        let def_hidden = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_visibility(PropertyVisibility::Hidden);
+        // ADR-0025: Hidden IS still queryable (persisted but not in default UI)
+        assert!(def_hidden.is_queryable());
+    }
+
+    // ── ADR-0025: T4 — new builders ──
+
+    #[test]
+    fn with_visibility_sets_visibility() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_visibility(PropertyVisibility::Panel);
+        assert_eq!(def.visibility, PropertyVisibility::Panel);
+    }
+
+    #[test]
+    fn with_mutability_sets_mutability() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_mutability(PropertyMutability::Immutable);
+        assert_eq!(def.mutability, PropertyMutability::Immutable);
+    }
+
+    #[test]
+    fn with_derived_from_sets_source_and_mutability() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_derived_from(DerivedSource::BlockContent);
+        assert_eq!(def.derived_from, Some(DerivedSource::BlockContent));
+        // Side-effect: mutability becomes Immutable
+        assert_eq!(def.mutability, PropertyMutability::Immutable);
+    }
+
+    #[test]
+    fn with_merge_policy_sets_policy() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_merge_policy(MergePolicy::Overwrite);
+        assert_eq!(def.merge_policy, MergePolicy::Overwrite);
+    }
+
+    #[test]
+    fn builders_are_chainable() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_visibility(PropertyVisibility::Panel)
+            .with_mutability(PropertyMutability::Immutable)
+            .with_derived_from(DerivedSource::Canonicalization)
+            .with_merge_policy(MergePolicy::Union);
+        assert_eq!(def.visibility, PropertyVisibility::Panel);
+        assert_eq!(def.mutability, PropertyMutability::Immutable);
+        assert_eq!(def.derived_from, Some(DerivedSource::Canonicalization));
+        assert_eq!(def.merge_policy, MergePolicy::Union);
+    }
+
+    #[test]
+    fn with_derived_from_after_immutable_is_idempotent() {
+        // Setting derived_from after Immutable is idempotent for mutability
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_mutability(PropertyMutability::Immutable)
+            .with_derived_from(DerivedSource::Importer);
+        assert_eq!(def.mutability, PropertyMutability::Immutable);
+        assert_eq!(def.derived_from, Some(DerivedSource::Importer));
+    }
+
+    // ── ADR-0025: T4 — assert_invariants ──
+
+    #[test]
+    fn assert_invariants_passes_for_non_derived() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_mutability(PropertyMutability::Mutable);
+        assert!(def.assert_invariants().is_ok());
+    }
+
+    #[test]
+    fn assert_invariants_passes_for_derived_and_immutable() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_derived_from(DerivedSource::Markdown);
+        assert!(def.assert_invariants().is_ok());
+    }
+
+    #[test]
+    fn assert_invariants_fails_for_derived_and_mutable() {
+        // Direct struct construction with derived_from + Mutable should fail the invariant
+        let def = PropertyDefinition {
+            derived_from: Some(DerivedSource::Markdown),
+            mutability: PropertyMutability::Mutable,
+            ..PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+        };
+        let result = def.assert_invariants();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, DomainError::InvariantViolation(_)));
+        let msg = format!("{}", err);
+        assert!(msg.contains("derived property must be immutable"));
+    }
+
+    // ── ADR-0025: T4 — from_legacy_fields ──
+
+    #[test]
+    fn from_legacy_fields_page_maps_to_panel() {
+        let def = PropertyDefinition::from_legacy_fields(
+            Uuid::new_v4(),
+            "x",
+            "X",
+            PropertyType::Text,
+            ViewContext::Page,
+            true,
+            true,
+            false,
+            false,
+        );
+        assert_eq!(def.visibility, PropertyVisibility::Panel);
+    }
+
+    #[test]
+    fn from_legacy_fields_never_hidden_maps_to_hidden() {
+        // Never + hidden=true → Hidden (dominant signal)
+        let def = PropertyDefinition::from_legacy_fields(
+            Uuid::new_v4(),
+            "x",
+            "X",
+            PropertyType::Text,
+            ViewContext::Never,
+            false,
+            false,
+            true,
+            true,
+        );
+        assert_eq!(def.visibility, PropertyVisibility::Hidden);
+    }
+
+    #[test]
+    fn from_legacy_fields_never_invents_derived_from() {
+        // from_legacy_fields never sets derived_from (always None)
+        for (vc, pub_, hidden, ro) in [
+            (ViewContext::Block, true, false, false),
+            (ViewContext::Page, true, false, false),
+            (ViewContext::Never, false, false, true),
+            (ViewContext::Never, false, true, true),
+        ] {
+            let def = PropertyDefinition::from_legacy_fields(
+                Uuid::new_v4(),
+                "x",
+                "X",
+                PropertyType::Text,
+                vc,
+                pub_,
+                false,
+                hidden,
+                ro,
+            );
+            assert!(
+                def.derived_from.is_none(),
+                "from_legacy_fields should never set derived_from"
+            );
+        }
+    }
+
+    // ── ADR-0025: T4 — legacy builders ──
+
+    #[test]
+    #[allow(deprecated)]
+    fn with_visibility_flags_hidden_overrides_public() {
+        // hidden=true dominates → Hidden regardless of public
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_visibility_flags(true, true, true);
+        assert_eq!(def.visibility, PropertyVisibility::Hidden);
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn with_visibility_flags_true_true_false_keeps_inline() {
+        // public=true, hidden=false → Inline
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_visibility_flags(true, true, false);
+        assert_eq!(def.visibility, PropertyVisibility::Inline);
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn with_read_only_true_sets_mutability_immutable() {
+        // Legacy with_read_only sets mutability
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_read_only(true);
+        assert_eq!(def.mutability, PropertyMutability::Immutable);
+        assert!(def.read_only);
+    }
+
+    // ── ADR-0025: T5 — backward-compat serde ──
+
+    #[test]
+    fn legacy_json_without_new_fields_defaults_all_four() {
+        // Pre-ADR-0025 JSON has no visibility/mutability/derived_from/merge_policy fields
+        let json = r#"{
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "db_ident": "my-prop",
+            "title": "My Prop",
+            "property_type": "Text",
+            "cardinality": "One",
+            "closed_values": [],
+            "view_context": "Block",
+            "public": true,
+            "queryable": true,
+            "hidden": false,
+            "attribute": null,
+            "read_only": false
+        }"#;
+        let def: PropertyDefinition = serde_json::from_str(json).unwrap();
+        assert_eq!(def.visibility, PropertyVisibility::Inline); // default
+        assert_eq!(def.mutability, PropertyMutability::Mutable); // default
+        assert!(def.derived_from.is_none()); // default
+        assert_eq!(def.merge_policy, MergePolicy::SetIfMissing); // default
+    }
+
+    #[test]
+    fn modern_json_round_trips_losslessly() {
+        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+            .with_visibility(PropertyVisibility::Panel)
+            .with_mutability(PropertyMutability::Immutable)
+            .with_derived_from(DerivedSource::BlockContent)
+            .with_merge_policy(MergePolicy::Overwrite);
+
+        let json = serde_json::to_string(&def).unwrap();
+        let restored: PropertyDefinition = serde_json::from_str(&json).unwrap();
+        assert_eq!(def.visibility, restored.visibility);
+        assert_eq!(def.mutability, restored.mutability);
+        assert_eq!(def.derived_from, restored.derived_from);
+        assert_eq!(def.merge_policy, restored.merge_policy);
+    }
+
+    #[test]
+    fn legacy_read_only_true_does_not_affect_mutability_default() {
+        // read_only:true in legacy JSON does NOT make mutability non-default;
+        // the two fields are independent per spec
+        let json = r#"{
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "db_ident": "my-prop",
+            "title": "My Prop",
+            "property_type": "Text",
+            "cardinality": "One",
+            "closed_values": [],
+            "view_context": "Block",
+            "public": true,
+            "queryable": true,
+            "hidden": false,
+            "attribute": null,
+            "read_only": true
+        }"#;
+        let def: PropertyDefinition = serde_json::from_str(json).unwrap();
+        // read_only is true (legacy)
+        assert!(def.read_only);
+        // mutability is still Mutable (serde default, independent of read_only)
+        assert_eq!(def.mutability, PropertyMutability::Mutable);
+    }
+}
+
+// ── ADR-0025: T10 — proptest for serde round-trip ──────────────────────────
+
+#[cfg(test)]
+mod proptest_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    // Implement Arbitrary for PropertyVisibility via prop_oneof
+    impl Arbitrary for PropertyVisibility {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(PropertyVisibility::Inline),
+                Just(PropertyVisibility::Panel),
+                Just(PropertyVisibility::System),
+                Just(PropertyVisibility::Hidden),
+            ]
+            .boxed()
+        }
+    }
+
+    // Implement Arbitrary for PropertyMutability
+    impl Arbitrary for PropertyMutability {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(PropertyMutability::Mutable),
+                Just(PropertyMutability::Immutable),
+            ]
+            .boxed()
+        }
+    }
+
+    // Implement Arbitrary for MergePolicy
+    impl Arbitrary for MergePolicy {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(MergePolicy::SetIfMissing),
+                Just(MergePolicy::Overwrite),
+                Just(MergePolicy::Append),
+                Just(MergePolicy::Union),
+                Just(MergePolicy::RejectOnConflict),
+                Just(MergePolicy::AskOnConflict),
+            ]
+            .boxed()
+        }
+    }
+
+    // Implement Arbitrary for DerivedSource
+    impl Arbitrary for DerivedSource {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(DerivedSource::BlockContent),
+                Just(DerivedSource::Markdown),
+                Just(DerivedSource::Canonicalization),
+                Just(DerivedSource::Importer),
+                ".*".prop_map(DerivedSource::OtherProperty),
+            ]
+            .boxed()
+        }
+    }
+
+    // Implement Arbitrary for PropertyType
+    impl Arbitrary for PropertyType {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(PropertyType::Text),
+                Just(PropertyType::Number),
+                Just(PropertyType::Date),
+                Just(PropertyType::DateTime),
+                Just(PropertyType::Url),
+                Just(PropertyType::Checkbox),
+                Just(PropertyType::Node),
+            ]
+            .boxed()
+        }
+    }
+
+    // Implement Arbitrary for Cardinality
+    impl Arbitrary for Cardinality {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(Cardinality::One),
+                Just(Cardinality::Many),
+            ]
+            .boxed()
+        }
+    }
+
+    // Implement Arbitrary for PropertyStatus
+    impl Arbitrary for PropertyStatus {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(PropertyStatus::Active),
+                Just(PropertyStatus::Deprecated),
+                Just(PropertyStatus::Merged),
+                Just(PropertyStatus::Alias),
+            ]
+            .boxed()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn property_definition_serde_roundtrip_is无损(def in arbitrary_property_definition()) {
+            // Serde round-trip must preserve all fields
+            let json = serde_json::to_string(&def).unwrap();
+            let restored: PropertyDefinition = serde_json::from_str(&json).unwrap();
+            prop_assert_eq!(def.visibility, restored.visibility);
+            prop_assert_eq!(def.mutability, restored.mutability);
+            prop_assert_eq!(def.derived_from, restored.derived_from);
+            prop_assert_eq!(def.merge_policy, restored.merge_policy);
+        }
+
+        #[test]
+        fn builder_constructed_def_always_satisfies_invariant(
+            visibility in any::<PropertyVisibility>(),
+            mutability in any::<PropertyMutability>(),
+            merge_policy in any::<MergePolicy>(),
+            source in any::<Option<DerivedSource>>()
+        ) {
+            // A PropertyDefinition built via new() + the 4 new builders
+            // must always satisfy the ADR-0025 invariant
+            let mut def = PropertyDefinition::new(
+                crate::value_objects::Uuid::new_v4(),
+                "test_prop",
+                "Test Prop",
+                PropertyType::Text,
+            )
+            .with_visibility(visibility)
+            .with_mutability(mutability)
+            .with_merge_policy(merge_policy);
+
+            if let Some(src) = source {
+                def = def.with_derived_from(src);
+            }
+
+            prop_assert!(def.assert_invariants().is_ok());
+        }
+    }
+
+    // Arbitrary instance generator for PropertyDefinition covering all new enum variants
+    fn arbitrary_property_definition() -> impl Strategy<Value = PropertyDefinition> {
+        (
+            any::<PropertyVisibility>(),
+            any::<PropertyMutability>(),
+            any::<Option<DerivedSource>>(),
+            any::<MergePolicy>(),
+            any::<PropertyType>(),
+            any::<Cardinality>(),
+            any::<PropertyStatus>(),
+        )
+            .prop_map(|(visibility, mutability, derived_from, merge_policy, property_type, cardinality, status)| {
+                let mut def = PropertyDefinition::new(
+                    crate::value_objects::Uuid::new_v4(),
+                    "test_prop",
+                    "Test Prop",
+                    property_type,
+                )
+                .with_visibility(visibility)
+                .with_mutability(mutability)
+                .with_merge_policy(merge_policy)
+                .with_cardinality(cardinality)
+                .with_status(status);
+
+                if let Some(src) = derived_from {
+                    def = def.with_derived_from(src);
+                }
+
+                def
+            })
     }
 }
