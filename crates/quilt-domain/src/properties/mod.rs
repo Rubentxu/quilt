@@ -41,5 +41,8 @@ pub use merge::merge_properties;
 pub use relation::{PropertyRelation, RelationType};
 pub use resolver::PropertyKeyResolver;
 pub use schema::{AutoDetectParams, PropertySchema};
-pub use types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext};
+pub use types::{
+    Cardinality, ClosedValue, DerivedSource, MergePolicy, PropertyMutability, PropertyStatus,
+    PropertyType, PropertyVisibility, ViewContext,
+};
 pub use validator::PropertyValidator;

@@ -56,6 +56,8 @@ pub enum DomainError {
     Database(String),
     /// Feature not yet implemented
     NotImplemented(&'static str),
+    /// Invariant violation in domain logic
+    InvariantViolation(&'static str),
 }
 
 impl fmt::Display for DomainError {
@@ -121,6 +123,9 @@ impl fmt::Display for DomainError {
             }
             DomainError::NotImplemented(feature) => {
                 write!(f, "Not implemented: {}", feature)
+            }
+            DomainError::InvariantViolation(msg) => {
+                write!(f, "Invariant violation: {}", msg)
             }
         }
     }
@@ -260,5 +265,28 @@ mod tests {
         let err = DomainError::BlockHasChildren;
         let debug = format!("{:?}", err);
         assert!(debug.contains("BlockHasChildren"));
+    }
+
+    // ── InvariantViolation ────────────────────────────────────────
+
+    #[test]
+    fn test_display_invariant_violation() {
+        let err = DomainError::InvariantViolation("derived property must be immutable");
+        let msg = format!("{}", err);
+        assert!(msg.contains("Invariant violation: derived property must be immutable"));
+    }
+
+    #[test]
+    fn test_implements_std_error_invariant_violation() {
+        // InvariantViolation must still implement std::error::Error (additive variant)
+        let err = DomainError::InvariantViolation("test");
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn test_debug_contains_invariant_violation_name() {
+        let err = DomainError::InvariantViolation("test");
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("InvariantViolation"));
     }
 }
