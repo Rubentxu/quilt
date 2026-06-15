@@ -132,16 +132,16 @@ describe('SlashActionRegistry — basics (T1)', () => {
 
 describe('SlashActionRegistry — default registry coverage (T5, T6)', () => {
   // T5
-  it('default registry has 18+ items (parity with legacy SLASH_MENU_ITEMS)', () => {
-    expect(defaultRegistry.allItems().length).toBeGreaterThanOrEqual(18)
+  it('default registry has 19+ items (parity with legacy SLASH_MENU_ITEMS plus waiting)', () => {
+    expect(defaultRegistry.allItems().length).toBeGreaterThanOrEqual(19)
   })
 
   // T6 — every action prefix used by the legacy switch must be present
   it('default registry covers every legacy action prefix + blockType', () => {
     const ids = defaultRegistry.allItems().map(i => i.id)
 
-    // Status (6)
-    for (const id of ['status-todo', 'status-doing', 'status-done', 'status-now', 'status-later', 'status-cancelled']) {
+    // Status (7)
+    for (const id of ['status-todo', 'status-doing', 'status-done', 'status-now', 'status-later', 'status-cancelled', 'status-waiting']) {
       expect(ids, `missing status item: ${id}`).toContain(id)
     }
     // Priority (3)

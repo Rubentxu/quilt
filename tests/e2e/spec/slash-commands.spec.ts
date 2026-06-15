@@ -7,8 +7,8 @@
  *
  *   - **Menu interaction** (3 tests) — opens on `/`, filters as the
  *     user types, closes on Escape.
- *   - **Status / marker** (6) — `/todo`, `/doing`, `/done`, `/now`,
- *     `/later`, `/cancelled` flip the block's `marker` to the
+ *   - **Status / marker** (7) — `/todo`, `/doing`, `/done`, `/now`,
+ *     `/later`, `/cancelled`, `/waiting` flip the block's `marker` to the
  *     title-cased `TaskMarker` value. `/doing` is a known gap — the
  *     server's `TaskMarker` enum does not include "Doing", so the
  *     test asserts the contract (marker=null after the call) until
@@ -35,7 +35,7 @@
  *     (NOT blockType changes), so the test asserts via the
  *     `/api/v1/blocks/:id/properties` endpoint, not via blockType.
  *
- * Total: 34 tests. The `/todo` command is exercised TWICE — once as
+ * Total: 35 tests. The `/todo` command is exercised TWICE — once as
  * a status setter (marker=Todo) and once as a blockType setter
  * (blockType=todo) — to cover both slash items that share the
  * label `TODO` / `To-do`.
@@ -596,18 +596,13 @@ test.describe('Role slash commands @slash-commands', () => {
 // covered by the `Status slash commands` describe block above; the
 // remaining three are exercised here.
 //
-// The `/doing` command is special: the registry's
-// `statusMarkerByValue` map has `doing: 'Doing' as TaskMarker`
-// (line 198) — a cast that overrides the TypeScript `TaskMarker`
-// union, which legitimately does NOT include `"Doing"`. The
-// backend's `TaskMarker::from_str` (task_marker.rs) returns
-// `Err(())` for "doing" too. As a result, `/doing` is a
-// REGRESSION CASE: it ships in the UI menu but cannot round-trip
-// through the API. The test below asserts the documented contract
-// (marker='Doing'); when the server is fixed to accept it, the
-// test will turn green. Until then, the test fails and surfaces
-// the bug — exactly what the project rules require
-// ("tests MUST fail, never skip").
+// The `/doing` command: the backend's `TaskMarker::from_str`
+// has always accepted "doing" (case-insensitive). The slash command
+// itself works. The latent bugs fixed in this change were:
+//   (a) pest grammar omitted "doing" — DSL query `(task doing)` failed
+//   (b) error message listed only 5 markers, omitting "doing"
+//   (c) heuristic rules generated "in-progress" instead of "doing"
+// The test below asserts the documented contract (marker='Doing').
 
 test.describe('More status slash commands @slash-commands', () => {
   test('/doing attempts to set block marker to Doing @slash-commands', async ({ page }) => {
@@ -680,6 +675,31 @@ test.describe('More status slash commands @slash-commands', () => {
     const updated = blocks.find((b) => b.id === blockId)
     expect(updated, 'block should still exist').toBeDefined()
     expect(updated!.marker).toBe('Later')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/waiting sets block marker to Waiting @slash-commands', async ({ page }) => {
+    const s = suffix()
+    const host = `slash-status-waiting-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'waiting seed')
+
+    const editor = await openPageAndEditBlock(page, host, 'waiting seed')
+    // /waiting matches only `status-waiting`.
+    await applySlashCommand(editor, '/waiting', 0)
+
+    // The marker badge renders the title-cased marker as UPPERCASE
+    // text inside the block row.
+    const row = page.locator('.block-row').first()
+    await expect(row.getByText('WAITING', { exact: true })).toBeVisible({
+      timeout: 5_000,
+    })
+
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.marker).toBe('Waiting')
 
     await deleteAllBlocks(page, host)
   })

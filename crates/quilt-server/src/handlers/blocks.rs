@@ -18,9 +18,11 @@ use crate::error::AppError;
 use crate::state::AppState;
 use quilt_application::services::ref_service::parse_refs_from_content;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate};
-use quilt_domain::repositories::{BlockRepository, PageRepository};
 use quilt_domain::references::RefType;
-use quilt_domain::value_objects::{BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid};
+use quilt_domain::repositories::{BlockRepository, PageRepository};
+use quilt_domain::value_objects::{
+    BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid,
+};
 use std::collections::HashMap;
 
 /// A block returned to the frontend
@@ -197,7 +199,9 @@ pub(crate) fn map_app_error(e: quilt_application::ApplicationError) -> AppError 
         }
         ApplicationError::Domain(d) => match d {
             DomainError::InvalidData(msg) => AppError::BadRequest(msg),
-            DomainError::BlockNotFound(id) => AppError::NotFound(format!("Block not found: {}", id)),
+            DomainError::BlockNotFound(id) => {
+                AppError::NotFound(format!("Block not found: {}", id))
+            }
             DomainError::PageNotFound(id) => AppError::NotFound(format!("Page not found: {}", id)),
             _ => AppError::Internal(d.to_string()),
         },
@@ -550,7 +554,7 @@ pub async fn update_block(
     let marker_update = match payload.marker.as_deref() {
         Some(s) => Some(TaskMarker::parse_str(s).map_err(|_| {
             AppError::BadRequest(format!(
-                "Invalid marker: '{}'. Expected one of: now, later, todo, done, cancelled",
+                "Invalid marker: '{}'. Expected one of: now, later, todo, doing, done, cancelled, waiting",
                 s
             ))
         })?),
@@ -776,12 +780,10 @@ pub async fn link_blocks(
     Extension(state): Extension<AppState>,
     Json(payload): Json<LinkBlocksRequest>,
 ) -> Result<(StatusCode, Json<serde_json::Value>), AppError> {
-    let source_uuid = Uuid::parse_str(&payload.source_id).map_err(|_| {
-        AppError::BadRequest(format!("Invalid source UUID: {}", payload.source_id))
-    })?;
-    let target_uuid = Uuid::parse_str(&payload.target_id).map_err(|_| {
-        AppError::BadRequest(format!("Invalid target UUID: {}", payload.target_id))
-    })?;
+    let source_uuid = Uuid::parse_str(&payload.source_id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid source UUID: {}", payload.source_id)))?;
+    let target_uuid = Uuid::parse_str(&payload.target_id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid target UUID: {}", payload.target_id)))?;
 
     // Use the use-case to create the link (verifies both blocks exist)
     state

@@ -29,6 +29,7 @@ import { defaultRegistry, type SlashContext } from './slashRegistry'
 import { InlinePropertyBadges } from '@features/properties/InlinePropertyBadges'
 // PropertyStrip — renders multiple in-block properties as a compact card
 import { PropertyStrip, type PropertyRow } from '@features/properties/PropertyStrip'
+import { TASK_MARKER_CYCLE } from './rendering/TaskRenderer'
 
 // Re-export findNearestLink for backward compatibility — BlockRow.test.tsx
 // (and any external consumer) imports it from this module. The actual
@@ -110,6 +111,8 @@ const MARKER_STYLES: Record<TaskMarker, { bg: string; text: string }> = {
   Now: { bg: 'var(--color-danger)', text: '#fff' },
   Later: { bg: 'var(--color-warning)', text: '#fff' },
   Cancelled: { bg: 'var(--color-text-disabled)', text: '#fff' },
+  // Waiting: purple - var(--color-warning-soft) is purple-ish if defined, fallback #9333ea
+  Waiting: { bg: 'var(--color-warning-soft, #9333ea)', text: '#fff' },
 }
 
 const PRIORITY_STYLES: Record<Priority, { bg: string; text: string }> = {
@@ -757,11 +760,10 @@ export function BlockRow({
 
         case 'ToggleDone': {
           e.preventDefault()
-          // Match WASM CycleMarker: None → Todo → Done → None
-          const CYCLE: (TaskMarker | null)[] = [null, 'Todo', 'Done']
-          const currentIdx = CYCLE.indexOf(block.marker ?? null)
-          const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % CYCLE.length : 0
-          const nextMarker = CYCLE[nextIdx]
+          // Use the 7-step cycle from TaskRenderer: null → todo → waiting → doing → done → later → cancelled → null
+          const currentIdx = TASK_MARKER_CYCLE.indexOf(block.marker)
+          const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % TASK_MARKER_CYCLE.length : 0
+          const nextMarker = TASK_MARKER_CYCLE[nextIdx]
           onUpdate({ ...block, marker: nextMarker })
           api.updateBlock(block.id, { marker: nextMarker }).catch(() => {
             toast.error('Failed to cycle marker')

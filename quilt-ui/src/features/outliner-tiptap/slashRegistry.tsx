@@ -47,6 +47,7 @@ import {
   Calendar, CalendarDays, CalendarX, CalendarClock,
   FileText, FilePlus, Hash, MessageCircle,
   ListChecks, Terminal, LayoutTemplate,
+  Hourglass,
 } from 'lucide-react'
 import type { Block, BlockType, TaskMarker, Priority, Page } from '@shared/types/api'
 import type { api as ApiClient } from '@core/api-client'
@@ -200,6 +201,7 @@ const statusMarkerByValue: Record<string, TaskMarker> = {
   now: 'Now',
   later: 'Later',
   cancelled: 'Cancelled',
+  waiting: 'Waiting' as TaskMarker,
 }
 
 const makeStatusHandler: (value: string) => SlashHandler = (value) => async (ctx) => {
@@ -326,6 +328,10 @@ export const defaultRegistry: SlashActionRegistry = (() => {
   reg.register(
     { id: 'status-cancelled', label: 'CANCELLED', description: 'Mark as cancelled', icon: <XCircle size={18} />, action: 'status:cancelled', keywords: ['cancelled', 'cancel', 'abandoned'], category: 'Status' },
     makeStatusHandler('cancelled'),
+  )
+  reg.register(
+    { id: 'status-waiting', label: 'WAITING', description: 'Mark as waiting on external', icon: <Hourglass size={18} />, action: 'status:waiting', keywords: ['waiting', 'blocked', 'paused'], category: 'Status' },
+    makeStatusHandler('waiting'),
   )
 
   // ── Priority ──

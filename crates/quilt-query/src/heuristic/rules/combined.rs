@@ -44,7 +44,7 @@ impl IntentRule for CombinedRule {
             if contains_any(&lower, &["done", "completed", "finished", "terminadas", "completadas", "hechas"]) {
                 parts.push(QueryAst::Task(vec!["done".into()]));
             } else if contains_any(&lower, &["open", "pending", "abiertas", "pendientes"]) {
-                parts.push(QueryAst::Task(vec!["todo".into(), "in-progress".into()]));
+                parts.push(QueryAst::Task(vec!["todo".into(), "doing".into()]));
             }
         }
 

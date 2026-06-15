@@ -62,6 +62,7 @@ pub(crate) fn parse_marker(s: &str) -> Option<TaskMarker> {
         "doing" => Some(TaskMarker::Doing),
         "done" => Some(TaskMarker::Done),
         "cancelled" => Some(TaskMarker::Cancelled),
+        "waiting" => Some(TaskMarker::Waiting),
         _ => None,
     }
 }
@@ -74,6 +75,7 @@ pub(crate) fn marker_to_str(m: &TaskMarker) -> &'static str {
         TaskMarker::Doing => "doing",
         TaskMarker::Done => "done",
         TaskMarker::Cancelled => "cancelled",
+        TaskMarker::Waiting => "waiting",
     }
 }
 
@@ -191,12 +193,14 @@ mod tests {
         assert_eq!(parse_marker("now"), Some(quilt_domain::value_objects::TaskMarker::Now));
         assert_eq!(parse_marker("later"), Some(quilt_domain::value_objects::TaskMarker::Later));
         assert_eq!(parse_marker("cancelled"), Some(quilt_domain::value_objects::TaskMarker::Cancelled));
+        assert_eq!(parse_marker("waiting"), Some(quilt_domain::value_objects::TaskMarker::Waiting));
 
         // PascalCase variants (legacy DB data - grace period)
         assert_eq!(parse_marker("TODO"), Some(quilt_domain::value_objects::TaskMarker::Todo));
         assert_eq!(parse_marker("DOING"), Some(quilt_domain::value_objects::TaskMarker::Doing));
         assert_eq!(parse_marker("DONE"), Some(quilt_domain::value_objects::TaskMarker::Done));
         assert_eq!(parse_marker("Now"), Some(quilt_domain::value_objects::TaskMarker::Now));
+        assert_eq!(parse_marker("WAITING"), Some(quilt_domain::value_objects::TaskMarker::Waiting));
 
         // Unknown
         assert_eq!(parse_marker("unknown"), None);

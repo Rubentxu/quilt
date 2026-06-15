@@ -15,13 +15,13 @@ impl IntentRule for TaskStatusRule {
 
         // English patterns
         if contains_any(&lower, &["open tasks", "open task", "pending tasks", "pending task"]) {
-            return Some((QueryAst::Task(vec!["todo".into(), "in-progress".into()]), 0.9));
+            return Some((QueryAst::Task(vec!["todo".into(), "doing".into()]), 0.9));
         }
         if contains_any(&lower, &["done tasks", "completed tasks", "finished tasks"]) {
             return Some((QueryAst::Task(vec!["done".into()]), 0.9));
         }
         if contains_any(&lower, &["tasks in progress", "active tasks", "working on"]) {
-            return Some((QueryAst::Task(vec!["in-progress".into()]), 0.85));
+            return Some((QueryAst::Task(vec!["doing".into()]), 0.85));
         }
         if contains_any(&lower, &["cancelled tasks", "canceled tasks"]) {
             return Some((QueryAst::Task(vec!["cancelled".into()]), 0.9));
@@ -29,13 +29,13 @@ impl IntentRule for TaskStatusRule {
 
         // Spanish patterns
         if contains_any(&lower, &["tareas abiertas", "tareas pendientes", "tarea abierta", "tarea pendiente"]) {
-            return Some((QueryAst::Task(vec!["todo".into(), "in-progress".into()]), 0.9));
+            return Some((QueryAst::Task(vec!["todo".into(), "doing".into()]), 0.9));
         }
         if contains_any(&lower, &["tareas terminadas", "tareas completadas", "tareas hechas", "tarea terminada"]) {
             return Some((QueryAst::Task(vec!["done".into()]), 0.9));
         }
         if contains_any(&lower, &["tareas en progreso", "tareas activas", "tarea en progreso"]) {
-            return Some((QueryAst::Task(vec!["in-progress".into()]), 0.85));
+            return Some((QueryAst::Task(vec!["doing".into()]), 0.85));
         }
         if contains_any(&lower, &["tareas canceladas", "tarea cancelada"]) {
             return Some((QueryAst::Task(vec!["cancelled".into()]), 0.9));

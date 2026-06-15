@@ -5,12 +5,12 @@ import { BlockCheckbox } from './Checkbox'
 
 const TASK_MARKER_CYCLE: (TaskMarker | null)[] = [
   null,
-  'todo',
-  'now',
-  'doing',
-  'done',
-  'later',
-  'cancelled',
+  'Todo',
+  'Waiting',
+  'Doing',
+  'Done',
+  'Later',
+  'Cancelled',
 ]
 
 export const TaskRenderer: BlockRenderer = {
@@ -22,7 +22,7 @@ export const TaskRenderer: BlockRenderer = {
   },
 
   renderBullet(ctx, _defaultBullet) {
-    const marker = ctx.block.marker ?? 'todo'
+    const marker = ctx.block.marker ?? 'Todo'
     return (
       <BlockCheckbox
         marker={marker}
@@ -44,8 +44,8 @@ export const TaskRenderer: BlockRenderer = {
 
   wrapContent(ctx, content) {
     const { marker } = ctx.block
-    const isDimmed = marker === 'done' || marker === 'cancelled'
-    const isStruck = marker === 'cancelled'
+    const isDimmed = marker === 'Done' || marker === 'Cancelled'
+    const isStruck = marker === 'Cancelled'
 
     return (
       <div

@@ -19,7 +19,7 @@ self_ref = { "self" }
 block_content = { "(" ~ "full-text-search" ~ string ~ ")" }
 sample = { "(" ~ "sample" ~ integer ~ ")" }
 
-task_marker = { "now" | "later" | "todo" | "done" | "cancelled" }
+task_marker = { "now" | "later" | "todo" | "doing" | "done" | "cancelled" | "waiting" }
 priority_level = { "a" | "b" | "c" }
 
 value = { string | integer | date | time_helper | boolean }

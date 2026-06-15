@@ -35,7 +35,7 @@ impl IntentRule for TemporalRule {
             if contains_any(&lower, &["done", "completed", "finished", "terminadas", "completadas", "hechas"]) {
                 QueryAst::Task(vec!["done".into()])
             } else if contains_any(&lower, &["open", "pending", "abiertas", "pendientes"]) {
-                QueryAst::Task(vec!["todo".into(), "in-progress".into()])
+                QueryAst::Task(vec!["todo".into(), "doing".into()])
             } else {
                 // Generic "tasks this week" — all tasks in time range
                 QueryAst::And(vec![])

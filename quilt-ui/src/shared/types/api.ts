@@ -1,6 +1,6 @@
 // ──── Enums ─────────────────────────────────────────────────────
 
-export type TaskMarker = "Now" | "Later" | "Todo" | "Doing" | "Done" | "Cancelled";
+export type TaskMarker = "Now" | "Later" | "Todo" | "Doing" | "Done" | "Cancelled" | "Waiting";
 export type Priority = "A" | "B" | "C";
 export type BlockType = "paragraph" | "heading1" | "heading2" | "heading3" | "bullet" | "numbered" | "todo" | "quote" | "code" | "divider" | "image";
 export type AppErrorCode = "NOT_FOUND" | "BAD_REQUEST" | "INTERNAL_ERROR";

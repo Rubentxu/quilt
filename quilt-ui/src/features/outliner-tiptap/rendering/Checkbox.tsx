@@ -1,21 +1,23 @@
 import type { TaskMarker } from '@shared/types/api'
 
 const MARKER_CHECKED_STATE: Record<TaskMarker, boolean | 'indeterminate'> = {
-  todo: false,
-  doing: 'indeterminate',
-  done: true,
-  now: 'indeterminate',
-  later: false,
-  cancelled: true,
+  Todo: false,
+  Doing: 'indeterminate',
+  Done: true,
+  Now: 'indeterminate',
+  Later: false,
+  Cancelled: true,
+  Waiting: false, // waiting is not indeterminate — it's a paused/pending state
 }
 
 const MARKER_COLORS: Record<TaskMarker, string> = {
-  todo: 'var(--color-info)',
-  doing: 'var(--color-accent)',
-  done: 'var(--color-success)',
-  now: 'var(--color-danger)',
-  later: 'var(--color-warning)',
-  cancelled: 'var(--color-text-disabled)',
+  Todo: 'var(--color-info)',
+  Doing: 'var(--color-accent)',
+  Done: 'var(--color-success)',
+  Now: 'var(--color-danger)',
+  Later: 'var(--color-warning)',
+  Cancelled: 'var(--color-text-disabled)',
+  Waiting: 'var(--color-warning-soft, #9333ea)', // purple
 }
 
 interface CheckboxProps {
