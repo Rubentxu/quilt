@@ -172,6 +172,10 @@ export interface Block {
   startTime?: string | null;
   /** ISO-8601 string. Next occurrence for recurring tasks (P2). */
   repeated?: string | null;
+  /** ISO-8601 string. Set when marker becomes Done. */
+  completedAt?: string | null;
+  /** ISO-8601 string. Set when marker becomes Cancelled. */
+  cancelledAt?: string | null;
 }
 
 export interface CreateBlockRequest {

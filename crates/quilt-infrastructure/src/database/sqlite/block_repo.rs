@@ -35,6 +35,10 @@ struct BlockRow {
     start_time: Option<i64>,
     repeated: Option<i64>,
     logbook: Option<i64>,
+    /// Timestamp when marker transitioned to Done. NULL if never Done.
+    completed_at: Option<i64>,
+    /// Timestamp when marker transitioned to Cancelled. NULL if never Cancelled.
+    cancelled_at: Option<i64>,
     collapsed: i64,
     created_at: i64,
     updated_at: i64,
@@ -71,6 +75,8 @@ impl BlockRow {
             start_time: row.get("start_time"),
             repeated: row.get("repeated"),
             logbook: row.get("logbook"),
+            completed_at: row.get("completed_at"),
+            cancelled_at: row.get("cancelled_at"),
             collapsed: row.get("collapsed"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
@@ -101,6 +107,8 @@ impl BlockRow {
             start_time: self.start_time.map(ts_to_datetime),
             repeated: self.repeated.map(ts_to_datetime),
             logbook: self.logbook.map(ts_to_datetime),
+            completed_at: self.completed_at.map(ts_to_datetime),
+            cancelled_at: self.cancelled_at.map(ts_to_datetime),
             collapsed: self.collapsed != 0,
             created_at: ts_to_datetime(self.created_at),
             updated_at: ts_to_datetime(self.updated_at),
@@ -208,8 +216,8 @@ impl BlockRepository for SqliteBlockRepository {
             r#"INSERT INTO blocks
             (id, page_id, parent_id, order_index, level, format, block_type, marker, priority,
              content, properties, scheduled, deadline, start_time, repeated, logbook,
-             collapsed, created_at, updated_at, refs, tags)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+             completed_at, cancelled_at, collapsed, created_at, updated_at, refs, tags)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(uuid_to_blob(&block.id))
         .bind(uuid_to_blob(&block.page_id))
@@ -227,6 +235,8 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(block.start_time.as_ref().map(datetime_to_ts))
         .bind(block.repeated.as_ref().map(datetime_to_ts))
         .bind(block.logbook.as_ref().map(datetime_to_ts))
+        .bind(block.completed_at.as_ref().map(datetime_to_ts))
+        .bind(block.cancelled_at.as_ref().map(datetime_to_ts))
         .bind(block.collapsed as i64)
         .bind(datetime_to_ts(&block.created_at))
         .bind(datetime_to_ts(&block.updated_at))
@@ -245,7 +255,7 @@ impl BlockRepository for SqliteBlockRepository {
             page_id = ?, parent_id = ?, order_index = ?, level = ?,
             format = ?, block_type = ?, marker = ?, priority = ?, content = ?,
             properties = ?, scheduled = ?, deadline = ?, start_time = ?,
-            repeated = ?, logbook = ?, collapsed = ?,
+            repeated = ?, logbook = ?, completed_at = ?, cancelled_at = ?, collapsed = ?,
             updated_at = ?, refs = ?, tags = ?
             WHERE id = ?"#,
         )
@@ -264,6 +274,8 @@ impl BlockRepository for SqliteBlockRepository {
         .bind(block.start_time.as_ref().map(datetime_to_ts))
         .bind(block.repeated.as_ref().map(datetime_to_ts))
         .bind(block.logbook.as_ref().map(datetime_to_ts))
+        .bind(block.completed_at.as_ref().map(datetime_to_ts))
+        .bind(block.cancelled_at.as_ref().map(datetime_to_ts))
         .bind(block.collapsed as i64)
         .bind(datetime_to_ts(&block.updated_at))
         .bind(uuid_list_to_blob(&block.refs))

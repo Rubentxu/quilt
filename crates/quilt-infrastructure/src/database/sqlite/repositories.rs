@@ -219,6 +219,10 @@ struct BlockRow {
     start_time: Option<i64>,
     repeated: Option<i64>,
     logbook: Option<i64>,
+    /// Timestamp when marker transitioned to Done. NULL if never Done.
+    completed_at: Option<i64>,
+    /// Timestamp when marker transitioned to Cancelled. NULL if never Cancelled.
+    cancelled_at: Option<i64>,
     collapsed: i64,
     created_at: i64,
     updated_at: i64,
@@ -255,6 +259,8 @@ impl BlockRow {
             start_time: row.get("start_time"),
             repeated: row.get("repeated"),
             logbook: row.get("logbook"),
+            completed_at: row.get("completed_at"),
+            cancelled_at: row.get("cancelled_at"),
             collapsed: row.get("collapsed"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
@@ -285,6 +291,8 @@ impl BlockRow {
             start_time: optional_ts_to_datetime(self.start_time),
             repeated: optional_ts_to_datetime(self.repeated),
             logbook: optional_ts_to_datetime(self.logbook),
+            completed_at: self.completed_at.map(ts_to_datetime),
+            cancelled_at: self.cancelled_at.map(ts_to_datetime),
             collapsed: self.collapsed != 0,
             created_at: ts_to_datetime(self.created_at),
             updated_at: ts_to_datetime(self.updated_at),

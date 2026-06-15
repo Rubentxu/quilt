@@ -148,6 +148,8 @@ mod tests {
             start_time: None,
             repeated: None,
             logbook: None,
+            completed_at: None,
+            cancelled_at: None,
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),

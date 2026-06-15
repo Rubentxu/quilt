@@ -161,6 +161,76 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
         }
     }
 
+    // Migration 009: add `completed_at` and `cancelled_at` columns to `blocks`
+    // (P1 of `slash-command-functional-behavior`). These columns store
+    // the timestamp when a block's marker transitioned to Done or Cancelled.
+    // They are nullable (no DEFAULT) — new transitions set them explicitly.
+    //
+    // Backfill: existing Done/Cancelled blocks get their new columns populated
+    // from the existing `logbook` value (which was set at completion time).
+    // The backfill UPDATE is safe to run on every call (uses `IS NULL` guard).
+    //
+    // Idempotent: if the columns already exist, the ALTER TABLE errors with
+    // "duplicate column" which we catch and ignore. The backfill still runs.
+    let completed_at_added = match sqlx::query("ALTER TABLE blocks ADD COLUMN completed_at INTEGER")
+        .execute(pool)
+        .await
+    {
+        Ok(_) => true,
+        Err(e) => {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+            false // column already existed
+        }
+    };
+
+    // Backfill completed_at from logbook for existing Done blocks.
+    // Runs on every migration call (idempotent: `completed_at IS NULL` guard).
+    // If the column was just added, this catches all existing done blocks.
+    // If the column existed, this catches any that were missed.
+    sqlx::query(
+        "UPDATE blocks SET completed_at = logbook \
+         WHERE marker = 'done' AND logbook IS NOT NULL AND completed_at IS NULL",
+    )
+    .execute(pool)
+    .await
+    .ok();
+
+    let cancelled_at_added = match sqlx::query("ALTER TABLE blocks ADD COLUMN cancelled_at INTEGER")
+        .execute(pool)
+        .await
+    {
+        Ok(_) => true,
+        Err(e) => {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+            false
+        }
+    };
+
+    // Backfill cancelled_at from logbook for existing Cancelled blocks.
+    // Runs on every migration call (idempotent: `cancelled_at IS NULL` guard).
+    sqlx::query(
+        "UPDATE blocks SET cancelled_at = logbook \
+         WHERE marker = 'cancelled' AND logbook IS NOT NULL AND cancelled_at IS NULL",
+    )
+    .execute(pool)
+    .await
+    .ok();
+
+    // Debug trace (remove in production)
+    if completed_at_added || cancelled_at_added {
+        tracing::debug!(
+            "migration 009: completed_at_added={}, cancelled_at_added={}",
+            completed_at_added,
+            cancelled_at_added
+        );
+    }
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS pages (

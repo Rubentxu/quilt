@@ -68,6 +68,12 @@ pub struct BlockDto {
     /// Repeated task next occurrence — ISO-8601 string (P2).
     #[serde(default)]
     pub repeated: Option<String>,
+    /// Completion timestamp — ISO-8601 string. Set when marker becomes Done.
+    #[serde(default)]
+    pub completed_at: Option<String>,
+    /// Cancellation timestamp — ISO-8601 string. Set when marker becomes Cancelled.
+    #[serde(default)]
+    pub cancelled_at: Option<String>,
 }
 
 impl From<(Block, Option<String>)> for BlockDto {
@@ -101,6 +107,8 @@ impl From<(Block, Option<String>)> for BlockDto {
             logbook: block.logbook.map(|dt| dt.to_rfc3339()),
             start_time: block.start_time.map(|dt| dt.to_rfc3339()),
             repeated: block.repeated.map(|dt| dt.to_rfc3339()),
+            completed_at: block.completed_at.map(|dt| dt.to_rfc3339()),
+            cancelled_at: block.cancelled_at.map(|dt| dt.to_rfc3339()),
         }
     }
 }

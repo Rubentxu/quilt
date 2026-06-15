@@ -33,6 +33,8 @@ fn make_block(order: f64) -> Block {
         start_time: None,
         repeated: None,
         logbook: None,
+        completed_at: None,
+        cancelled_at: None,
         collapsed: false,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
