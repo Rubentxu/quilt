@@ -45,6 +45,12 @@ export { findNearestLink } from './blockKeyboardHandler'
 // and is the single source of truth for role detection in BlockRow.
 import { useBlockStrategy, type BlockStrategyName } from './useBlockStrategy'
 
+// Projection renderer feature flag
+import { isProjectionRendererEnabled } from '@shared/utils/featureFlags'
+// ProjectionRenderer — new V1 contract renderer (ADR-0025)
+import { ProjectionRenderer } from '@features/projection/ProjectionRenderer'
+import { useProjection } from '@features/projection/hooks'
+
 // Heavy overlays that only render on user action. Pulling them in via
 // React.lazy means the page bundle stays small even though every
 // block can theoretically show them.
@@ -1386,71 +1392,106 @@ export function BlockRow({
           For `type:: view` blocks the read-mode path delegates to SavedViewBlock instead
           of InlineContent — the view IS the content (table/kanban/etc.) and there is no
           literal text to edit. The user edits the view via the properties panel
-          (view-type::, view-name::, data-source::). */}
-      {isEditing && !isView ? (
-        <div
-          key="edit"
-          ref={contentRef}
-          className="block-content type-body-lg"
-          contentEditable
-          suppressContentEditableWarning
-          role="textbox"
-          aria-multiline="false"
-          aria-label="Block content"
-          tabIndex={0}
-          style={{
-            flex: 1,
-            minWidth: 0,
-            color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
-            outline: 'none',
-            minHeight: '1.5em',
-            wordBreak: 'break-word',
-            whiteSpace: 'pre-wrap',
-          }}
-          onInput={handleInput}
-          onBlur={handleBlur}
-          onKeyDown={handleKeyDown}
-        />
-      ) : isView ? (
-        // Lazy-loaded SavedViewBlock — the heavy view components
-        // (TableView, KanbanBoard) only enter the bundle when the
-        // user actually has a view block on screen.
-        <div
-          key="view"
-          data-testid="block-view-content"
-          style={{
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          <Suspense fallback={<SavedViewFallback />}>
-            <SavedViewBlock block={block} allBlocks={allBlocks} />
-          </Suspense>
-        </div>
-      ) : (
-        <div
-          key="read"
-          onClick={handleStartEdit}
-          className="block-content-read type-body-lg"
-          style={{
-            flex: 1,
-            minWidth: 0,
-            color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
-            cursor: 'text',
-            textDecoration: block.marker === 'Cancelled' ? 'line-through' : 'none',
-            minHeight: '1.5em',
-            wordBreak: 'break-word',
-          }}
-        >
-          <InlineContent
-            content={block.content}
-            blocks={allBlocks}
-            pageMap={pageMap}
-            openTab={openTab}
-            suppressInlineProperties
-            onPropertiesExtracted={handlePropsExtracted}
+          (view-type::, view-name::, data-source::).
+
+          ADR-0025 (ui-surface-refactor): when VITE_PROJECTION_RENDERER is enabled,
+          this section delegates to ProjectionRenderer which consumes the block's
+          resolved projection view (from GET /api/v1/blocks/:id/projection). The
+          projection aggregates decorations (badges, checkboxes, etc.) from active
+          contracts. The legacy rendering path is preserved when the flag is off. */}
+      {isProjectionRendererEnabled() ? (
+        // ProjectionRenderer path — fetches and renders via projection view
+        isView ? (
+          <div
+            key="view"
+            data-testid="block-view-content"
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            <Suspense fallback={<SavedViewFallback />}>
+              <SavedViewBlock block={block} allBlocks={allBlocks} />
+            </Suspense>
+          </div>
+        ) : (
+          <ProjectionRendererWrapper
+            block={block}
+            isEditing={isEditing}
+            contentRef={contentRef}
+            onStartEdit={handleStartEdit}
+            onBlur={handleBlur}
+            onInput={handleInput}
+            onKeyDown={handleKeyDown}
+            onTaskToggle={async (target: string, checked: boolean) => {
+              // Handle task checkbox toggle via projection
+              const marker = checked ? 'Done' : 'Todo'
+              const shape = ensureTaskShape(block, marker)
+              onUpdate({ ...block, marker })
+              await api.updateBlock(block.id, shape).catch(() => {
+                toast.error('Failed to update marker')
+              })
+            }}
           />
-        </div>
+        )
+      ) : (
+        // Legacy path — direct InlineContent rendering
+        isEditing && !isView ? (
+          <div
+            key="edit"
+            ref={contentRef}
+            className="block-content type-body-lg"
+            contentEditable
+            suppressContentEditableWarning
+            role="textbox"
+            aria-multiline="false"
+            aria-label="Block content"
+            tabIndex={0}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
+              outline: 'none',
+              minHeight: '1.5em',
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+            }}
+            onInput={handleInput}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+          />
+        ) : isView ? (
+          <div
+            key="view"
+            data-testid="block-view-content"
+            style={{ flex: 1, minWidth: 0 }}
+          >
+            <Suspense fallback={<SavedViewFallback />}>
+              <SavedViewBlock block={block} allBlocks={allBlocks} />
+            </Suspense>
+          </div>
+        ) : (
+          <div
+            key="read"
+            onClick={handleStartEdit}
+            className="block-content-read type-body-lg"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              color: isDimmed ? 'var(--color-text-disabled)' : 'var(--color-text-primary)',
+              cursor: 'text',
+              textDecoration: block.marker === 'Cancelled' ? 'line-through' : 'none',
+              minHeight: '1.5em',
+              wordBreak: 'break-word',
+            }}
+          >
+            <InlineContent
+              content={block.content}
+              blocks={allBlocks}
+              pageMap={pageMap}
+              openTab={openTab}
+              suppressInlineProperties
+              onPropertiesExtracted={handlePropsExtracted}
+            />
+          </div>
+        )
       )}
 
       {/* Property strip — renders multiple in-block properties (key:: value)
@@ -1728,6 +1769,85 @@ export function BlockRow({
           />
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── ProjectionRenderer wrapper ───────────────────────────────────────────────
+//
+// ADR-0025: wraps ProjectionRenderer with the useProjection hook and
+// wires it into BlockRow's existing edit/input/blur handlers.
+
+interface ProjectionRendererWrapperProps {
+  block: Block
+  isEditing: boolean
+  contentRef: React.RefObject<HTMLDivElement | null>
+  onStartEdit: () => void
+  onBlur: () => void
+  onInput: (e: React.FormEvent<HTMLDivElement>) => void
+  onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void
+  onTaskToggle?: (target: string, checked: boolean) => void
+}
+
+function ProjectionRendererWrapper({
+  block,
+  isEditing,
+  contentRef,
+  onStartEdit,
+  onBlur,
+  onInput,
+  onKeyDown,
+  onTaskToggle,
+}: ProjectionRendererWrapperProps) {
+  const { projection } = useProjection({
+    blockId: block.id,
+    skip: !block.id, // Always skip when no block ID
+  })
+
+  if (isEditing) {
+    return (
+      <div
+        ref={contentRef}
+        contentEditable
+        suppressContentEditableWarning
+        role="textbox"
+        aria-multiline="false"
+        aria-label="Block content"
+        tabIndex={0}
+        onBlur={onBlur}
+        onInput={onInput}
+        onKeyDown={onKeyDown}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          color: 'var(--color-text-primary)',
+          outline: 'none',
+          minHeight: '1.5em',
+          wordBreak: 'break-word',
+          whiteSpace: 'pre-wrap',
+        }}
+      >
+        {block.content}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      onClick={onStartEdit}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        cursor: 'text',
+        minHeight: '1.5em',
+        wordBreak: 'break-word',
+      }}
+    >
+      <ProjectionRenderer
+        projection={projection}
+        isEditing={false}
+        onTaskToggle={onTaskToggle}
+      />
     </div>
   )
 }

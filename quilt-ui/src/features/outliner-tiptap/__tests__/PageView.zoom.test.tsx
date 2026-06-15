@@ -79,6 +79,50 @@ vi.mock('@core/wasm-bridge/WasmProvider', () => ({
   ensureWasmLoaded: vi.fn().mockResolvedValue(undefined),
 }))
 
+// ── useProjection mock ─────────────────────────────────────────
+// ADR-0025: ProjectionRenderer requires useProjection to return a
+// resolved projection with the block's text. Without this mock,
+// the projection is null (loading/error) and ProjectionRenderer
+// renders a skeleton instead of text content.
+
+const { mockUseProjection } = vi.hoisted(() => {
+  const fn = vi.fn()
+  return { mockUseProjection: fn }
+})
+
+function makeProjection(text: string) {
+  return {
+    projection: {
+      text,
+      links: [],
+      children: [],
+      decorations: [],
+      conflicts: [],
+      properties: {},
+    },
+    loading: false,
+    error: null,
+  }
+}
+
+vi.mock('@features/projection/hooks', () => ({
+  useProjection: (...args: any[]) => mockUseProjection(...args),
+}))
+
+// Map from blockId → content, populated in beforeEach
+const blockContentMap = new Map<string, string>()
+
+function setProjectionMocks(blocks: Block[]) {
+  blockContentMap.clear()
+  for (const b of blocks) {
+    blockContentMap.set(b.id, b.content)
+  }
+  mockUseProjection.mockImplementation((opts: { blockId: string }) => {
+    const text = blockContentMap.get(opts.blockId) ?? 'UNKNOWN_BLOCK'
+    return makeProjection(text)
+  })
+}
+
 // ── Block factory ──────────────────────────────────────────────
 
 function makeBlock(overrides: Partial<Block> = {}): Block {
@@ -124,14 +168,23 @@ function buildDemoTree(): Block[] {
 // ── Helpers ─────────────────────────────────────────────────────
 
 /**
- * Get all block-content-read divs (the visible block text in read
- * mode). The PageView renders one per visible block. We use this
- * to assert which blocks are present in the DOM after the zoom
- * filter has been applied.
+ * Get all visible block text content from the DOM.
+ *
+ * Legacy path (VITE_PROJECTION_RENDERER=off):
+ *   - read mode uses `.block-content-read` divs
+ * ProjectionRenderer path (VITE_PROJECTION_RENDERER=on):
+ *   - each block renders a ProjectionRenderer with [data-testid="projection-text"]
+ *     as the text container inside [data-testid="projection-renderer"]
  */
 function getVisibleBlockContents(): string[] {
-  const readNodes = document.querySelectorAll('.block-content-read')
-  return Array.from(readNodes).map(el => el.textContent ?? '')
+  // Legacy: .block-content-read divs
+  const legacy = document.querySelectorAll('.block-content-read')
+  if (legacy.length > 0) {
+    return Array.from(legacy).map(el => el.textContent ?? '')
+  }
+  // Projection renderer: text is inside [data-testid="projection-text"]
+  const projection = document.querySelectorAll('[data-testid="projection-text"]')
+  return Array.from(projection).map(el => el.textContent?.trim() ?? '')
 }
 
 // ── Lifecycle ──────────────────────────────────────────────────
@@ -139,10 +192,13 @@ function getVisibleBlockContents(): string[] {
 beforeEach(() => {
   vi.clearAllMocks()
   // Default: return the demo tree.
-  mockGetPageBlocks.mockResolvedValue(buildDemoTree())
+  const tree = buildDemoTree()
+  mockGetPageBlocks.mockResolvedValue(tree)
   mockUpdateBlock.mockImplementation(async (id, data) => makeBlock({ id, ...data }))
   mockDeleteBlock.mockResolvedValue({ deleted: true })
   mockCreateBlock.mockImplementation(async data => makeBlock({ id: 'new', ...data }))
+  // Set up projection mocks for the demo tree blocks.
+  setProjectionMocks(tree)
 })
 
 afterEach(() => {

@@ -49,6 +49,7 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/migration", handlers::migration::routes())
         .nest("/api/v1/user/tour-state", handlers::tour_state::routes())
         .nest("/api/v1/graph", handlers::graph::routes())
+        .nest("/api/v1/presets", handlers::presets::routes())
         // Frontend serving (catch-all for SPA)
         .route(
             "/",
@@ -79,6 +80,8 @@ pub fn create_app(state: AppState) -> Router {
         .layer(axum::Extension(state.repos.tour_state.clone()))
         .layer(axum::Extension(state.search_service.clone()))
         .layer(axum::Extension(state.ref_service.clone()))
+        .layer(axum::Extension(state.projection_resolver.clone()))
+        .layer(axum::Extension(state.preset_registry.clone()))
         .layer(cors)
         .layer(middleware::from_fn(
             crate::middleware::auth::auth_middleware,

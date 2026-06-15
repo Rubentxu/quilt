@@ -743,6 +743,46 @@ export const api = {
       sessionCache.invalidate('GET /user/tour-state')
       return result
     }),
+
+  // ─── Projection (ADR-0025) ─────────────────────────────────────────────────
+  //
+  // `GET /api/v1/blocks/:id/projection` — resolves the winning projection
+  // for a block and returns the `ProjectionView`. The cache TTL is 30s
+  // to balance freshness with responsiveness.
+
+  /**
+   * Get the resolved projection view for a block.
+   *
+   * The projection aggregates the block's visual surface: text content,
+   * decorations (badges, checkboxes, etc.), links, and any resolution
+   * conflicts. Powers the projection-renderer feature.
+   *
+   * @param blockId UUID of the block to project
+   */
+  getBlockProjection: (blockId: string) =>
+    cachedFetch<import('@features/projection/types').ProjectionView>(
+      'GET',
+      `/blocks/${blockId}/projection`,
+    ),
+
+  // ─── Property presets (ADR-0025) ──────────────────────────────────────────
+  //
+  // `GET /api/v1/presets` — lists all registered V1 property presets.
+  // Each preset is a named bundle of property patches (key/value/mutability)
+  // that can be applied to a block to change its visual representation.
+
+  /**
+   * List all available property presets.
+   *
+   * Presets power the slash command menu and the preset palette. Each
+   * preset carries required argument kinds (date/url/text) that the
+   * caller must provide when applying.
+   */
+  listPresets: () =>
+    cachedFetch<import('@features/projection/types').PresetListResponse>(
+      'GET',
+      '/presets',
+    ),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────

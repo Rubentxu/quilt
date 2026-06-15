@@ -263,6 +263,7 @@ pub fn routes() -> Router {
             get(get_block_properties).put(set_block_property),
         )
         .route("/:id/properties/:key", delete(delete_block_property))
+        .route("/:id/projection", get(super::projection::get_projection))
 }
 
 /// GET /api/v1/blocks?dsl=...&limit=...

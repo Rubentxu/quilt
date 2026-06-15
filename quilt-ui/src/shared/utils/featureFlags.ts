@@ -27,6 +27,15 @@
  * directly so tests can stub the function.
  */
 
+/**
+ * Feature flag utility for the projection renderer change.
+ *
+ * The `VITE_PROJECTION_RENDERER` flag toggles between the legacy
+ * BlockRow rendering and the new ProjectionRenderer component.
+ * When ON (default), BlockRow delegates rendering to ProjectionRenderer.
+ * When OFF, the legacy rendering path is preserved for safe rollback.
+ */
+
 import { vi } from 'vitest'
 
 const TRUTHY = new Set(['true', '1', 'yes', 'on'])
@@ -42,6 +51,16 @@ export function parseAnnotationFlag(raw: string | undefined): boolean {
   return true
 }
 
+/** Raw env-var read for projection flag — exported only for tests. */
+export function parseProjectionFlag(raw: string | undefined): boolean {
+  if (raw === undefined) return true // Default to ON — ADR-0025 projection renderer is the new standard path
+  const normalized = raw.trim().toLowerCase()
+  if (normalized === '') return false
+  if (TRUTHY.has(normalized)) return true
+  if (['false', '0', 'no', 'off'].includes(normalized)) return false
+  return false
+}
+
 let _enabled: boolean = parseAnnotationFlag(
   // Vite injects `import.meta.env.VITE_*` at build/dev time; undefined
   // in unit tests. The `typeof === 'string'` guard keeps the strict
@@ -51,12 +70,26 @@ let _enabled: boolean = parseAnnotationFlag(
     : undefined,
 )
 
+let _projectionEnabled: boolean = parseProjectionFlag(
+  typeof import.meta.env.VITE_PROJECTION_RENDERER === 'string'
+    ? import.meta.env.VITE_PROJECTION_RENDERER
+    : undefined,
+)
+
 /**
  * Returns true when the frontend should use the new annotation
  * REST surface instead of the block-property comment path.
  */
 export function isAnnotationsEnabled(): boolean {
   return _enabled
+}
+
+/**
+ * Returns true when the frontend should use the new ProjectionRenderer
+ * instead of the legacy BlockRow rendering.
+ */
+export function isProjectionRendererEnabled(): boolean {
+  return _projectionEnabled
 }
 
 /**
@@ -70,6 +103,17 @@ export function __setAnnotationsEnabledForTest(value: boolean): () => void {
   _enabled = value
   return () => {
     _enabled = previous
+  }
+}
+
+/**
+ * Override the projection renderer flag value. **Test-only**
+ */
+export function __setProjectionRendererEnabledForTest(value: boolean): () => void {
+  const previous = _projectionEnabled
+  _projectionEnabled = value
+  return () => {
+    _projectionEnabled = previous
   }
 }
 

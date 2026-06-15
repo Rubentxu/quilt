@@ -5,7 +5,9 @@
 use axum::extract::FromRef;
 use quilt_application::AppServices;
 use quilt_application::services::ref_service::RefServiceTrait;
+use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 
+use quilt_domain::canonicalization::PresetRegistry;
 use quilt_domain::repositories::{
     BlockRepository, PageRepository, PropertyRepository, RefRepository, RelationRepository,
     SchemaRepository, SettingsRepository, TagRepository, TourStateRepository,
@@ -128,6 +130,10 @@ pub struct AppState {
     pub last_opened_graph: Arc<RwLock<Option<String>>>,
     /// Bidirectional reference service for O(1) backlink queries
     pub ref_service: Arc<dyn RefServiceTrait>,
+    /// Projection resolver for block projection resolution
+    pub projection_resolver: Arc<ProjectionResolver>,
+    /// Preset registry for property presets
+    pub preset_registry: Arc<dyn PresetRegistry>,
 }
 
 // ── FromRef implementations ─────────────────────────────────────────────────
@@ -201,6 +207,18 @@ impl FromRef<AppState> for Arc<dyn RefServiceTrait> {
     }
 }
 
+impl FromRef<AppState> for Arc<ProjectionResolver> {
+    fn from_ref(state: &AppState) -> Self {
+        state.projection_resolver.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn PresetRegistry> {
+    fn from_ref(state: &AppState) -> Self {
+        state.preset_registry.clone()
+    }
+}
+
 impl AppState {
     /// Create a new AppState with all repositories wired up
     ///
@@ -214,6 +232,8 @@ impl AppState {
         search_index: Arc<SearchIndexManager>,
         ref_service: Arc<dyn RefServiceTrait>,
         services: Arc<AppServices>,
+        projection_resolver: Arc<ProjectionResolver>,
+        preset_registry: Arc<dyn PresetRegistry>,
     ) -> Self {
         // Create broadcast channel for navigation events
         let (navigation_tx, _) = broadcast::channel(100);
@@ -226,6 +246,8 @@ impl AppState {
             navigation_tx,
             last_opened_graph: Arc::new(RwLock::new(None)),
             ref_service,
+            projection_resolver,
+            preset_registry,
         }
     }
 

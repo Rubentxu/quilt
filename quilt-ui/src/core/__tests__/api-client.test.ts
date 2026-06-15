@@ -548,6 +548,10 @@ describe('api surface (P0 — only mounted routes)', () => {
       'executeQuery',
       // Tour state
       'getTourState', 'dismissTour',
+      // Projection (ADR-0025)
+      'getBlockProjection',
+      // Presets (ADR-0025)
+      'listPresets',
     ].sort()
     expect(Object.keys(api).sort()).toEqual(expected)
   })

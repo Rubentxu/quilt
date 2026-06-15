@@ -231,30 +231,6 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
         );
     }
 
-    // Migration 009b: add `journal_aggregate` column to `user_settings`
-    // (T7 of `slash-command-functional-behavior`). This setting controls whether
-    // the journal page renders 4 default query blocks (NOW, Scheduled today,
-    // Deadlines today, Overdue). Default: 0 (false) — opt-in feature.
-    //
-    // Idempotent: ALTER TABLE errors with "duplicate column" if already added.
-    match sqlx::query(
-        "ALTER TABLE user_settings ADD COLUMN journal_aggregate INTEGER NOT NULL DEFAULT 0",
-    )
-    .execute(pool)
-    .await
-    {
-        Ok(_) => {
-            tracing::debug!("migration 009b: journal_aggregate added");
-        }
-        Err(e) => {
-            let msg = e.to_string();
-            if !msg.contains("duplicate column") {
-                return Err(e.into());
-            }
-            // column already existed — no-op
-        }
-    }
-
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS pages (
@@ -515,6 +491,30 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     )
     .execute(pool)
     .await?;
+
+    // Migration 009b: add `journal_aggregate` column to `user_settings`
+    // (T7 of `slash-command-functional-behavior`). This setting controls whether
+    // the journal page renders 4 default query blocks (NOW, Scheduled today,
+    // Deadlines today, Overdue). Default: 0 (false) — opt-in feature.
+    //
+    // Idempotent: ALTER TABLE errors with "duplicate column" if already added.
+    match sqlx::query(
+        "ALTER TABLE user_settings ADD COLUMN journal_aggregate INTEGER NOT NULL DEFAULT 0",
+    )
+    .execute(pool)
+    .await
+    {
+        Ok(_) => {
+            tracing::debug!("migration 009b: journal_aggregate added");
+        }
+        Err(e) => {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+            // column already existed — no-op
+        }
+    }
 
     // Create tour_dismissals table (B of quilt-fase4-cross-device-tour).
     // Keyed by the opaque `user_id` (V1: the api key from the
