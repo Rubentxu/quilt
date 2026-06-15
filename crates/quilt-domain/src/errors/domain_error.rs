@@ -38,6 +38,21 @@ pub enum DomainError {
     CircularReference(Uuid),
     /// Cannot delete block with children
     BlockHasChildren,
+
+    // Canonicalization / patch errors
+    /// Merge conflict: patch value differs from existing value under RejectOnConflict policy
+    MergeConflict {
+        /// The property key that conflicted
+        key: String,
+        /// The value already present in the block
+        existing: crate::value_objects::PropertyValue,
+        /// The value the patch attempted to write
+        attempted: crate::value_objects::PropertyValue,
+    },
+    /// Attempted to explicitly patch a property whose definition is immutable
+    ImmutableProperty(String),
+    /// Patch attempted to write a forbidden key (`content`, `text`, `children`)
+    ForbiddenPatchKey(String),
     /// Entity already exists
     AlreadyExists(String),
     /// Entity not found (generic)
@@ -102,6 +117,15 @@ impl fmt::Display for DomainError {
             }
             DomainError::BlockHasChildren => {
                 write!(f, "Cannot delete block with children")
+            }
+            DomainError::MergeConflict { key, .. } => {
+                write!(f, "Merge conflict on property '{}'", key)
+            }
+            DomainError::ImmutableProperty(key) => {
+                write!(f, "Property is immutable: {}", key)
+            }
+            DomainError::ForbiddenPatchKey(key) => {
+                write!(f, "Forbidden patch key: {}", key)
             }
             DomainError::AlreadyExists(entity) => {
                 write!(f, "{} already exists", entity)
@@ -288,5 +312,80 @@ mod tests {
         let err = DomainError::InvariantViolation("test");
         let debug = format!("{:?}", err);
         assert!(debug.contains("InvariantViolation"));
+    }
+
+    // ── MergeConflict ──────────────────────────────────────────────
+
+    #[test]
+    fn test_display_merge_conflict() {
+        use crate::value_objects::PropertyValue;
+        let err = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("Merge conflict"));
+        assert!(msg.contains("status"));
+    }
+
+    #[test]
+    fn test_merge_conflict_equality() {
+        use crate::value_objects::PropertyValue;
+        let err1 = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        let err2 = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        assert_eq!(err1, err2);
+    }
+
+    #[test]
+    fn test_debug_contains_merge_conflict_name() {
+        use crate::value_objects::PropertyValue;
+        let err = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("MergeConflict"));
+    }
+
+    // ── ImmutableProperty ──────────────────────────────────────────
+
+    #[test]
+    fn test_display_immutable_property() {
+        let err = DomainError::ImmutableProperty("heading-level".into());
+        let msg = format!("{}", err);
+        assert_eq!(msg, "Property is immutable: heading-level");
+    }
+
+    #[test]
+    fn test_debug_contains_immutable_property_name() {
+        let err = DomainError::ImmutableProperty("heading-level".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("ImmutableProperty"));
+    }
+
+    // ── ForbiddenPatchKey ─────────────────────────────────────────
+
+    #[test]
+    fn test_display_forbidden_patch_key() {
+        let err = DomainError::ForbiddenPatchKey("content".into());
+        let msg = format!("{}", err);
+        assert_eq!(msg, "Forbidden patch key: content");
+    }
+
+    #[test]
+    fn test_debug_contains_forbidden_patch_key_name() {
+        let err = DomainError::ForbiddenPatchKey("content".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("ForbiddenPatchKey"));
     }
 }

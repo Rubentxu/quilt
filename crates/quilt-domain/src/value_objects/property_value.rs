@@ -36,6 +36,14 @@ impl PropertyValue {
         PropertyValue::String(s.into())
     }
 
+    /// Create a text property value (alias for [`string()`]).
+    ///
+    /// Used in the canonicalization pipeline to align with spec vocabulary.
+    #[must_use]
+    pub fn text(s: impl Into<String>) -> Self {
+        Self::string(s)
+    }
+
     /// Create a boolean property value
     pub fn boolean(b: bool) -> Self {
         PropertyValue::Boolean(b)
@@ -227,6 +235,29 @@ mod tests {
 
         let s = PropertyValue::string(String::from("owned"));
         assert_eq!(s, PropertyValue::String("owned".into()));
+    }
+
+    // ── text alias ────────────────────────────────────────────────
+
+    #[test]
+    fn test_text_constructor_matches_string_constructor() {
+        assert_eq!(
+            PropertyValue::text("hello"),
+            PropertyValue::string("hello")
+        );
+        assert_eq!(
+            PropertyValue::text(String::from("world")),
+            PropertyValue::string(String::from("world"))
+        );
+    }
+
+    #[test]
+    fn test_text_accepts_str_and_string() {
+        let s1 = PropertyValue::text("owned");
+        assert_eq!(s1, PropertyValue::String("owned".into()));
+
+        let s2 = PropertyValue::text(String::from("owned"));
+        assert_eq!(s2, PropertyValue::String("owned".into()));
     }
 
     // ── type_name ─────────────────────────────────────────────────

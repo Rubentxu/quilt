@@ -12,6 +12,8 @@
 //! - `references/` - Reference model (Ref, RefType, RefIndex)
 //! - `errors/` - Domain-specific error types
 
+pub mod canonicalization;
+pub mod content;
 pub mod entities;
 pub mod errors;
 pub mod events;
@@ -22,7 +24,9 @@ pub mod services;
 pub mod value_objects;
 
 // Re-exports for convenience
-pub use entities::{Asset, Block, File, Journal, Page, Tag};
+pub use canonicalization::{CanonicalInput, CanonicalizationResult, Canonicalizer, PatchOutcome, ProjectionConflict, PropertyDefinitionRegistry, PropertyPatch, PropertyPatchProvenance, SourceKind};
+pub use content::{BlockContent, BlockSegment, Mark};
+pub use entities::{Asset, Block, File, Journal, Page, PropertyKey, Tag};
 pub use errors::DomainError;
 pub use references::{Ref, RefIndex, RefType};
 pub use services::OrderCalculator;
