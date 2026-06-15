@@ -1806,26 +1806,26 @@ impl SqlitePropertyRepository {
         let first_seen_at: Option<i64> = row.get("first_seen_at");
         let last_seen_at: Option<i64> = row.get("last_seen_at");
 
-        Ok(PropertyDefinition {
+        // ADR-0025: Use from_legacy_fields for the row mapper, then set
+        // usage metadata via builders. This ensures the 4 new first-class
+        // config fields (visibility, mutability, derived_from, merge_policy)
+        // are derived correctly from the legacy flags.
+        Ok(PropertyDefinition::from_legacy_fields(
             id,
-            db_ident: row.get("db_ident"),
-            title: row.get("title"),
+            row.get::<String, _>("db_ident"),
+            row.get::<String, _>("title"),
             property_type,
-            cardinality,
-            closed_values: Vec::new(), // Populated by `load_closed_values` callers
             view_context,
-            public: public != 0,
-            queryable: queryable != 0,
-            hidden: hidden != 0,
-            attribute: row.get("attribute"),
-            read_only: read_only != 0,
-            status,
-            alias_of: row.get("alias_of"),
-            block_count: block_count.max(0) as u64,
-            page_count: page_count.max(0) as u64,
-            first_seen_at: optional_ts_to_datetime(first_seen_at),
-            last_seen_at: optional_ts_to_datetime(last_seen_at),
-        })
+            public != 0,
+            queryable != 0,
+            hidden != 0,
+            read_only != 0,
+        )
+        .with_usage(block_count.max(0) as u64, page_count.max(0) as u64)
+        .with_seen_at(
+            optional_ts_to_datetime(first_seen_at),
+            optional_ts_to_datetime(last_seen_at),
+        ))
     }
 
     /// Fetch the closed values for a property definition. Returns

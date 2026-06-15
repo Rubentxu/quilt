@@ -109,6 +109,8 @@ fn entry_to_block(entry: &MemoryEntry) -> Result<Block, StoreError> {
         repeated: None,
         logbook: None,
         collapsed: false,
+        completed_at: None,
+        cancelled_at: None,
         created_at: entry.created_at,
         updated_at: now,
     })
