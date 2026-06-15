@@ -143,7 +143,23 @@ export type QueryAst =
     }
   | { Exists: string }
   | { Missing: string }
-  | { Namespace: string };
+  | { Namespace: string }
+  // ─────────────────────────────────────────────────────────────────
+  // T5: Journal Aggregation Predicates
+  // ─────────────────────────────────────────────────────────────────
+  | { Scheduled: { predicate: DatePredicate } }
+  | { Deadline: { predicate: DatePredicate } }
+  | 'Overdue'
+  | 'InProgress'
+
+// ─── DatePredicate (T5) ─────────────────────────────────────────────────────
+
+/** Date predicate for scheduled/deadline queries (T5). */
+export type DatePredicate =
+  | 'Today'
+  | 'Tomorrow'
+  | 'Yesterday'
+  | { Relative: string }
 
 // ─── QueryError ─────────────────────────────────────────────────────────────────
 

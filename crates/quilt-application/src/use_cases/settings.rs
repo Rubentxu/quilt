@@ -34,6 +34,7 @@ pub trait SettingsUseCases: Send + Sync {
         journal_format: Option<String>,
         start_of_week: Option<u8>,
         preferred_format: Option<BlockFormat>,
+        journal_aggregate: Option<bool>,
     ) -> Result<UserSettings, ApplicationError>;
 
     /// List the common date format options exposed in the UI.
@@ -69,6 +70,7 @@ impl<R: SettingsRepository + 'static> SettingsUseCases for SettingsUseCasesImpl<
         journal_format: Option<String>,
         start_of_week: Option<u8>,
         preferred_format: Option<BlockFormat>,
+        journal_aggregate: Option<bool>,
     ) -> Result<UserSettings, ApplicationError> {
         let current = self
             .repo
@@ -81,6 +83,7 @@ impl<R: SettingsRepository + 'static> SettingsUseCases for SettingsUseCasesImpl<
             journal_format: journal_format.unwrap_or(current.journal_format),
             start_of_week: start_of_week.unwrap_or(current.start_of_week),
             preferred_format: preferred_format.unwrap_or(current.preferred_format),
+            journal_aggregate: journal_aggregate.unwrap_or(current.journal_aggregate),
         };
 
         updated

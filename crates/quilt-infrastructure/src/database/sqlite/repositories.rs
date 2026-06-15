@@ -1629,8 +1629,8 @@ impl SqliteSettingsRepository {
 #[async_trait]
 impl SettingsRepository for SqliteSettingsRepository {
     async fn get_user_settings(&self) -> Result<UserSettings, DomainError> {
-        let row = sqlx::query_as::<_, (String, String, u8, String)>(
-            "SELECT timezone, journal_format, start_of_week, preferred_format \
+        let row = sqlx::query_as::<_, (String, String, u8, String, bool)>(
+            "SELECT timezone, journal_format, start_of_week, preferred_format, COALESCE(journal_aggregate, 0) \
              FROM user_settings WHERE id = 1",
         )
         .fetch_optional(&self.pool)
@@ -1638,12 +1638,13 @@ impl SettingsRepository for SqliteSettingsRepository {
         .map_err(|e| DomainError::Storage(format!("get_user_settings: {}", e)))?;
 
         match row {
-            Some((timezone, journal_format, start_of_week, preferred_format)) => Ok(UserSettings {
+            Some((timezone, journal_format, start_of_week, preferred_format, journal_aggregate)) => Ok(UserSettings {
                 timezone,
                 journal_format,
                 start_of_week,
                 preferred_format: BlockFormat::parse_str(&preferred_format)
                     .unwrap_or(BlockFormat::Markdown),
+                journal_aggregate,
             }),
             None => Ok(UserSettings::default()),
         }
@@ -1656,19 +1657,21 @@ impl SettingsRepository for SqliteSettingsRepository {
         };
 
         sqlx::query(
-            "INSERT INTO user_settings (id, timezone, journal_format, start_of_week, preferred_format, updated_at) \
-             VALUES (1, ?, ?, ?, ?, unixepoch('now')) \
+            "INSERT INTO user_settings (id, timezone, journal_format, start_of_week, preferred_format, journal_aggregate, updated_at) \
+             VALUES (1, ?, ?, ?, ?, ?, unixepoch('now')) \
              ON CONFLICT(id) DO UPDATE SET \
              timezone = excluded.timezone, \
              journal_format = excluded.journal_format, \
              start_of_week = excluded.start_of_week, \
              preferred_format = excluded.preferred_format, \
+             journal_aggregate = excluded.journal_aggregate, \
              updated_at = excluded.updated_at",
         )
         .bind(&settings.timezone)
         .bind(&settings.journal_format)
         .bind(settings.start_of_week)
         .bind(preferred_format)
+        .bind(settings.journal_aggregate)
         .execute(&self.pool)
         .await
         .map_err(|e| DomainError::Storage(format!("update_user_settings: {}", e)))?;

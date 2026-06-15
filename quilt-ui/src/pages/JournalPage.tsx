@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { PageView } from '@features/outliner-tiptap/PageView'
 import { ErrorBoundary } from '@shared/components/ErrorBoundary'
+import { JournalAggregator } from '@features/journal/JournalAggregator'
 import { api, QuiltApiError } from '@core/api-client'
 import { useWasm } from '@core/wasm-bridge/WasmProvider'
 import { useTabs } from '@shared/contexts/TabsContext'
@@ -149,6 +150,7 @@ export function JournalPage() {
         isJournal
         journalFormat={settings?.journalFormat}
       />
+      <JournalAggregator pageName={page.name} />
     </ErrorBoundary>
   )
 }

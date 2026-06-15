@@ -61,6 +61,7 @@ pub struct UpdateSettingsRequest {
     pub journal_format: Option<String>,
     pub start_of_week: Option<u8>,
     pub preferred_format: Option<String>,
+    pub journal_aggregate: Option<bool>,
 }
 
 /// PUT /api/v1/settings
@@ -86,6 +87,7 @@ pub async fn update_settings(
             .preferred_format
             .and_then(|f| BlockFormat::parse_str(&f).ok())
             .unwrap_or(current.preferred_format),
+        journal_aggregate: req.journal_aggregate.unwrap_or(current.journal_aggregate),
     };
 
     updated

@@ -220,6 +220,8 @@ export interface UserSettings {
   journalFormat: string;
   startOfWeek: number;
   preferredFormat: string;
+  /** Whether to show daily aggregation sections on journal pages (default: false) */
+  journalAggregate?: boolean;
 }
 
 export interface UpdateSettingsRequest {
@@ -227,6 +229,7 @@ export interface UpdateSettingsRequest {
   journalFormat?: string;
   startOfWeek?: number;
   preferredFormat?: string;
+  journalAggregate?: boolean;
 }
 
 export interface DateFormatOption {

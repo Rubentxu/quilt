@@ -25,6 +25,10 @@ pub struct UserSettings {
 
     /// Preferred content format for new pages/blocks
     pub preferred_format: BlockFormat,
+
+    /// Whether to show daily aggregation sections on journal pages (default: false)
+    #[serde(default)]
+    pub journal_aggregate: bool,
 }
 
 impl Default for UserSettings {
@@ -34,6 +38,7 @@ impl Default for UserSettings {
             journal_format: "%Y-%m-%d".to_string(),
             start_of_week: 1, // Monday
             preferred_format: BlockFormat::Markdown,
+            journal_aggregate: false,
         }
     }
 }
@@ -135,6 +140,7 @@ mod tests {
         assert_eq!(settings.journal_format, "%Y-%m-%d");
         assert_eq!(settings.start_of_week, 1);
         assert_eq!(settings.preferred_format, BlockFormat::Markdown);
+        assert_eq!(settings.journal_aggregate, false);
     }
 
     #[test]
