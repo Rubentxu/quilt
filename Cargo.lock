@@ -1834,6 +1834,7 @@ dependencies = [
  "pest",
  "pest_derive",
  "proptest",
+ "quilt-core",
  "quilt-domain",
  "quilt-query",
  "quilt-search",
