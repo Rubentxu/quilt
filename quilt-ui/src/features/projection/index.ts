@@ -6,3 +6,4 @@ export * from './types';
 export * from './hooks';
 export * from './DecorationSlots';
 export * from './ProjectionRenderer';
+export { PresetMenu } from './PresetMenu';
