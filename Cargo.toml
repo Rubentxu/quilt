@@ -68,6 +68,9 @@ parking_lot = "0.12"
 # UUID
 uuid = { version = "1", features = ["v4", "serde"] }
 
+# URL parsing
+url = { version = "2", features = ["serde"] }
+
 # File watching
 # Use default features so the crate pulls in all platform backends:
 #   - macos_fsevent (modern macOS), inotify (Linux), ReadDirectoryChangesW (Windows).

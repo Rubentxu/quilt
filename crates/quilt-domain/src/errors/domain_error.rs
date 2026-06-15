@@ -53,6 +53,19 @@ pub enum DomainError {
     ImmutableProperty(String),
     /// Patch attempted to write a forbidden key (`content`, `text`, `children`)
     ForbiddenPatchKey(String),
+    /// Unknown preset: no preset with this id exists in the registry
+    UnknownPreset(crate::canonicalization::PresetId),
+    /// A required preset argument was not provided
+    MissingPresetArg {
+        /// The preset that requires the argument
+        preset: crate::canonicalization::PresetId,
+        /// The kind of missing argument
+        kind: crate::canonicalization::PresetArgKind,
+    },
+    /// Invalid preset id format
+    InvalidPresetId(String),
+    /// Duplicate preset argument kinds in a single preset invocation
+    DuplicatePresetArgKind(crate::canonicalization::PresetArgKind),
     /// Entity already exists
     AlreadyExists(String),
     /// Entity not found (generic)
@@ -127,6 +140,28 @@ impl fmt::Display for DomainError {
             DomainError::ForbiddenPatchKey(key) => {
                 write!(f, "Forbidden patch key: {}", key)
             }
+            DomainError::UnknownPreset(preset) => {
+                write!(f, "unknown preset: {}", preset)
+            }
+            DomainError::MissingPresetArg { preset, kind } => {
+                let kind_str = match kind {
+                    crate::canonicalization::PresetArgKind::Date => "Date",
+                    crate::canonicalization::PresetArgKind::Url => "Url",
+                    crate::canonicalization::PresetArgKind::Text => "Text",
+                };
+                write!(f, "preset {} requires a {} argument", preset, kind_str)
+            }
+            DomainError::InvalidPresetId(s) => {
+                write!(f, "invalid preset id: {}", s)
+            }
+            DomainError::DuplicatePresetArgKind(kind) => {
+                let kind_str = match kind {
+                    crate::canonicalization::PresetArgKind::Date => "Date",
+                    crate::canonicalization::PresetArgKind::Url => "Url",
+                    crate::canonicalization::PresetArgKind::Text => "Text",
+                };
+                write!(f, "duplicate preset arg kind: {}", kind_str)
+            }
             DomainError::AlreadyExists(entity) => {
                 write!(f, "{} already exists", entity)
             }
@@ -164,6 +199,7 @@ pub type DomainResult<T> = Result<T, DomainError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::canonicalization::{PresetArgKind, PresetId};
 
     // ── Display for each variant ──────────────────────────────────
 
@@ -387,5 +423,78 @@ mod tests {
         let err = DomainError::ForbiddenPatchKey("content".into());
         let debug = format!("{:?}", err);
         assert!(debug.contains("ForbiddenPatchKey"));
+    }
+
+    // ── UnknownPreset ─────────────────────────────────────────────
+
+    #[test]
+    fn test_display_unknown_preset() {
+        use crate::canonicalization::PresetId;
+        let id = PresetId::new("/TODO").unwrap();
+        let err = DomainError::UnknownPreset(id);
+        let msg = format!("{}", err);
+        assert_eq!(msg, "unknown preset: /TODO");
+    }
+
+    #[test]
+    fn test_debug_contains_unknown_preset() {
+        use crate::canonicalization::PresetId;
+        let id = PresetId::new("/Video").unwrap();
+        let err = DomainError::UnknownPreset(id);
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("UnknownPreset"));
+    }
+
+    // ── MissingPresetArg ──────────────────────────────────────────
+
+    #[test]
+    fn test_display_missing_preset_arg() {
+        use crate::canonicalization::{PresetArgKind, PresetId};
+        let preset = PresetId::new("/Scheduled").unwrap();
+        let err = DomainError::MissingPresetArg { preset, kind: PresetArgKind::Date };
+        let msg = format!("{}", err);
+        assert!(msg.contains("/Scheduled"));
+        assert!(msg.contains("Date"));
+    }
+
+    #[test]
+    fn test_debug_contains_missing_preset_arg() {
+        use crate::canonicalization::{PresetArgKind, PresetId};
+        let preset = PresetId::new("/Deadline").unwrap();
+        let err = DomainError::MissingPresetArg { preset, kind: PresetArgKind::Url };
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("MissingPresetArg"));
+    }
+
+    // ── InvalidPresetId ──────────────────────────────────────────
+
+    #[test]
+    fn test_display_invalid_preset_id() {
+        let err = DomainError::InvalidPresetId("TODO".into());
+        let msg = format!("{}", err);
+        assert_eq!(msg, "invalid preset id: TODO");
+    }
+
+    #[test]
+    fn test_debug_contains_invalid_preset_id() {
+        let err = DomainError::InvalidPresetId("TO DO".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("InvalidPresetId"));
+    }
+
+    // ── DuplicatePresetArgKind ────────────────────────────────────
+
+    #[test]
+    fn test_display_duplicate_preset_arg_kind() {
+        let err = DomainError::DuplicatePresetArgKind(PresetArgKind::Text);
+        let msg = format!("{}", err);
+        assert_eq!(msg, "duplicate preset arg kind: Text");
+    }
+
+    #[test]
+    fn test_debug_contains_duplicate_preset_arg_kind() {
+        let err = DomainError::DuplicatePresetArgKind(PresetArgKind::Date);
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("DuplicatePresetArgKind"));
     }
 }

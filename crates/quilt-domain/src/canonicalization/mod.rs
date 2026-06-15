@@ -7,9 +7,13 @@
 pub mod value_objects;
 pub mod canonicalizer;
 pub mod apply;
+pub mod presets;
 
 pub use value_objects::{
     CanonicalInput, CanonicalizationResult, PropertyPatch, PropertyPatchProvenance,
     PatchOutcome, ProjectionConflict, SourceKind,
 };
 pub use canonicalizer::{Canonicalizer, PropertyDefinitionRegistry};
+pub use presets::{
+    PresetArg, PresetArgKind, PresetArgs, PresetId, PropertyPreset,
+};
