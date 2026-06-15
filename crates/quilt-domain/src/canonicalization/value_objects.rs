@@ -83,13 +83,21 @@ impl PropertyPatch {
     /// Construct a derived patch (produced by the canonicalizer).
     #[must_use]
     pub fn derived(key: PropertyKey, value: PropertyValue) -> Self {
-        Self { key, value, provenance: PropertyPatchProvenance::Derived }
+        Self {
+            key,
+            value,
+            provenance: PropertyPatchProvenance::Derived,
+        }
     }
 
     /// Construct an explicit patch (set by the user).
     #[must_use]
     pub fn explicit(key: PropertyKey, value: PropertyValue) -> Self {
-        Self { key, value, provenance: PropertyPatchProvenance::Explicit }
+        Self {
+            key,
+            value,
+            provenance: PropertyPatchProvenance::Explicit,
+        }
     }
 
     /// Apply this patch to a block, enforcing merge policy from the property definition.
@@ -161,7 +169,11 @@ impl CanonicalizationResult {
     /// Construct an empty result (no patches derived or applied).
     #[must_use]
     pub fn empty(content: BlockContent) -> Self {
-        Self { content, derived: Vec::new(), applied: Vec::new() }
+        Self {
+            content,
+            derived: Vec::new(),
+            applied: Vec::new(),
+        }
     }
 
     /// Construct a result with only content (no patches).
@@ -190,10 +202,22 @@ mod tests {
 
     #[test]
     fn source_kind_serialize_all_variants_snake_case() {
-        assert_eq!(serde_json::to_string(&SourceKind::Markdown).unwrap(), "\"markdown\"");
-        assert_eq!(serde_json::to_string(&SourceKind::Paste).unwrap(), "\"paste\"");
-        assert_eq!(serde_json::to_string(&SourceKind::SlashCommand).unwrap(), "\"slash_command\"");
-        assert_eq!(serde_json::to_string(&SourceKind::Picker).unwrap(), "\"picker\"");
+        assert_eq!(
+            serde_json::to_string(&SourceKind::Markdown).unwrap(),
+            "\"markdown\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SourceKind::Paste).unwrap(),
+            "\"paste\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SourceKind::SlashCommand).unwrap(),
+            "\"slash_command\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SourceKind::Picker).unwrap(),
+            "\"picker\""
+        );
         assert_eq!(serde_json::to_string(&SourceKind::Api).unwrap(), "\"api\"");
         assert_eq!(serde_json::to_string(&SourceKind::Mcp).unwrap(), "\"mcp\"");
     }
@@ -232,8 +256,7 @@ mod tests {
 
     #[test]
     fn canonical_input_with_context_page_sets_and_preserves_fields() {
-        let input = CanonicalInput::from_text("some text")
-            .with_context_page("My Page");
+        let input = CanonicalInput::from_text("some text").with_context_page("My Page");
         assert_eq!(input.text, "some text");
         assert_eq!(input.context_page, Some("My Page".into()));
         assert_eq!(input.source_kind, SourceKind::Markdown);
@@ -248,8 +271,7 @@ mod tests {
 
     #[test]
     fn canonical_input_round_trips_via_serde() {
-        let input = CanonicalInput::from_text("test content")
-            .with_context_page("Test Page");
+        let input = CanonicalInput::from_text("test content").with_context_page("Test Page");
         let json = serde_json::to_string(&input).unwrap();
         let restored: CanonicalInput = serde_json::from_str(&json).unwrap();
         assert_eq!(input, restored);
@@ -267,13 +289,22 @@ mod tests {
 
     #[test]
     fn provenance_serialize_lowercase() {
-        assert_eq!(serde_json::to_string(&PropertyPatchProvenance::Derived).unwrap(), "\"derived\"");
-        assert_eq!(serde_json::to_string(&PropertyPatchProvenance::Explicit).unwrap(), "\"explicit\"");
+        assert_eq!(
+            serde_json::to_string(&PropertyPatchProvenance::Derived).unwrap(),
+            "\"derived\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PropertyPatchProvenance::Explicit).unwrap(),
+            "\"explicit\""
+        );
     }
 
     #[test]
     fn provenance_round_trip() {
-        for p in [PropertyPatchProvenance::Derived, PropertyPatchProvenance::Explicit] {
+        for p in [
+            PropertyPatchProvenance::Derived,
+            PropertyPatchProvenance::Explicit,
+        ] {
             let json = serde_json::to_string(&p).unwrap();
             let restored: PropertyPatchProvenance = serde_json::from_str(&json).unwrap();
             assert_eq!(p, restored);
@@ -310,7 +341,11 @@ mod tests {
     fn property_patch_struct_preserves_all_three_fields() {
         let key = make_key("type");
         let value = PropertyValue::text("task");
-        let patch = PropertyPatch { key: key.clone(), value: value.clone(), provenance: PropertyPatchProvenance::Derived };
+        let patch = PropertyPatch {
+            key: key.clone(),
+            value: value.clone(),
+            provenance: PropertyPatchProvenance::Derived,
+        };
         assert_eq!(patch.key, key);
         assert_eq!(patch.value, value);
         assert_eq!(patch.provenance, PropertyPatchProvenance::Derived);
@@ -419,7 +454,10 @@ mod tests {
                 PropertyPatch::derived(make_key("heading-level"), PropertyValue::text("1")),
                 PropertyPatch::derived(make_key("block-role"), PropertyValue::text("heading")),
             ],
-            applied: vec![PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"))],
+            applied: vec![PropertyPatch::explicit(
+                make_key("status"),
+                PropertyValue::text("todo"),
+            )],
         };
         let json = serde_json::to_string(&result).unwrap();
         let restored: CanonicalizationResult = serde_json::from_str(&json).unwrap();

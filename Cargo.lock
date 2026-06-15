@@ -1845,6 +1845,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+ "url",
  "uuid",
 ]
 
@@ -1890,6 +1891,7 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "tokio",
+ "url",
  "uuid",
 ]
 
@@ -3271,6 +3273,7 @@ dependencies = [
  "idna",
  "percent-encoding",
  "serde",
+ "serde_derive",
 ]
 
 [[package]]

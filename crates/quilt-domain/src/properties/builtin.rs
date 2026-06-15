@@ -1,7 +1,9 @@
 //! Builtin properties - predefined system properties
 
 use super::definition::PropertyDefinition;
-use super::types::{Cardinality, ClosedValue, PropertyMutability, PropertyType, PropertyVisibility, ViewContext};
+use super::types::{
+    Cardinality, ClosedValue, PropertyMutability, PropertyType, PropertyVisibility, ViewContext,
+};
 use crate::value_objects::Uuid;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -145,8 +147,13 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
             view_context: ViewContext::Never,
             visibility: PropertyVisibility::System,
             mutability: PropertyMutability::Immutable,
-            ..PropertyDefinition::new(Uuid::new_v4(), "created_at", "Created At", PropertyType::Text)
-                .with_cardinality(Cardinality::One)
+            ..PropertyDefinition::new(
+                Uuid::new_v4(),
+                "created_at",
+                "Created At",
+                PropertyType::Text,
+            )
+            .with_cardinality(Cardinality::One)
         };
         map.insert("created_at".to_string(), created_at);
 
@@ -154,8 +161,13 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
             view_context: ViewContext::Never,
             visibility: PropertyVisibility::System,
             mutability: PropertyMutability::Immutable,
-            ..PropertyDefinition::new(Uuid::new_v4(), "updated_at", "Updated At", PropertyType::Text)
-                .with_cardinality(Cardinality::One)
+            ..PropertyDefinition::new(
+                Uuid::new_v4(),
+                "updated_at",
+                "Updated At",
+                PropertyType::Text,
+            )
+            .with_cardinality(Cardinality::One)
         };
         map.insert("updated_at".to_string(), updated_at);
 

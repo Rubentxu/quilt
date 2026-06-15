@@ -1,16 +1,11 @@
 //! HTTP handlers for semantic property relations (PI-8).
 
-use axum::{
-    Extension, Json,
-    extract::Query,
-    routing::get,
-    Router,
-};
-use std::sync::Arc;
+use axum::{Extension, Json, Router, extract::Query, routing::get};
 use quilt_domain::properties::relation::{PropertyRelation, RelationType};
 use quilt_domain::repositories::RelationRepository;
 use quilt_domain::value_objects::Uuid;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use crate::error::AppError;
 
@@ -36,8 +31,12 @@ pub struct CreateRelationRequest {
     pub confidence: f64,
 }
 
-fn default_relation_type() -> String { "precedes".to_string() }
-fn default_confidence() -> f64 { 1.0 }
+fn default_relation_type() -> String {
+    "precedes".to_string()
+}
+fn default_confidence() -> f64 {
+    1.0
+}
 
 #[derive(Debug, Serialize)]
 pub struct RelationListResponse {
@@ -55,7 +54,10 @@ pub struct FromQueryParams {
 pub async fn list_relations(
     Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<RelationListResponse>, AppError> {
-    let relations = relation_repo.list_all().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let relations = relation_repo
+        .list_all()
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = relations.len();
     Ok(Json(RelationListResponse { relations, count }))
 }
@@ -65,8 +67,13 @@ pub async fn get_relation(
     axum::extract::Path(id_str): axum::extract::Path<String>,
     Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
-    let rel = relation_repo.get_by_id(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let id = id_str
+        .parse::<Uuid>()
+        .map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
+    let rel = relation_repo
+        .get_by_id(id)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     match rel {
         Some(r) => Ok(Json(serde_json::to_value(r).unwrap())),
         None => Err(AppError::BadRequest("Relation not found".to_string())),
@@ -78,7 +85,10 @@ pub async fn get_relations_by_key(
     axum::extract::Path(key): axum::extract::Path<String>,
     Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<RelationListResponse>, AppError> {
-    let relations = relation_repo.get_by_key(&key).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let relations = relation_repo
+        .get_by_key(&key)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = relations.len();
     Ok(Json(RelationListResponse { relations, count }))
 }
@@ -88,7 +98,10 @@ pub async fn get_relations_from(
     Query(params): Query<FromQueryParams>,
     Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<RelationListResponse>, AppError> {
-    let relations = relation_repo.get_from(&params.key, &params.value).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let relations = relation_repo
+        .get_from(&params.key, &params.value)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = relations.len();
     Ok(Json(RelationListResponse { relations, count }))
 }
@@ -117,7 +130,10 @@ pub async fn create_relation(
         body.confidence,
     );
 
-    relation_repo.insert(&relation).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    relation_repo
+        .insert(&relation)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     Ok(Json(serde_json::to_value(&relation).unwrap()))
 }
 
@@ -126,7 +142,12 @@ pub async fn delete_relation(
     axum::extract::Path(id_str): axum::extract::Path<String>,
     Extension(relation_repo): Extension<Arc<dyn RelationRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
-    relation_repo.delete(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let id = id_str
+        .parse::<Uuid>()
+        .map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
+    relation_repo
+        .delete(id)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     Ok(Json(serde_json::json!({"deleted": true})))
 }

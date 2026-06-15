@@ -278,7 +278,11 @@ impl SqliteCompiler {
     // ─────────────────────────────────────────────────────────────────────────
 
     /// Compiles `PageFuzzy` using FTS5 prefix-first matching with LIKE fallback.
-    pub fn compile_page_fuzzy(&self, term: &str, limit: usize) -> Result<CompiledQuery, CompilerError> {
+    pub fn compile_page_fuzzy(
+        &self,
+        term: &str,
+        limit: usize,
+    ) -> Result<CompiledQuery, CompilerError> {
         let fts_sql = format!(
             "WITH fts_results AS ( \
                 SELECT p.id, p.name FROM pages p \
@@ -566,7 +570,11 @@ mod tests {
         let ast = parser.parse("(property \"count\" > 5)").unwrap();
         let compiler = SqliteCompiler::new();
         let result = compiler.compile(&ast, 50).unwrap();
-        assert!(result.sql.contains("json_extract(properties, '$.count') > ?"));
+        assert!(
+            result
+                .sql
+                .contains("json_extract(properties, '$.count') > ?")
+        );
         assert!(result.sql.contains("LIMIT 50"));
         assert_eq!(result.params[0].as_string(), "5");
     }
@@ -1010,7 +1018,11 @@ mod tests {
             .expect("parse must succeed");
         let compiler = SqliteCompiler::new();
         let compiled = compiler.compile(&ast, 100).expect("compile must succeed");
-        assert!(compiled.sql.contains("json_extract(properties, '$.count') > ?"));
+        assert!(
+            compiled
+                .sql
+                .contains("json_extract(properties, '$.count') > ?")
+        );
         assert!(compiled.sql.contains("LIMIT 100"));
         assert_eq!(compiled.params.len(), 1);
         assert_eq!(compiled.params[0].as_string(), "5");

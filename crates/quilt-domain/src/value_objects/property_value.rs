@@ -241,10 +241,7 @@ mod tests {
 
     #[test]
     fn test_text_constructor_matches_string_constructor() {
-        assert_eq!(
-            PropertyValue::text("hello"),
-            PropertyValue::string("hello")
-        );
+        assert_eq!(PropertyValue::text("hello"), PropertyValue::string("hello"));
         assert_eq!(
             PropertyValue::text(String::from("world")),
             PropertyValue::string(String::from("world"))
@@ -269,7 +266,8 @@ mod tests {
         assert_eq!(PropertyValue::Integer(1).type_name(), "integer");
         assert_eq!(PropertyValue::Float(1.0).type_name(), "float");
         assert_eq!(
-            PropertyValue::Date(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap()).type_name(),
+            PropertyValue::Date(chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap())
+                .type_name(),
             "date"
         );
         assert_eq!(PropertyValue::Ref("p".into()).type_name(), "ref");
@@ -326,7 +324,9 @@ mod tests {
 
     #[test]
     fn test_json_roundtrip_date() {
-        let dt = chrono::Utc.with_ymd_and_hms(2026, 5, 15, 10, 30, 0).unwrap();
+        let dt = chrono::Utc
+            .with_ymd_and_hms(2026, 5, 15, 10, 30, 0)
+            .unwrap();
         let original = PropertyValue::Date(dt);
         let json = original.to_json();
         assert!(json.as_str().unwrap().starts_with("2026-05-15"));

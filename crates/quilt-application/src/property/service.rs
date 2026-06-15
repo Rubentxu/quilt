@@ -5,9 +5,7 @@
 
 use crate::errors::ApplicationError;
 use async_trait::async_trait;
-use quilt_domain::properties::analytics::{
-    AnalyticsParams, PropertyAnalytics,
-};
+use quilt_domain::properties::analytics::{AnalyticsParams, PropertyAnalytics};
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::types::PropertyStatus;
 use quilt_domain::repositories::PropertyRepository;
@@ -49,7 +47,8 @@ pub trait PropertyServiceTrait: Send + Sync {
     async fn get_by_key(&self, key: &str) -> Result<Option<PropertyDefinition>, ApplicationError>;
 
     /// Get multiple property definitions by their keys.
-    async fn batch_get(&self, keys: &[String]) -> Result<Vec<PropertyDefinition>, ApplicationError>;
+    async fn batch_get(&self, keys: &[String])
+    -> Result<Vec<PropertyDefinition>, ApplicationError>;
 
     /// Search properties by substring match on key or title.
     async fn search(
@@ -95,10 +94,7 @@ pub trait PropertyServiceTrait: Send + Sync {
 
     /// Deprecate a property — marks it as Deprecated.
     /// Existing blocks still carry the value; writes should warn.
-    async fn deprecate(
-        &self,
-        key: &str,
-    ) -> Result<PropertyDefinition, ApplicationError>;
+    async fn deprecate(&self, key: &str) -> Result<PropertyDefinition, ApplicationError>;
 
     /// Merge source_key into target_key — source becomes Merged,
     /// blocks with source key get migrated to target key.
@@ -171,22 +167,18 @@ impl PropertyServiceTrait for PropertyService {
         // Try update first; if not found, insert.
         match self.repo.update(def).await {
             Ok(()) => Ok(()),
-            Err(quilt_domain::errors::DomainError::NotFound(_)) => {
-                self.repo.insert(def).await.map_err(ApplicationError::Domain)
-            }
+            Err(quilt_domain::errors::DomainError::NotFound(_)) => self
+                .repo
+                .insert(def)
+                .await
+                .map_err(ApplicationError::Domain),
             Err(e) => Err(ApplicationError::Domain(e)),
         }
     }
 
     #[instrument(skip(self))]
-    async fn delete(
-        &self,
-        id: quilt_domain::value_objects::Uuid,
-    ) -> Result<(), ApplicationError> {
-        self.repo
-            .delete(id)
-            .await
-            .map_err(ApplicationError::Domain)
+    async fn delete(&self, id: quilt_domain::value_objects::Uuid) -> Result<(), ApplicationError> {
+        self.repo.delete(id).await.map_err(ApplicationError::Domain)
     }
 
     #[instrument(skip(self))]
@@ -198,7 +190,11 @@ impl PropertyServiceTrait for PropertyService {
         let partial_lower = partial.to_lowercase();
 
         // Use search to get candidates, then score and sort
-        let all = self.repo.search(&partial_lower, limit * 3).await.map_err(ApplicationError::Domain)?;
+        let all = self
+            .repo
+            .search(&partial_lower, limit * 3)
+            .await
+            .map_err(ApplicationError::Domain)?;
 
         let mut scored: Vec<(PropertySuggestion, i32)> = all
             .into_iter()
@@ -277,10 +273,7 @@ impl PropertyServiceTrait for PropertyService {
     }
 
     #[instrument(skip(self))]
-    async fn deprecate(
-        &self,
-        key: &str,
-    ) -> Result<PropertyDefinition, ApplicationError> {
+    async fn deprecate(&self, key: &str) -> Result<PropertyDefinition, ApplicationError> {
         let mut def = self
             .repo
             .get_by_db_ident(key)
@@ -318,10 +311,7 @@ impl PropertyServiceTrait for PropertyService {
             .await
             .map_err(ApplicationError::Domain)?
             .ok_or_else(|| {
-                ApplicationError::Validation(format!(
-                    "Target property '{}' not found",
-                    target_key
-                ))
+                ApplicationError::Validation(format!("Target property '{}' not found", target_key))
             })?;
 
         source.status = PropertyStatus::Merged;
@@ -351,10 +341,7 @@ impl PropertyServiceTrait for PropertyService {
             .await
             .map_err(ApplicationError::Domain)?
             .ok_or_else(|| {
-                ApplicationError::Validation(format!(
-                    "Target property '{}' not found",
-                    target_key
-                ))
+                ApplicationError::Validation(format!("Target property '{}' not found", target_key))
             })?;
 
         // Check new_key doesn't already exist

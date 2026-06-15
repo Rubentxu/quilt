@@ -93,7 +93,8 @@ mod tests {
     #[test]
     fn dyn_trait_accepts_test_registry() {
         // Compile-time check: Box<dyn PresetRegistry> accepts TestRegistry
-        let reg: Box<dyn PresetRegistry> = Box::new(TestRegistry::new().insert(make_preset("/TODO")));
+        let reg: Box<dyn PresetRegistry> =
+            Box::new(TestRegistry::new().insert(make_preset("/TODO")));
         assert_eq!(reg.len(), 1);
         let got = reg.get(&PresetId::new("/TODO").unwrap());
         assert!(got.is_some());

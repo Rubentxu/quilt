@@ -415,7 +415,9 @@ impl ToolHandler for TemplateToolHandler {
                         let blocks: Vec<Value> = s
                             .blocks
                             .iter()
-                            .map(|b| serde_json::to_value(BlockDto::from(b.clone())).unwrap_or_default())
+                            .map(|b| {
+                                serde_json::to_value(BlockDto::from(b.clone())).unwrap_or_default()
+                            })
                             .collect();
 
                         let response = TemplateSchemaResponse {
@@ -506,9 +508,7 @@ impl ToolHandler for TemplateToolHandler {
                 Ok(serde_json::to_string_pretty(&response).unwrap_or_else(|e| e.to_string()))
             }
             // ── Contract (Q030) handlers ────────────────────────────
-            "quilt_get_template_contract" => {
-                self.handle_get_template_contract(args).await
-            }
+            "quilt_get_template_contract" => self.handle_get_template_contract(args).await,
             "quilt_list_templates_with_contracts" => {
                 self.handle_list_templates_with_contracts().await
             }
@@ -540,7 +540,8 @@ impl ToolHandler for TemplateToolHandler {
                 // Rich tier: block_ids in evidence
                 let mut ev = Evidence::universal_fallback(name);
                 if let Some(block_id_str) = args.get("block_id").and_then(|v| v.as_str())
-                    && let Some(uuid) = quilt_domain::value_objects::Uuid::parse_str(block_id_str).ok()
+                    && let Some(uuid) =
+                        quilt_domain::value_objects::Uuid::parse_str(block_id_str).ok()
                 {
                     ev.block_ids = vec![uuid.into()];
                 }
@@ -557,7 +558,8 @@ impl ToolHandler for TemplateToolHandler {
                 // Rich tier: block_ids in evidence
                 let mut ev = Evidence::universal_fallback(name);
                 if let Some(block_id_str) = args.get("block_id").and_then(|v| v.as_str())
-                    && let Some(uuid) = quilt_domain::value_objects::Uuid::parse_str(block_id_str).ok()
+                    && let Some(uuid) =
+                        quilt_domain::value_objects::Uuid::parse_str(block_id_str).ok()
                 {
                     ev.block_ids = vec![uuid.into()];
                 }
@@ -633,18 +635,19 @@ impl TemplateToolHandler {
                 serde_json::to_string_pretty(&err).unwrap_or_default()
             })?;
 
-        let template_id = quilt_domain::value_objects::Uuid::parse_str(template_id_str).map_err(|_| {
-            let err = ContractErrorWire {
-                error: "invalid_argument",
-                property: None,
-                template_value: None,
-                proposed_value: None,
-                expected: None,
-                actual: None,
-                message: Some(format!("Invalid template_id format: {}", template_id_str)),
-            };
-            serde_json::to_string_pretty(&err).unwrap_or_default()
-        })?;
+        let template_id =
+            quilt_domain::value_objects::Uuid::parse_str(template_id_str).map_err(|_| {
+                let err = ContractErrorWire {
+                    error: "invalid_argument",
+                    property: None,
+                    template_value: None,
+                    proposed_value: None,
+                    expected: None,
+                    actual: None,
+                    message: Some(format!("Invalid template_id format: {}", template_id_str)),
+                };
+                serde_json::to_string_pretty(&err).unwrap_or_default()
+            })?;
 
         // Resolve the page name from the id, then look up the schema.
         // The application layer has `get_template_schema(name)`; we
@@ -711,10 +714,7 @@ impl TemplateToolHandler {
                     proposed_value: None,
                     expected: None,
                     actual: None,
-                    message: Some(format!(
-                        "No template page found with id {}.",
-                        template_id
-                    )),
+                    message: Some(format!("No template page found with id {}.", template_id)),
                 };
                 return Ok(serde_json::to_string_pretty(&err).unwrap_or_default());
             }
@@ -753,9 +753,11 @@ impl TemplateToolHandler {
                 Ok(Some(s)) => s,
                 _ => continue,
             };
-            let page_id = schema.blocks.first().map(|b| b.page_id).unwrap_or_else(|| {
-                quilt_domain::value_objects::Uuid::nil()
-            });
+            let page_id = schema
+                .blocks
+                .first()
+                .map(|b| b.page_id)
+                .unwrap_or_else(|| quilt_domain::value_objects::Uuid::nil());
             let contract = self.build_contract_for_template(page_id, &schema).await;
 
             // Serialize the contract as a JSON value for inlining.
@@ -796,18 +798,19 @@ impl TemplateToolHandler {
                 };
                 serde_json::to_string_pretty(&err).unwrap_or_default()
             })?;
-        let block_uuid = quilt_domain::value_objects::Uuid::parse_str(block_id_str).map_err(|_| {
-            let err = ContractErrorWire {
-                error: "invalid_argument",
-                property: None,
-                template_value: None,
-                proposed_value: None,
-                expected: None,
-                actual: None,
-                message: Some(format!("Invalid block_id format: {}", block_id_str)),
-            };
-            serde_json::to_string_pretty(&err).unwrap_or_default()
-        })?;
+        let block_uuid =
+            quilt_domain::value_objects::Uuid::parse_str(block_id_str).map_err(|_| {
+                let err = ContractErrorWire {
+                    error: "invalid_argument",
+                    property: None,
+                    template_value: None,
+                    proposed_value: None,
+                    expected: None,
+                    actual: None,
+                    message: Some(format!("Invalid block_id format: {}", block_id_str)),
+                };
+                serde_json::to_string_pretty(&err).unwrap_or_default()
+            })?;
 
         // 2. Resolve template id (prefer template_id, fallback to template_name)
         let template_id = if let Some(tid_str) = args.get("template_id").and_then(|v| v.as_str()) {
@@ -838,7 +841,10 @@ impl TemplateToolHandler {
                         proposed_value: None,
                         expected: None,
                         actual: None,
-                        message: Some(format!("No template page found with name `template/{}`.", tname)),
+                        message: Some(format!(
+                            "No template page found with name `template/{}`.",
+                            tname
+                        )),
                     };
                     serde_json::to_string_pretty(&err).unwrap_or_default()
                 })?;
@@ -958,7 +964,13 @@ impl TemplateToolHandler {
         // 7. Run the use case
         let result = self
             .apply_with_contract_use_cases
-            .apply(block_uuid, &template_name, &contract, &proposed_map, caller_version)
+            .apply(
+                block_uuid,
+                &template_name,
+                &contract,
+                &proposed_map,
+                caller_version,
+            )
             .await;
 
         match result {

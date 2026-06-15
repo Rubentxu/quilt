@@ -1668,8 +1668,7 @@ mod tests {
     #[test]
     fn wasm_default_strategy_selector_falls_back_to_default_for_unknown_type() {
         let sel = DefaultStrategySelector::with_builtins();
-        let block =
-            Block::from_json(r#"{"properties":{"type":"something-else"}}"#).unwrap();
+        let block = Block::from_json(r#"{"properties":{"type":"something-else"}}"#).unwrap();
         let picked = sel.select(&block).expect("default always matches");
         assert_eq!(picked.name(), "default");
     }
@@ -1709,8 +1708,7 @@ mod tests {
         // `Box<dyn StrategySelector>` for the future PortfolioScorer
         // integration. This is the only ergonomic contract that the
         // WASM bridge relies on (the bridge stores a Box<dyn ...>).
-        let sel: Box<dyn StrategySelector> =
-            Box::new(DefaultStrategySelector::with_builtins());
+        let sel: Box<dyn StrategySelector> = Box::new(DefaultStrategySelector::with_builtins());
         let block = Block::from_json(r#"{"properties":{"type":"task"}}"#).unwrap();
         assert_eq!(sel.select(&block).unwrap().name(), "task");
     }

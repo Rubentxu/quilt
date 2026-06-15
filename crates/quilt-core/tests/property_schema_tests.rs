@@ -39,12 +39,7 @@ fn test_property_visibility_lowercase() {
 
 #[test]
 fn test_property_visibility_default_is_inline() {
-    let def = PropertyDefinition::new(
-        uuid::Uuid::nil(),
-        "test",
-        "Test",
-        PropertyType::Text,
-    );
+    let def = PropertyDefinition::new(uuid::Uuid::nil(), "test", "Test", PropertyType::Text);
     assert_eq!(def.visibility, PropertyVisibility::Inline);
 }
 
@@ -61,8 +56,14 @@ fn test_property_mutability_serde_roundtrip() {
 
 #[test]
 fn test_property_mutability_from_read_only() {
-    assert_eq!(PropertyMutability::from_read_only(false), PropertyMutability::Mutable);
-    assert_eq!(PropertyMutability::from_read_only(true), PropertyMutability::Immutable);
+    assert_eq!(
+        PropertyMutability::from_read_only(false),
+        PropertyMutability::Mutable
+    );
+    assert_eq!(
+        PropertyMutability::from_read_only(true),
+        PropertyMutability::Immutable
+    );
     assert!(!PropertyMutability::Mutable.to_read_only());
     assert!(PropertyMutability::Immutable.to_read_only());
 }
@@ -129,12 +130,7 @@ fn test_merge_policy_adr_0025_v1_table() {
 
 #[test]
 fn test_property_definition_all_adr_0025_fields_default() {
-    let def = PropertyDefinition::new(
-        uuid::Uuid::nil(),
-        "test",
-        "Test",
-        PropertyType::Text,
-    );
+    let def = PropertyDefinition::new(uuid::Uuid::nil(), "test", "Test", PropertyType::Text);
 
     assert_eq!(def.visibility, PropertyVisibility::Inline);
     assert_eq!(def.mutability, PropertyMutability::Mutable);
@@ -176,10 +172,27 @@ fn test_property_definition_is_queryable() {
     let base = PropertyDefinition::new(uuid::Uuid::nil(), "t", "T", PropertyType::Text);
 
     // Inline and Panel are queryable; System is not; Hidden IS queryable
-    assert!(base.clone().with_visibility(PropertyVisibility::Inline).is_queryable());
-    assert!(base.clone().with_visibility(PropertyVisibility::Panel).is_queryable());
-    assert!(base.clone().with_visibility(PropertyVisibility::Hidden).is_queryable());
-    assert!(!base.clone().with_visibility(PropertyVisibility::System).is_queryable());
+    assert!(
+        base.clone()
+            .with_visibility(PropertyVisibility::Inline)
+            .is_queryable()
+    );
+    assert!(
+        base.clone()
+            .with_visibility(PropertyVisibility::Panel)
+            .is_queryable()
+    );
+    assert!(
+        base.clone()
+            .with_visibility(PropertyVisibility::Hidden)
+            .is_queryable()
+    );
+    assert!(
+        !base
+            .clone()
+            .with_visibility(PropertyVisibility::System)
+            .is_queryable()
+    );
 }
 
 #[test]
@@ -244,8 +257,14 @@ fn test_wire_format_derived_source() {
 /// Must use snake_case enum variant names.
 #[test]
 fn test_wire_format_merge_policy() {
-    assert_eq!(serde_json::to_string(&MergePolicy::SetIfMissing).unwrap(), "\"set_if_missing\"");
-    assert_eq!(serde_json::to_string(&MergePolicy::AskOnConflict).unwrap(), "\"ask_on_conflict\"");
+    assert_eq!(
+        serde_json::to_string(&MergePolicy::SetIfMissing).unwrap(),
+        "\"set_if_missing\""
+    );
+    assert_eq!(
+        serde_json::to_string(&MergePolicy::AskOnConflict).unwrap(),
+        "\"ask_on_conflict\""
+    );
 }
 
 /// ADR-0025 T8: PropertyDefinition with all ADR-0025 fields omitted
@@ -269,9 +288,9 @@ fn test_backward_compat_deser_legacy_property_def() {
     });
 
     let def: PropertyDefinition = serde_json::from_value(legacy_json).unwrap();
-    assert_eq!(def.visibility, PropertyVisibility::Inline);   // default
+    assert_eq!(def.visibility, PropertyVisibility::Inline); // default
     assert_eq!(def.mutability, PropertyMutability::Mutable); // default
-    assert_eq!(def.derived_from, None);                      // default
+    assert_eq!(def.derived_from, None); // default
     assert_eq!(def.merge_policy, MergePolicy::SetIfMissing); // default
 }
 

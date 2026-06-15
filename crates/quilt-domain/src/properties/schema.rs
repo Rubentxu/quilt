@@ -50,7 +50,9 @@ impl PropertySchema {
 
     /// Check if this schema contains a given property key.
     pub fn contains_key(&self, key: &str) -> bool {
-        self.property_keys.iter().any(|k| k.eq_ignore_ascii_case(key))
+        self.property_keys
+            .iter()
+            .any(|k| k.eq_ignore_ascii_case(key))
     }
 }
 
@@ -88,7 +90,11 @@ mod tests {
             Uuid::new_v4(),
             "task",
             "Task tracking",
-            vec!["status".to_string(), "priority".to_string(), "deadline".to_string()],
+            vec![
+                "status".to_string(),
+                "priority".to_string(),
+                "deadline".to_string(),
+            ],
             false,
         );
         assert!(schema.contains_key("status"));

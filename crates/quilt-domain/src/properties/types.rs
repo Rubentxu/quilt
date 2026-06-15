@@ -315,7 +315,9 @@ impl fmt::Display for PropertyVisibility {
 ///
 /// Replaces the legacy `read_only: bool` flag. `Immutable` properties are
 /// changed only by system rules, importers, or privileged operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum PropertyMutability {
     /// User-editable from the UI (default).
@@ -433,7 +435,9 @@ impl fmt::Display for DerivedSource {
 /// Each property declares its merge policy for patches arriving via slash
 /// commands, importers, MCP requests, or CRDT merge. Metadata only in
 /// this slice — actual enforcement is in the canonicalization pipeline.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum MergePolicy {
     /// Write only if no value exists; keep existing otherwise.
@@ -605,10 +609,22 @@ mod tests {
         assert_eq!(PropertyVisibility::Panel.as_str(), "panel");
         assert_eq!(PropertyVisibility::System.as_str(), "system");
         assert_eq!(PropertyVisibility::Hidden.as_str(), "hidden");
-        assert_eq!(PropertyVisibility::from_str("inline"), Some(PropertyVisibility::Inline));
-        assert_eq!(PropertyVisibility::from_str("panel"), Some(PropertyVisibility::Panel));
-        assert_eq!(PropertyVisibility::from_str("system"), Some(PropertyVisibility::System));
-        assert_eq!(PropertyVisibility::from_str("hidden"), Some(PropertyVisibility::Hidden));
+        assert_eq!(
+            PropertyVisibility::from_str("inline"),
+            Some(PropertyVisibility::Inline)
+        );
+        assert_eq!(
+            PropertyVisibility::from_str("panel"),
+            Some(PropertyVisibility::Panel)
+        );
+        assert_eq!(
+            PropertyVisibility::from_str("system"),
+            Some(PropertyVisibility::System)
+        );
+        assert_eq!(
+            PropertyVisibility::from_str("hidden"),
+            Some(PropertyVisibility::Hidden)
+        );
         assert_eq!(PropertyVisibility::from_str("unknown"), None);
     }
 
@@ -630,8 +646,14 @@ mod tests {
 
     #[test]
     fn test_property_mutability_from_read_only() {
-        assert_eq!(PropertyMutability::from_read_only(false), PropertyMutability::Mutable);
-        assert_eq!(PropertyMutability::from_read_only(true), PropertyMutability::Immutable);
+        assert_eq!(
+            PropertyMutability::from_read_only(false),
+            PropertyMutability::Mutable
+        );
+        assert_eq!(
+            PropertyMutability::from_read_only(true),
+            PropertyMutability::Immutable
+        );
     }
 
     #[test]
@@ -743,8 +765,14 @@ mod tests {
     fn test_merge_policy_as_str_and_from_str() {
         assert_eq!(MergePolicy::SetIfMissing.as_str(), "set_if_missing");
         assert_eq!(MergePolicy::Overwrite.as_str(), "overwrite");
-        assert_eq!(MergePolicy::from_str("set_if_missing"), Some(MergePolicy::SetIfMissing));
-        assert_eq!(MergePolicy::from_str("overwrite"), Some(MergePolicy::Overwrite));
+        assert_eq!(
+            MergePolicy::from_str("set_if_missing"),
+            Some(MergePolicy::SetIfMissing)
+        );
+        assert_eq!(
+            MergePolicy::from_str("overwrite"),
+            Some(MergePolicy::Overwrite)
+        );
         assert_eq!(MergePolicy::from_str("last_write_wins"), None);
     }
 
@@ -758,10 +786,16 @@ mod tests {
         assert_eq!(status_policy, Some(&("status", MergePolicy::Overwrite)));
 
         let projection_policy = table.iter().find(|(k, _)| *k == "projection");
-        assert_eq!(projection_policy, Some(&("projection", MergePolicy::SetIfMissing)));
+        assert_eq!(
+            projection_policy,
+            Some(&("projection", MergePolicy::SetIfMissing))
+        );
 
         let media_type_policy = table.iter().find(|(k, _)| *k == "media-type");
-        assert_eq!(media_type_policy, Some(&("media-type", MergePolicy::AskOnConflict)));
+        assert_eq!(
+            media_type_policy,
+            Some(&("media-type", MergePolicy::AskOnConflict))
+        );
     }
 
     #[test]

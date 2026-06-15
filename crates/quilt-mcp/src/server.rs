@@ -299,12 +299,10 @@ mod tests {
             Arc::new(SqlitePropertyRepository::new(pool.clone())),
         ));
         let property_handler = PropertyToolHandler::new(property_service);
-        let schema_handler = SchemaHandler::new(
-            quilt_application::schema::SchemaService::new(
-                Arc::new(SqliteSchemaRepository::new(pool.clone())),
-                Arc::new(SqlitePropertyRepository::new(pool.clone())),
-            ),
-        );
+        let schema_handler = SchemaHandler::new(quilt_application::schema::SchemaService::new(
+            Arc::new(SqliteSchemaRepository::new(pool.clone())),
+            Arc::new(SqlitePropertyRepository::new(pool.clone())),
+        ));
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -318,7 +316,9 @@ mod tests {
                 Box::new(template_handler),
                 Box::new(property_handler),
                 Box::new(schema_handler),
-                Box::new(RelationHandler::new(Arc::new(SqliteRelationRepository::new(pool.clone())))),
+                Box::new(RelationHandler::new(Arc::new(
+                    SqliteRelationRepository::new(pool.clone()),
+                ))),
                 Box::new(system_handler),
             ],
             vec![Box::new(resource_provider)],

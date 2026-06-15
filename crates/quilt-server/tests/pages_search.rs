@@ -115,12 +115,7 @@ async fn post(app: Router, uri: &str, body: Value) -> (StatusCode, Value) {
 async fn seed_pages(app: Router, names: &[&str]) -> Result<Vec<Value>> {
     let mut out = Vec::with_capacity(names.len());
     for name in names {
-        let (status, body) = post(
-            app.clone(),
-            "/api/v1/pages",
-            json!({ "name": name }),
-        )
-        .await;
+        let (status, body) = post(app.clone(), "/api/v1/pages", json!({ "name": name })).await;
         assert_eq!(status, StatusCode::CREATED, "create_page failed: {body}");
         out.push(body);
     }
@@ -254,11 +249,7 @@ async fn search_pages_clamps_oversized_limit_to_200() -> Result<()> {
     // really pinning. The assertion is that the endpoint does not
     // 400/422 on absurd limit values.
     let app = create_test_app().await?;
-    seed_pages(
-        app.clone(),
-        &["a", "b", "c", "d", "e", "f", "g"],
-    )
-    .await?;
+    seed_pages(app.clone(), &["a", "b", "c", "d", "e", "f", "g"]).await?;
 
     let (status, body) = get(app, "/api/v1/pages/search?q=&limit=999").await;
     assert_eq!(status, StatusCode::OK);
@@ -276,7 +267,10 @@ async fn search_pages_with_no_matches_returns_empty_array() -> Result<()> {
     let (status, body) = get(app, "/api/v1/pages/search?q=zzzzz").await;
     assert_eq!(status, StatusCode::OK);
     let arr = body.as_array().expect("response should be an array");
-    assert!(arr.is_empty(), "no-match query should return an empty array");
+    assert!(
+        arr.is_empty(),
+        "no-match query should return an empty array"
+    );
 
     Ok(())
 }

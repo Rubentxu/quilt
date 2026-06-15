@@ -301,7 +301,10 @@ impl RefServiceTrait for RefService {
         self.repo
             .insert_ref(source_id, target_id, RefType::BlockRef)
             .await?;
-        self.index.write().unwrap().add_ref(source_id, target_id, RefType::BlockRef);
+        self.index
+            .write()
+            .unwrap()
+            .add_ref(source_id, target_id, RefType::BlockRef);
         Ok(())
     }
 
@@ -570,7 +573,10 @@ mod tests {
         assert_eq!(service.get_forward_refs(block_id).len(), 1);
 
         // Save with empty content — should clear refs
-        service.on_block_saved(block_id, "", Vec::new()).await.unwrap();
+        service
+            .on_block_saved(block_id, "", Vec::new())
+            .await
+            .unwrap();
 
         assert!(service.get_forward_refs(block_id).is_empty());
         assert_eq!(service.get_backlinks(target_id).len(), 0);

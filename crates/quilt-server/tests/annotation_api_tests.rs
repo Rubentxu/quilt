@@ -139,10 +139,7 @@ async fn create_page_and_block(app: &Router, page_name: &str) -> (String, String
     .await;
     assert_eq!(status, StatusCode::CREATED, "create block failed: {block}");
 
-    (
-        page_id,
-        block["id"].as_str().unwrap().to_string(),
-    )
+    (page_id, block["id"].as_str().unwrap().to_string())
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -166,12 +163,7 @@ async fn auth_required_for_annotation_endpoints() -> Result<()> {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 
     // GET without auth → 401
-    let (status, _) = get(
-        app.clone(),
-        "/api/v1/annotations?status=pending",
-        false,
-    )
-    .await;
+    let (status, _) = get(app.clone(), "/api/v1/annotations?status=pending", false).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 
     // PATCH without auth → 401
@@ -205,8 +197,7 @@ async fn auth_required_for_annotation_endpoints() -> Result<()> {
 #[tokio::test]
 async fn annotation_crud_round_trip() -> Result<()> {
     let app = create_test_app().await?;
-    let (_page_id, block_id) =
-        create_page_and_block(&app, "CRUD Page").await;
+    let (_page_id, block_id) = create_page_and_block(&app, "CRUD Page").await;
     let url = "/api/v1/annotations".to_string();
 
     // 1. Create
@@ -232,15 +223,13 @@ async fn annotation_crud_round_trip() -> Result<()> {
     assert_eq!(created["content"], "Please review this paragraph");
     assert_eq!(created["blockId"], block_id);
     assert!(created["createdAt"].is_string());
-    assert!(created.get("highlightStart").is_none(), "block scope must not serialize offsets");
+    assert!(
+        created.get("highlightStart").is_none(),
+        "block scope must not serialize offsets"
+    );
 
     // 2. Read one
-    let (status, fetched) = get(
-        app.clone(),
-        &format!("/api/v1/annotations/{id}"),
-        true,
-    )
-    .await;
+    let (status, fetched) = get(app.clone(), &format!("/api/v1/annotations/{id}"), true).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(fetched["id"], id);
     assert_eq!(fetched["content"], "Please review this paragraph");
@@ -442,22 +431,12 @@ async fn list_filters_by_status() -> Result<()> {
     assert_eq!(status, StatusCode::OK);
 
     // status=pending → 2
-    let (status, list) = get(
-        app.clone(),
-        "/api/v1/annotations?status=pending",
-        true,
-    )
-    .await;
+    let (status, list) = get(app.clone(), "/api/v1/annotations?status=pending", true).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(list.as_array().unwrap().len(), 2);
 
     // status=resolved → 1
-    let (status, list) = get(
-        app,
-        "/api/v1/annotations?status=resolved",
-        true,
-    )
-    .await;
+    let (status, list) = get(app, "/api/v1/annotations?status=resolved", true).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(list.as_array().unwrap().len(), 1);
 
@@ -550,12 +529,7 @@ async fn block_scoped_convenience_route_works() -> Result<()> {
     assert_eq!(list.as_array().unwrap().len(), 2);
 
     // Invalid block UUID in path → 400
-    let (status, _) = get(
-        app,
-        "/api/v1/blocks/not-a-uuid/annotations",
-        true,
-    )
-    .await;
+    let (status, _) = get(app, "/api/v1/blocks/not-a-uuid/annotations", true).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 
     Ok(())
@@ -596,12 +570,7 @@ async fn unknown_id_returns_404() -> Result<()> {
     let unknown = Uuid::new_v4().to_string();
 
     // GET one
-    let (status, _) = get(
-        app.clone(),
-        &format!("/api/v1/annotations/{unknown}"),
-        true,
-    )
-    .await;
+    let (status, _) = get(app.clone(), &format!("/api/v1/annotations/{unknown}"), true).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
     // PATCH on unknown id → 404 (NotFound variant)

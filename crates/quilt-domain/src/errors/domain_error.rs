@@ -451,7 +451,10 @@ mod tests {
     fn test_display_missing_preset_arg() {
         use crate::canonicalization::{PresetArgKind, PresetId};
         let preset = PresetId::new("/Scheduled").unwrap();
-        let err = DomainError::MissingPresetArg { preset, kind: PresetArgKind::Date };
+        let err = DomainError::MissingPresetArg {
+            preset,
+            kind: PresetArgKind::Date,
+        };
         let msg = format!("{}", err);
         assert!(msg.contains("/Scheduled"));
         assert!(msg.contains("Date"));
@@ -461,7 +464,10 @@ mod tests {
     fn test_debug_contains_missing_preset_arg() {
         use crate::canonicalization::{PresetArgKind, PresetId};
         let preset = PresetId::new("/Deadline").unwrap();
-        let err = DomainError::MissingPresetArg { preset, kind: PresetArgKind::Url };
+        let err = DomainError::MissingPresetArg {
+            preset,
+            kind: PresetArgKind::Url,
+        };
         let debug = format!("{:?}", err);
         assert!(debug.contains("MissingPresetArg"));
     }

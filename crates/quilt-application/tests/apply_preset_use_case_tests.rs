@@ -26,14 +26,12 @@ use chrono::NaiveDate;
 use quilt_application::services::canonicalizer::MarkdownCanonicalizer;
 use quilt_application::services::presets::StaticPresetRegistry;
 use quilt_application::use_cases::ApplyPreset;
-use quilt_domain::canonicalization::{
-    PresetArg, PresetArgs, PresetId, PropertyDefinitionRegistry,
-};
+use quilt_core::parser::inline::InlineParser;
+use quilt_domain::canonicalization::{PresetArg, PresetArgs, PresetId, PropertyDefinitionRegistry};
 use quilt_domain::entities::Block;
 use quilt_domain::properties::types::{MergePolicy, PropertyMutability, PropertyType};
 use quilt_domain::value_objects::{PropertyValue, Uuid};
 use std::sync::Arc;
-use quilt_core::parser::inline::InlineParser;
 
 /// Build a minimal property definition registry for V1 preset tests.
 fn make_registry(patches: &[(&str, MergePolicy)]) -> Arc<PropertyDefinitionRegistry> {
@@ -106,10 +104,20 @@ fn empty_block() -> Block {
 fn v1_todo_sets_type_status_projection() {
     let mut block = empty_block();
     let outcome = uc()
-        .execute(&mut block, &PresetId::new("/TODO").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/TODO").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
-    let p = |k| outcome.block.properties.get(k).map(|v| v.as_display_string());
+    let p = |k| {
+        outcome
+            .block
+            .properties
+            .get(k)
+            .map(|v| v.as_display_string())
+    };
     assert_eq!(p("type").as_deref(), Some("task"));
     assert_eq!(p("status").as_deref(), Some("todo"));
     assert_eq!(p("projection").as_deref(), Some("auto"));
@@ -120,10 +128,20 @@ fn v1_todo_sets_type_status_projection() {
 fn v1_doing_sets_type_status_projection() {
     let mut block = empty_block();
     let outcome = uc()
-        .execute(&mut block, &PresetId::new("/DOING").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/DOING").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
-    let p = |k| outcome.block.properties.get(k).map(|v| v.as_display_string());
+    let p = |k| {
+        outcome
+            .block
+            .properties
+            .get(k)
+            .map(|v| v.as_display_string())
+    };
     assert_eq!(p("type").as_deref(), Some("task"));
     assert_eq!(p("status").as_deref(), Some("doing"));
     assert_eq!(p("projection").as_deref(), Some("auto"));
@@ -133,10 +151,20 @@ fn v1_doing_sets_type_status_projection() {
 fn v1_waiting_sets_type_status_projection() {
     let mut block = empty_block();
     let outcome = uc()
-        .execute(&mut block, &PresetId::new("/WAITING").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/WAITING").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
-    let p = |k| outcome.block.properties.get(k).map(|v| v.as_display_string());
+    let p = |k| {
+        outcome
+            .block
+            .properties
+            .get(k)
+            .map(|v| v.as_display_string())
+    };
     assert_eq!(p("status").as_deref(), Some("waiting"));
 }
 
@@ -144,10 +172,20 @@ fn v1_waiting_sets_type_status_projection() {
 fn v1_done_sets_type_status_projection() {
     let mut block = empty_block();
     let outcome = uc()
-        .execute(&mut block, &PresetId::new("/DONE").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/DONE").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
-    let p = |k| outcome.block.properties.get(k).map(|v| v.as_display_string());
+    let p = |k| {
+        outcome
+            .block
+            .properties
+            .get(k)
+            .map(|v| v.as_display_string())
+    };
     assert_eq!(p("status").as_deref(), Some("done"));
 }
 
@@ -155,10 +193,20 @@ fn v1_done_sets_type_status_projection() {
 fn v1_now_adds_focus_now() {
     let mut block = empty_block();
     let outcome = uc()
-        .execute(&mut block, &PresetId::new("/NOW").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/NOW").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
-    let p = |k| outcome.block.properties.get(k).map(|v| v.as_display_string());
+    let p = |k| {
+        outcome
+            .block
+            .properties
+            .get(k)
+            .map(|v| v.as_display_string())
+    };
     assert_eq!(p("focus").as_deref(), Some("now"));
 }
 
@@ -175,7 +223,12 @@ fn v1_scheduled_with_date_arg() {
         .unwrap();
 
     assert_eq!(
-        outcome.block.properties.get("scheduled").map(|v| v.as_display_string()).as_deref(),
+        outcome
+            .block
+            .properties
+            .get("scheduled")
+            .map(|v| v.as_display_string())
+            .as_deref(),
         Some("2026-06-15")
     );
 }
@@ -193,7 +246,12 @@ fn v1_deadline_with_date_arg() {
         .unwrap();
 
     assert_eq!(
-        outcome.block.properties.get("deadline").map(|v| v.as_display_string()).as_deref(),
+        outcome
+            .block
+            .properties
+            .get("deadline")
+            .map(|v| v.as_display_string())
+            .as_deref(),
         Some("2026-12-25")
     );
 }
@@ -210,10 +268,19 @@ fn v1_video_with_url_arg() {
         .execute(&mut block, &PresetId::new("/Video").unwrap(), &args)
         .unwrap();
 
-    let p = |k| outcome.block.properties.get(k).map(|v| v.as_display_string());
+    let p = |k| {
+        outcome
+            .block
+            .properties
+            .get(k)
+            .map(|v| v.as_display_string())
+    };
     assert_eq!(p("type").as_deref(), Some("media"));
     assert_eq!(p("media-type").as_deref(), Some("video"));
-    assert_eq!(p("source-url").as_deref(), Some("https://example.com/video.mp4"));
+    assert_eq!(
+        p("source-url").as_deref(),
+        Some("https://example.com/video.mp4")
+    );
 }
 
 #[test]
@@ -228,7 +295,13 @@ fn v1_image_with_url_arg() {
         .execute(&mut block, &PresetId::new("/Image").unwrap(), &args)
         .unwrap();
 
-    let p = |k| outcome.block.properties.get(k).map(|v| v.as_display_string());
+    let p = |k| {
+        outcome
+            .block
+            .properties
+            .get(k)
+            .map(|v| v.as_display_string())
+    };
     assert_eq!(p("media-type").as_deref(), Some("image"));
 }
 
@@ -237,20 +310,32 @@ fn v1_image_with_url_arg() {
 #[test]
 fn unknown_preset_returns_unknown_preset_error() {
     let mut block = empty_block();
-    let result = ApplyPreset::new(preset_reg(), full_registry())
-        .execute(&mut block, &PresetId::new("/NotAPreset").unwrap(), &PresetArgs::empty());
+    let result = ApplyPreset::new(preset_reg(), full_registry()).execute(
+        &mut block,
+        &PresetId::new("/NotAPreset").unwrap(),
+        &PresetArgs::empty(),
+    );
 
-    assert!(matches!(result, Err(quilt_domain::errors::DomainError::UnknownPreset(_))));
+    assert!(matches!(
+        result,
+        Err(quilt_domain::errors::DomainError::UnknownPreset(_))
+    ));
 }
 
 #[test]
 fn missing_date_arg_returns_missing_preset_arg_error() {
     let mut block = empty_block();
     // /Scheduled requires Date arg
-    let result = ApplyPreset::new(preset_reg(), full_registry())
-        .execute(&mut block, &PresetId::new("/Scheduled").unwrap(), &PresetArgs::empty());
+    let result = ApplyPreset::new(preset_reg(), full_registry()).execute(
+        &mut block,
+        &PresetId::new("/Scheduled").unwrap(),
+        &PresetArgs::empty(),
+    );
 
-    assert!(matches!(result, Err(quilt_domain::errors::DomainError::MissingPresetArg { .. })));
+    assert!(matches!(
+        result,
+        Err(quilt_domain::errors::DomainError::MissingPresetArg { .. })
+    ));
 }
 
 #[test]
@@ -270,7 +355,12 @@ fn extra_args_are_ignored() {
 
     // /Scheduled still applied successfully
     assert_eq!(
-        outcome.block.properties.get("scheduled").map(|v| v.as_display_string()).as_deref(),
+        outcome
+            .block
+            .properties
+            .get("scheduled")
+            .map(|v| v.as_display_string())
+            .as_deref(),
         Some("2026-06-15")
     );
 }
@@ -285,15 +375,26 @@ fn set_if_missing_skips_existing_value() {
         ("projection", MergePolicy::SetIfMissing),
     ]);
     let mut block = empty_block();
-    block.properties.insert("type".into(), PropertyValue::text("existing-type"));
+    block
+        .properties
+        .insert("type".into(), PropertyValue::text("existing-type"));
 
     let outcome = ApplyPreset::new(preset_reg(), reg)
-        .execute(&mut block, &PresetId::new("/TODO").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/TODO").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
     // Existing value preserved (SetIfMissing)
     assert_eq!(
-        outcome.block.properties.get("type").map(|v| v.as_display_string()).as_deref(),
+        outcome
+            .block
+            .properties
+            .get("type")
+            .map(|v| v.as_display_string())
+            .as_deref(),
         Some("existing-type")
     );
 }
@@ -306,15 +407,26 @@ fn overwrite_replaces_existing_value() {
         ("projection", MergePolicy::Overwrite),
     ]);
     let mut block = empty_block();
-    block.properties.insert("status".into(), PropertyValue::text("done"));
+    block
+        .properties
+        .insert("status".into(), PropertyValue::text("done"));
 
     let outcome = ApplyPreset::new(preset_reg(), reg)
-        .execute(&mut block, &PresetId::new("/TODO").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/TODO").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
     // Overwrite replaced the value
     assert_eq!(
-        outcome.block.properties.get("status").map(|v| v.as_display_string()).as_deref(),
+        outcome
+            .block
+            .properties
+            .get("status")
+            .map(|v| v.as_display_string())
+            .as_deref(),
         Some("todo")
     );
 }
@@ -328,7 +440,11 @@ fn content_unchanged_after_apply() {
 
     let original = block.content.clone();
     let outcome = uc()
-        .execute(&mut block, &PresetId::new("/TODO").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/TODO").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
     assert_eq!(outcome.block.content, original);
@@ -340,15 +456,27 @@ fn content_unchanged_after_apply() {
 #[test]
 fn original_block_untouched_on_error() {
     let mut block = empty_block();
-    block.properties.insert("type".into(), PropertyValue::text("custom"));
+    block
+        .properties
+        .insert("type".into(), PropertyValue::text("custom"));
 
     // /Scheduled requires Date arg — passing empty args should error
-    let result = ApplyPreset::new(preset_reg(), full_registry())
-        .execute(&mut block, &PresetId::new("/Scheduled").unwrap(), &PresetArgs::empty());
+    let result = ApplyPreset::new(preset_reg(), full_registry()).execute(
+        &mut block,
+        &PresetId::new("/Scheduled").unwrap(),
+        &PresetArgs::empty(),
+    );
 
     assert!(result.is_err());
     // Original block untouched
-    assert_eq!(block.properties.get("type").map(|v| v.as_display_string()).as_deref(), Some("custom"));
+    assert_eq!(
+        block
+            .properties
+            .get("type")
+            .map(|v| v.as_display_string())
+            .as_deref(),
+        Some("custom")
+    );
 }
 
 // ── Cross-feature equivalence ────────────────────────────────────────────────
@@ -371,7 +499,9 @@ fn canonicalizer() -> MarkdownCanonicalizer {
 }
 
 /// Extract the type/status/projection keys + values from derived patches.
-fn extracted_triple(derived: &[quilt_domain::canonicalization::PropertyPatch]) -> Vec<(String, String)> {
+fn extracted_triple(
+    derived: &[quilt_domain::canonicalization::PropertyPatch],
+) -> Vec<(String, String)> {
     let mut triples: Vec<(String, String)> = Vec::with_capacity(3);
     for p in derived {
         let k = p.key.as_str().to_string();
@@ -394,7 +524,11 @@ fn cross_feature_todo_equivalence() {
     // Explicit: apply /TODO preset
     let mut block = empty_block();
     let preset_outcome = ApplyPreset::new(preset_reg(), canonicalizer_registry())
-        .execute(&mut block, &PresetId::new("/TODO").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/TODO").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
     // Extract preset result as triples
@@ -403,7 +537,12 @@ fn cross_feature_todo_equivalence() {
         .map(|k| {
             (
                 k.to_string(),
-                preset_outcome.block.properties.get(*k).unwrap().as_display_string(),
+                preset_outcome
+                    .block
+                    .properties
+                    .get(*k)
+                    .unwrap()
+                    .as_display_string(),
             )
         })
         .collect();
@@ -423,7 +562,11 @@ fn cross_feature_doing_equivalence() {
 
     let mut block = empty_block();
     let preset_outcome = ApplyPreset::new(preset_reg(), canonicalizer_registry())
-        .execute(&mut block, &PresetId::new("/DOING").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/DOING").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
     let preset_triple: Vec<(String, String)> = ["type", "status", "projection"]
@@ -431,7 +574,12 @@ fn cross_feature_doing_equivalence() {
         .map(|k| {
             (
                 k.to_string(),
-                preset_outcome.block.properties.get(*k).unwrap().as_display_string(),
+                preset_outcome
+                    .block
+                    .properties
+                    .get(*k)
+                    .unwrap()
+                    .as_display_string(),
             )
         })
         .collect();
@@ -449,7 +597,11 @@ fn cross_feature_done_equivalence() {
 
     let mut block = empty_block();
     let preset_outcome = ApplyPreset::new(preset_reg(), canonicalizer_registry())
-        .execute(&mut block, &PresetId::new("/DONE").unwrap(), &PresetArgs::empty())
+        .execute(
+            &mut block,
+            &PresetId::new("/DONE").unwrap(),
+            &PresetArgs::empty(),
+        )
         .unwrap();
 
     let preset_triple: Vec<(String, String)> = ["type", "status", "projection"]
@@ -457,7 +609,12 @@ fn cross_feature_done_equivalence() {
         .map(|k| {
             (
                 k.to_string(),
-                preset_outcome.block.properties.get(*k).unwrap().as_display_string(),
+                preset_outcome
+                    .block
+                    .properties
+                    .get(*k)
+                    .unwrap()
+                    .as_display_string(),
             )
         })
         .collect();

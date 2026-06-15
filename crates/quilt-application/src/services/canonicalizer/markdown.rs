@@ -1,7 +1,9 @@
 //! V1 Markdown canonicalizer — derives structured property patches from Markdown syntax.
 
-use quilt_domain::canonicalization::{CanonicalInput, CanonicalizationResult, Canonicalizer, PropertyPatch, PropertyPatchProvenance};
 use quilt_core::parser::inline::{InlineParser, ParsedContent, Segment};
+use quilt_domain::canonicalization::{
+    CanonicalInput, CanonicalizationResult, Canonicalizer, PropertyPatch, PropertyPatchProvenance,
+};
 use quilt_domain::entities::PropertyKey;
 use quilt_domain::value_objects::PropertyValue;
 use std::sync::Arc;
@@ -51,7 +53,11 @@ impl Canonicalizer for MarkdownCanonicalizer {
         let normalized_text = input.text.replace('\n', " ");
         let content = quilt_domain::content::BlockContent::from_text(&normalized_text);
 
-        CanonicalizationResult { content, derived, applied: Vec::new() }
+        CanonicalizationResult {
+            content,
+            derived,
+            applied: Vec::new(),
+        }
     }
 }
 
@@ -68,7 +74,11 @@ fn expand_bracket_markers(text: &str) -> String {
             "DONE:"
         };
         let after_marker = &text[prefix_len..].trim_start();
-        let after_marker = after_marker.strip_prefix("[ ]").or(after_marker.strip_prefix("[x]")).or(after_marker.strip_prefix("[X]")).unwrap_or(after_marker);
+        let after_marker = after_marker
+            .strip_prefix("[ ]")
+            .or(after_marker.strip_prefix("[x]"))
+            .or(after_marker.strip_prefix("[X]"))
+            .unwrap_or(after_marker);
         format!("{} {}", marker_text, after_marker)
     } else {
         text.to_string()
@@ -119,7 +129,9 @@ fn collect_derived_patches(parsed: &ParsedContent, raw_text: &str) -> Vec<Proper
                 ));
             }
 
-            Segment::PageRef { page_name, alias, .. } => {
+            Segment::PageRef {
+                page_name, alias, ..
+            } => {
                 patches.push(PropertyPatch::derived(
                     PropertyKey::new("page-ref").expect("valid key"),
                     PropertyValue::text(page_name),
@@ -414,20 +426,40 @@ mod tests {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("# My Heading");
         let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
-        assert!(keys.contains(&"heading-level"), "expected heading-level: {:?}", keys);
-        assert!(keys.contains(&"block-role"), "expected block-role: {:?}", keys);
-        let level_patch = result.derived.iter().find(|p| p.key.as_str() == "heading-level");
+        assert!(
+            keys.contains(&"heading-level"),
+            "expected heading-level: {:?}",
+            keys
+        );
+        assert!(
+            keys.contains(&"block-role"),
+            "expected block-role: {:?}",
+            keys
+        );
+        let level_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "heading-level");
         assert_eq!(level_patch.map(|p| extract_str(&p.value)), Some(Some("1")));
-        let role_patch = result.derived.iter().find(|p| p.key.as_str() == "block-role");
+        let role_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "block-role");
         assert!(role_patch.is_some(), "expected block-role patch");
-        assert_eq!(role_patch.map(|p| extract_str(&p.value)), Some(Some("heading")));
+        assert_eq!(
+            role_patch.map(|p| extract_str(&p.value)),
+            Some(Some("heading"))
+        );
     }
 
     #[test]
     fn canonicalize_h3_sets_level_3() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("### Level 3");
-        let level_patch = result.derived.iter().find(|p| p.key.as_str() == "heading-level");
+        let level_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "heading-level");
         assert_eq!(level_patch.map(|p| extract_str(&p.value)), Some(Some("3")));
     }
 
@@ -435,7 +467,10 @@ mod tests {
     fn canonicalize_h6_max_level() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("###### Level 6");
-        let level_patch = result.derived.iter().find(|p| p.key.as_str() == "heading-level");
+        let level_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "heading-level");
         assert_eq!(level_patch.map(|p| extract_str(&p.value)), Some(Some("6")));
     }
 
@@ -444,7 +479,11 @@ mod tests {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("Just some text");
         let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
-        assert!(!keys.contains(&"heading-level"), "should not have heading-level: {:?}", keys);
+        assert!(
+            !keys.contains(&"heading-level"),
+            "should not have heading-level: {:?}",
+            keys
+        );
     }
 
     // T17: link row mapping
@@ -453,13 +492,32 @@ mod tests {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("Check [this site](https://example.com) for info");
         let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
-        assert!(keys.contains(&"link-kind"), "expected link-kind: {:?}", keys);
-        let kind_patch = result.derived.iter().find(|p| p.key.as_str() == "link-kind");
-        assert_eq!(kind_patch.map(|p| extract_str(&p.value)), Some(Some("external")));
+        assert!(
+            keys.contains(&"link-kind"),
+            "expected link-kind: {:?}",
+            keys
+        );
+        let kind_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "link-kind");
+        assert_eq!(
+            kind_patch.map(|p| extract_str(&p.value)),
+            Some(Some("external"))
+        );
         let url_patch = result.derived.iter().find(|p| p.key.as_str() == "link-url");
-        assert_eq!(url_patch.map(|p| extract_str(&p.value)), Some(Some("https://example.com")));
-        let text_patch = result.derived.iter().find(|p| p.key.as_str() == "link-text");
-        assert_eq!(text_patch.map(|p| extract_str(&p.value)), Some(Some("this site")));
+        assert_eq!(
+            url_patch.map(|p| extract_str(&p.value)),
+            Some(Some("https://example.com"))
+        );
+        let text_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "link-text");
+        assert_eq!(
+            text_patch.map(|p| extract_str(&p.value)),
+            Some(Some("this site"))
+        );
     }
 
     #[test]
@@ -467,11 +525,27 @@ mod tests {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("![alt text](https://example.com/image.png)");
         let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
-        assert!(keys.contains(&"embed-kind"), "expected embed-kind: {:?}", keys);
-        let kind_patch = result.derived.iter().find(|p| p.key.as_str() == "embed-kind");
-        assert_eq!(kind_patch.map(|p| extract_str(&p.value)), Some(Some("image")));
-        let url_patch = result.derived.iter().find(|p| p.key.as_str() == "embed-url");
-        assert_eq!(url_patch.map(|p| extract_str(&p.value)), Some(Some("https://example.com/image.png")));
+        assert!(
+            keys.contains(&"embed-kind"),
+            "expected embed-kind: {:?}",
+            keys
+        );
+        let kind_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "embed-kind");
+        assert_eq!(
+            kind_patch.map(|p| extract_str(&p.value)),
+            Some(Some("image"))
+        );
+        let url_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "embed-url");
+        assert_eq!(
+            url_patch.map(|p| extract_str(&p.value)),
+            Some(Some("https://example.com/image.png"))
+        );
     }
 
     // T18: page-ref row mapping
@@ -482,7 +556,10 @@ mod tests {
         let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
         assert!(keys.contains(&"page-ref"), "expected page-ref: {:?}", keys);
         let ref_patch = result.derived.iter().find(|p| p.key.as_str() == "page-ref");
-        assert_eq!(ref_patch.map(|p| extract_str(&p.value)), Some(Some("My Page")));
+        assert_eq!(
+            ref_patch.map(|p| extract_str(&p.value)),
+            Some(Some("My Page"))
+        );
     }
 
     #[test]
@@ -491,19 +568,35 @@ mod tests {
         let result = c.canonicalize_block("See [[Real Page|display]] here");
         let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
         assert!(keys.contains(&"page-ref"), "expected page-ref: {:?}", keys);
-        assert!(keys.contains(&"page-ref-alias"), "expected page-ref-alias: {:?}", keys);
-        let alias_patch = result.derived.iter().find(|p| p.key.as_str() == "page-ref-alias");
-        assert_eq!(alias_patch.map(|p| extract_str(&p.value)), Some(Some("display")));
+        assert!(
+            keys.contains(&"page-ref-alias"),
+            "expected page-ref-alias: {:?}",
+            keys
+        );
+        let alias_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "page-ref-alias");
+        assert_eq!(
+            alias_patch.map(|p| extract_str(&p.value)),
+            Some(Some("display"))
+        );
     }
 
     #[test]
     fn canonicalize_block_ref_emits_block_ref_patch() {
         let c = new_canonicalizer();
-        let result =
-            c.canonicalize_block("Link to ((550e8400-e29b-41d4-a716-446655440000)) here");
+        let result = c.canonicalize_block("Link to ((550e8400-e29b-41d4-a716-446655440000)) here");
         let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
-        assert!(keys.contains(&"block-ref"), "expected block-ref: {:?}", keys);
-        let ref_patch = result.derived.iter().find(|p| p.key.as_str() == "block-ref");
+        assert!(
+            keys.contains(&"block-ref"),
+            "expected block-ref: {:?}",
+            keys
+        );
+        let ref_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "block-ref");
         assert_eq!(
             ref_patch.map(|p| extract_str(&p.value)),
             Some(Some("550e8400-e29b-41d4-a716-446655440000"))
@@ -515,13 +608,30 @@ mod tests {
     fn canonicalize_todo_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("TODO: Fix the bug");
-        assert_eq!(result.derived.len(), 3, "expected 3 derived patches: {:?}", result.derived);
+        assert_eq!(
+            result.derived.len(),
+            3,
+            "expected 3 derived patches: {:?}",
+            result.derived
+        );
         let type_patch = result.derived.iter().find(|p| p.key.as_str() == "type");
-        assert_eq!(type_patch.map(|p| extract_str(&p.value)), Some(Some("task")));
+        assert_eq!(
+            type_patch.map(|p| extract_str(&p.value)),
+            Some(Some("task"))
+        );
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
-        let proj_patch = result.derived.iter().find(|p| p.key.as_str() == "projection");
-        assert_eq!(proj_patch.map(|p| extract_str(&p.value)), Some(Some("auto")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("todo"))
+        );
+        let proj_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "projection");
+        assert_eq!(
+            proj_patch.map(|p| extract_str(&p.value)),
+            Some(Some("auto"))
+        );
         // Regression guard: no marker:: patch
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
@@ -533,7 +643,10 @@ mod tests {
         let result = c.canonicalize_block("[ ] Implement feature");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("todo"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -544,7 +657,10 @@ mod tests {
         let result = c.canonicalize_block("DONE: Task completed");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("done")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("done"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -555,7 +671,10 @@ mod tests {
         let result = c.canonicalize_block("[x] Task finished");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("done")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("done"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -566,7 +685,10 @@ mod tests {
         let result = c.canonicalize_block("NOW: Working on this");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("now")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("now"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -577,7 +699,10 @@ mod tests {
         let result = c.canonicalize_block("LATER: Plan for future");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("later")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("later"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -588,7 +713,10 @@ mod tests {
         let result = c.canonicalize_block("DOING: In progress");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("doing")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("doing"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -599,7 +727,10 @@ mod tests {
         let result = c.canonicalize_block("WAITING: Blocked");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("waiting")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("waiting"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -610,7 +741,10 @@ mod tests {
         let result = c.canonicalize_block("CANCELLED: No longer needed");
         assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("cancelled")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("cancelled"))
+        );
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
         assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
@@ -619,7 +753,11 @@ mod tests {
     fn canonicalize_no_marker_returns_empty_derived() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("Just plain text without markers");
-        assert!(result.derived.is_empty(), "expected no derived patches, got: {:?}", result.derived);
+        assert!(
+            result.derived.is_empty(),
+            "expected no derived patches, got: {:?}",
+            result.derived
+        );
     }
 
     // T19 + T18: task marker followed by page ref
@@ -628,14 +766,31 @@ mod tests {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("TODO: See [[My Task]] for details");
         // 3 marker patches + 1 page-ref patch = 4
-        assert_eq!(result.derived.len(), 4, "expected 4 derived patches: {:?}", result.derived);
+        assert_eq!(
+            result.derived.len(),
+            4,
+            "expected 4 derived patches: {:?}",
+            result.derived
+        );
         // Marker triple present
         let type_patch = result.derived.iter().find(|p| p.key.as_str() == "type");
-        assert_eq!(type_patch.map(|p| extract_str(&p.value)), Some(Some("task")));
+        assert_eq!(
+            type_patch.map(|p| extract_str(&p.value)),
+            Some(Some("task"))
+        );
         let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
-        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
-        let proj_patch = result.derived.iter().find(|p| p.key.as_str() == "projection");
-        assert_eq!(proj_patch.map(|p| extract_str(&p.value)), Some(Some("auto")));
+        assert_eq!(
+            status_patch.map(|p| extract_str(&p.value)),
+            Some(Some("todo"))
+        );
+        let proj_patch = result
+            .derived
+            .iter()
+            .find(|p| p.key.as_str() == "projection");
+        assert_eq!(
+            proj_patch.map(|p| extract_str(&p.value)),
+            Some(Some("auto"))
+        );
         // Page ref present
         assert!(result.derived.iter().any(|p| p.key.as_str() == "page-ref"));
         // No marker patch (regression guard)

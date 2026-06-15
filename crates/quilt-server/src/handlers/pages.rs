@@ -155,12 +155,7 @@ pub fn routes() -> Router {
 pub async fn list_pages(
     Extension(state): Extension<AppState>,
 ) -> Result<Json<Vec<PageDto>>, AppError> {
-    let pages = state
-        .services
-        .page
-        .list()
-        .await
-        .map_err(map_app_error)?;
+    let pages = state.services.page.list().await.map_err(map_app_error)?;
 
     let dtos: Vec<PageDto> = pages.into_iter().map(PageDto::from).collect();
 

@@ -71,12 +71,16 @@ fn apply_policy(
                 return Ok(outcome);
             }
             track_derived(&mut outcome);
-            block.properties.insert(key_owned.into_string(), patch.value.clone());
+            block
+                .properties
+                .insert(key_owned.into_string(), patch.value.clone());
             Ok(outcome)
         }
         MergePolicy::Overwrite => {
             track_derived(&mut outcome);
-            block.properties.insert(key_owned.into_string(), patch.value.clone());
+            block
+                .properties
+                .insert(key_owned.into_string(), patch.value.clone());
             Ok(outcome)
         }
         MergePolicy::Append => {
@@ -92,9 +96,7 @@ fn apply_policy(
         MergePolicy::RejectOnConflict => {
             apply_reject_on_conflict(patch, block, &mut outcome, existing)
         }
-        MergePolicy::AskOnConflict => {
-            apply_ask_on_conflict(patch, block, &mut outcome, existing)
-        }
+        MergePolicy::AskOnConflict => apply_ask_on_conflict(patch, block, &mut outcome, existing),
     }
 }
 
@@ -116,22 +118,31 @@ fn apply_append(
     match (&block.properties.get(key_str), cardinality) {
         // No existing value + Many → seed array
         (None, Cardinality::Many) => {
-            block.properties.insert(key_owned.into_string(), PropertyValue::Array(vec![patch.value.clone()]));
+            block.properties.insert(
+                key_owned.into_string(),
+                PropertyValue::Array(vec![patch.value.clone()]),
+            );
         }
         // Existing array + Many → push (wrap scalar if needed)
         (Some(PropertyValue::Array(arr)), Cardinality::Many) => {
             let mut new_arr = arr.clone();
             push_dedup(&mut new_arr, &patch.value);
-            block.properties.insert(key_owned.into_string(), PropertyValue::Array(new_arr));
+            block
+                .properties
+                .insert(key_owned.into_string(), PropertyValue::Array(new_arr));
         }
         // Scalar + Many → convert to array
         (Some(scalar), Cardinality::Many) => {
             let new_arr = vec![(*scalar).clone(), patch.value.clone()];
-            block.properties.insert(key_owned.into_string(), PropertyValue::Array(new_arr));
+            block
+                .properties
+                .insert(key_owned.into_string(), PropertyValue::Array(new_arr));
         }
         // Any + One → overwrite
         (_, Cardinality::One) => {
-            block.properties.insert(key_owned.into_string(), patch.value.clone());
+            block
+                .properties
+                .insert(key_owned.into_string(), patch.value.clone());
         }
     }
     Ok(())
@@ -153,23 +164,32 @@ fn apply_union(
     match (&block.properties.get(key_str), cardinality) {
         // No existing value + Many → seed array
         (None, Cardinality::Many) => {
-            block.properties.insert(key_owned.into_string(), PropertyValue::Array(vec![patch.value.clone()]));
+            block.properties.insert(
+                key_owned.into_string(),
+                PropertyValue::Array(vec![patch.value.clone()]),
+            );
         }
         // Existing array + Many → set union
         (Some(PropertyValue::Array(arr)), Cardinality::Many) => {
             let mut new_arr = arr.clone();
             extend_with_unique(&mut new_arr, &patch.value);
-            block.properties.insert(key_owned.into_string(), PropertyValue::Array(new_arr));
+            block
+                .properties
+                .insert(key_owned.into_string(), PropertyValue::Array(new_arr));
         }
         // Scalar + Many → convert to array with union
         (Some(scalar), Cardinality::Many) => {
             let mut new_arr = vec![(*scalar).clone()];
             extend_with_unique(&mut new_arr, &patch.value);
-            block.properties.insert(key_owned.into_string(), PropertyValue::Array(new_arr));
+            block
+                .properties
+                .insert(key_owned.into_string(), PropertyValue::Array(new_arr));
         }
         // Any + One → overwrite
         (_, Cardinality::One) => {
-            block.properties.insert(key_owned.into_string(), patch.value.clone());
+            block
+                .properties
+                .insert(key_owned.into_string(), patch.value.clone());
         }
     }
     Ok(())
@@ -202,7 +222,9 @@ fn apply_reject_on_conflict(
     if patch.provenance == crate::canonicalization::PropertyPatchProvenance::Derived {
         outcome.derived_materialized.push(key_owned.clone());
     }
-    block.properties.insert(key_owned.into_string(), patch.value.clone());
+    block
+        .properties
+        .insert(key_owned.into_string(), patch.value.clone());
     Ok(PatchOutcome::unchanged(block.clone()))
 }
 
@@ -244,7 +266,9 @@ fn apply_ask_on_conflict(
     if patch.provenance == crate::canonicalization::PropertyPatchProvenance::Derived {
         outcome.derived_materialized.push(key_owned.clone());
     }
-    block.properties.insert(key_owned.into_string(), patch.value.clone());
+    block
+        .properties
+        .insert(key_owned.into_string(), patch.value.clone());
     Ok(PatchOutcome::unchanged(block.clone()))
 }
 
@@ -275,9 +299,11 @@ fn extend_with_unique(target: &mut Vec<PropertyValue>, value: &PropertyValue) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canonicalization::{CanonicalInput, PropertyPatchProvenance, PropertyPatch};
+    use crate::canonicalization::{CanonicalInput, PropertyPatch, PropertyPatchProvenance};
     use crate::entities::{Block, BlockCreate};
-    use crate::properties::types::{Cardinality, MergePolicy, PropertyMutability, PropertyType, PropertyVisibility};
+    use crate::properties::types::{
+        Cardinality, MergePolicy, PropertyMutability, PropertyType, PropertyVisibility,
+    };
     use crate::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid};
     use proptest::prelude::*;
     use std::collections::HashMap;
@@ -300,7 +326,11 @@ mod tests {
         .expect("creates block")
     }
 
-    fn make_def(db_ident: &str, merge_policy: MergePolicy, mutability: PropertyMutability) -> crate::properties::PropertyDefinition {
+    fn make_def(
+        db_ident: &str,
+        merge_policy: MergePolicy,
+        mutability: PropertyMutability,
+    ) -> crate::properties::PropertyDefinition {
         use crate::properties::types::ViewContext;
         crate::properties::PropertyDefinition {
             id: Uuid::new_v4(),
@@ -328,7 +358,9 @@ mod tests {
         }
     }
 
-    fn build_registry(defs: &[crate::properties::PropertyDefinition]) -> PropertyDefinitionRegistry {
+    fn build_registry(
+        defs: &[crate::properties::PropertyDefinition],
+    ) -> PropertyDefinitionRegistry {
         PropertyDefinitionRegistry::from_definitions(defs.iter().cloned())
     }
 
@@ -377,7 +409,11 @@ mod tests {
 
     #[test]
     fn apply_to_rejects_explicit_patch_to_immutable_property() {
-        let def = make_def("heading-level", MergePolicy::SetIfMissing, PropertyMutability::Immutable);
+        let def = make_def(
+            "heading-level",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Immutable,
+        );
         let patch = PropertyPatch::explicit(make_key("heading-level"), PropertyValue::text("1"));
         let mut block = make_empty_block();
         let defs = build_registry(&[def]);
@@ -388,7 +424,11 @@ mod tests {
 
     #[test]
     fn apply_to_block_content_is_preserved_on_error() {
-        let def = make_def("heading-level", MergePolicy::SetIfMissing, PropertyMutability::Immutable);
+        let def = make_def(
+            "heading-level",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Immutable,
+        );
         let patch = PropertyPatch::explicit(make_key("heading-level"), PropertyValue::text("1"));
         let mut block = make_empty_block();
         block.content = "original content".to_string();
@@ -402,33 +442,55 @@ mod tests {
 
     #[test]
     fn apply_set_if_missing_writes_when_no_value() {
-        let def = make_def("status", MergePolicy::SetIfMissing, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("todo")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("todo"))
+        );
         assert!(result.skipped.is_empty());
     }
 
     #[test]
     fn apply_set_if_missing_skips_when_value_exists() {
-        let def = make_def("status", MergePolicy::SetIfMissing, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("done")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("done"))
+        );
         assert!(result.skipped.iter().any(|k| k.as_str() == "status"));
     }
 
     #[test]
     fn apply_set_if_missing_never_errors() {
-        let def = make_def("status", MergePolicy::SetIfMissing, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         patch.apply_to(&mut block, &defs).expect("never errors");
     }
@@ -437,30 +499,50 @@ mod tests {
 
     #[test]
     fn apply_overwrite_replaces_existing() {
-        let def = make_def("status", MergePolicy::Overwrite, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::Overwrite,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("todo")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("todo"))
+        );
         assert!(result.skipped.is_empty());
     }
 
     #[test]
     fn apply_overwrite_writes_when_no_value() {
-        let def = make_def("status", MergePolicy::Overwrite, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::Overwrite,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("todo")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("todo"))
+        );
         assert!(result.skipped.is_empty());
     }
 
     #[test]
     fn apply_overwrite_never_errors() {
-        let def = make_def("status", MergePolicy::Overwrite, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::Overwrite,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
         let defs = build_registry(&[def]);
@@ -478,7 +560,10 @@ mod tests {
         };
         let patch = PropertyPatch::explicit(make_key("tags"), PropertyValue::text("new-tag"));
         let mut block = make_empty_block();
-        block.properties.insert("tags".into(), PropertyValue::Array(vec![PropertyValue::text("existing")]));
+        block.properties.insert(
+            "tags".into(),
+            PropertyValue::Array(vec![PropertyValue::text("existing")]),
+        );
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
         let arr = match block.properties.get("tags") {
@@ -512,10 +597,15 @@ mod tests {
         let def = make_def("status", MergePolicy::Append, PropertyMutability::Mutable);
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("todo")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("todo"))
+        );
     }
 
     #[test]
@@ -524,7 +614,9 @@ mod tests {
         def.cardinality = Cardinality::Many;
         let patch = PropertyPatch::explicit(make_key("tags"), PropertyValue::text("new-tag"));
         let mut block = make_empty_block();
-        block.properties.insert("tags".into(), PropertyValue::text("existing"));
+        block
+            .properties
+            .insert("tags".into(), PropertyValue::text("existing"));
         let defs = build_registry(&[def]);
         patch.apply_to(&mut block, &defs).expect("never errors");
     }
@@ -537,7 +629,13 @@ mod tests {
         def.cardinality = Cardinality::Many;
         let patch = PropertyPatch::explicit(make_key("tags"), PropertyValue::text("existing"));
         let mut block = make_empty_block();
-        block.properties.insert("tags".into(), PropertyValue::Array(vec![PropertyValue::text("existing"), PropertyValue::text("other")]));
+        block.properties.insert(
+            "tags".into(),
+            PropertyValue::Array(vec![
+                PropertyValue::text("existing"),
+                PropertyValue::text("other"),
+            ]),
+        );
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
         let arr = match block.properties.get("tags") {
@@ -553,7 +651,10 @@ mod tests {
         def.cardinality = Cardinality::Many;
         let patch = PropertyPatch::explicit(make_key("tags"), PropertyValue::text("new-tag"));
         let mut block = make_empty_block();
-        block.properties.insert("tags".into(), PropertyValue::Array(vec![PropertyValue::text("existing")]));
+        block.properties.insert(
+            "tags".into(),
+            PropertyValue::Array(vec![PropertyValue::text("existing")]),
+        );
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
         let arr = match block.properties.get("tags") {
@@ -570,10 +671,15 @@ mod tests {
         let def = make_def("status", MergePolicy::Union, PropertyMutability::Mutable);
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("todo")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("todo"))
+        );
     }
 
     #[test]
@@ -590,23 +696,38 @@ mod tests {
 
     #[test]
     fn apply_reject_on_conflict_rejects_when_differ() {
-        let def = make_def("status", MergePolicy::RejectOnConflict, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::RejectOnConflict,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs);
         assert!(matches!(result, Err(DomainError::MergeConflict { key, .. }) if key == "status"));
         // Block unchanged
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("done")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("done"))
+        );
     }
 
     #[test]
     fn apply_reject_on_conflict_accepts_when_match() {
-        let def = make_def("status", MergePolicy::RejectOnConflict, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::RejectOnConflict,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("done"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
         assert!(result.skipped.contains(&make_key("status")));
@@ -614,12 +735,19 @@ mod tests {
 
     #[test]
     fn apply_reject_on_conflict_writes_when_no_value() {
-        let def = make_def("status", MergePolicy::RejectOnConflict, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::RejectOnConflict,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("todo")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("todo"))
+        );
         assert!(result.derived_materialized.is_empty());
     }
 
@@ -627,24 +755,39 @@ mod tests {
 
     #[test]
     fn apply_ask_on_conflict_defers_when_differ() {
-        let def = make_def("status", MergePolicy::AskOnConflict, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::AskOnConflict,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
         assert_eq!(result.conflicts.len(), 1);
         assert_eq!(result.conflicts[0].policy, MergePolicy::AskOnConflict);
         // Block unchanged
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("done")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("done"))
+        );
     }
 
     #[test]
     fn apply_ask_on_conflict_accepts_when_match() {
-        let def = make_def("status", MergePolicy::AskOnConflict, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::AskOnConflict,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("done"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("done"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("done"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
         assert!(result.conflicts.is_empty());
@@ -653,12 +796,19 @@ mod tests {
 
     #[test]
     fn apply_ask_on_conflict_writes_when_no_value() {
-        let def = make_def("status", MergePolicy::AskOnConflict, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::AskOnConflict,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("todo"));
         let mut block = make_empty_block();
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("todo")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("todo"))
+        );
     }
 
     // ── Derived provenance tracking ──────────────────────────────
@@ -666,32 +816,60 @@ mod tests {
     #[test]
     fn apply_derived_materialized_only_for_derived_patches() {
         // Immutable definition + Explicit patch → Err (immutable means never writable by user)
-        let def_immutable = make_def("heading-level", MergePolicy::SetIfMissing, PropertyMutability::Immutable);
-        let explicit_patch = PropertyPatch::explicit(make_key("heading-level"), PropertyValue::text("1"));
+        let def_immutable = make_def(
+            "heading-level",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Immutable,
+        );
+        let explicit_patch =
+            PropertyPatch::explicit(make_key("heading-level"), PropertyValue::text("1"));
         let mut block_explicit = make_empty_block();
         let defs_immutable = build_registry(&[def_immutable]);
         let result_explicit = explicit_patch.apply_to(&mut block_explicit, &defs_immutable);
-        assert!(matches!(result_explicit, Err(DomainError::ImmutableProperty(k)) if k == "heading-level"));
+        assert!(
+            matches!(result_explicit, Err(DomainError::ImmutableProperty(k)) if k == "heading-level")
+        );
 
         // Mutable definition + Derived patch → writes and tracks derived_materialized
-        let def_mutable = make_def("heading-level", MergePolicy::SetIfMissing, PropertyMutability::Mutable);
-        let derived_patch = PropertyPatch::derived(make_key("heading-level"), PropertyValue::text("2"));
+        let def_mutable = make_def(
+            "heading-level",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Mutable,
+        );
+        let derived_patch =
+            PropertyPatch::derived(make_key("heading-level"), PropertyValue::text("2"));
         let mut block_derived = make_empty_block();
         let defs_mutable = build_registry(&[def_mutable]);
-        let result_derived = derived_patch.apply_to(&mut block_derived, &defs_mutable).expect("ok");
-        assert!(result_derived.derived_materialized.iter().any(|k| k.as_str() == "heading-level"));
+        let result_derived = derived_patch
+            .apply_to(&mut block_derived, &defs_mutable)
+            .expect("ok");
+        assert!(
+            result_derived
+                .derived_materialized
+                .iter()
+                .any(|k| k.as_str() == "heading-level")
+        );
     }
 
     #[test]
     fn apply_skipped_reports_set_if_missing_kept_value() {
-        let def = make_def("status", MergePolicy::SetIfMissing, PropertyMutability::Mutable);
+        let def = make_def(
+            "status",
+            MergePolicy::SetIfMissing,
+            PropertyMutability::Mutable,
+        );
         let patch = PropertyPatch::explicit(make_key("status"), PropertyValue::text("new"));
         let mut block = make_empty_block();
-        block.properties.insert("status".into(), PropertyValue::text("existing"));
+        block
+            .properties
+            .insert("status".into(), PropertyValue::text("existing"));
         let defs = build_registry(&[def]);
         let result = patch.apply_to(&mut block, &defs).expect("ok");
         assert!(result.skipped.iter().any(|k| k.as_str() == "status"));
-        assert_eq!(block.properties.get("status"), Some(&PropertyValue::text("existing")));
+        assert_eq!(
+            block.properties.get("status"),
+            Some(&PropertyValue::text("existing"))
+        );
     }
 
     // ── Per-policy matrix (T13) ───────────────────────────────────
@@ -724,24 +902,42 @@ mod tests {
                 let mut block = make_empty_block();
                 let defs = build_registry(&[def.clone()]);
                 let result = patch.apply_to(&mut block, &defs);
-                assert!(result.is_ok(), "policy {:?} should not error with no pre-value", policy);
-                assert!(block.properties.contains_key("prop"), "policy {:?} should write with no pre-value", policy);
+                assert!(
+                    result.is_ok(),
+                    "policy {:?} should not error with no pre-value",
+                    policy
+                );
+                assert!(
+                    block.properties.contains_key("prop"),
+                    "policy {:?} should write with no pre-value",
+                    policy
+                );
             }
 
             // Case: same value → Skip (SetIfMissing, Reject, Ask) or Write (Overwrite, Append, Union)
             {
                 let mut block = make_empty_block();
-                block.properties.insert("prop".into(), PropertyValue::text("p"));
+                block
+                    .properties
+                    .insert("prop".into(), PropertyValue::text("p"));
                 let defs = build_registry(&[def.clone()]);
                 let result = patch.apply_to(&mut block, &defs).unwrap();
                 match policy {
                     MergePolicy::SetIfMissing
                     | MergePolicy::RejectOnConflict
                     | MergePolicy::AskOnConflict => {
-                        assert!(result.skipped.iter().any(|k| k.as_str() == "prop"), "policy {:?} should skip when values match", policy);
+                        assert!(
+                            result.skipped.iter().any(|k| k.as_str() == "prop"),
+                            "policy {:?} should skip when values match",
+                            policy
+                        );
                     }
                     _ => {
-                        assert!(block.properties.get("prop") == Some(&PropertyValue::text("p")), "policy {:?} should keep value when values match", policy);
+                        assert!(
+                            block.properties.get("prop") == Some(&PropertyValue::text("p")),
+                            "policy {:?} should keep value when values match",
+                            policy
+                        );
                     }
                 }
             }
@@ -749,20 +945,34 @@ mod tests {
             // Case: different value + One cardinality
             {
                 let mut block = make_empty_block();
-                block.properties.insert("prop".into(), PropertyValue::text("existing"));
+                block
+                    .properties
+                    .insert("prop".into(), PropertyValue::text("existing"));
                 let defs = build_registry(&[def.clone()]);
                 let result = patch.apply_to(&mut block, &defs);
                 match policy {
                     MergePolicy::RejectOnConflict => {
-                        assert!(matches!(result, Err(DomainError::MergeConflict { .. })), "policy {:?} should error on conflict", policy);
+                        assert!(
+                            matches!(result, Err(DomainError::MergeConflict { .. })),
+                            "policy {:?} should error on conflict",
+                            policy
+                        );
                     }
                     MergePolicy::AskOnConflict => {
                         let outcome = result.expect("ok");
-                        assert!(!outcome.conflicts.is_empty(), "policy {:?} should surface conflict", policy);
+                        assert!(
+                            !outcome.conflicts.is_empty(),
+                            "policy {:?} should surface conflict",
+                            policy
+                        );
                     }
                     _ => {
                         let outcome = result.expect("ok");
-                        assert!(outcome.conflicts.is_empty(), "policy {:?} should not conflict", policy);
+                        assert!(
+                            outcome.conflicts.is_empty(),
+                            "policy {:?} should not conflict",
+                            policy
+                        );
                     }
                 }
             }
@@ -832,7 +1042,9 @@ mod tests {
         fn build_registry(
             defs: &[crate::properties::PropertyDefinition],
         ) -> crate::canonicalization::PropertyDefinitionRegistry {
-            crate::canonicalization::PropertyDefinitionRegistry::from_definitions(defs.iter().cloned())
+            crate::canonicalization::PropertyDefinitionRegistry::from_definitions(
+                defs.iter().cloned(),
+            )
         }
 
         // Valid policy strategy — map 0..6 to each MergePolicy variant

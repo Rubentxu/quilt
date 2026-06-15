@@ -9,7 +9,9 @@ use sqlx::SqlitePool;
 use quilt_domain::entities::{
     Annotation, AnnotationCreate, AnnotationScope, AnnotationStatus, AuthorType,
 };
-use quilt_domain::repositories::{AnnotationFilters, AnnotationRepository, AnnotationRepositoryExt};
+use quilt_domain::repositories::{
+    AnnotationFilters, AnnotationRepository, AnnotationRepositoryExt,
+};
 use quilt_domain::value_objects::Uuid;
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::SqliteAnnotationRepository;
@@ -35,25 +37,29 @@ async fn insert_parent_block(pool: &SqlitePool) -> Uuid {
     let block_id = Uuid::new_v4();
     let page_name = format!("page-{}", page_id.short());
     let now: i64 = chrono::Utc::now().timestamp();
-    sqlx::query("INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
-                 VALUES (?, ?, 'markdown', 0, ?, ?)")
-        .bind(page_id.as_bytes().to_vec())
-        .bind(&page_name)
-        .bind(now)
-        .bind(now)
-        .execute(pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
+    sqlx::query(
+        "INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
+                 VALUES (?, ?, 'markdown', 0, ?, ?)",
+    )
+    .bind(page_id.as_bytes().to_vec())
+    .bind(&page_name)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
                  collapsed, created_at, updated_at, refs, tags) \
-                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')")
-        .bind(block_id.as_bytes().to_vec())
-        .bind(page_id.as_bytes().to_vec())
-        .bind(now)
-        .bind(now)
-        .execute(pool)
-        .await
-        .unwrap();
+                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')",
+    )
+    .bind(block_id.as_bytes().to_vec())
+    .bind(page_id.as_bytes().to_vec())
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await
+    .unwrap();
     block_id
 }
 
@@ -71,12 +77,7 @@ fn make_block_annotation(block_id: Uuid, content: &str, author: &str) -> Annotat
     .expect("block annotation should be valid")
 }
 
-fn make_inline_annotation(
-    block_id: Uuid,
-    content: &str,
-    start: u32,
-    end: u32,
-) -> Annotation {
+fn make_inline_annotation(block_id: Uuid, content: &str, start: u32, end: u32) -> Annotation {
     Annotation::new(AnnotationCreate {
         block_id,
         scope: AnnotationScope::Inline,

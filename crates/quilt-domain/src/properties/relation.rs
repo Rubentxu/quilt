@@ -111,12 +111,7 @@ mod tests {
 
     #[test]
     fn test_workflow_step_relation() {
-        let rel = PropertyRelation::workflow_step(
-            Uuid::new_v4(),
-            "status",
-            "todo",
-            "doing",
-        );
+        let rel = PropertyRelation::workflow_step(Uuid::new_v4(), "status", "todo", "doing");
         assert_eq!(rel.source_key, "status");
         assert_eq!(rel.source_value, "todo");
         assert_eq!(rel.target_key, "status");
@@ -128,14 +123,20 @@ mod tests {
     #[test]
     fn test_relation_type_as_str() {
         assert_eq!(RelationType::Precedes.as_str(), "precedes");
-        assert_eq!(RelationType::Custom("ranked".to_string()).as_str(), "ranked");
+        assert_eq!(
+            RelationType::Custom("ranked".to_string()).as_str(),
+            "ranked"
+        );
     }
 
     #[test]
     fn test_confidence_clamped() {
         let rel = PropertyRelation::new(
             Uuid::new_v4(),
-            "p", "a", "p", "b",
+            "p",
+            "a",
+            "p",
+            "b",
             RelationType::Implies,
             "test",
             1.5, // should clamp to 1.0
@@ -145,9 +146,7 @@ mod tests {
 
     #[test]
     fn test_serialization() {
-        let rel = PropertyRelation::workflow_step(
-            Uuid::new_v4(), "status", "todo", "doing",
-        );
+        let rel = PropertyRelation::workflow_step(Uuid::new_v4(), "status", "todo", "doing");
         let json = serde_json::to_string(&rel).unwrap();
         assert!(json.contains("precedes"));
         assert!(json.contains("todo"));

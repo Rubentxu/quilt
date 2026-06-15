@@ -3,17 +3,17 @@
 //! Holds the database pool, MCP server, search index, and other shared resources.
 
 use axum::extract::FromRef;
-use quilt_application::services::ref_service::RefServiceTrait;
 use quilt_application::AppServices;
+use quilt_application::services::ref_service::RefServiceTrait;
 
 use quilt_domain::repositories::{
-    BlockRepository, PageRepository, PropertyRepository, RefRepository,
-    RelationRepository, SchemaRepository, SettingsRepository, TagRepository, TourStateRepository,
+    BlockRepository, PageRepository, PropertyRepository, RefRepository, RelationRepository,
+    SchemaRepository, SettingsRepository, TagRepository, TourStateRepository,
 };
-use quilt_search::SearchService;
 use quilt_search::SearchIndexManager;
+use quilt_search::SearchService;
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{RwLock, broadcast};
 
 /// Bundles all repository traits into a single cloneable struct.
 ///

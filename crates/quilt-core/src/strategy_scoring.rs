@@ -340,10 +340,7 @@ impl StrategySelector for ScoredStrategySelector {
 /// Build a [`Block`] with the given `type` and any extra
 /// properties. Re-exported here (next to the scoring code that
 /// consumes it) so tests in this module stay readable.
-pub fn block_with(
-    block_type: Option<&str>,
-    extra: &[(&str, &str)],
-) -> Block {
+pub fn block_with(block_type: Option<&str>, extra: &[(&str, &str)]) -> Block {
     let mut props: HashMap<String, String> = HashMap::new();
     if let Some(t) = block_type {
         props.insert("type".to_string(), t.to_string());
@@ -459,10 +456,7 @@ mod tests {
     fn recency_signal_is_half_at_one_half_life() {
         let now = fixed_now();
         let half_life_ago = now - chrono::Duration::hours(RECENCY_HALF_LIFE_HOURS as i64);
-        let b = block_with(
-            Some("task"),
-            &[("updated-at", &half_life_ago.to_rfc3339())],
-        );
+        let b = block_with(Some("task"), &[("updated-at", &half_life_ago.to_rfc3339())]);
         let scorer = RelevanceScorer::with_now(now);
         let score = scorer.recency_signal(&b);
         assert!(
@@ -478,7 +472,10 @@ mod tests {
         let b = block_with(Some("task"), &[("updated-at", &long_ago.to_rfc3339())]);
         let scorer = RelevanceScorer::with_now(now);
         let score = scorer.recency_signal(&b);
-        assert!(score < 0.01, "very old block should score ≈0.0, got {score}");
+        assert!(
+            score < 0.01,
+            "very old block should score ≈0.0, got {score}"
+        );
     }
 
     #[test]
@@ -499,10 +496,15 @@ mod tests {
     fn recency_signal_parses_unix_epoch_seconds() {
         let now = fixed_now();
         let scorer = RelevanceScorer::with_now(now);
-        let block_at_now =
-            block_with(Some("task"), &[("updated-at", &now.timestamp().to_string())]);
+        let block_at_now = block_with(
+            Some("task"),
+            &[("updated-at", &now.timestamp().to_string())],
+        );
         let score = scorer.recency_signal(&block_at_now);
-        assert!((score - 1.0).abs() < 1e-3, "epoch seconds should parse, got {score}");
+        assert!(
+            (score - 1.0).abs() < 1e-3,
+            "epoch seconds should parse, got {score}"
+        );
     }
 
     // ── Full scorer ───────────────────────────────────────────────
@@ -549,7 +551,10 @@ mod tests {
         let fresh = block_with(Some("task"), &[("updated-at", &now.to_rfc3339())]);
         let old = block_with(
             Some("task"),
-            &[("updated-at", &(now - chrono::Duration::days(7)).to_rfc3339())],
+            &[(
+                "updated-at",
+                &(now - chrono::Duration::days(7)).to_rfc3339(),
+            )],
         );
         let s_fresh = scorer.score("task", &fresh);
         let s_old = scorer.score("task", &old);

@@ -332,7 +332,9 @@ impl<'de> Deserialize<'de> for DerivedSource {
                     "markdown" => Ok(DerivedSource::Markdown),
                     "canonicalization" => Ok(DerivedSource::Canonicalization),
                     "importer" => Ok(DerivedSource::Importer),
-                    _ => Err(::serde::de::Error::custom(format!("unknown derived source: {v}"))),
+                    _ => Err(::serde::de::Error::custom(format!(
+                        "unknown derived source: {v}"
+                    ))),
                 }
             }
             fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -528,12 +530,7 @@ impl PropertyDefinition {
 
     /// Legacy 3-flag visibility builder (deprecated).
     #[deprecated(note = "use with_visibility(PropertyVisibility) instead")]
-    pub fn with_visibility_flags(
-        mut self,
-        public: bool,
-        queryable: bool,
-        hidden: bool,
-    ) -> Self {
+    pub fn with_visibility_flags(mut self, public: bool, queryable: bool, hidden: bool) -> Self {
         self.public = public;
         self.queryable = queryable;
         self.hidden = hidden;

@@ -15,7 +15,7 @@ pub mod types;
 
 pub use engine::{StructureGardener, StructureGardenerError};
 pub use template_doctor::{
-    DefaultRegistry, DiagnosisReport, GardenerCare, Issue, IssueKind, RepairAction,
-    RepairReport, TemplateDoctor, TemplateState,
+    DefaultRegistry, DiagnosisReport, GardenerCare, Issue, IssueKind, RepairAction, RepairReport,
+    TemplateDoctor, TemplateState,
 };
 pub use types::*;

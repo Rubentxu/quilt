@@ -209,7 +209,9 @@ impl Block {
             self.logbook = None;
         }
         // Case 4: Transitioning AWAY FROM Cancelled (including Cancelled → Done)
-        else if old_marker == Some(TaskMarker::Cancelled) && new_marker != Some(TaskMarker::Cancelled) {
+        else if old_marker == Some(TaskMarker::Cancelled)
+            && new_marker != Some(TaskMarker::Cancelled)
+        {
             self.cancelled_at = None;
             self.logbook = None;
         }
@@ -423,7 +425,10 @@ mod tests {
             })
             .unwrap();
 
-        assert!(block.logbook.is_some(), "logbook should be set when marker becomes Done");
+        assert!(
+            block.logbook.is_some(),
+            "logbook should be set when marker becomes Done"
+        );
         assert!(
             block.completed_at.is_some(),
             "completed_at should be set when marker becomes Done"

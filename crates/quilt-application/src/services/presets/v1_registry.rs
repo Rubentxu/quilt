@@ -54,17 +54,16 @@ impl StaticPresetRegistry {
     /// This is a **build-time programmer error**, not a runtime condition.
     #[must_use]
     pub fn v1() -> Self {
-        let mut registry = Self { presets: HashMap::new() };
+        let mut registry = Self {
+            presets: HashMap::new(),
+        };
 
         // Build-time validator result
         let mut validation_errors: Vec<String> = Vec::new();
 
         // ── Simple task presets (no args) ──────────────────────────────────
 
-        fn task_preset(
-            id: &'static str,
-            status: &'static str,
-        ) -> (PresetId, PropertyPreset) {
+        fn task_preset(id: &'static str, status: &'static str) -> (PresetId, PropertyPreset) {
             let id = PresetId::new(id).expect("valid preset id");
             let preset = PropertyPreset::new(
                 id.clone(),
@@ -144,7 +143,8 @@ impl StaticPresetRegistry {
             placeholder_date: NaiveDate,
         ) -> (PresetId, PropertyPreset) {
             let id = PresetId::new(id).expect("valid preset id");
-            let args = PresetArgs::from_vec(vec![PresetArg::Date(placeholder_date)]).expect("valid args");
+            let args =
+                PresetArgs::from_vec(vec![PresetArg::Date(placeholder_date)]).expect("valid args");
             let preset = PropertyPreset::new(
                 id.clone(),
                 vec![PropertyPatch::explicit(
@@ -163,45 +163,58 @@ impl StaticPresetRegistry {
         }
 
         // /Scheduled
-        let (id, preset) = date_preset("/Scheduled", "scheduled", NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
+        let (id, preset) = date_preset(
+            "/Scheduled",
+            "scheduled",
+            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+        );
         // Build-time validation: Date-arg preset must have a scheduled or deadline patch
         let has_date_patch = preset.patches.iter().any(|p| {
             let k = p.key.as_str();
             k == "scheduled" || k == "deadline"
         });
         if !has_date_patch {
-            validation_errors.push(
-                format!("/Scheduled requires a 'scheduled' or 'deadline' patch key, found: {:?}",
-                    preset.patches.iter().map(|p| p.key.as_str()).collect::<Vec<_>>()
-                )
-            );
+            validation_errors.push(format!(
+                "/Scheduled requires a 'scheduled' or 'deadline' patch key, found: {:?}",
+                preset
+                    .patches
+                    .iter()
+                    .map(|p| p.key.as_str())
+                    .collect::<Vec<_>>()
+            ));
         }
         registry.presets.insert(id, preset);
 
         // /Deadline
-        let (id, preset) = date_preset("/Deadline", "deadline", NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
+        let (id, preset) = date_preset(
+            "/Deadline",
+            "deadline",
+            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+        );
         let has_date_patch = preset.patches.iter().any(|p| {
             let k = p.key.as_str();
             k == "scheduled" || k == "deadline"
         });
         if !has_date_patch {
-            validation_errors.push(
-                format!("/Deadline requires a 'scheduled' or 'deadline' patch key, found: {:?}",
-                    preset.patches.iter().map(|p| p.key.as_str()).collect::<Vec<_>>()
-                )
-            );
+            validation_errors.push(format!(
+                "/Deadline requires a 'scheduled' or 'deadline' patch key, found: {:?}",
+                preset
+                    .patches
+                    .iter()
+                    .map(|p| p.key.as_str())
+                    .collect::<Vec<_>>()
+            ));
         }
         registry.presets.insert(id, preset);
 
         // ── Url-arg presets ─────────────────────────────────────────────────
 
-        fn url_preset(
-            id: &'static str,
-            media_type: &str,
-        ) -> (PresetId, PropertyPreset) {
+        fn url_preset(id: &'static str, media_type: &str) -> (PresetId, PropertyPreset) {
             let id = PresetId::new(id).expect("valid preset id");
-            let placeholder_url = url::Url::parse("https://placeholder.example.com").expect("valid placeholder");
-            let args = PresetArgs::from_vec(vec![PresetArg::Url(placeholder_url)]).expect("valid args");
+            let placeholder_url =
+                url::Url::parse("https://placeholder.example.com").expect("valid placeholder");
+            let args =
+                PresetArgs::from_vec(vec![PresetArg::Url(placeholder_url)]).expect("valid args");
             let preset = PropertyPreset::new(
                 id.clone(),
                 vec![
@@ -230,25 +243,37 @@ impl StaticPresetRegistry {
         // /Video
         let (id, preset) = url_preset("/Video", "video");
         // Build-time validation: Url-arg preset must have a source-url patch
-        let has_url_patch = preset.patches.iter().any(|p| p.key.as_str() == "source-url");
+        let has_url_patch = preset
+            .patches
+            .iter()
+            .any(|p| p.key.as_str() == "source-url");
         if !has_url_patch {
-            validation_errors.push(
-                format!("/Video requires a 'source-url' patch key, found: {:?}",
-                    preset.patches.iter().map(|p| p.key.as_str()).collect::<Vec<_>>()
-                )
-            );
+            validation_errors.push(format!(
+                "/Video requires a 'source-url' patch key, found: {:?}",
+                preset
+                    .patches
+                    .iter()
+                    .map(|p| p.key.as_str())
+                    .collect::<Vec<_>>()
+            ));
         }
         registry.presets.insert(id, preset);
 
         // /Image
         let (id, preset) = url_preset("/Image", "image");
-        let has_url_patch = preset.patches.iter().any(|p| p.key.as_str() == "source-url");
+        let has_url_patch = preset
+            .patches
+            .iter()
+            .any(|p| p.key.as_str() == "source-url");
         if !has_url_patch {
-            validation_errors.push(
-                format!("/Image requires a 'source-url' patch key, found: {:?}",
-                    preset.patches.iter().map(|p| p.key.as_str()).collect::<Vec<_>>()
-                )
-            );
+            validation_errors.push(format!(
+                "/Image requires a 'source-url' patch key, found: {:?}",
+                preset
+                    .patches
+                    .iter()
+                    .map(|p| p.key.as_str())
+                    .collect::<Vec<_>>()
+            ));
         }
         registry.presets.insert(id, preset);
 
@@ -352,7 +377,12 @@ mod tests {
     fn list_returns_9_ids() {
         let reg = StaticPresetRegistry::v1();
         let ids = reg.list();
-        assert_eq!(ids.len(), 9, "V1 registry should have 9 presets, got: {:?}", ids);
+        assert_eq!(
+            ids.len(),
+            9,
+            "V1 registry should have 9 presets, got: {:?}",
+            ids
+        );
     }
 
     #[test]
@@ -391,7 +421,11 @@ mod tests {
     fn todo_status_is_todo() {
         let reg = StaticPresetRegistry::v1();
         let preset = reg.get(&PresetId::new("/TODO").unwrap()).unwrap();
-        let status_patch = preset.patches.iter().find(|p| p.key.as_str() == "status").unwrap();
+        let status_patch = preset
+            .patches
+            .iter()
+            .find(|p| p.key.as_str() == "status")
+            .unwrap();
         assert_eq!(status_patch.value.as_display_string(), "todo");
     }
 
@@ -399,7 +433,11 @@ mod tests {
     fn done_status_is_done() {
         let reg = StaticPresetRegistry::v1();
         let preset = reg.get(&PresetId::new("/DONE").unwrap()).unwrap();
-        let status_patch = preset.patches.iter().find(|p| p.key.as_str() == "status").unwrap();
+        let status_patch = preset
+            .patches
+            .iter()
+            .find(|p| p.key.as_str() == "status")
+            .unwrap();
         assert_eq!(status_patch.value.as_display_string(), "done");
     }
 
@@ -407,7 +445,11 @@ mod tests {
     fn video_media_type_is_video() {
         let reg = StaticPresetRegistry::v1();
         let preset = reg.get(&PresetId::new("/Video").unwrap()).unwrap();
-        let patch = preset.patches.iter().find(|p| p.key.as_str() == "media-type").unwrap();
+        let patch = preset
+            .patches
+            .iter()
+            .find(|p| p.key.as_str() == "media-type")
+            .unwrap();
         assert_eq!(patch.value.as_display_string(), "video");
     }
 
@@ -415,7 +457,11 @@ mod tests {
     fn now_has_focus_now() {
         let reg = StaticPresetRegistry::v1();
         let preset = reg.get(&PresetId::new("/NOW").unwrap()).unwrap();
-        let patch = preset.patches.iter().find(|p| p.key.as_str() == "focus").unwrap();
+        let patch = preset
+            .patches
+            .iter()
+            .find(|p| p.key.as_str() == "focus")
+            .unwrap();
         assert_eq!(patch.value.as_display_string(), "now");
     }
 

@@ -78,10 +78,7 @@ async fn setup_server() -> (McpServer, SqlitePool) {
         ReapplyTemplateUseCaseImpl::new(Arc::new(concrete_tuc), block_repo.clone()),
     );
     let apply_with_contract_use_cases: Arc<dyn ApplyTemplateWithContractUseCase> = Arc::new(
-        ApplyTemplateWithContractUseCaseImpl::new(
-            template_use_cases.clone(),
-            block_repo.clone(),
-        ),
+        ApplyTemplateWithContractUseCaseImpl::new(template_use_cases.clone(), block_repo.clone()),
     );
 
     let search_use_cases = Arc::new(SearchUseCasesImpl::new().with_search_service(Arc::new(
@@ -94,11 +91,11 @@ async fn setup_server() -> (McpServer, SqlitePool) {
     let retrieval_handler = RetrievalToolHandler::new(search_use_cases.clone());
     let temporal_handler = TemporalToolHandler::new(search_use_cases.clone());
     let graph_handler = GraphToolHandler::new(block_use_cases.clone());
-        let template_handler = TemplateToolHandler::new(
-            template_use_cases.clone(),
-            reapply_use_cases.clone(),
-            apply_with_contract_use_cases.clone(),
-        );
+    let template_handler = TemplateToolHandler::new(
+        template_use_cases.clone(),
+        reapply_use_cases.clone(),
+        apply_with_contract_use_cases.clone(),
+    );
     // handler list. This contract test uses a focused subset of handlers
     // (no SystemToolHandler) so the tool count is 20 here, while the
     // exercised by the contract tests below just like every other tool.

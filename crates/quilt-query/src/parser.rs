@@ -337,10 +337,7 @@ impl QueryParser {
             "sum" => Ok(AggregateFn::Sum),
             "min" => Ok(AggregateFn::Min),
             "max" => Ok(AggregateFn::Max),
-            _ => Err(ParseError::Invalid(format!(
-                "unknown aggregate fn: {}",
-                s
-            ))),
+            _ => Err(ParseError::Invalid(format!("unknown aggregate fn: {}", s))),
         }
     }
 
@@ -414,7 +411,7 @@ impl QueryParser {
                 return Err(ParseError::Invalid(format!(
                     "sort-by direction must be 'asc' or 'desc', got: {}",
                     args[1]
-                )))
+                )));
             }
         };
         let inner = self.parse_expr(&args[2])?;
@@ -724,7 +721,11 @@ impl QueryParser {
     /// Parses a date predicate string into a `DatePredicate`.
     ///
     /// Handles: `today`, `tomorrow`, `yesterday`, and relative offsets like `-3d`, `+1w`.
-    fn parse_date_predicate(&self, rest: &str, predicate_name: &str) -> Result<crate::ast::DatePredicate, ParseError> {
+    fn parse_date_predicate(
+        &self,
+        rest: &str,
+        predicate_name: &str,
+    ) -> Result<crate::ast::DatePredicate, ParseError> {
         let trimmed = rest.trim();
         if trimmed.is_empty() {
             return Err(ParseError::Invalid(format!(
@@ -1545,7 +1546,10 @@ mod tests {
         let result = parse("(scheduled -3d)");
         match result {
             QueryAst::Scheduled { predicate } => {
-                assert!(matches!(predicate, crate::ast::DatePredicate::Relative(crate::time_helpers::TimeOffset::Days(-3))));
+                assert!(matches!(
+                    predicate,
+                    crate::ast::DatePredicate::Relative(crate::time_helpers::TimeOffset::Days(-3))
+                ));
             }
             other => panic!("expected Scheduled predicate, got {:?}", other),
         }

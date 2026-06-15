@@ -45,12 +45,14 @@ pub trait PropertyRepository: Send + Sync {
     ) -> Result<Vec<PropertyDefinition>, DomainError>;
 
     /// Search properties by name (case-insensitive, substring match).
-    async fn search(&self, query: &str, limit: usize)
-    -> Result<Vec<PropertyDefinition>, DomainError>;
+    async fn search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<PropertyDefinition>, DomainError>;
 
     /// Get property definitions sorted by usage (block_count descending).
-    async fn list_by_usage(&self, limit: usize)
-    -> Result<Vec<PropertyDefinition>, DomainError>;
+    async fn list_by_usage(&self, limit: usize) -> Result<Vec<PropertyDefinition>, DomainError>;
 
     // ── PI-5: Analytics methods ──
 
@@ -111,7 +113,10 @@ impl<T: PropertyRepository + ?Sized> PropertyRepository for Arc<T> {
         self.as_ref().get_by_id(id).await
     }
 
-    async fn get_by_db_ident(&self, ident: &str) -> Result<Option<PropertyDefinition>, DomainError> {
+    async fn get_by_db_ident(
+        &self,
+        ident: &str,
+    ) -> Result<Option<PropertyDefinition>, DomainError> {
         self.as_ref().get_by_db_ident(ident).await
     }
 
@@ -135,11 +140,18 @@ impl<T: PropertyRepository + ?Sized> PropertyRepository for Arc<T> {
         self.as_ref().delete(id).await
     }
 
-    async fn get_by_db_idents(&self, idents: &[&str]) -> Result<Vec<PropertyDefinition>, DomainError> {
+    async fn get_by_db_idents(
+        &self,
+        idents: &[&str],
+    ) -> Result<Vec<PropertyDefinition>, DomainError> {
         self.as_ref().get_by_db_idents(idents).await
     }
 
-    async fn search(&self, query: &str, limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
+    async fn search(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<PropertyDefinition>, DomainError> {
         self.as_ref().search(query, limit).await
     }
 
@@ -147,11 +159,18 @@ impl<T: PropertyRepository + ?Sized> PropertyRepository for Arc<T> {
         self.as_ref().list_by_usage(limit).await
     }
 
-    async fn get_co_occurrences(&self, limit: usize) -> Result<Vec<PropertyCoOccurrence>, DomainError> {
+    async fn get_co_occurrences(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<PropertyCoOccurrence>, DomainError> {
         self.as_ref().get_co_occurrences(limit).await
     }
 
-    async fn get_trends(&self, period_days: u32, limit: usize) -> Result<Vec<PropertyTrend>, DomainError> {
+    async fn get_trends(
+        &self,
+        period_days: u32,
+        limit: usize,
+    ) -> Result<Vec<PropertyTrend>, DomainError> {
         self.as_ref().get_trends(period_days, limit).await
     }
 

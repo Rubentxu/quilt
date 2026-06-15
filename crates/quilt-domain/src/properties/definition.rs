@@ -34,7 +34,6 @@ pub struct PropertyDefinition {
     pub closed_values: Vec<ClosedValue>,
 
     // ── PI-1: Legacy visibility/mutability fields (deprecated) ──
-
     /// Where to display this property in the UI (legacy).
     #[deprecated(note = "use visibility: PropertyVisibility instead")]
     pub view_context: ViewContext,
@@ -55,7 +54,6 @@ pub struct PropertyDefinition {
     pub read_only: bool,
 
     // ── PI-2: Lifecycle & usage metadata ──
-
     /// Lifecycle status of this property.
     #[serde(default)]
     pub status: PropertyStatus,
@@ -76,7 +74,6 @@ pub struct PropertyDefinition {
     pub last_seen_at: Option<DateTime<Utc>>,
 
     // ── ADR-0025: First-class configuration fields ──
-
     /// First-class visibility tier (ADR-0025). Defaults to `Inline`.
     #[serde(default)]
     pub visibility: PropertyVisibility,
@@ -175,7 +172,10 @@ impl PropertyDefinition {
                 actual: key.len(),
             });
         }
-        if !key.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
+        if !key
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        {
             return Err(KeyValidationError::InvalidChars {
                 key: key.to_string(),
             });
@@ -234,12 +234,7 @@ impl PropertyDefinition {
     /// NOTE: This is the legacy builder preserved for backward compatibility.
     /// New code should use `with_visibility(PropertyVisibility)` directly.
     #[deprecated(note = "use with_visibility(PropertyVisibility) instead")]
-    pub fn with_visibility_flags(
-        mut self,
-        public: bool,
-        queryable: bool,
-        hidden: bool,
-    ) -> Self {
+    pub fn with_visibility_flags(mut self, public: bool, queryable: bool, hidden: bool) -> Self {
         self.public = public;
         self.queryable = queryable;
         self.hidden = hidden;
@@ -673,9 +668,14 @@ mod tests {
 
     #[test]
     fn merged_is_redirect() {
-        let prop = PropertyDefinition::new(Uuid::new_v4(), "old_status", "Old Status", PropertyType::Text)
-            .with_status(PropertyStatus::Merged)
-            .with_alias_of("status");
+        let prop = PropertyDefinition::new(
+            Uuid::new_v4(),
+            "old_status",
+            "Old Status",
+            PropertyType::Text,
+        )
+        .with_status(PropertyStatus::Merged)
+        .with_alias_of("status");
         assert!(prop.is_redirect());
         assert_eq!(prop.alias_of, Some("status".to_string()));
     }
@@ -706,8 +706,8 @@ mod tests {
 
     #[test]
     fn with_usage_builder() {
-        let prop = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
-            .with_usage(42, 7);
+        let prop =
+            PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text).with_usage(42, 7);
         assert_eq!(prop.block_count, 42);
         assert_eq!(prop.page_count, 7);
     }
@@ -1135,11 +1135,7 @@ mod proptest_tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
-            prop_oneof![
-                Just(Cardinality::One),
-                Just(Cardinality::Many),
-            ]
-            .boxed()
+            prop_oneof![Just(Cardinality::One), Just(Cardinality::Many),].boxed()
         }
     }
 
@@ -1209,24 +1205,34 @@ mod proptest_tests {
             any::<Cardinality>(),
             any::<PropertyStatus>(),
         )
-            .prop_map(|(visibility, mutability, derived_from, merge_policy, property_type, cardinality, status)| {
-                let mut def = PropertyDefinition::new(
-                    crate::value_objects::Uuid::new_v4(),
-                    "test_prop",
-                    "Test Prop",
+            .prop_map(
+                |(
+                    visibility,
+                    mutability,
+                    derived_from,
+                    merge_policy,
                     property_type,
-                )
-                .with_visibility(visibility)
-                .with_mutability(mutability)
-                .with_merge_policy(merge_policy)
-                .with_cardinality(cardinality)
-                .with_status(status);
+                    cardinality,
+                    status,
+                )| {
+                    let mut def = PropertyDefinition::new(
+                        crate::value_objects::Uuid::new_v4(),
+                        "test_prop",
+                        "Test Prop",
+                        property_type,
+                    )
+                    .with_visibility(visibility)
+                    .with_mutability(mutability)
+                    .with_merge_policy(merge_policy)
+                    .with_cardinality(cardinality)
+                    .with_status(status);
 
-                if let Some(src) = derived_from {
-                    def = def.with_derived_from(src);
-                }
+                    if let Some(src) = derived_from {
+                        def = def.with_derived_from(src);
+                    }
 
-                def
-            })
+                    def
+                },
+            )
     }
 }

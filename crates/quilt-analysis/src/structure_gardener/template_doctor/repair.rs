@@ -4,10 +4,10 @@
 //! from a `DiagnosisReport`. `repair` and `repair_with_canonical`
 //! apply those actions (purely) and produce a `RepairReport`.
 
+use super::TemplateDoctor;
 use super::issue_types::{
     DiagnosisReport, Issue, IssueKind, RepairAction, RepairReport, TemplateState,
 };
-use super::TemplateDoctor;
 use quilt_domain::entities::{PropertyKey, TemplateContract};
 use std::collections::HashMap;
 
@@ -109,7 +109,8 @@ impl TemplateDoctor {
         state: &TemplateState,
         canonical_locked_values: &HashMap<PropertyKey, String>,
     ) -> RepairReport {
-        let report = self.diagnose_with_canonical_locked_values(contract, state, canonical_locked_values);
+        let report =
+            self.diagnose_with_canonical_locked_values(contract, state, canonical_locked_values);
         let mut actions = Vec::new();
         let mut unfixable = Vec::new();
 

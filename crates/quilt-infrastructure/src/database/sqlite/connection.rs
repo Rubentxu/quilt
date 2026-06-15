@@ -237,9 +237,11 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     // Deadlines today, Overdue). Default: 0 (false) — opt-in feature.
     //
     // Idempotent: ALTER TABLE errors with "duplicate column" if already added.
-    match sqlx::query("ALTER TABLE user_settings ADD COLUMN journal_aggregate INTEGER NOT NULL DEFAULT 0")
-        .execute(pool)
-        .await
+    match sqlx::query(
+        "ALTER TABLE user_settings ADD COLUMN journal_aggregate INTEGER NOT NULL DEFAULT 0",
+    )
+    .execute(pool)
+    .await
     {
         Ok(_) => {
             tracing::debug!("migration 009b: journal_aggregate added");
@@ -599,12 +601,16 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
 
     // Indices that back the three new PropertyRepository methods
     // (get_by_db_ident, get_by_db_idents, list_by_usage).
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_defs_db_ident ON property_definitions(db_ident)")
-        .execute(pool)
-        .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_defs_status ON property_definitions(status)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_property_defs_db_ident ON property_definitions(db_ident)",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_property_defs_status ON property_definitions(status)",
+    )
+    .execute(pool)
+    .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_defs_usage ON property_definitions(block_count DESC)")
         .execute(pool)
         .await?;
@@ -636,9 +642,11 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_schemas_name ON property_schemas(name)")
         .execute(pool)
         .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_property_schemas_auto ON property_schemas(auto_detected)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_property_schemas_auto ON property_schemas(auto_detected)",
+    )
+    .execute(pool)
+    .await?;
 
     // ── Property Intelligence v8 (PI-8) — semantic property relations ──
     //
@@ -668,9 +676,11 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_prop_rels_target ON property_relations(target_key, target_value)")
         .execute(pool)
         .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_prop_rels_type ON property_relations(relation_type)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_prop_rels_type ON property_relations(relation_type)",
+    )
+    .execute(pool)
+    .await?;
 
     Ok(())
 }

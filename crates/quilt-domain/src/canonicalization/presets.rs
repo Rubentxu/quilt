@@ -528,9 +528,18 @@ mod tests {
 
     #[test]
     fn preset_arg_kind_serialize_lowercase() {
-        assert_eq!(serde_json::to_string(&PresetArgKind::Date).unwrap(), "\"date\"");
-        assert_eq!(serde_json::to_string(&PresetArgKind::Url).unwrap(), "\"url\"");
-        assert_eq!(serde_json::to_string(&PresetArgKind::Text).unwrap(), "\"text\"");
+        assert_eq!(
+            serde_json::to_string(&PresetArgKind::Date).unwrap(),
+            "\"date\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PresetArgKind::Url).unwrap(),
+            "\"url\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PresetArgKind::Text).unwrap(),
+            "\"text\""
+        );
     }
 
     #[test]
@@ -602,7 +611,10 @@ mod tests {
             PresetArg::Text("first".into()),
             PresetArg::Text("second".into()),
         ]);
-        assert!(matches!(args, Err(DomainError::DuplicatePresetArgKind(PresetArgKind::Text))));
+        assert!(matches!(
+            args,
+            Err(DomainError::DuplicatePresetArgKind(PresetArgKind::Text))
+        ));
     }
 
     #[test]
@@ -627,8 +639,10 @@ mod tests {
     #[test]
     fn preset_args_get_missing() {
         use chrono::NaiveDate;
-        let args = PresetArgs::from_vec(vec![PresetArg::Date(NaiveDate::from_ymd_opt(2026, 6, 15).unwrap())])
-            .unwrap();
+        let args = PresetArgs::from_vec(vec![PresetArg::Date(
+            NaiveDate::from_ymd_opt(2026, 6, 15).unwrap(),
+        )])
+        .unwrap();
         assert!(args.get(PresetArgKind::Url).is_none());
     }
 
@@ -640,11 +654,14 @@ mod tests {
             PresetArg::Text("a".into()),
         ])
         .unwrap();
-        let kinds: Vec<_> = args.iter().map(|a| match a {
-            PresetArg::Date(_) => "date",
-            PresetArg::Text(_) => "text",
-            PresetArg::Url(_) => "url",
-        }).collect();
+        let kinds: Vec<_> = args
+            .iter()
+            .map(|a| match a {
+                PresetArg::Date(_) => "date",
+                PresetArg::Text(_) => "text",
+                PresetArg::Url(_) => "url",
+            })
+            .collect();
         assert_eq!(kinds, vec!["date", "text"]);
     }
 

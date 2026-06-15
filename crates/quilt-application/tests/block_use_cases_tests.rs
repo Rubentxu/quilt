@@ -10,8 +10,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use quilt_application::use_cases::{BlockUseCases, BlockUseCasesImpl};
 use quilt_domain::errors::DomainError;
-use quilt_domain::repositories::{RefRepository, RefRow};
 use quilt_domain::references::RefType;
+use quilt_domain::repositories::{RefRepository, RefRow};
 use quilt_domain::value_objects::{PropertyValue, TaskMarker, Uuid};
 use quilt_test_helpers::{InMemoryBlockRepo, InMemoryPageRepo};
 
@@ -24,8 +24,9 @@ fn setup() -> impl BlockUseCases {
         Arc::new(InMemoryPageRepo::new());
     // Create a RefService with a mock ref repository
     let ref_repo: Arc<dyn RefRepository> = Arc::new(MockRefRepo);
-    let ref_service: Arc<dyn quilt_application::services::ref_service::RefServiceTrait> =
-        Arc::new(quilt_application::services::ref_service::RefService::new(ref_repo));
+    let ref_service: Arc<dyn quilt_application::services::ref_service::RefServiceTrait> = Arc::new(
+        quilt_application::services::ref_service::RefService::new(ref_repo),
+    );
     BlockUseCasesImpl::new(block_repo, page_repo, ref_service)
 }
 
@@ -45,7 +46,11 @@ impl RefRepository for MockRefRepo {
         Ok(Vec::new())
     }
 
-    async fn sync_refs(&self, _source_id: Uuid, _refs: &[(Uuid, RefType)]) -> Result<(), DomainError> {
+    async fn sync_refs(
+        &self,
+        _source_id: Uuid,
+        _refs: &[(Uuid, RefType)],
+    ) -> Result<(), DomainError> {
         Ok(())
     }
 
@@ -53,23 +58,46 @@ impl RefRepository for MockRefRepo {
         Ok(Vec::new())
     }
 
-    async fn insert_ref(&self, _source_id: Uuid, _target_id: Uuid, _ref_type: RefType) -> Result<(), DomainError> {
+    async fn insert_ref(
+        &self,
+        _source_id: Uuid,
+        _target_id: Uuid,
+        _ref_type: RefType,
+    ) -> Result<(), DomainError> {
         Ok(())
     }
 
-    async fn get_unlinked_references(&self, _page_name: &str, _page_id: Uuid) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
+    async fn get_unlinked_references(
+        &self,
+        _page_name: &str,
+        _page_id: Uuid,
+    ) -> Result<Vec<(Uuid, Uuid, String)>, DomainError> {
         Ok(Vec::new())
     }
 
-    async fn set_custom_context(&self, _source_id: Uuid, _target_id: Uuid, _ref_type: RefType, _context: Option<&str>) -> Result<bool, DomainError> {
+    async fn set_custom_context(
+        &self,
+        _source_id: Uuid,
+        _target_id: Uuid,
+        _ref_type: RefType,
+        _context: Option<&str>,
+    ) -> Result<bool, DomainError> {
         Ok(false)
     }
 
-    async fn get_custom_context(&self, _source_id: Uuid, _target_id: Uuid, _ref_type: RefType) -> Result<Option<String>, DomainError> {
+    async fn get_custom_context(
+        &self,
+        _source_id: Uuid,
+        _target_id: Uuid,
+        _ref_type: RefType,
+    ) -> Result<Option<String>, DomainError> {
         Ok(None)
     }
 
-    async fn get_custom_contexts_for_target(&self, _target_id: Uuid) -> Result<Vec<(Uuid, RefType, String)>, DomainError> {
+    async fn get_custom_contexts_for_target(
+        &self,
+        _target_id: Uuid,
+    ) -> Result<Vec<(Uuid, RefType, String)>, DomainError> {
         Ok(Vec::new())
     }
 }

@@ -24,7 +24,10 @@ pub mod services;
 pub mod value_objects;
 
 // Re-exports for convenience
-pub use canonicalization::{CanonicalInput, CanonicalizationResult, Canonicalizer, PatchOutcome, ProjectionConflict, PropertyDefinitionRegistry, PropertyPatch, PropertyPatchProvenance, SourceKind};
+pub use canonicalization::{
+    CanonicalInput, CanonicalizationResult, Canonicalizer, PatchOutcome, ProjectionConflict,
+    PropertyDefinitionRegistry, PropertyPatch, PropertyPatchProvenance, SourceKind,
+};
 pub use content::{BlockContent, BlockSegment, Mark};
 pub use entities::{Asset, Block, File, Journal, Page, PropertyKey, Tag};
 pub use errors::DomainError;

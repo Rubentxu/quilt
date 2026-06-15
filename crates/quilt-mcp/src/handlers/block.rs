@@ -513,22 +513,31 @@ mod tests {
             _content: &str,
             _after_block_id: quilt_application::Uuid,
             _marker: Option<quilt_application::TaskMarker>,
-            _properties: std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>,
+            _properties: std::collections::HashMap<
+                String,
+                quilt_domain::value_objects::PropertyValue,
+            >,
         ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn update_block(
             &self,
             _block_id: quilt_application::Uuid,
             _update: quilt_domain::entities::BlockUpdate,
         ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn list_distinct_authors(
             &self,
             _prefix: Option<&str>,
         ) -> Result<Vec<String>, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn set_property(
             &self,
@@ -536,21 +545,29 @@ mod tests {
             _key: String,
             _value: quilt_domain::value_objects::PropertyValue,
         ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn delete_property(
             &self,
             _block_id: quilt_application::Uuid,
             _key: &str,
         ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
         async fn get_properties(
             &self,
             _block_id: quilt_application::Uuid,
-        ) -> Result<std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>, quilt_application::ApplicationError>
-        {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        ) -> Result<
+            std::collections::HashMap<String, quilt_domain::value_objects::PropertyValue>,
+            quilt_application::ApplicationError,
+        > {
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
     }
 

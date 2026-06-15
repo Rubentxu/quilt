@@ -107,35 +107,41 @@ async fn annotations_table_rejects_empty_content() {
     let page_id = vec![0u8; 16];
     let block_id = vec![1u8; 16];
     let now: i64 = chrono::Utc::now().timestamp();
-    sqlx::query("INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
-                 VALUES (?, ?, 'markdown', 0, ?, ?)")
-        .bind(&page_id)
-        .bind("p")
-        .bind(now)
-        .bind(now)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
+    sqlx::query(
+        "INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
+                 VALUES (?, ?, 'markdown', 0, ?, ?)",
+    )
+    .bind(&page_id)
+    .bind("p")
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
                  collapsed, created_at, updated_at, refs, tags) \
-                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')")
-        .bind(&block_id)
-        .bind(&page_id)
-        .bind(now)
-        .bind(now)
-        .execute(&pool)
-        .await
-        .unwrap();
+                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')",
+    )
+    .bind(&block_id)
+    .bind(&page_id)
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // Empty content → CHECK violation
-    let res = sqlx::query("INSERT INTO annotations \
+    let res = sqlx::query(
+        "INSERT INTO annotations \
         (id, block_id, scope, author_type, author_name, content, status, created_at) \
-        VALUES (?, ?, 'block', 'human', 'u', '', 'pending', ?)")
-        .bind(vec![2u8; 16])
-        .bind(&block_id)
-        .bind(now)
-        .execute(&pool)
-        .await;
+        VALUES (?, ?, 'block', 'human', 'u', '', 'pending', ?)",
+    )
+    .bind(vec![2u8; 16])
+    .bind(&block_id)
+    .bind(now)
+    .execute(&pool)
+    .await;
     assert!(res.is_err(), "empty content must be rejected by CHECK");
 }
 
@@ -145,34 +151,40 @@ async fn annotations_table_rejects_invalid_scope() {
     let page_id = vec![0u8; 16];
     let block_id = vec![1u8; 16];
     let now: i64 = chrono::Utc::now().timestamp();
-    sqlx::query("INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
-                 VALUES (?, ?, 'markdown', 0, ?, ?)")
-        .bind(&page_id)
-        .bind("p")
-        .bind(now)
-        .bind(now)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
+    sqlx::query(
+        "INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
+                 VALUES (?, ?, 'markdown', 0, ?, ?)",
+    )
+    .bind(&page_id)
+    .bind("p")
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
                  collapsed, created_at, updated_at, refs, tags) \
-                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')")
-        .bind(&block_id)
-        .bind(&page_id)
-        .bind(now)
-        .bind(now)
-        .execute(&pool)
-        .await
-        .unwrap();
+                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')",
+    )
+    .bind(&block_id)
+    .bind(&page_id)
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
 
-    let res = sqlx::query("INSERT INTO annotations \
+    let res = sqlx::query(
+        "INSERT INTO annotations \
         (id, block_id, scope, author_type, author_name, content, status, created_at) \
-        VALUES (?, ?, 'bogus', 'human', 'u', 'x', 'pending', ?)")
-        .bind(vec![2u8; 16])
-        .bind(&block_id)
-        .bind(now)
-        .execute(&pool)
-        .await;
+        VALUES (?, ?, 'bogus', 'human', 'u', 'x', 'pending', ?)",
+    )
+    .bind(vec![2u8; 16])
+    .bind(&block_id)
+    .bind(now)
+    .execute(&pool)
+    .await;
     assert!(res.is_err(), "scope='bogus' must be rejected by CHECK");
 }
 
@@ -182,33 +194,39 @@ async fn annotations_table_cascade_deletes_on_block_delete() {
     let page_id = vec![0u8; 16];
     let block_id = vec![1u8; 16];
     let now: i64 = chrono::Utc::now().timestamp();
-    sqlx::query("INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
-                 VALUES (?, ?, 'markdown', 0, ?, ?)")
-        .bind(&page_id)
-        .bind("p")
-        .bind(now)
-        .bind(now)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
+    sqlx::query(
+        "INSERT INTO pages (id, name, format, journal, created_at, updated_at) \
+                 VALUES (?, ?, 'markdown', 0, ?, ?)",
+    )
+    .bind(&page_id)
+    .bind("p")
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO blocks (id, page_id, format, block_type, content, properties, \
                  collapsed, created_at, updated_at, refs, tags) \
-                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')")
-        .bind(&block_id)
-        .bind(&page_id)
-        .bind(now)
-        .bind(now)
-        .execute(&pool)
-        .await
-        .unwrap();
+                 VALUES (?, ?, 'markdown', 'paragraph', '', '{}', 0, ?, ?, '[]', '[]')",
+    )
+    .bind(&block_id)
+    .bind(&page_id)
+    .bind(now)
+    .bind(now)
+    .execute(&pool)
+    .await
+    .unwrap();
 
     // Insert annotation, then delete block, then verify annotation is gone.
-    sqlx::query("INSERT INTO annotations \
+    sqlx::query(
+        "INSERT INTO annotations \
         (id, block_id, scope, author_type, author_name, content, status, created_at) \
-        VALUES (?, ?, 'block', 'human', 'u', 'hi', 'pending', ?)")
-        .bind(vec![2u8; 16])
-        .bind(&block_id)
-        .bind(now)
+        VALUES (?, ?, 'block', 'human', 'u', 'hi', 'pending', ?)",
+    )
+    .bind(vec![2u8; 16])
+    .bind(&block_id)
+    .bind(now)
     .execute(&pool)
     .await
     .unwrap();

@@ -150,7 +150,13 @@ impl PageUseCases for MockPageUseCases {
                 quilt_domain::errors::DomainError::Storage(err),
             ));
         }
-        Ok(self.pages.lock().unwrap().iter().find(|p| p.name == name).cloned())
+        Ok(self
+            .pages
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|p| p.name == name)
+            .cloned())
     }
 
     async fn search(&self, _query: &str, _limit: usize) -> Result<Vec<Page>, ApplicationError> {

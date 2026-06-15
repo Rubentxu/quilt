@@ -56,7 +56,10 @@ impl ToolHandler for RelationHandler {
     async fn execute(&self, name: &str, args: &Value) -> Result<String, String> {
         match name {
             "quilt_properties_relations" => {
-                let action = args.get("action").and_then(|v| v.as_str()).ok_or("Missing 'action'")?;
+                let action = args
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .ok_or("Missing 'action'")?;
 
                 match action {
                     "list" => {
@@ -64,33 +67,70 @@ impl ToolHandler for RelationHandler {
                         Ok(serde_json::to_string_pretty(&serde_json::json!({
                             "count": rels.len(),
                             "relations": rels,
-                        })).unwrap_or_else(|e| format!("Error: {}", e)))
+                        }))
+                        .unwrap_or_else(|e| format!("Error: {}", e)))
                     }
                     "get_by_key" => {
-                        let key = args.get("key").and_then(|v| v.as_str()).ok_or("Missing 'key'")?;
+                        let key = args
+                            .get("key")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'key'")?;
                         let rels = self.repo.get_by_key(key).await.map_err(|e| e.to_string())?;
                         Ok(serde_json::to_string_pretty(&serde_json::json!({
                             "count": rels.len(),
                             "relations": rels,
-                        })).unwrap_or_else(|e| format!("Error: {}", e)))
+                        }))
+                        .unwrap_or_else(|e| format!("Error: {}", e)))
                     }
                     "get_from" => {
-                        let key = args.get("key").and_then(|v| v.as_str()).ok_or("Missing 'key'")?;
-                        let value = args.get("value").and_then(|v| v.as_str()).ok_or("Missing 'value'")?;
-                        let rels = self.repo.get_from(key, value).await.map_err(|e| e.to_string())?;
+                        let key = args
+                            .get("key")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'key'")?;
+                        let value = args
+                            .get("value")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'value'")?;
+                        let rels = self
+                            .repo
+                            .get_from(key, value)
+                            .await
+                            .map_err(|e| e.to_string())?;
                         Ok(serde_json::to_string_pretty(&serde_json::json!({
                             "count": rels.len(),
                             "relations": rels,
-                        })).unwrap_or_else(|e| format!("Error: {}", e)))
+                        }))
+                        .unwrap_or_else(|e| format!("Error: {}", e)))
                     }
                     "create" => {
-                        let source_key = args.get("source_key").and_then(|v| v.as_str()).ok_or("Missing 'source_key'")?;
-                        let source_value = args.get("source_value").and_then(|v| v.as_str()).ok_or("Missing 'source_value'")?;
-                        let target_key = args.get("target_key").and_then(|v| v.as_str()).ok_or("Missing 'target_key'")?;
-                        let target_value = args.get("target_value").and_then(|v| v.as_str()).ok_or("Missing 'target_value'")?;
-                        let rt_str = args.get("relation_type").and_then(|v| v.as_str()).unwrap_or("precedes");
-                        let desc = args.get("description").and_then(|v| v.as_str()).unwrap_or("");
-                        let conf = args.get("confidence").and_then(|v| v.as_f64()).unwrap_or(1.0);
+                        let source_key = args
+                            .get("source_key")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'source_key'")?;
+                        let source_value = args
+                            .get("source_value")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'source_value'")?;
+                        let target_key = args
+                            .get("target_key")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'target_key'")?;
+                        let target_value = args
+                            .get("target_value")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'target_value'")?;
+                        let rt_str = args
+                            .get("relation_type")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("precedes");
+                        let desc = args
+                            .get("description")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let conf = args
+                            .get("confidence")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(1.0);
 
                         let rt = match rt_str {
                             "precedes" => RelationType::Precedes,
@@ -110,14 +150,24 @@ impl ToolHandler for RelationHandler {
                             desc.to_string(),
                             conf,
                         );
-                        self.repo.insert(&relation).await.map_err(|e| e.to_string())?;
-                        Ok(serde_json::to_string_pretty(&relation).unwrap_or_else(|e| format!("Error: {}", e)))
+                        self.repo
+                            .insert(&relation)
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        Ok(serde_json::to_string_pretty(&relation)
+                            .unwrap_or_else(|e| format!("Error: {}", e)))
                     }
                     "delete" => {
-                        let id_str = args.get("id").and_then(|v| v.as_str()).ok_or("Missing 'id'")?;
+                        let id_str = args
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .ok_or("Missing 'id'")?;
                         let id = id_str.parse::<Uuid>().map_err(|e| e.to_string())?;
                         self.repo.delete(id).await.map_err(|e| e.to_string())?;
-                        Ok(serde_json::to_string_pretty(&serde_json::json!({"deleted": true})).unwrap())
+                        Ok(
+                            serde_json::to_string_pretty(&serde_json::json!({"deleted": true}))
+                                .unwrap(),
+                        )
                     }
                     _ => Err(format!("Unknown action: {}", action)),
                 }

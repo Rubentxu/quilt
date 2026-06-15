@@ -136,10 +136,8 @@ pub trait BlockRepository: Send + Sync {
     ///   expected to be tiny (single digits). If a deployment grows
     ///   to thousands of distinct authors, this method should grow
     ///   a `cursor` + `limit` pair, mirroring `list_distinct_keys`.
-    async fn list_distinct_authors(
-        &self,
-        prefix: Option<&str>,
-    ) -> Result<Vec<String>, DomainError>;
+    async fn list_distinct_authors(&self, prefix: Option<&str>)
+    -> Result<Vec<String>, DomainError>;
 }
 
 /// BlockRepositoryExt provides additional convenience methods

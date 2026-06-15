@@ -7,16 +7,14 @@
 //! - `block` (the caller's reference) is untouched after the call
 
 use chrono::NaiveDate;
+use proptest::prelude::*;
 use quilt_application::services::presets::StaticPresetRegistry;
 use quilt_application::use_cases::ApplyPreset;
-use quilt_domain::canonicalization::{
-    PresetArg, PresetArgs, PresetId, PropertyDefinitionRegistry,
-};
+use quilt_domain::canonicalization::{PresetArg, PresetArgs, PresetId, PropertyDefinitionRegistry};
 use quilt_domain::entities::Block;
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::types::{MergePolicy, PropertyMutability, PropertyType};
 use quilt_domain::value_objects::Uuid;
-use proptest::prelude::*;
 use std::sync::Arc;
 
 /// Full V1 def registry covering all 9 presets.

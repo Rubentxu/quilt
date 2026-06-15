@@ -102,16 +102,17 @@ async fn backfill_completed_at_from_logbook_for_done_blocks() {
     .unwrap();
 
     // Re-run migrations to trigger backfill
-    connection::run_migrations(&pool).await.expect("backfill run");
+    connection::run_migrations(&pool)
+        .await
+        .expect("backfill run");
 
     // Verify completed_at was backfilled from logbook
-    let completed_at: Option<i64> = sqlx::query_scalar(
-        "SELECT completed_at FROM blocks WHERE id = ?",
-    )
-    .bind(&block_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let completed_at: Option<i64> =
+        sqlx::query_scalar("SELECT completed_at FROM blocks WHERE id = ?")
+            .bind(&block_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     assert!(
         completed_at.is_some(),
@@ -162,16 +163,17 @@ async fn backfill_cancelled_at_from_logbook_for_cancelled_blocks() {
     .unwrap();
 
     // Re-run migrations to trigger backfill
-    connection::run_migrations(&pool).await.expect("backfill run");
+    connection::run_migrations(&pool)
+        .await
+        .expect("backfill run");
 
     // Verify cancelled_at was backfilled from logbook
-    let cancelled_at: Option<i64> = sqlx::query_scalar(
-        "SELECT cancelled_at FROM blocks WHERE id = ?",
-    )
-    .bind(&block_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let cancelled_at: Option<i64> =
+        sqlx::query_scalar("SELECT cancelled_at FROM blocks WHERE id = ?")
+            .bind(&block_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     assert!(
         cancelled_at.is_some(),
@@ -222,21 +224,19 @@ async fn new_done_block_columns_start_null() {
     .unwrap();
 
     // Both timestamp columns should be NULL initially
-    let completed_at: Option<i64> = sqlx::query_scalar(
-        "SELECT completed_at FROM blocks WHERE id = ?",
-    )
-    .bind(&block_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let completed_at: Option<i64> =
+        sqlx::query_scalar("SELECT completed_at FROM blocks WHERE id = ?")
+            .bind(&block_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
-    let cancelled_at: Option<i64> = sqlx::query_scalar(
-        "SELECT cancelled_at FROM blocks WHERE id = ?",
-    )
-    .bind(&block_id)
-    .fetch_one(&pool)
-    .await
-    .unwrap();
+    let cancelled_at: Option<i64> =
+        sqlx::query_scalar("SELECT cancelled_at FROM blocks WHERE id = ?")
+            .bind(&block_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
 
     assert!(
         completed_at.is_none(),

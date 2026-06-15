@@ -183,7 +183,8 @@ mod tests {
 
     #[test]
     fn test_annotation_creation() {
-        let annotation = create_test_annotation(AuthorType::Human, "Please expand this section").unwrap();
+        let annotation =
+            create_test_annotation(AuthorType::Human, "Please expand this section").unwrap();
         assert!(annotation.id != Uuid::nil());
         assert_eq!(annotation.status, AnnotationStatus::Pending);
         assert_eq!(annotation.author_type, AuthorType::Human);
@@ -232,7 +233,8 @@ mod tests {
             author_name: "ruben".to_string(),
             content: "Test".to_string(),
             parent_annotation_id: None,
-        }).unwrap();
+        })
+        .unwrap();
 
         assert!(annotation.belongs_to_block(block_id));
         assert!(!annotation.belongs_to_block(Uuid::new_v4()));

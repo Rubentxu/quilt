@@ -9,11 +9,11 @@ use quilt_application::use_cases::{
     ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
     TourStateUseCases, TourStateUseCasesImpl,
 };
-use quilt_infrastructure::database::sqlite::connection::{run_migrations, DbPool};
+use quilt_infrastructure::database::sqlite::connection::{DbPool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
-    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository, SqliteTagRepository,
-    SqliteTourStateRepository,
+    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
+    SqliteTagRepository, SqliteTourStateRepository,
 };
 use quilt_search::{SearchIndexManager, SearchService};
 use quilt_server::state::RepositoryBundle;
@@ -48,7 +48,9 @@ pub async fn build_test_app_state_with_repos(
     Arc<SqliteTourStateRepository>,
 ) {
     // Run migrations first
-    run_migrations(&pool).await.expect("Failed to run migrations");
+    run_migrations(&pool)
+        .await
+        .expect("Failed to run migrations");
 
     let search_index = Arc::new(SearchIndexManager::new(pool.clone()));
     let search_service: Arc<SearchService> = Arc::new(SearchService::new(Arc::new(pool.clone())));
@@ -70,13 +72,17 @@ pub async fn build_test_app_state_with_repos(
         Arc::new(SqliteSettingsRepository::new(pool.clone()));
     let relation_repo: Arc<SqliteRelationRepository> =
         Arc::new(SqliteRelationRepository::new(pool.clone()));
-    let schema_repo: Arc<SqliteSchemaRepository> = Arc::new(SqliteSchemaRepository::new(pool.clone()));
+    let schema_repo: Arc<SqliteSchemaRepository> =
+        Arc::new(SqliteSchemaRepository::new(pool.clone()));
     let property_repo: Arc<SqlitePropertyRepository> =
         Arc::new(SqlitePropertyRepository::new(pool.clone()));
 
     // Build use cases
-    let block_use_cases: Arc<dyn BlockUseCases> =
-        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone(), ref_service.clone()));
+    let block_use_cases: Arc<dyn BlockUseCases> = Arc::new(BlockUseCasesImpl::new(
+        block_repo.clone(),
+        page_repo.clone(),
+        ref_service.clone(),
+    ));
     let page_use_cases: Arc<dyn PageUseCases> =
         Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
     let resource_use_cases: Arc<dyn ResourceUseCases> = Arc::new(ResourceUseCasesImpl::new(
@@ -84,8 +90,10 @@ pub async fn build_test_app_state_with_repos(
         page_repo.clone(),
         tag_repo.clone(),
     ));
-    let template_use_cases: Arc<dyn TemplateUseCases> =
-        Arc::new(TemplateUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
+    let template_use_cases: Arc<dyn TemplateUseCases> = Arc::new(TemplateUseCasesImpl::new(
+        page_repo.clone(),
+        block_repo.clone(),
+    ));
     let tour_state_use_cases: Arc<dyn TourStateUseCases> =
         Arc::new(TourStateUseCasesImpl::new(tour_state_repo.clone()));
 

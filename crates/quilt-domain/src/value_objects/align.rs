@@ -28,7 +28,10 @@ impl Align {
             "left" | "l" => Ok(Align::Left),
             "center" | "c" | "centre" => Ok(Align::Center),
             "right" | "r" => Ok(Align::Right),
-            _ => Err(DomainError::ParseError(format!("Invalid align value: {}", s))),
+            _ => Err(DomainError::ParseError(format!(
+                "Invalid align value: {}",
+                s
+            ))),
         }
     }
 }
