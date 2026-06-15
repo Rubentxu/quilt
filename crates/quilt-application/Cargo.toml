@@ -8,6 +8,7 @@ license.workspace = true
 description = "Application layer - use cases, commands, and queries"
 
 [dependencies]
+quilt-core = { path = "../quilt-core" }
 quilt-domain = { path = "../quilt-domain" }
 quilt-query = { path = "../quilt-query" }
 quilt-search = { path = "../quilt-search" }
