@@ -18,6 +18,7 @@ pub mod apply_preset;
 pub mod block;
 pub mod dtos;
 pub mod page;
+pub mod projection_resolver;
 pub mod resource;
 pub mod search;
 pub mod template;
