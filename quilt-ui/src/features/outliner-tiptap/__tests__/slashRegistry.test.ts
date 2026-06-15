@@ -445,3 +445,122 @@ describe('SlashActionRegistry — /card role (T13)', () => {
     promptSpy.mockRestore()
   })
 })
+
+// ─── T14: status handler block-to-task conversion ─────────────────────────
+//
+// makeStatusHandler calls ensureTaskShape and merges the result into the
+// api.updateBlock call. This means:
+//   - paragraph/bullet/numbered/heading → { blockType:'todo', marker }
+//   - code/quote/divider/image/todo     → { marker } only
+
+describe('SlashActionRegistry — status handler block-to-task conversion (T14)', () => {
+  // Helper: invoke the status handler for a given marker value
+  async function invokeStatusHandler(
+    ctx: SlashContext,
+    markerValue: string,
+  ) {
+    const reg = defaultRegistry
+    const handler = reg.getHandler(`status-${markerValue}`)
+    expect(handler, `missing handler: status-${markerValue}`).toBeDefined()
+    const item = reg.getItem(`status-${markerValue}`)
+    expect(item, `missing item: status-${markerValue}`).toBeDefined()
+    await handler!(ctx, item!)
+  }
+
+  it('status-todo on paragraph → { blockType:"todo", marker:"Todo" }', async () => {
+    const updateBlock = vi.fn().mockResolvedValue({ id: 'b1' })
+    const onUpdate = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b1', blockType: 'paragraph', marker: null }),
+      api: { updateBlock } as any,
+      onUpdate,
+    })
+    await invokeStatusHandler(ctx, 'todo')
+    expect(updateBlock).toHaveBeenCalledWith('b1', {
+      blockType: 'todo',
+      marker: 'Todo',
+    })
+    expect(onUpdate).toHaveBeenCalled()
+  })
+
+  it('status-doing on bullet → { blockType:"todo", marker:"Doing" }', async () => {
+    const updateBlock = vi.fn().mockResolvedValue({ id: 'b1' })
+    const onUpdate = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b1', blockType: 'bullet', marker: null }),
+      api: { updateBlock } as any,
+      onUpdate,
+    })
+    await invokeStatusHandler(ctx, 'doing')
+    expect(updateBlock).toHaveBeenCalledWith('b1', {
+      blockType: 'todo',
+      marker: 'Doing',
+    })
+  })
+
+  it('status-done on numbered → { blockType:"todo", marker:"Done" }', async () => {
+    const updateBlock = vi.fn().mockResolvedValue({ id: 'b1' })
+    const onUpdate = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b1', blockType: 'numbered', marker: null }),
+      api: { updateBlock } as any,
+      onUpdate,
+    })
+    await invokeStatusHandler(ctx, 'done')
+    expect(updateBlock).toHaveBeenCalledWith('b1', {
+      blockType: 'todo',
+      marker: 'Done',
+    })
+  })
+
+  for (const heading of ['heading1', 'heading2', 'heading3'] as const) {
+    it(`status-todo on ${heading} → { blockType:"todo", marker:"Todo" }`, async () => {
+      const updateBlock = vi.fn().mockResolvedValue({ id: 'b1' })
+      const onUpdate = vi.fn()
+      const ctx = makeCtx({
+        block: makeBlock({ id: 'b1', blockType: heading, marker: null }),
+        api: { updateBlock } as any,
+        onUpdate,
+      })
+      await invokeStatusHandler(ctx, 'todo')
+      expect(updateBlock).toHaveBeenCalledWith('b1', {
+        blockType: 'todo',
+        marker: 'Todo',
+      })
+    })
+  }
+
+  for (const blockType of ['code', 'quote', 'divider', 'image', 'todo'] as const) {
+    it(`status-waiting on ${blockType} → { marker:"Waiting" } only (no blockType change)`, async () => {
+      const updateBlock = vi.fn().mockResolvedValue({ id: 'b1' })
+      const onUpdate = vi.fn()
+      const ctx = makeCtx({
+        block: makeBlock({ id: 'b1', blockType, marker: null }),
+        api: { updateBlock } as any,
+        onUpdate,
+      })
+      await invokeStatusHandler(ctx, 'waiting')
+      // Must only have marker, no blockType
+      expect(updateBlock).toHaveBeenCalledWith('b1', { marker: 'Waiting' })
+      expect(updateBlock).not.toHaveBeenCalledWith(
+        'b1',
+        expect.objectContaining({ blockType: expect.anything() }),
+      )
+    })
+  }
+
+  it('status-waiting surfaces error via toast on failure', async () => {
+    const updateBlock = vi.fn().mockRejectedValue(new Error('boom'))
+    const toast = { error: vi.fn(), success: vi.fn() }
+    const onUpdate = vi.fn()
+    const ctx = makeCtx({
+      block: makeBlock({ id: 'b1', blockType: 'paragraph', marker: null }),
+      api: { updateBlock } as any,
+      toast: toast as any,
+      onUpdate,
+    })
+    await invokeStatusHandler(ctx, 'waiting')
+    expect(toast.error).toHaveBeenCalledWith('Failed to set status')
+    expect(onUpdate).not.toHaveBeenCalled()
+  })
+})

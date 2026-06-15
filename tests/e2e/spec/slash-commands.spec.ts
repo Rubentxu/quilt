@@ -368,6 +368,99 @@ test.describe('Status slash commands @slash-commands', () => {
   })
 })
 
+// ─── Block-to-task conversion (ADR-0023 deviation, ADR-0025) ─────────────
+//
+// When a marker is set on a paragraph/bullet/numbered block via slash
+// command, blockType converts to 'todo' in the same API call. This is a
+// ONE-WAY conversion: clearing the marker does NOT revert blockType.
+
+test.describe('Block-to-task conversion — one-way paragraph→todo @slash-commands', () => {
+  test('/TODO on paragraph block → blockType:"todo" AND marker:"Todo" in single update', async ({ page }) => {
+    const s = suffix()
+    const host = `block-to-task-para-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'paragraph to task')
+
+    // Verify initial blockType is 'paragraph'
+    const blocks0 = await getPageBlocks(page, host)
+    const initial = blocks0.find((b) => b.id === blockId)
+    expect(initial?.blockType).toBe('paragraph')
+
+    const editor = await openPageAndEditBlock(page, host, 'paragraph to task')
+    await applySlashCommand(editor, '/todo', 0)
+
+    // Server-side: blockType MUST be 'todo' AND marker MUST be 'Todo'
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType, 'blockType should be todo').toBe('todo')
+    expect(updated!.marker, 'marker should be Todo').toBe('Todo')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('/DONE on heading1 block → blockType:"todo" AND marker:"Done" (ADR-0025 deviation)', async ({ page }) => {
+    const s = suffix()
+    const host = `block-to-task-heading-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'heading to task')
+
+    // Set blockType to heading1 first (via API)
+    const headers = getAuthHeaders()
+    await page.request.patch(`${API_URL}/api/v1/blocks/${blockId}`, {
+      data: { blockType: 'heading1' },
+      headers,
+    })
+
+    const editor = await openPageAndEditBlock(page, host, 'heading to task')
+    await applySlashCommand(editor, '/done', 0)
+
+    // Server-side: blockType converts to 'todo' AND marker is 'Done'
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType, 'blockType should be todo after /DONE on heading').toBe('todo')
+    expect(updated!.marker, 'marker should be Done').toBe('Done')
+
+    await deleteAllBlocks(page, host)
+  })
+
+  test('clearing marker on todo block → blockType stays "todo" (one-way, ADR-0025)', async ({ page }) => {
+    const s = suffix()
+    const host = `block-to-task-clear-${s}`
+    await createPage(page, host)
+    const blockId = await createBlock(page, host, 'clear marker test')
+
+    // First set blockType to todo and marker to Todo
+    const headers = getAuthHeaders()
+    await page.request.patch(`${API_URL}/api/v1/blocks/${blockId}`, {
+      data: { blockType: 'todo', marker: 'Todo' },
+      headers,
+    })
+
+    // Verify it's set correctly
+    const blocks0 = await getPageBlocks(page, host)
+    const initial = blocks0.find((b) => b.id === blockId)
+    expect(initial?.blockType).toBe('todo')
+    expect(initial?.marker).toBe('Todo')
+
+    // Now clear the marker using the API directly
+    await page.request.patch(`${API_URL}/api/v1/blocks/${blockId}`, {
+      data: { marker: null },
+      headers,
+    })
+
+    // BlockType should STILL be 'todo' — this is the one-way conversion
+    const blocks = await getPageBlocks(page, host)
+    const updated = blocks.find((b) => b.id === blockId)
+    expect(updated, 'block should still exist').toBeDefined()
+    expect(updated!.blockType, 'blockType should stay todo after clearing marker (one-way)').toBe('todo')
+    expect(updated!.marker, 'marker should be null').toBeNull()
+
+    await deleteAllBlocks(page, host)
+  })
+})
+
 test.describe('Block type slash commands @slash-commands', () => {
   test('/h1 creates heading1 block (persists across reload) @slash-commands', async ({ page }) => {
     const s = suffix()

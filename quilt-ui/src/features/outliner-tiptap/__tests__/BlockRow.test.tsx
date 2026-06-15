@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup, act } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { BlockRow, findNearestLink } from '../BlockRow'
@@ -944,4 +944,48 @@ describe('findNearestLink', () => {
   it('returns null when there is no link near the cursor', () => {
     expect(findNearestLink('just plain text with no links', 5)).toBeNull()
   })
+})
+
+// ─── ToggleDone — Ctrl/Cmd+Enter marker cycling ──────────────────────────
+//
+// Tests that Ctrl+Enter (or Cmd+Enter on Mac) on a paragraph block
+// triggers the 7-step marker cycle AND converts blockType to 'todo' in
+// a single API call (ADR-0023 deviation, ADR-0025).
+
+describe('BlockRow ToggleDone — block-to-task conversion', () => {
+  // Helper: get the textbox editor
+  function getEditor(): HTMLElement {
+    return screen.getByRole('textbox', { name: 'Block content' })
+  }
+
+  it('Ctrl+Enter on paragraph block → api.updateBlock called with blockType:"todo" and marker:"Todo"', async () => {
+    const { onUpdate } = renderRow('cycle test')
+    mockUpdateBlock.mockResolvedValueOnce({
+      ...makeBlock('cycle test'),
+      marker: 'Todo',
+      blockType: 'todo',
+    })
+
+    // Click to edit mode, then fire Cmd+Enter
+    clickToEdit()
+    const editor = getEditor()
+    // Simulate Cmd+Enter (Mac) or Ctrl+Enter (other platforms)
+    await act(async () => {
+      fireEvent.keyDown(editor, { key: 'Enter', metaKey: true })
+    })
+
+    await waitFor(() => {
+      // The ToggleDone call should have blockType:'todo' and marker:'Todo'
+      const calls = mockUpdateBlock.mock.calls
+      const toggleDoneCall = calls.find(
+        (call) => call[1] && call[1].blockType === 'todo' && call[1].marker === 'Todo',
+      )
+      expect(toggleDoneCall, 'api.updateBlock should be called with blockType:"todo", marker:"Todo"').toBeDefined()
+    })
+    expect(onUpdate).toHaveBeenCalled()
+  })
+
+  // Note: The "already-todo block" case (marker cycling without blockType change)
+  // is covered by ensureTaskShape.test.ts (NON_TASK_BLOCK_TYPES includes 'todo')
+  // and slashRegistry.test.ts (T14 status handler tests).
 })

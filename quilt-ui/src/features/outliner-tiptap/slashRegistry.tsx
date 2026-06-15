@@ -50,6 +50,7 @@ import {
   Hourglass,
 } from 'lucide-react'
 import type { Block, BlockType, TaskMarker, Priority, Page } from '@shared/types/api'
+import { ensureTaskShape } from './ensureTaskShape'
 import type { api as ApiClient } from '@core/api-client'
 import type toastFn from 'react-hot-toast'
 import type { NavigateFn } from '@tanstack/react-router'
@@ -212,8 +213,11 @@ const statusMarkerByValue: Record<string, TaskMarker> = {
 const makeStatusHandler: (value: string) => SlashHandler = (value) => async (ctx) => {
   const marker = statusMarkerByValue[value]
   if (!marker) return
+  // ADR-0023 deviation (ADR-0025): one-way paragraph/bullet/numbered/heading → todo
+  // conversion when a marker is set. Clearing the marker does NOT revert blockType.
+  const shape = ensureTaskShape(ctx.block, marker)
   try {
-    const updated = await ctx.api.updateBlock(ctx.block.id, { marker })
+    const updated = await ctx.api.updateBlock(ctx.block.id, shape)
     ctx.onUpdate(updated)
   } catch {
     ctx.toast.error('Failed to set status')

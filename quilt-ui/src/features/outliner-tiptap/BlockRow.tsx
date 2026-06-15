@@ -31,6 +31,7 @@ import { InlinePropertyBadges } from '@features/properties/InlinePropertyBadges'
 // PropertyStrip — renders multiple in-block properties as a compact card
 import { PropertyStrip, type PropertyRow } from '@features/properties/PropertyStrip'
 import { TASK_MARKER_CYCLE } from './rendering/TaskRenderer'
+import { ensureTaskShape } from './ensureTaskShape'
 
 // Re-export findNearestLink for backward compatibility — BlockRow.test.tsx
 // (and any external consumer) imports it from this module. The actual
@@ -816,8 +817,11 @@ export function BlockRow({
           const currentIdx = TASK_MARKER_CYCLE.indexOf(block.marker)
           const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % TASK_MARKER_CYCLE.length : 0
           const nextMarker = TASK_MARKER_CYCLE[nextIdx]
+          // ADR-0023 deviation (ADR-0025): one-way paragraph/bullet/numbered/heading → todo
+          // conversion when cycling to a non-null marker. Clearing marker does NOT revert blockType.
+          const shape = ensureTaskShape(block, nextMarker)
           onUpdate({ ...block, marker: nextMarker })
-          api.updateBlock(block.id, { marker: nextMarker }).catch(() => {
+          api.updateBlock(block.id, shape).catch(() => {
             toast.error('Failed to cycle marker')
           })
           return
