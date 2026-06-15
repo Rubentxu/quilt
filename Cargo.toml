@@ -71,6 +71,9 @@ uuid = { version = "1", features = ["v4", "serde"] }
 # URL parsing
 url = { version = "2", features = ["serde"] }
 
+# Regex
+regex = "1"
+
 # File watching
 # Use default features so the crate pulls in all platform backends:
 #   - macos_fsevent (modern macOS), inotify (Linux), ReadDirectoryChangesW (Windows).

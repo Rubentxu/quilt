@@ -18,6 +18,7 @@ pub mod entities;
 pub mod errors;
 pub mod events;
 pub mod properties;
+pub mod projection;
 pub mod references;
 pub mod repositories;
 pub mod services;
@@ -31,6 +32,12 @@ pub use canonicalization::{
 pub use content::{BlockContent, BlockSegment, Mark};
 pub use entities::{Asset, Block, File, Journal, Page, PropertyKey, Tag};
 pub use errors::DomainError;
+pub use projection::{
+    Decoration, DecorationKind, DefaultProjection, LinkKind, LinkView, PropertyPredicate,
+    Projection, ProjectionContract, ProjectionContractId, ProjectionContext,
+    ProjectionRegistry, ProjectionView, ProjectionViewBuilder, ProjectionViewDelta,
+    RegisteredProjection,
+};
 pub use references::{Ref, RefIndex, RefType};
 pub use services::OrderCalculator;
 pub use value_objects::{

@@ -1887,6 +1887,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "proptest",
+ "regex",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
