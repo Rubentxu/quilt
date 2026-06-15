@@ -23,12 +23,16 @@ mod state;
 use crate::handlers::metrics;
 use crate::state::{AppState, RepositoryBundle};
 use quilt_application::AppServices;
+use quilt_application::services::presets::StaticPresetRegistry;
+use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
-    BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
-    ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
-    TourStateUseCases, TourStateUseCasesImpl,
+    BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl,
+    ResourceUseCases, ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases,
+    TemplateUseCasesImpl, TourStateUseCases, TourStateUseCasesImpl,
 };
+use quilt_application::use_cases::projection_resolver::ProjectionResolver;
+use quilt_domain::canonicalization::PresetRegistry;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
@@ -188,8 +192,13 @@ async fn main() -> Result<()> {
         tour_state_repo,
     );
 
+    // Create projection resolver and preset registry
+    let projection_resolver = Arc::new(ProjectionResolver::new(StaticProjectionRegistry::v1()));
+    let preset_registry: Arc<dyn PresetRegistry> = Arc::new(StaticPresetRegistry::v1());
+
     let state =
-        AppState::new_with_repos(repos, search_service, search_index, ref_service, services);
+        AppState::new_with_repos(repos, search_service, search_index, ref_service, services,
+            projection_resolver, preset_registry);
 
     // Create router
     let app = routes::create_app(state);
