@@ -301,7 +301,6 @@ pub enum QueryAst {
     // ─────────────────────────────────────────────────────────────────────────
     // T5: Journal Aggregation Predicates
     // ─────────────────────────────────────────────────────────────────────────
-
     /// Filter by scheduled date predicate (T5).
     ///
     /// `(scheduled today)`, `(scheduled tomorrow)`, `(scheduled yesterday)`,

@@ -611,42 +611,40 @@ pub async fn update_block(
 
     // Parse scheduling fields from ISO-8601 strings.
     // Double-Option: Some(None) = clear, Some(Some(dt)) = set, None = don't touch.
-    let scheduled_update: Option<Option<chrono::DateTime<chrono::Utc>>> =
-        match payload.scheduled {
-            Some(maybe_iso) => Some(
-                maybe_iso
-                    .map(|iso| {
-                        chrono::DateTime::parse_from_rfc3339(&iso)
-                            .map(|dt| dt.with_timezone(&chrono::Utc))
-                            .map_err(|_| {
-                                AppError::BadRequest(format!(
-                                    "Invalid scheduled date: '{}'. Expected ISO-8601 format.",
-                                    iso
-                                ))
-                            })
-                    })
-                    .transpose()?,
-            ),
-            None => None,
-        };
-    let deadline_update: Option<Option<chrono::DateTime<chrono::Utc>>> =
-        match payload.deadline {
-            Some(maybe_iso) => Some(
-                maybe_iso
-                    .map(|iso| {
-                        chrono::DateTime::parse_from_rfc3339(&iso)
-                            .map(|dt| dt.with_timezone(&chrono::Utc))
-                            .map_err(|_| {
-                                AppError::BadRequest(format!(
-                                    "Invalid deadline date: '{}'. Expected ISO-8601 format.",
-                                    iso
-                                ))
-                            })
-                    })
-                    .transpose()?,
-            ),
-            None => None,
-        };
+    let scheduled_update: Option<Option<chrono::DateTime<chrono::Utc>>> = match payload.scheduled {
+        Some(maybe_iso) => Some(
+            maybe_iso
+                .map(|iso| {
+                    chrono::DateTime::parse_from_rfc3339(&iso)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .map_err(|_| {
+                            AppError::BadRequest(format!(
+                                "Invalid scheduled date: '{}'. Expected ISO-8601 format.",
+                                iso
+                            ))
+                        })
+                })
+                .transpose()?,
+        ),
+        None => None,
+    };
+    let deadline_update: Option<Option<chrono::DateTime<chrono::Utc>>> = match payload.deadline {
+        Some(maybe_iso) => Some(
+            maybe_iso
+                .map(|iso| {
+                    chrono::DateTime::parse_from_rfc3339(&iso)
+                        .map(|dt| dt.with_timezone(&chrono::Utc))
+                        .map_err(|_| {
+                            AppError::BadRequest(format!(
+                                "Invalid deadline date: '{}'. Expected ISO-8601 format.",
+                                iso
+                            ))
+                        })
+                })
+                .transpose()?,
+        ),
+        None => None,
+    };
 
     let update = BlockUpdate {
         content: payload.content,

@@ -73,16 +73,12 @@ async fn setup_world() -> TestWorld {
         ReapplyTemplateUseCaseImpl::new(Arc::new(concrete_tuc), block_repo.clone()),
     );
     let apply_with_contract_use_cases: Arc<dyn ApplyTemplateWithContractUseCase> = Arc::new(
-        ApplyTemplateWithContractUseCaseImpl::new(
-            template_use_cases.clone(),
-            block_repo.clone(),
-        ),
+        ApplyTemplateWithContractUseCaseImpl::new(template_use_cases.clone(), block_repo.clone()),
     );
 
     let _search_use_cases = Arc::new(
-        SearchUseCasesImpl::new().with_search_service(Arc::new(SearchService::new(Arc::new(
-            pool.clone(),
-        )))),
+        SearchUseCasesImpl::new()
+            .with_search_service(Arc::new(SearchService::new(Arc::new(pool.clone())))),
     );
 
     let block_handler = BlockToolHandler::new(block_use_cases.clone());
@@ -110,11 +106,7 @@ async fn setup_world() -> TestWorld {
     }
 }
 
-async fn insert_template(
-    world: &TestWorld,
-    name: &str,
-    block_props: Vec<(&str, &str)>,
-) -> Uuid {
+async fn insert_template(world: &TestWorld, name: &str, block_props: Vec<(&str, &str)>) -> Uuid {
     let page = Page::new(PageCreate {
         name: format!("template/{}", name),
         title: None,
@@ -243,7 +235,10 @@ async fn get_template_contract_returns_contract() {
     .await;
 
     // The tool returns the contract as JSON.
-    assert!(result.get("template_id").is_some(), "result missing template_id");
+    assert!(
+        result.get("template_id").is_some(),
+        "result missing template_id"
+    );
     let required = result.get("required_properties").and_then(|v| v.as_array());
     assert!(required.is_some(), "missing required_properties");
     let reqs: Vec<String> = required

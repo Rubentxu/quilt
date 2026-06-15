@@ -35,7 +35,9 @@ use quilt_domain::entities::{Block, Page, UserSettings};
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
-use quilt_domain::properties::types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext};
+use quilt_domain::properties::types::{
+    Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext,
+};
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
     BlockRepository, PageRepository, PropertyRepository, RefRepository, RefRow, SettingsRepository,
@@ -878,8 +880,6 @@ impl SqlitePageRepository {
         }
     }
 
-
-
     /// Check whether a key resolves to a read-only PropertyDefinition.
     async fn is_read_only_key(&self, key: &str) -> bool {
         if let Some(repo) = &self.property_repo {
@@ -1638,7 +1638,13 @@ impl SettingsRepository for SqliteSettingsRepository {
         .map_err(|e| DomainError::Storage(format!("get_user_settings: {}", e)))?;
 
         match row {
-            Some((timezone, journal_format, start_of_week, preferred_format, journal_aggregate)) => Ok(UserSettings {
+            Some((
+                timezone,
+                journal_format,
+                start_of_week,
+                preferred_format,
+                journal_aggregate,
+            )) => Ok(UserSettings {
                 timezone,
                 journal_format,
                 start_of_week,
@@ -1776,7 +1782,10 @@ impl SqlitePropertyRepository {
     /// `closed_values` is NOT included — call `load_closed_values`
     /// separately and merge, or use the private `row_to_definition`
     /// helper below.
-    fn row_to_definition(&self, row: &sqlx::sqlite::SqliteRow) -> Result<PropertyDefinition, DomainError> {
+    fn row_to_definition(
+        &self,
+        row: &sqlx::sqlite::SqliteRow,
+    ) -> Result<PropertyDefinition, DomainError> {
         let id_blob: Vec<u8> = row.get("id");
         let id = blob_to_uuid(&id_blob)?;
         let property_type_str: String = row.get("property_type");
@@ -1806,26 +1815,26 @@ impl SqlitePropertyRepository {
         let first_seen_at: Option<i64> = row.get("first_seen_at");
         let last_seen_at: Option<i64> = row.get("last_seen_at");
 
-        Ok(PropertyDefinition {
+        // ADR-0025: Use from_legacy_fields for the row mapper, then set
+        // usage metadata via builders. This ensures the 4 new first-class
+        // config fields (visibility, mutability, derived_from, merge_policy)
+        // are derived correctly from the legacy flags.
+        Ok(PropertyDefinition::from_legacy_fields(
             id,
-            db_ident: row.get("db_ident"),
-            title: row.get("title"),
+            row.get::<String, _>("db_ident"),
+            row.get::<String, _>("title"),
             property_type,
-            cardinality,
-            closed_values: Vec::new(), // Populated by `load_closed_values` callers
             view_context,
-            public: public != 0,
-            queryable: queryable != 0,
-            hidden: hidden != 0,
-            attribute: row.get("attribute"),
-            read_only: read_only != 0,
-            status,
-            alias_of: row.get("alias_of"),
-            block_count: block_count.max(0) as u64,
-            page_count: page_count.max(0) as u64,
-            first_seen_at: optional_ts_to_datetime(first_seen_at),
-            last_seen_at: optional_ts_to_datetime(last_seen_at),
-        })
+            public != 0,
+            queryable != 0,
+            hidden != 0,
+            read_only != 0,
+        )
+        .with_usage(block_count.max(0) as u64, page_count.max(0) as u64)
+        .with_seen_at(
+            optional_ts_to_datetime(first_seen_at),
+            optional_ts_to_datetime(last_seen_at),
+        ))
     }
 
     /// Fetch the closed values for a property definition. Returns
@@ -1921,12 +1930,10 @@ impl PropertyRepository for SqlitePropertyRepository {
 
     #[instrument(skip(self))]
     async fn get_all(&self) -> Result<Vec<PropertyDefinition>, DomainError> {
-        let rows = sqlx::query(
-            "SELECT * FROM property_definitions ORDER BY db_ident ASC",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| DomainError::Storage(format!("get_all: {}", e)))?;
+        let rows = sqlx::query("SELECT * FROM property_definitions ORDER BY db_ident ASC")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("get_all: {}", e)))?;
 
         let mut results = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -2056,10 +2063,7 @@ impl PropertyRepository for SqlitePropertyRepository {
     }
 
     #[instrument(skip(self))]
-    async fn get_closed_values(
-        &self,
-        property_id: Uuid,
-    ) -> Result<Vec<ClosedValue>, DomainError> {
+    async fn get_closed_values(&self, property_id: Uuid) -> Result<Vec<ClosedValue>, DomainError> {
         self.load_closed_values(property_id).await
     }
 
@@ -2141,10 +2145,7 @@ impl PropertyRepository for SqlitePropertyRepository {
     }
 
     #[instrument(skip(self))]
-    async fn list_by_usage(
-        &self,
-        limit: usize,
-    ) -> Result<Vec<PropertyDefinition>, DomainError> {
+    async fn list_by_usage(&self, limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
         let rows = sqlx::query(
             "SELECT * FROM property_definitions \
              ORDER BY block_count DESC, db_ident ASC LIMIT ?",
@@ -2212,7 +2213,11 @@ impl PropertyRepository for SqlitePropertyRepository {
         .await
         .map_err(|e| DomainError::Storage(format!("get_co_occurrences: {}", e)))?;
 
-        let total_blocks = self.count_blocks_with_properties().await.unwrap_or(1).max(1) as f64;
+        let total_blocks = self
+            .count_blocks_with_properties()
+            .await
+            .unwrap_or(1)
+            .max(1) as f64;
 
         let results: Vec<_> = rows
             .iter()
@@ -2316,9 +2321,15 @@ impl PropertyRepository for SqlitePropertyRepository {
                 let previous = previous_count as u64;
 
                 let (change_percent, direction) = if previous == 0 && current > 0 {
-                    (f64::INFINITY, quilt_domain::properties::analytics::TrendDirection::New)
+                    (
+                        f64::INFINITY,
+                        quilt_domain::properties::analytics::TrendDirection::New,
+                    )
                 } else if previous == 0 && current == 0 {
-                    (0.0, quilt_domain::properties::analytics::TrendDirection::Stable)
+                    (
+                        0.0,
+                        quilt_domain::properties::analytics::TrendDirection::Stable,
+                    )
                 } else {
                     let change = ((current as f64 - previous as f64) / previous as f64) * 100.0;
                     let dir = if change > 10.0 {
@@ -2363,12 +2374,10 @@ impl PropertyRepository for SqlitePropertyRepository {
 
     #[instrument(skip(self))]
     async fn count_blocks_with_properties(&self) -> Result<u64, DomainError> {
-        let row = sqlx::query(
-            "SELECT COUNT(*) AS cnt FROM blocks WHERE properties != '{}'",
-        )
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| DomainError::Storage(format!("count_blocks_with_properties: {}", e)))?;
+        let row = sqlx::query("SELECT COUNT(*) AS cnt FROM blocks WHERE properties != '{}'")
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("count_blocks_with_properties: {}", e)))?;
 
         let count: i64 = row.get("cnt");
         Ok(count as u64)
@@ -2391,16 +2400,18 @@ impl SqliteSchemaRepository {
         &self,
         row: &sqlx::sqlite::SqliteRow,
     ) -> Result<quilt_domain::properties::schema::PropertySchema, quilt_domain::DomainError> {
-        let id_bytes: Vec<u8> = row.try_get("id").map_err(|e| {
-            quilt_domain::DomainError::Storage(format!("schema id: {}", e))
-        })?;
+        let id_bytes: Vec<u8> = row
+            .try_get("id")
+            .map_err(|e| quilt_domain::DomainError::Storage(format!("schema id: {}", e)))?;
         let id = blob_to_uuid(&id_bytes)?;
 
-        let name: String = row.try_get("name").map_err(|e| {
-            quilt_domain::DomainError::Storage(format!("schema name: {}", e))
-        })?;
+        let name: String = row
+            .try_get("name")
+            .map_err(|e| quilt_domain::DomainError::Storage(format!("schema name: {}", e)))?;
         let description: String = row.try_get("description").unwrap_or_default();
-        let keys_json: String = row.try_get("property_keys").unwrap_or_else(|_| "[]".to_string());
+        let keys_json: String = row
+            .try_get("property_keys")
+            .unwrap_or_else(|_| "[]".to_string());
         let property_keys: Vec<String> = serde_json::from_str(&keys_json).unwrap_or_default();
         let auto_detected: i64 = row.try_get("auto_detected").unwrap_or(0);
         let created_at: i64 = row.try_get("created_at").unwrap_or(0);
@@ -2424,7 +2435,8 @@ impl quilt_domain::repositories::SchemaRepository for SqliteSchemaRepository {
     async fn get_by_id(
         &self,
         id: quilt_domain::value_objects::Uuid,
-    ) -> Result<Option<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError> {
+    ) -> Result<Option<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError>
+    {
         let row = sqlx::query("SELECT * FROM property_schemas WHERE id = ?")
             .bind(uuid_to_blob(&id))
             .fetch_optional(&self.pool)
@@ -2441,12 +2453,15 @@ impl quilt_domain::repositories::SchemaRepository for SqliteSchemaRepository {
     async fn get_by_name(
         &self,
         name: &str,
-    ) -> Result<Option<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError> {
+    ) -> Result<Option<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError>
+    {
         let row = sqlx::query("SELECT * FROM property_schemas WHERE name = ?")
             .bind(name)
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| quilt_domain::DomainError::Storage(format!("schema get_by_name: {}", e)))?;
+            .map_err(|e| {
+                quilt_domain::DomainError::Storage(format!("schema get_by_name: {}", e))
+            })?;
 
         match row {
             Some(r) => Ok(Some(self.row_to_schema(&r)?)),
@@ -2457,29 +2472,30 @@ impl quilt_domain::repositories::SchemaRepository for SqliteSchemaRepository {
     #[tracing::instrument(skip(self))]
     async fn list_all(
         &self,
-    ) -> Result<Vec<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError> {
+    ) -> Result<Vec<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError>
+    {
         let rows = sqlx::query("SELECT * FROM property_schemas ORDER BY name ASC")
             .fetch_all(&self.pool)
             .await
             .map_err(|e| quilt_domain::DomainError::Storage(format!("schema list_all: {}", e)))?;
 
-        rows.iter()
-            .map(|r| self.row_to_schema(r))
-            .collect()
+        rows.iter().map(|r| self.row_to_schema(r)).collect()
     }
 
     #[tracing::instrument(skip(self))]
     async fn list_auto_detected(
         &self,
-    ) -> Result<Vec<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError> {
-        let rows = sqlx::query("SELECT * FROM property_schemas WHERE auto_detected = 1 ORDER BY name ASC")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| quilt_domain::DomainError::Storage(format!("schema list_auto_detected: {}", e)))?;
+    ) -> Result<Vec<quilt_domain::properties::schema::PropertySchema>, quilt_domain::DomainError>
+    {
+        let rows =
+            sqlx::query("SELECT * FROM property_schemas WHERE auto_detected = 1 ORDER BY name ASC")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| {
+                    quilt_domain::DomainError::Storage(format!("schema list_auto_detected: {}", e))
+                })?;
 
-        rows.iter()
-            .map(|r| self.row_to_schema(r))
-            .collect()
+        rows.iter().map(|r| self.row_to_schema(r)).collect()
     }
 
     #[tracing::instrument(skip(self))]
@@ -2563,17 +2579,20 @@ impl SqliteRelationRepository {
     fn row_to_relation(
         &self,
         row: &sqlx::sqlite::SqliteRow,
-    ) -> Result<quilt_domain::properties::relation::PropertyRelation, quilt_domain::DomainError> {
-        let id_bytes: Vec<u8> = row.try_get("id").map_err(|e| {
-            quilt_domain::DomainError::Storage(format!("relation id: {}", e))
-        })?;
+    ) -> Result<quilt_domain::properties::relation::PropertyRelation, quilt_domain::DomainError>
+    {
+        let id_bytes: Vec<u8> = row
+            .try_get("id")
+            .map_err(|e| quilt_domain::DomainError::Storage(format!("relation id: {}", e)))?;
         let id = blob_to_uuid(&id_bytes)?;
 
         let source_key: String = row.try_get("source_key").unwrap_or_default();
         let source_value: String = row.try_get("source_value").unwrap_or_default();
         let target_key: String = row.try_get("target_key").unwrap_or_default();
         let target_value: String = row.try_get("target_value").unwrap_or_default();
-        let relation_type_str: String = row.try_get("relation_type").unwrap_or_else(|_| "precedes".to_string());
+        let relation_type_str: String = row
+            .try_get("relation_type")
+            .unwrap_or_else(|_| "precedes".to_string());
         let description: String = row.try_get("description").unwrap_or_default();
         let confidence: f64 = row.try_get("confidence").unwrap_or(1.0);
         let created_at: i64 = row.try_get("created_at").unwrap_or(0);
@@ -2606,12 +2625,17 @@ impl quilt_domain::repositories::RelationRepository for SqliteRelationRepository
     async fn get_by_id(
         &self,
         id: quilt_domain::value_objects::Uuid,
-    ) -> Result<Option<quilt_domain::properties::relation::PropertyRelation>, quilt_domain::DomainError> {
+    ) -> Result<
+        Option<quilt_domain::properties::relation::PropertyRelation>,
+        quilt_domain::DomainError,
+    > {
         let row = sqlx::query("SELECT * FROM property_relations WHERE id = ?")
             .bind(uuid_to_blob(&id))
             .fetch_optional(&self.pool)
             .await
-            .map_err(|e| quilt_domain::DomainError::Storage(format!("relation get_by_id: {}", e)))?;
+            .map_err(|e| {
+                quilt_domain::DomainError::Storage(format!("relation get_by_id: {}", e))
+            })?;
 
         match row {
             Some(r) => Ok(Some(self.row_to_relation(&r)?)),
@@ -2623,7 +2647,8 @@ impl quilt_domain::repositories::RelationRepository for SqliteRelationRepository
     async fn get_by_key(
         &self,
         key: &str,
-    ) -> Result<Vec<quilt_domain::properties::relation::PropertyRelation>, quilt_domain::DomainError> {
+    ) -> Result<Vec<quilt_domain::properties::relation::PropertyRelation>, quilt_domain::DomainError>
+    {
         let rows = sqlx::query(
             "SELECT * FROM property_relations WHERE source_key = ? OR target_key = ? ORDER BY created_at ASC",
         )
@@ -2641,7 +2666,8 @@ impl quilt_domain::repositories::RelationRepository for SqliteRelationRepository
         &self,
         key: &str,
         value: &str,
-    ) -> Result<Vec<quilt_domain::properties::relation::PropertyRelation>, quilt_domain::DomainError> {
+    ) -> Result<Vec<quilt_domain::properties::relation::PropertyRelation>, quilt_domain::DomainError>
+    {
         let rows = sqlx::query(
             "SELECT * FROM property_relations WHERE source_key = ? AND source_value = ? ORDER BY created_at ASC",
         )
@@ -2657,11 +2683,14 @@ impl quilt_domain::repositories::RelationRepository for SqliteRelationRepository
     #[tracing::instrument(skip(self))]
     async fn list_all(
         &self,
-    ) -> Result<Vec<quilt_domain::properties::relation::PropertyRelation>, quilt_domain::DomainError> {
-        let rows = sqlx::query("SELECT * FROM property_relations ORDER BY source_key, source_value, created_at ASC")
-            .fetch_all(&self.pool)
-            .await
-            .map_err(|e| quilt_domain::DomainError::Storage(format!("relation list_all: {}", e)))?;
+    ) -> Result<Vec<quilt_domain::properties::relation::PropertyRelation>, quilt_domain::DomainError>
+    {
+        let rows = sqlx::query(
+            "SELECT * FROM property_relations ORDER BY source_key, source_value, created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| quilt_domain::DomainError::Storage(format!("relation list_all: {}", e)))?;
 
         rows.iter().map(|r| self.row_to_relation(r)).collect()
     }

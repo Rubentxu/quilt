@@ -57,8 +57,7 @@ pub mod repair;
 pub mod report;
 
 pub use issue_types::{
-    DefaultRegistry, DiagnosisReport, Issue, IssueKind, RepairAction, RepairReport,
-    TemplateState,
+    DefaultRegistry, DiagnosisReport, Issue, IssueKind, RepairAction, RepairReport, TemplateState,
 };
 pub use report::GardenerCare;
 
@@ -112,7 +111,9 @@ mod tests {
         locked: &[&str],
         version: Version,
     ) -> TemplateContract {
-        let mut builder = TemplateContract::builder().template_id(template_id).version(version);
+        let mut builder = TemplateContract::builder()
+            .template_id(template_id)
+            .version(version);
         for r in required {
             if locked.contains(r) {
                 builder = builder.required_property(r).locked_layout(r);
@@ -123,11 +124,7 @@ mod tests {
         builder.build().expect("contract build")
     }
 
-    fn state_with(
-        template_id: Uuid,
-        pairs: &[(&str, &str)],
-        version: Version,
-    ) -> TemplateState {
+    fn state_with(template_id: Uuid, pairs: &[(&str, &str)], version: Version) -> TemplateState {
         let mut map = HashMap::new();
         for (k, v) in pairs {
             map.insert((*k).to_string(), (*v).to_string());
@@ -162,9 +159,8 @@ mod tests {
         let tid = uuid_from_u8(2);
         let contract = contract_with(tid, &["title", "status"], &[], Version::new());
         let state = state_with(tid, &[("title", "Hello")], Version::new());
-        let doctor = TemplateDoctor::with_defaults(
-            DefaultRegistry::new().with_default("status", "draft"),
-        );
+        let doctor =
+            TemplateDoctor::with_defaults(DefaultRegistry::new().with_default("status", "draft"));
         let report = doctor.diagnose(&contract, &state);
 
         let missing: Vec<&Issue> = report
@@ -178,7 +174,12 @@ mod tests {
         let repair = doctor.repair(&contract, &state, &report);
         assert!(!repair.clean);
         assert_eq!(repair.actions.len(), 1);
-        assert!(!repair.unfixable.iter().any(|i| i.kind == IssueKind::MissingRequiredProperty));
+        assert!(
+            !repair
+                .unfixable
+                .iter()
+                .any(|i| i.kind == IssueKind::MissingRequiredProperty)
+        );
         match &repair.actions[0] {
             RepairAction::Added { key, value } => {
                 assert_eq!(key.as_str(), "status");
@@ -188,7 +189,10 @@ mod tests {
         }
         // Resulting state carries the new property.
         assert_eq!(
-            repair.resulting_state.properties.get(&PropertyKey::new("status").unwrap()),
+            repair
+                .resulting_state
+                .properties
+                .get(&PropertyKey::new("status").unwrap()),
             Some(&"draft".to_string())
         );
     }
@@ -218,9 +222,12 @@ mod tests {
             RepairAction::Removed { key } => assert_eq!(key.as_str(), "foo"),
             other => panic!("expected Removed, got {other:?}"),
         }
-        assert!(!repair.resulting_state.properties.contains_key(
-            &PropertyKey::new("foo").unwrap()
-        ));
+        assert!(
+            !repair
+                .resulting_state
+                .properties
+                .contains_key(&PropertyKey::new("foo").unwrap())
+        );
     }
 
     // ── 3. Locked property changed ──────────────────────────────
@@ -235,8 +242,7 @@ mod tests {
         let mut canonical = HashMap::new();
         canonical.insert(PropertyKey::new("type").unwrap(), "task".to_string());
 
-        let report =
-            doctor.diagnose_with_canonical_locked_values(&contract, &state, &canonical);
+        let report = doctor.diagnose_with_canonical_locked_values(&contract, &state, &canonical);
         let changed: Vec<&Issue> = report
             .issues
             .iter()
@@ -254,7 +260,10 @@ mod tests {
             other => panic!("expected Restored, got {other:?}"),
         }
         assert_eq!(
-            repair.resulting_state.properties.get(&PropertyKey::new("type").unwrap()),
+            repair
+                .resulting_state
+                .properties
+                .get(&PropertyKey::new("type").unwrap()),
             Some(&"task".to_string())
         );
     }
@@ -268,9 +277,12 @@ mod tests {
         canonical.insert(PropertyKey::new("type").unwrap(), "task".to_string());
 
         let doctor = TemplateDoctor::new();
-        let report =
-            doctor.diagnose_with_canonical_locked_values(&contract, &state, &canonical);
-        assert!(report.is_clean(), "no drift expected, got {:?}", report.issues);
+        let report = doctor.diagnose_with_canonical_locked_values(&contract, &state, &canonical);
+        assert!(
+            report.is_clean(),
+            "no drift expected, got {:?}",
+            report.issues
+        );
     }
 
     // ── 4. Version mismatch ──────────────────────────────────────
@@ -338,14 +350,12 @@ mod tests {
             ],
             Version::from_u32(1),
         );
-        let doctor = TemplateDoctor::with_defaults(
-            DefaultRegistry::new().with_default("status", "draft"),
-        );
+        let doctor =
+            TemplateDoctor::with_defaults(DefaultRegistry::new().with_default("status", "draft"));
         let mut canonical = HashMap::new();
         canonical.insert(PropertyKey::new("type").unwrap(), "task".to_string());
 
-        let report =
-            doctor.diagnose_with_canonical_locked_values(&contract, &state, &canonical);
+        let report = doctor.diagnose_with_canonical_locked_values(&contract, &state, &canonical);
 
         let kinds: Vec<IssueKind> = report.issues.iter().map(|i| i.kind).collect();
         assert!(kinds.contains(&IssueKind::MissingRequiredProperty));
@@ -374,7 +384,11 @@ mod tests {
             result.properties.get(&PropertyKey::new("type").unwrap()),
             Some(&"task".to_string())
         );
-        assert!(!result.properties.contains_key(&PropertyKey::new("unused").unwrap()));
+        assert!(
+            !result
+                .properties
+                .contains_key(&PropertyKey::new("unused").unwrap())
+        );
         assert_eq!(result.version.as_u32(), 2);
     }
 
@@ -423,14 +437,18 @@ mod tests {
         let repair = doctor.repair(&contract, &state, &report);
         assert!(!repair.clean);
         assert_eq!(repair.actions.len(), 0);
-        assert!(repair
-            .unfixable
-            .iter()
-            .any(|i| i.kind == IssueKind::MissingRequiredProperty));
-        assert!(repair
-            .unfixable
-            .iter()
-            .any(|i| i.kind == IssueKind::MissingPropertyDefault));
+        assert!(
+            repair
+                .unfixable
+                .iter()
+                .any(|i| i.kind == IssueKind::MissingRequiredProperty)
+        );
+        assert!(
+            repair
+                .unfixable
+                .iter()
+                .any(|i| i.kind == IssueKind::MissingPropertyDefault)
+        );
         // The input state is unchanged because no action could be taken.
         assert_eq!(repair.resulting_state, state);
     }
@@ -462,31 +480,31 @@ mod tests {
         let mut props = HashMap::new();
         props.insert("  Status  ".to_string(), "draft".to_string());
         let state = TemplateState::new(tid, props, Version::new());
-        assert!(state
-            .properties()
-            .contains_key(&PropertyKey::new("status").unwrap()));
+        assert!(
+            state
+                .properties()
+                .contains_key(&PropertyKey::new("status").unwrap())
+        );
     }
 
     #[test]
     fn partition_separates_fixable_from_unfixable() {
         let tid = uuid_from_u8(12);
         let contract = contract_with(tid, &["title", "status"], &[], Version::new());
-        let state = state_with(
-            tid,
-            &[("title", "x"), ("extra", "y")],
-            Version::new(),
-        );
+        let state = state_with(tid, &[("title", "x"), ("extra", "y")], Version::new());
         let report = TemplateDoctor::new().diagnose(&contract, &state);
         let (fixable, unfixable) = report.partition();
-        assert!(fixable
-            .iter()
-            .any(|i| i.kind == IssueKind::ExtraProperty));
-        assert!(unfixable
-            .iter()
-            .any(|i| i.kind == IssueKind::MissingRequiredProperty));
-        assert!(unfixable
-            .iter()
-            .any(|i| i.kind == IssueKind::MissingPropertyDefault));
+        assert!(fixable.iter().any(|i| i.kind == IssueKind::ExtraProperty));
+        assert!(
+            unfixable
+                .iter()
+                .any(|i| i.kind == IssueKind::MissingRequiredProperty)
+        );
+        assert!(
+            unfixable
+                .iter()
+                .any(|i| i.kind == IssueKind::MissingPropertyDefault)
+        );
     }
 
     #[test]
@@ -512,11 +530,13 @@ mod tests {
             .property(),
             Some(&key)
         );
-        assert!(RepairAction::Upgraded {
-            new_version: Version::new()
-        }
-        .property()
-        .is_none());
+        assert!(
+            RepairAction::Upgraded {
+                new_version: Version::new()
+            }
+            .property()
+            .is_none()
+        );
     }
 
     #[test]

@@ -208,7 +208,9 @@ impl SearchUseCases for SearchUseCasesImpl {
     async fn query_dsl(&self, dsl: &str, limit: usize) -> Result<Vec<Block>, ApplicationError> {
         let plan = self.query(dsl, limit).await?;
         plan.blocks.ok_or_else(|| {
-            ApplicationError::Validation("Block repository not configured for query_dsl".to_string())
+            ApplicationError::Validation(
+                "Block repository not configured for query_dsl".to_string(),
+            )
         })
     }
 

@@ -232,8 +232,7 @@ impl BlockRepository for InMemoryBlockRepository {
         // `created_by` property, sorted ASC, optionally filtered by
         // a `LIKE` prefix. NULLs and non-string values are skipped.
         let blocks = self.blocks.read();
-        let mut authors: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
+        let mut authors: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for block in blocks.values() {
             if let Some(value) = block.properties.get("created_by") {
                 if let quilt_domain::value_objects::PropertyValue::String(s) = value {

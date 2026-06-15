@@ -10,8 +10,8 @@
 //! - Dates
 //! - Tags
 
-use crate::value_objects::Uuid;
 use crate::Mark;
+use crate::value_objects::Uuid;
 use serde::{Deserialize, Serialize};
 
 /// A segment in a block's content.
@@ -104,9 +104,7 @@ impl BlockSegment {
     pub fn is_embed(&self) -> bool {
         matches!(
             self,
-            BlockSegment::Image { .. }
-                | BlockSegment::Code { .. }
-                | BlockSegment::Table { .. }
+            BlockSegment::Image { .. } | BlockSegment::Code { .. } | BlockSegment::Table { .. }
         )
     }
 
@@ -197,7 +195,13 @@ impl BlockSegment {
                 result.push_str(" |\n");
                 // Separator row
                 result.push_str("| ");
-                result.push_str(&headers.iter().map(|_| "---".to_string()).collect::<Vec<_>>().join(" | "));
+                result.push_str(
+                    &headers
+                        .iter()
+                        .map(|_| "---".to_string())
+                        .collect::<Vec<_>>()
+                        .join(" | "),
+                );
                 result.push_str(" |\n");
                 // Data rows
                 for row in rows {
@@ -211,7 +215,12 @@ impl BlockSegment {
                 // Format date as YYYY-MM-DD
                 let date_str = value.to_string();
                 if date_str.len() == 8 {
-                    format!("{}-{}-{}", &date_str[0..4], &date_str[4..6], &date_str[6..8])
+                    format!(
+                        "{}-{}-{}",
+                        &date_str[0..4],
+                        &date_str[4..6],
+                        &date_str[6..8]
+                    )
                 } else {
                     date_str
                 }
@@ -264,7 +273,10 @@ mod tests {
     #[test]
     fn test_block_segment_as_ref_target() {
         let id = Uuid::new_v4();
-        let page_ref = BlockSegment::PageRef { target: id, label: None };
+        let page_ref = BlockSegment::PageRef {
+            target: id,
+            label: None,
+        };
         assert_eq!(page_ref.as_ref_target(), Some(id));
 
         let text_seg = BlockSegment::Text {

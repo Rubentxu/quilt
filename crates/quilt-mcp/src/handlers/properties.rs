@@ -6,9 +6,7 @@ use crate::handlers::ToolHandler;
 use crate::protocol::Evidence;
 use crate::tools::Tool;
 use async_trait::async_trait;
-use quilt_application::property::{
-    PropertyServiceTrait,
-};
+use quilt_application::property::PropertyServiceTrait;
 use quilt_domain::properties::analytics::AnalyticsParams;
 use serde_json::Value;
 use std::sync::Arc;
@@ -131,10 +129,7 @@ impl ToolHandler for PropertyToolHandler {
     async fn execute(&self, name: &str, args: &Value) -> Result<String, String> {
         match name {
             "quilt_properties_batch" => {
-                let limit = args
-                    .get("limit")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(50) as usize;
+                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
                 let limit = limit.min(100);
 
                 let keys: Vec<String> = args
@@ -147,15 +142,16 @@ impl ToolHandler for PropertyToolHandler {
                     })
                     .unwrap_or_default();
 
-                let query_str = args
-                    .get("query")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let query_str = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
 
                 let mut results = Vec::new();
 
                 if !keys.is_empty() {
-                    let by_keys = self.service.batch_get(&keys).await.map_err(|e| e.to_string())?;
+                    let by_keys = self
+                        .service
+                        .batch_get(&keys)
+                        .await
+                        .map_err(|e| e.to_string())?;
                     results.extend(by_keys);
                 }
 
@@ -194,10 +190,7 @@ impl ToolHandler for PropertyToolHandler {
                     .get("partial")
                     .and_then(|v| v.as_str())
                     .ok_or("Missing 'partial' parameter")?;
-                let limit = args
-                    .get("limit")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(10) as usize;
+                let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
                 let limit = limit.min(50);
 
                 let suggestions = self
@@ -251,7 +244,11 @@ impl ToolHandler for PropertyToolHandler {
 
                 let result = match action {
                     "deprecate" => {
-                        let def = self.service.deprecate(key).await.map_err(|e| e.to_string())?;
+                        let def = self
+                            .service
+                            .deprecate(key)
+                            .await
+                            .map_err(|e| e.to_string())?;
                         serde_json::to_value(def).map_err(|e| e.to_string())?
                     }
                     "merge" => {
@@ -259,7 +256,11 @@ impl ToolHandler for PropertyToolHandler {
                             .get("target_key")
                             .and_then(|v| v.as_str())
                             .ok_or("Missing 'target_key' for merge")?;
-                        let def = self.service.merge(key, target).await.map_err(|e| e.to_string())?;
+                        let def = self
+                            .service
+                            .merge(key, target)
+                            .await
+                            .map_err(|e| e.to_string())?;
                         serde_json::to_value(def).map_err(|e| e.to_string())?
                     }
                     "alias" => {
@@ -271,7 +272,11 @@ impl ToolHandler for PropertyToolHandler {
                             .get("target_key")
                             .and_then(|v| v.as_str())
                             .ok_or("Missing 'target_key' for alias")?;
-                        let def = self.service.alias(new_key, target).await.map_err(|e| e.to_string())?;
+                        let def = self
+                            .service
+                            .alias(new_key, target)
+                            .await
+                            .map_err(|e| e.to_string())?;
                         serde_json::to_value(def).map_err(|e| e.to_string())?
                     }
                     _ => return Err(format!("Unknown lifecycle action: {}", action)),

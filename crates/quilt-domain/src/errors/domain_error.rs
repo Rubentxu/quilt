@@ -38,6 +38,34 @@ pub enum DomainError {
     CircularReference(Uuid),
     /// Cannot delete block with children
     BlockHasChildren,
+
+    // Canonicalization / patch errors
+    /// Merge conflict: patch value differs from existing value under RejectOnConflict policy
+    MergeConflict {
+        /// The property key that conflicted
+        key: String,
+        /// The value already present in the block
+        existing: crate::value_objects::PropertyValue,
+        /// The value the patch attempted to write
+        attempted: crate::value_objects::PropertyValue,
+    },
+    /// Attempted to explicitly patch a property whose definition is immutable
+    ImmutableProperty(String),
+    /// Patch attempted to write a forbidden key (`content`, `text`, `children`)
+    ForbiddenPatchKey(String),
+    /// Unknown preset: no preset with this id exists in the registry
+    UnknownPreset(crate::canonicalization::PresetId),
+    /// A required preset argument was not provided
+    MissingPresetArg {
+        /// The preset that requires the argument
+        preset: crate::canonicalization::PresetId,
+        /// The kind of missing argument
+        kind: crate::canonicalization::PresetArgKind,
+    },
+    /// Invalid preset id format
+    InvalidPresetId(String),
+    /// Duplicate preset argument kinds in a single preset invocation
+    DuplicatePresetArgKind(crate::canonicalization::PresetArgKind),
     /// Entity already exists
     AlreadyExists(String),
     /// Entity not found (generic)
@@ -56,6 +84,8 @@ pub enum DomainError {
     Database(String),
     /// Feature not yet implemented
     NotImplemented(&'static str),
+    /// Invariant violation in domain logic
+    InvariantViolation(&'static str),
 }
 
 impl fmt::Display for DomainError {
@@ -101,6 +131,37 @@ impl fmt::Display for DomainError {
             DomainError::BlockHasChildren => {
                 write!(f, "Cannot delete block with children")
             }
+            DomainError::MergeConflict { key, .. } => {
+                write!(f, "Merge conflict on property '{}'", key)
+            }
+            DomainError::ImmutableProperty(key) => {
+                write!(f, "Property is immutable: {}", key)
+            }
+            DomainError::ForbiddenPatchKey(key) => {
+                write!(f, "Forbidden patch key: {}", key)
+            }
+            DomainError::UnknownPreset(preset) => {
+                write!(f, "unknown preset: {}", preset)
+            }
+            DomainError::MissingPresetArg { preset, kind } => {
+                let kind_str = match kind {
+                    crate::canonicalization::PresetArgKind::Date => "Date",
+                    crate::canonicalization::PresetArgKind::Url => "Url",
+                    crate::canonicalization::PresetArgKind::Text => "Text",
+                };
+                write!(f, "preset {} requires a {} argument", preset, kind_str)
+            }
+            DomainError::InvalidPresetId(s) => {
+                write!(f, "invalid preset id: {}", s)
+            }
+            DomainError::DuplicatePresetArgKind(kind) => {
+                let kind_str = match kind {
+                    crate::canonicalization::PresetArgKind::Date => "Date",
+                    crate::canonicalization::PresetArgKind::Url => "Url",
+                    crate::canonicalization::PresetArgKind::Text => "Text",
+                };
+                write!(f, "duplicate preset arg kind: {}", kind_str)
+            }
             DomainError::AlreadyExists(entity) => {
                 write!(f, "{} already exists", entity)
             }
@@ -122,6 +183,9 @@ impl fmt::Display for DomainError {
             DomainError::NotImplemented(feature) => {
                 write!(f, "Not implemented: {}", feature)
             }
+            DomainError::InvariantViolation(msg) => {
+                write!(f, "Invariant violation: {}", msg)
+            }
         }
     }
 }
@@ -135,6 +199,7 @@ pub type DomainResult<T> = Result<T, DomainError>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::canonicalization::{PresetArgKind, PresetId};
 
     // ── Display for each variant ──────────────────────────────────
 
@@ -260,5 +325,182 @@ mod tests {
         let err = DomainError::BlockHasChildren;
         let debug = format!("{:?}", err);
         assert!(debug.contains("BlockHasChildren"));
+    }
+
+    // ── InvariantViolation ────────────────────────────────────────
+
+    #[test]
+    fn test_display_invariant_violation() {
+        let err = DomainError::InvariantViolation("derived property must be immutable");
+        let msg = format!("{}", err);
+        assert!(msg.contains("Invariant violation: derived property must be immutable"));
+    }
+
+    #[test]
+    fn test_implements_std_error_invariant_violation() {
+        // InvariantViolation must still implement std::error::Error (additive variant)
+        let err = DomainError::InvariantViolation("test");
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn test_debug_contains_invariant_violation_name() {
+        let err = DomainError::InvariantViolation("test");
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("InvariantViolation"));
+    }
+
+    // ── MergeConflict ──────────────────────────────────────────────
+
+    #[test]
+    fn test_display_merge_conflict() {
+        use crate::value_objects::PropertyValue;
+        let err = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("Merge conflict"));
+        assert!(msg.contains("status"));
+    }
+
+    #[test]
+    fn test_merge_conflict_equality() {
+        use crate::value_objects::PropertyValue;
+        let err1 = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        let err2 = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        assert_eq!(err1, err2);
+    }
+
+    #[test]
+    fn test_debug_contains_merge_conflict_name() {
+        use crate::value_objects::PropertyValue;
+        let err = DomainError::MergeConflict {
+            key: "status".into(),
+            existing: PropertyValue::string("done"),
+            attempted: PropertyValue::string("todo"),
+        };
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("MergeConflict"));
+    }
+
+    // ── ImmutableProperty ──────────────────────────────────────────
+
+    #[test]
+    fn test_display_immutable_property() {
+        let err = DomainError::ImmutableProperty("heading-level".into());
+        let msg = format!("{}", err);
+        assert_eq!(msg, "Property is immutable: heading-level");
+    }
+
+    #[test]
+    fn test_debug_contains_immutable_property_name() {
+        let err = DomainError::ImmutableProperty("heading-level".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("ImmutableProperty"));
+    }
+
+    // ── ForbiddenPatchKey ─────────────────────────────────────────
+
+    #[test]
+    fn test_display_forbidden_patch_key() {
+        let err = DomainError::ForbiddenPatchKey("content".into());
+        let msg = format!("{}", err);
+        assert_eq!(msg, "Forbidden patch key: content");
+    }
+
+    #[test]
+    fn test_debug_contains_forbidden_patch_key_name() {
+        let err = DomainError::ForbiddenPatchKey("content".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("ForbiddenPatchKey"));
+    }
+
+    // ── UnknownPreset ─────────────────────────────────────────────
+
+    #[test]
+    fn test_display_unknown_preset() {
+        use crate::canonicalization::PresetId;
+        let id = PresetId::new("/TODO").unwrap();
+        let err = DomainError::UnknownPreset(id);
+        let msg = format!("{}", err);
+        assert_eq!(msg, "unknown preset: /TODO");
+    }
+
+    #[test]
+    fn test_debug_contains_unknown_preset() {
+        use crate::canonicalization::PresetId;
+        let id = PresetId::new("/Video").unwrap();
+        let err = DomainError::UnknownPreset(id);
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("UnknownPreset"));
+    }
+
+    // ── MissingPresetArg ──────────────────────────────────────────
+
+    #[test]
+    fn test_display_missing_preset_arg() {
+        use crate::canonicalization::{PresetArgKind, PresetId};
+        let preset = PresetId::new("/Scheduled").unwrap();
+        let err = DomainError::MissingPresetArg {
+            preset,
+            kind: PresetArgKind::Date,
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("/Scheduled"));
+        assert!(msg.contains("Date"));
+    }
+
+    #[test]
+    fn test_debug_contains_missing_preset_arg() {
+        use crate::canonicalization::{PresetArgKind, PresetId};
+        let preset = PresetId::new("/Deadline").unwrap();
+        let err = DomainError::MissingPresetArg {
+            preset,
+            kind: PresetArgKind::Url,
+        };
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("MissingPresetArg"));
+    }
+
+    // ── InvalidPresetId ──────────────────────────────────────────
+
+    #[test]
+    fn test_display_invalid_preset_id() {
+        let err = DomainError::InvalidPresetId("TODO".into());
+        let msg = format!("{}", err);
+        assert_eq!(msg, "invalid preset id: TODO");
+    }
+
+    #[test]
+    fn test_debug_contains_invalid_preset_id() {
+        let err = DomainError::InvalidPresetId("TO DO".into());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("InvalidPresetId"));
+    }
+
+    // ── DuplicatePresetArgKind ────────────────────────────────────
+
+    #[test]
+    fn test_display_duplicate_preset_arg_kind() {
+        let err = DomainError::DuplicatePresetArgKind(PresetArgKind::Text);
+        let msg = format!("{}", err);
+        assert_eq!(msg, "duplicate preset arg kind: Text");
+    }
+
+    #[test]
+    fn test_debug_contains_duplicate_preset_arg_kind() {
+        let err = DomainError::DuplicatePresetArgKind(PresetArgKind::Date);
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("DuplicatePresetArgKind"));
     }
 }

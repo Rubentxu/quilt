@@ -205,6 +205,8 @@ impl AgentStore {
             repeated: None,
             logbook: None,
             collapsed: false,
+            completed_at: None,
+            cancelled_at: None,
             created_at: now,
             updated_at: now,
         };

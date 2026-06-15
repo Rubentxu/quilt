@@ -22,18 +22,18 @@ mod state;
 
 use crate::handlers::metrics;
 use crate::state::{AppState, RepositoryBundle};
+use quilt_application::AppServices;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
-    ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl, TourStateUseCases,
-    TourStateUseCasesImpl,
+    ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
+    TourStateUseCases, TourStateUseCasesImpl,
 };
-use quilt_application::AppServices;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
-    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository, SqliteTagRepository,
-    SqliteTourStateRepository,
+    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
+    SqliteTagRepository, SqliteTourStateRepository,
 };
 use quilt_search::SearchService;
 
@@ -103,7 +103,8 @@ async fn main() -> Result<()> {
     let tag_repo: Arc<SqliteTagRepository> = Arc::new(SqliteTagRepository::new(pool.clone()));
     let relation_repo: Arc<SqliteRelationRepository> =
         Arc::new(SqliteRelationRepository::new(pool.clone()));
-    let schema_repo: Arc<SqliteSchemaRepository> = Arc::new(SqliteSchemaRepository::new(pool.clone()));
+    let schema_repo: Arc<SqliteSchemaRepository> =
+        Arc::new(SqliteSchemaRepository::new(pool.clone()));
     let property_repo: Arc<SqlitePropertyRepository> =
         Arc::new(SqlitePropertyRepository::new(pool.clone()));
     let tour_state_repo: Arc<SqliteTourStateRepository> =
@@ -121,15 +122,15 @@ async fn main() -> Result<()> {
         .rebuild_from_repo()
         .await
         .map_err(|e| anyhow::anyhow!("Failed to rebuild reference index: {}", e))?;
-    info!(
-        "Reference index rebuilt with {} entries",
-        ref_service.len()
-    );
+    info!("Reference index rebuilt with {} entries", ref_service.len());
     let ref_service: Arc<dyn RefServiceTrait> = Arc::new(ref_service);
 
     // Create use cases
-    let block_use_cases: Arc<dyn BlockUseCases> =
-        Arc::new(BlockUseCasesImpl::new(block_repo.clone(), page_repo.clone(), ref_service.clone()));
+    let block_use_cases: Arc<dyn BlockUseCases> = Arc::new(BlockUseCasesImpl::new(
+        block_repo.clone(),
+        page_repo.clone(),
+        ref_service.clone(),
+    ));
     let page_use_cases: Arc<dyn PageUseCases> =
         Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
     let resource_use_cases: Arc<dyn ResourceUseCases> = Arc::new(ResourceUseCasesImpl::new(
@@ -137,8 +138,10 @@ async fn main() -> Result<()> {
         page_repo.clone(),
         tag_repo.clone(),
     ));
-    let template_use_cases: Arc<dyn TemplateUseCases> =
-        Arc::new(TemplateUseCasesImpl::new(page_repo.clone(), block_repo.clone()));
+    let template_use_cases: Arc<dyn TemplateUseCases> = Arc::new(TemplateUseCasesImpl::new(
+        page_repo.clone(),
+        block_repo.clone(),
+    ));
     let tour_state_use_cases: Arc<dyn TourStateUseCases> =
         Arc::new(TourStateUseCasesImpl::new(tour_state_repo.clone()));
     let search_use_cases = Arc::new(
@@ -185,13 +188,8 @@ async fn main() -> Result<()> {
         tour_state_repo,
     );
 
-    let state = AppState::new_with_repos(
-        repos,
-        search_service,
-        search_index,
-        ref_service,
-        services,
-    );
+    let state =
+        AppState::new_with_repos(repos, search_service, search_index, ref_service, services);
 
     // Create router
     let app = routes::create_app(state);

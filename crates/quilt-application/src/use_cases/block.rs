@@ -3,11 +3,11 @@
 //! Implements [`BlockUseCases`] trait for block CRUD and linking operations.
 
 use crate::errors::ApplicationError;
-use crate::services::ref_service::{parse_refs_from_content, RefServiceTrait};
+use crate::services::ref_service::{RefServiceTrait, parse_refs_from_content};
 use async_trait::async_trait;
 use quilt_domain::entities::{Block, BlockCreate, BlockUpdate, Page, PageCreate};
-use quilt_domain::repositories::{BlockRepository, BlockRepositoryExt, PageRepository};
 use quilt_domain::references::RefType;
+use quilt_domain::repositories::{BlockRepository, BlockRepositoryExt, PageRepository};
 use quilt_domain::value_objects::{
     BlockFormat, BlockType, Priority, PropertyValue, TaskMarker, Uuid,
 };
@@ -120,11 +120,7 @@ pub trait BlockUseCases: Send + Sync {
     ) -> Result<Block, ApplicationError>;
 
     /// Delete a property from a block.
-    async fn delete_property(
-        &self,
-        block_id: Uuid,
-        key: &str,
-    ) -> Result<Block, ApplicationError>;
+    async fn delete_property(&self, block_id: Uuid, key: &str) -> Result<Block, ApplicationError>;
 
     /// Get all properties of a block.
     async fn get_properties(
@@ -234,9 +230,7 @@ impl BlockUseCases for BlockUseCasesImpl {
                 .await
                 .map_err(ApplicationError::Domain)?;
 
-            let next_sibling = siblings
-                .iter()
-                .find(|b| b.order > preceding.order);
+            let next_sibling = siblings.iter().find(|b| b.order > preceding.order);
 
             match next_sibling {
                 Some(next) => (preceding.order + next.order) / 2.0,
@@ -253,7 +247,8 @@ impl BlockUseCases for BlockUseCasesImpl {
             existing_blocks
                 .iter()
                 .map(|b| b.order)
-                .fold(0.0_f64, |a, b| a.max(b)) + 1.0
+                .fold(0.0_f64, |a, b| a.max(b))
+                + 1.0
         };
 
         // Parse raw_properties into HashMap<String, PropertyValue>
@@ -628,11 +623,7 @@ impl BlockUseCases for BlockUseCasesImpl {
     }
 
     #[instrument(skip(self))]
-    async fn delete_property(
-        &self,
-        block_id: Uuid,
-        key: &str,
-    ) -> Result<Block, ApplicationError> {
+    async fn delete_property(&self, block_id: Uuid, key: &str) -> Result<Block, ApplicationError> {
         let mut block = self
             .block_repo
             .get_or_fail(block_id)

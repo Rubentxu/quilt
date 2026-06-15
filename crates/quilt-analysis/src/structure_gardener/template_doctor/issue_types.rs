@@ -39,11 +39,7 @@ impl TemplateState {
     /// version. Keys are normalized via `PropertyKey::new`; invalid
     /// keys are silently dropped (consistent with the contract
     /// builder's behavior).
-    pub fn new(
-        template_id: Uuid,
-        properties: HashMap<String, String>,
-        version: Version,
-    ) -> Self {
+    pub fn new(template_id: Uuid, properties: HashMap<String, String>, version: Version) -> Self {
         let normalized = properties
             .into_iter()
             .filter_map(|(k, v)| PropertyKey::new(&k).ok().map(|key| (key, v)))

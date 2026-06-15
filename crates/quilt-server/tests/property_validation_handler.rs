@@ -38,12 +38,7 @@ async fn create_test_app() -> Result<Router> {
     Ok(app)
 }
 
-async fn req(
-    app: Router,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-) -> (StatusCode, Value) {
+async fn req(app: Router, method: Method, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
     let mut builder = Request::builder()
         .method(method)
         .uri(uri)

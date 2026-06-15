@@ -317,9 +317,7 @@ impl StrategyScorer for BinaryScorer {
 pub fn select_strategy_from_json(block_json: &str) -> Option<String> {
     let block = Block::from_json(block_json)?;
     let selector = DefaultStrategySelector::with_builtins();
-    selector
-        .select(&block)
-        .map(|s| s.name().to_string())
+    selector.select(&block).map(|s| s.name().to_string())
 }
 
 // ── Tests ───────────────────────────────────────────────────────────
@@ -583,10 +581,8 @@ mod tests {
     fn block_from_json_coerces_non_string_values_to_string() {
         // booleans / numbers should become their string form so
         // the strategy layer can do exact equality on them.
-        let b = Block::from_json(
-            r#"{"properties":{"type":"task","resolved":true,"count":42}}"#,
-        )
-        .unwrap();
+        let b = Block::from_json(r#"{"properties":{"type":"task","resolved":true,"count":42}}"#)
+            .unwrap();
         assert_eq!(b.properties.get("type").map(String::as_str), Some("task"));
         assert_eq!(
             b.properties.get("resolved").map(String::as_str),
@@ -597,10 +593,7 @@ mod tests {
 
     #[test]
     fn block_from_json_drops_null_values() {
-        let b = Block::from_json(
-            r#"{"properties":{"type":"task","cleared":null}}"#,
-        )
-        .unwrap();
+        let b = Block::from_json(r#"{"properties":{"type":"task","cleared":null}}"#).unwrap();
         assert_eq!(b.properties.len(), 1);
         assert!(b.properties.contains_key("type"));
         assert!(!b.properties.contains_key("cleared"));
@@ -655,9 +648,7 @@ mod tests {
     #[test]
     fn wasm_bridge_falls_back_to_default_for_unknown_type() {
         assert_eq!(
-            select_strategy_from_json(
-                r#"{"properties":{"type":"something-else"}}"#,
-            ),
+            select_strategy_from_json(r#"{"properties":{"type":"something-else"}}"#,),
             Some("default".to_string()),
         );
     }
@@ -667,10 +658,7 @@ mod tests {
         // `{}` is a valid envelope (no `properties` field). The
         // selector sees an empty block and the default strategy
         // matches.
-        assert_eq!(
-            select_strategy_from_json("{}"),
-            Some("default".to_string()),
-        );
+        assert_eq!(select_strategy_from_json("{}"), Some("default".to_string()),);
     }
 
     #[test]
@@ -704,9 +692,7 @@ mod tests {
         // picks "default" (no `type` key) — but the path through
         // the JSON parser is exercised.
         assert_eq!(
-            select_strategy_from_json(
-                r#"{"properties":{"type":"task","resolved":true}}"#,
-            ),
+            select_strategy_from_json(r#"{"properties":{"type":"task","resolved":true}}"#,),
             Some("task".to_string()),
         );
     }

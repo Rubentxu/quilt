@@ -12,6 +12,10 @@ _Avoid_: base de datos, knowledge base, vault
 Unidad atómica de contenido en el outliner. Tiene UUID inmutable, contenido markdown, propiedades tipadas, refs a otros bloques/páginas, y posición jerárquica (parent, order, level).
 _Avoid_: nodo, item, entrada
 
+### Contenido de Bloque
+Texto markdown editable que pertenece directamente al Bloque. No es una Propiedad. Quilt puede derivar Properties visibles o invisibles a partir de la sintaxis del contenido —por ejemplo heading-level desde `#`, links desde markdown links, o media metadata desde una URL— pero el texto visible sigue siendo contenido del Bloque.
+_Avoid_: text property, content como metadata, duplicar texto en properties
+
 ### Página
 Contenedor de bloques. Puede ser normal, journal, o namespace. Identificada por nombre (lowercase, único).
 _Avoid_: documento, archivo, nota
@@ -53,8 +57,76 @@ Lenguaje de consultas tipo `(and (task TODO) (priority A))`. Base compartida ent
 _Avoid_: query language, Datalog, SQL
 
 ### Propiedad
-Par clave-valor tipada en un bloque o página (`status:: draft`, `priority:: A`). Las propiedades son el mecanismo de colaboración: el usuario y el agente negocian estado y contexto mediante propiedades custom. Tipos soportados: Text, Number, Date, DateTime, Url, Checkbox, Select, Multi-select, Relation, Rollup, Formula, Node (page-ref). Las properties definen layout (header/inline/panel), estilos y comportamiento por template.
+Par clave-valor tipada en un bloque o página (`status:: draft`, `priority:: A`). Las propiedades son la fuente canónica de la información semántica, estructural y de proyección de un Bloque: estado, prioridad, fechas, media, tipo visual y metadata viven como properties, no como campos especiales duplicados. Pueden ser visibles inline, visibles solo en panel, o internas/sistema. Tipos soportados: Text, Number, Date, DateTime, Url, Checkbox, Select, Multi-select, Relation, Rollup, Formula, Node (page-ref). La forma en que una property se muestra, se fusiona o puede editarse se expresa como Configuración de Propiedad dentro del grafo.
 _Avoid_: metadato, atributo, tag
+
+### Configuración de Propiedad
+Properties que describen otra Propiedad: tipo, visibilidad, mutabilidad, política de fusión y preferencia de representación. No introduce primitivas nuevas fuera del grafo; si Quilt necesita expresar que una property se ve inline, en panel, como indicador, como preview o como metadata de sistema, esa decisión vive como properties sobre la configuración/esquema de esa Propiedad.
+_Avoid_: slot visual externo, metadata fuera del grafo, registry UI como fuente de verdad
+
+### Visibilidad de Propiedad
+Regla que define dónde se muestra una Propiedad: `inline` junto al Bloque, `panel` solo en el panel derecho, `system` oculta por defecto pero visible con “show system”, o `hidden` reservada para agentes/MCP/debug. En modo edición de Bloque, las properties del Bloque son visibles como parte de la superficie de edición, respetando su mutabilidad.
+_Avoid_: display flag genérico, CSS visibility
+
+### Mutabilidad de Propiedad
+Regla que define si una Propiedad puede editarse desde la UI. Una property mutable puede cambiarse en el panel o en modo edición; una property inmutable se muestra como lectura y solo cambia por el sistema, importadores o reglas explícitas.
+_Avoid_: disabled input como decisión de dominio, readonly accidental
+
+### Proyección de Bloque
+Forma contextual de visualizar un Bloque derivada de sus Properties. Todo Bloque conserva una Superficie Base universal —texto enriquecido, enlaces y properties visibles— y las proyecciones especializadas componen capas de visualización encima de esa base. Proyecciones como Task, Media, Query, Card o Annotation se activan leyendo properties del Bloque, no por tipos hardcodeados ni columnas especiales, y no reemplazan destructivamente el contenido del Bloque.
+_Avoid_: tipo de bloque visual, componente especial, renderer hardcodeado, reemplazo del bloque
+
+### Superficie Base de Bloque
+Visualización universal de cualquier Bloque: contenido textual enriquecido, enlaces, hijos y properties visibles según su visibilidad y contexto de edición. Existe siempre, incluso cuando aplican proyecciones especializadas. Las proyecciones enriquecen o insertan representación adicional dentro de esta superficie, pero no eliminan ni reemplazan el texto ni las properties del Bloque.
+_Avoid_: fallback pobre, renderer por defecto como caso residual, vista sin properties
+
+### Visualización Genérica de Texto
+Modo seguro y universal de mostrar un Bloque como texto enriquecido con sus enlaces, hijos y properties visibles. Es el fallback obligatorio cuando ninguna proyección especializada aplica, cuando hay ambigüedad, o cuando las properties derivadas y aplicadas producen contratos incompatibles. Nunca intenta inferir intención destructivamente.
+_Avoid_: error visual, pantalla vacía, elegir una proyección dudosa
+
+### Contrato de Proyección
+Conjunto principalmente declarativo de Properties requeridas y condiciones que activan una Proyección de Bloque, con un escape hatch de código para casos complejos. Por ejemplo, TaskProjection requiere `type:: task` y un `status::` compatible; VideoProjection requiere `type:: media` y `media-type:: video`. Ninguna property aislada debería activar una proyección sin contexto suficiente.
+_Avoid_: if hardcodeado, renderer selector manual, type switch
+
+### Preferencia de Proyección
+Property visual que expresa cómo debe resolverse la Proyección de Bloque. `projection:: auto` indica que Quilt debe elegir la mejor proyección compatible según los Contratos de Proyección disponibles y caer a la Proyección por Defecto si ninguna aplica. En bloques comunes, ausencia de `projection` equivale a `projection:: auto`; los Property Presets deben materializar `projection:: auto` explícitamente. Un valor específico como `projection:: task` expresa una preferencia explícita, pero no debe activar una proyección si su contrato no se cumple.
+_Avoid_: renderer forzado, componente visual directo, default como contrato
+
+### Property Preset
+Conjunto nombrado de Properties que se aplica a un Bloque como atajo de creación o transformación. Un slash command aplica un Property Preset; no elige directamente la Proyección de Bloque. La proyección se deriva después leyendo las Properties resultantes.
+_Avoid_: comando de render, tipo visual, componente
+
+### Property Patch
+Operación no destructiva que aplica, agrega o ajusta un subconjunto de Properties en un Bloque. Conserva el texto, los hijos y las properties no relacionadas del Bloque. Si una property existente contradice el contrato del preset o de la proyección esperada, el patch debe fallar o pedir confirmación en vez de borrar o convertir información silenciosamente.
+_Avoid_: convertir bloque, reemplazo total, borrar contenido, comando destructivo
+
+### Canonización de Entrada
+Proceso que transforma input del usuario —Markdown, paste, slash command, picker, API o MCP— en Contenido de Bloque más Properties derivadas o aplicadas. El texto queda en el Bloque; las Properties capturan semántica, estructura, enlaces, proyección o metadata detectada. Slash commands son automatizaciones de canonización que aplican texto y/o Property Patches.
+_Avoid_: comando especial, parser visual, texto como property
+
+### Canonización Markdown
+Caso de Canonización de Entrada donde sintaxis Markdown en el Contenido de Bloque deriva Properties. En V1, headings derivan `heading-level` y `block-role:: heading`; links markdown derivan `link`, `link-label` y `link-kind`; embeds markdown derivan `embed-url` y `embed-kind`; refs `[[Page]]` derivan `page-ref`; refs `((block-id))` derivan `block-ref`; prefijos TODO/DOING/DONE derivan `type:: task`, `status` y `projection:: auto`. El resto del Markdown permanece solo como Contenido de Bloque.
+_Avoid_: markdown como renderer solamente, duplicar texto, parser sin modelo canónico
+
+### Propiedad Derivada
+Property calculada desde el Contenido de Bloque por Canonización de Entrada. Se materializa en el Bloque como `system`, queryable e inmutable desde la UI. Se modifica editando la fuente que la produjo, no editando la property directamente; si la sintaxis fuente cambia o desaparece, Quilt regenera o elimina la property derivada. Por ejemplo, `# Título` deriva `heading-level:: 1`; cambiarlo a `## Título` actualiza la property derivada.
+_Avoid_: property editable duplicando markdown, segunda fuente de verdad, override manual
+
+### Conflicto de Proyección
+Situación donde Properties derivadas y aplicadas coexisten pero activan contratos de proyección incompatibles o ambiguos. Quilt no borra ni convierte información automáticamente: conserva Contenido de Bloque y Properties, materializa el conflicto como properties de sistema (`projection-conflict`, `projection-conflict-reason`, `projection-conflict-candidates`), y muestra la Visualización Genérica de Texto hasta que el usuario o una regla explícita resuelva la intención.
+_Avoid_: resolver borrando, inferencia destructiva, elección silenciosa de proyección
+
+### Política de Fusión de Propiedad
+Regla que define qué ocurre cuando un Property Patch toca una property que ya existe. Las políticas posibles incluyen: set-if-missing, overwrite, append, union, reject-on-conflict y ask-on-conflict. La política se define por property/preset/contexto; el default conceptual es preservar información y escalar colisiones reales.
+_Avoid_: overwrite por defecto, last-write-wins ciego, merge implícito
+
+### Foco de Bloque
+Property que marca que un Bloque pertenece al foco actual del usuario sin cambiar su estado de tarea. `focus:: now` significa “este Bloque debe aparecer en el foco actual”. Es independiente de `status:: todo/doing/waiting/done` y conceptualmente single-value.
+_Avoid_: estado de tarea, en ejecución, vista NOW como entidad separada
+
+### Slash Command
+Atajo de entrada del Outliner para aplicar un Property Preset al Bloque actual. Ejemplos: `/TODO` aplica `type:: task` y `status:: todo`; `/Video` aplica properties de media. No contiene lógica de render propia.
+_Avoid_: render command, bloque especial
 
 ### Propuesta
 Contenido creado por un agente via MCP, marcado con `created_by:: agent::nombre`. El usuario acepta, rechaza o solicita revisión. El workflow es por convención, no impuesto por Quilt.

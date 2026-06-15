@@ -37,10 +37,7 @@ impl Mark {
     /// Used for simplified equality checks.
     pub fn is_formatting_only(&self) -> bool {
         match self {
-            Mark::Bold
-            | Mark::Italic
-            | Mark::Strikethrough
-            | Mark::Code => true,
+            Mark::Bold | Mark::Italic | Mark::Strikethrough | Mark::Code => true,
             Mark::Highlight { .. } | Mark::Link { .. } => false,
         }
     }
@@ -56,7 +53,18 @@ mod tests {
         assert!(Mark::Italic.is_formatting_only());
         assert!(Mark::Strikethrough.is_formatting_only());
         assert!(Mark::Code.is_formatting_only());
-        assert!(!Mark::Highlight { color: Some("#ffff00".to_string()) }.is_formatting_only());
-        assert!(!Mark::Link { url: "http://example.com".to_string(), label: None }.is_formatting_only());
+        assert!(
+            !Mark::Highlight {
+                color: Some("#ffff00".to_string())
+            }
+            .is_formatting_only()
+        );
+        assert!(
+            !Mark::Link {
+                url: "http://example.com".to_string(),
+                label: None
+            }
+            .is_formatting_only()
+        );
     }
 }

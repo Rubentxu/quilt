@@ -15,11 +15,7 @@ pub trait RelationRepository: Send + Sync {
     async fn get_by_key(&self, key: &str) -> Result<Vec<PropertyRelation>, DomainError>;
 
     /// Get all relations where a specific key+value is the source.
-    async fn get_from(
-        &self,
-        key: &str,
-        value: &str,
-    ) -> Result<Vec<PropertyRelation>, DomainError>;
+    async fn get_from(&self, key: &str, value: &str) -> Result<Vec<PropertyRelation>, DomainError>;
 
     /// Get all relations.
     async fn list_all(&self) -> Result<Vec<PropertyRelation>, DomainError>;

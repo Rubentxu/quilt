@@ -14,12 +14,15 @@
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use sqlx::sqlite::SqlitePool;
 use sqlx::Row;
+use sqlx::sqlite::SqlitePool;
 use tracing::{info, warn};
 
 #[derive(Parser, Debug)]
-#[command(name = "migrate-comments", about = "Migrate block-as-comment data to annotations")]
+#[command(
+    name = "migrate-comments",
+    about = "Migrate block-as-comment data to annotations"
+)]
 struct Args {
     #[arg(short = 'd', long, default_value = "quilt.db")]
     database_url: String,
@@ -99,16 +102,24 @@ async fn main() -> Result<()> {
         let created_at: i64 = row.get("created_at");
         let props = String::from_utf8_lossy(&properties_raw);
         let (author_type, author_name) = parse_author(&props);
-        let resolved = props.contains("\"resolved\":\"true\"") || props.contains("\"resolved\": true");
+        let resolved =
+            props.contains("\"resolved\":\"true\"") || props.contains("\"resolved\": true");
         let status = if resolved { "resolved" } else { "pending" };
 
         if args.dry_run {
-            info!("[DRY-RUN] annotation: author={}:{} status={}", author_type, author_name, status);
+            info!(
+                "[DRY-RUN] annotation: author={}:{} status={}",
+                author_type, author_name, status
+            );
             migrated += 1;
             continue;
         }
 
-        let resolved_at: Option<i64> = if resolved { Some(chrono::Utc::now().timestamp()) } else { None };
+        let resolved_at: Option<i64> = if resolved {
+            Some(chrono::Utc::now().timestamp())
+        } else {
+            None
+        };
 
         sqlx::query(
             "INSERT INTO annotations (id, block_id, author_type, author_name, content, status, scope, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, 'block', ?, ?)",
@@ -124,7 +135,10 @@ async fn main() -> Result<()> {
         .execute(&pool)
         .await?;
 
-        info!("Migrated annotation: author={}:{}", author_type, author_name);
+        info!(
+            "Migrated annotation: author={}:{}",
+            author_type, author_name
+        );
         migrated += 1;
     }
 
@@ -162,7 +176,13 @@ async fn main() -> Result<()> {
         }
     }
 
-    info!(migrated, skipped_existing, skipped_no_parent, dry = args.dry_run, "Migration complete");
+    info!(
+        migrated,
+        skipped_existing,
+        skipped_no_parent,
+        dry = args.dry_run,
+        "Migration complete"
+    );
     Ok(())
 }
 

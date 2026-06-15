@@ -128,19 +128,36 @@ mod tests {
         async fn delete(&self, _id: Uuid) -> Result<(), DomainError> {
             Ok(())
         }
-        async fn get_by_db_idents(&self, _idents: &[&str]) -> Result<Vec<PropertyDefinition>, DomainError> {
+        async fn get_by_db_idents(
+            &self,
+            _idents: &[&str],
+        ) -> Result<Vec<PropertyDefinition>, DomainError> {
             Ok(Vec::new())
         }
-        async fn search(&self, _query: &str, _limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
+        async fn search(
+            &self,
+            _query: &str,
+            _limit: usize,
+        ) -> Result<Vec<PropertyDefinition>, DomainError> {
             Ok(Vec::new())
         }
-        async fn list_by_usage(&self, _limit: usize) -> Result<Vec<PropertyDefinition>, DomainError> {
+        async fn list_by_usage(
+            &self,
+            _limit: usize,
+        ) -> Result<Vec<PropertyDefinition>, DomainError> {
             Ok(Vec::new())
         }
-        async fn get_co_occurrences(&self, _limit: usize) -> Result<Vec<super::super::analytics::PropertyCoOccurrence>, DomainError> {
+        async fn get_co_occurrences(
+            &self,
+            _limit: usize,
+        ) -> Result<Vec<super::super::analytics::PropertyCoOccurrence>, DomainError> {
             Ok(vec![])
         }
-        async fn get_trends(&self, _period_days: u32, _limit: usize) -> Result<Vec<super::super::analytics::PropertyTrend>, DomainError> {
+        async fn get_trends(
+            &self,
+            _period_days: u32,
+            _limit: usize,
+        ) -> Result<Vec<super::super::analytics::PropertyTrend>, DomainError> {
             Ok(vec![])
         }
         async fn count_distinct_properties(&self) -> Result<u64, DomainError> {

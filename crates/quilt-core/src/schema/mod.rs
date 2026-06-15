@@ -13,4 +13,7 @@ pub mod classes;
 pub mod properties;
 
 pub use classes::Class;
-pub use properties::{Cardinality, ClosedValue, PropertyDefinition, PropertyType, ViewContext};
+pub use properties::{
+    Cardinality, ClosedValue, DerivedSource, MergePolicy, PropertyDefinition, PropertyMutability,
+    PropertyType, PropertyVisibility, ViewContext,
+};

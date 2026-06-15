@@ -24,13 +24,11 @@ use serde::{Deserialize, Serialize};
 /// - Tables
 /// - Dates
 /// - Tags
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct BlockContent {
     /// The sequence of segments that make up this content
     pub segments: Vec<BlockSegment>,
 }
-
 
 impl BlockContent {
     /// Create a new BlockContent with a single text segment.
@@ -196,7 +194,14 @@ impl BlockContent {
             }
         }
 
-        (BlockContent { segments: left_segments }, BlockContent { segments: right_segments })
+        (
+            BlockContent {
+                segments: left_segments,
+            },
+            BlockContent {
+                segments: right_segments,
+            },
+        )
     }
 }
 

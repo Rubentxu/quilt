@@ -31,9 +31,9 @@ pub mod types;
 // (`quilt_core::strategy_scoring::RelevanceScorer`) when they just
 // want the default.
 pub use strategy_scoring::{
-    block_with, RelevanceScorer, ScoredStrategySelector, NEUTRAL_SIGNAL,
-    RECENCY_HALF_LIFE_HOURS, WEIGHT_PROPERTY_COMPLETENESS, WEIGHT_RECENCY,
-    WEIGHT_SEMANTIC_SIMILARITY, WEIGHT_TYPE_MATCH,
+    NEUTRAL_SIGNAL, RECENCY_HALF_LIFE_HOURS, RelevanceScorer, ScoredStrategySelector,
+    WEIGHT_PROPERTY_COMPLETENESS, WEIGHT_RECENCY, WEIGHT_SEMANTIC_SIMILARITY, WEIGHT_TYPE_MATCH,
+    block_with,
 };
 
 #[cfg(target_arch = "wasm32")]

@@ -342,18 +342,24 @@ where
 
             QueryAst::Overdue => {
                 let sql = "b.deadline < strftime('%s','now') * 1000 AND b.marker NOT IN (?, ?)";
-                Ok((sql.to_string(), vec![
-                    SqlParam::String("done".to_string()),
-                    SqlParam::String("cancelled".to_string()),
-                ]))
+                Ok((
+                    sql.to_string(),
+                    vec![
+                        SqlParam::String("done".to_string()),
+                        SqlParam::String("cancelled".to_string()),
+                    ],
+                ))
             }
 
             QueryAst::InProgress => {
                 let sql = "b.marker IN (?, ?)";
-                Ok((sql.to_string(), vec![
-                    SqlParam::String("now".to_string()),
-                    SqlParam::String("doing".to_string()),
-                ]))
+                Ok((
+                    sql.to_string(),
+                    vec![
+                        SqlParam::String("now".to_string()),
+                        SqlParam::String("doing".to_string()),
+                    ],
+                ))
             }
         }
     }
@@ -399,11 +405,21 @@ where
             DatePredicate::Relative(offset) => {
                 let base_date = match offset {
                     crate::time_helpers::TimeOffset::Days(n) => today - chrono::Duration::days(*n),
-                    crate::time_helpers::TimeOffset::Weeks(n) => today - chrono::Duration::weeks(*n),
-                    crate::time_helpers::TimeOffset::Months(n) => today - chrono::Duration::days(n * 30),
-                    crate::time_helpers::TimeOffset::Years(n) => today - chrono::Duration::days(n * 365),
-                    crate::time_helpers::TimeOffset::Hours(n) => today - chrono::Duration::hours(*n),
-                    crate::time_helpers::TimeOffset::Minutes(n) => today - chrono::Duration::minutes(*n),
+                    crate::time_helpers::TimeOffset::Weeks(n) => {
+                        today - chrono::Duration::weeks(*n)
+                    }
+                    crate::time_helpers::TimeOffset::Months(n) => {
+                        today - chrono::Duration::days(n * 30)
+                    }
+                    crate::time_helpers::TimeOffset::Years(n) => {
+                        today - chrono::Duration::days(n * 365)
+                    }
+                    crate::time_helpers::TimeOffset::Hours(n) => {
+                        today - chrono::Duration::hours(*n)
+                    }
+                    crate::time_helpers::TimeOffset::Minutes(n) => {
+                        today - chrono::Duration::minutes(*n)
+                    }
                 };
                 let date_str = base_date.format("%Y-%m-%d").to_string();
                 let sql = format!(

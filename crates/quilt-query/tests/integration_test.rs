@@ -459,7 +459,10 @@ async fn test_e2e_scheduled_today() {
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
-    assert_eq!(result_count, 1, "Should find exactly 1 block scheduled for today");
+    assert_eq!(
+        result_count, 1,
+        "Should find exactly 1 block scheduled for today"
+    );
 }
 
 #[tokio::test]
@@ -505,7 +508,10 @@ async fn test_e2e_deadline_today() {
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
-    assert_eq!(result_count, 1, "Should find exactly 1 block with deadline today");
+    assert_eq!(
+        result_count, 1,
+        "Should find exactly 1 block with deadline today"
+    );
 }
 
 #[tokio::test]
@@ -561,7 +567,10 @@ async fn test_e2e_overdue() {
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
-    assert_eq!(result_count, 1, "Should find exactly 1 overdue block (not done)");
+    assert_eq!(
+        result_count, 1,
+        "Should find exactly 1 overdue block (not done)"
+    );
 }
 
 #[tokio::test]
@@ -640,7 +649,10 @@ async fn test_e2e_scheduled_tomorrow() {
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
-    assert_eq!(result_count, 1, "Should find exactly 1 block scheduled for tomorrow");
+    assert_eq!(
+        result_count, 1,
+        "Should find exactly 1 block scheduled for tomorrow"
+    );
 }
 
 #[tokio::test]
@@ -681,5 +693,8 @@ async fn test_e2e_predicates_compose_with_and() {
         .expect("query failed");
 
     let result_count = execute_query(&pool, &result.sql, &result.params).await;
-    assert_eq!(result_count, 1, "Should find exactly 1 block matching both predicates");
+    assert_eq!(
+        result_count, 1,
+        "Should find exactly 1 block matching both predicates"
+    );
 }

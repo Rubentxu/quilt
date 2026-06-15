@@ -6,8 +6,8 @@
 //! `LockedPropertyChanged` when the caller supplies the contract's
 //! per-key values.
 
-use super::issue_types::{DiagnosisReport, Issue, IssueKind};
 use super::TemplateDoctor;
+use super::issue_types::{DiagnosisReport, Issue, IssueKind};
 use quilt_domain::entities::{PropertyKey, TemplateContract};
 use std::collections::HashMap;
 
@@ -77,10 +77,7 @@ impl TemplateDoctor {
                 issues.push(Issue {
                     kind: IssueKind::ExtraProperty,
                     property: Some(key.clone()),
-                    detail: format!(
-                        "property '{}' is not declared in the contract",
-                        key
-                    ),
+                    detail: format!("property '{}' is not declared in the contract", key),
                     fixable: true,
                 });
             }

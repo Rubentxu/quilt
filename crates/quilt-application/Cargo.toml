@@ -8,6 +8,7 @@ license.workspace = true
 description = "Application layer - use cases, commands, and queries"
 
 [dependencies]
+quilt-core = { path = "../quilt-core" }
 quilt-domain = { path = "../quilt-domain" }
 quilt-query = { path = "../quilt-query" }
 quilt-search = { path = "../quilt-search" }
@@ -22,6 +23,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+url.workspace = true
 parking_lot.workspace = true
 
 [dev-dependencies]

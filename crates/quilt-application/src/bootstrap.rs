@@ -4,7 +4,8 @@
 //! all use cases through a single struct.
 
 use crate::use_cases::{
-    BlockUseCases, PageUseCases, ResourceUseCases, SearchUseCases, TemplateUseCases, TourStateUseCases,
+    BlockUseCases, PageUseCases, ResourceUseCases, SearchUseCases, TemplateUseCases,
+    TourStateUseCases,
 };
 use std::sync::Arc;
 

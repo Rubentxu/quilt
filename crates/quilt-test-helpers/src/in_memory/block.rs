@@ -290,11 +290,7 @@ impl BlockRepository for InMemoryBlockRepo {
         Ok(out)
     }
 
-    async fn list_by_property_key(
-        &self,
-        key: &str,
-        limit: u32,
-    ) -> Result<Vec<Block>, DomainError> {
+    async fn list_by_property_key(&self, key: &str, limit: u32) -> Result<Vec<Block>, DomainError> {
         // Scan every block; keep the ones that have the key in their
         // `properties` map (value is irrelevant). Mirrors the SQLite
         // `json_extract IS NOT NULL` check.
@@ -319,8 +315,7 @@ impl BlockRepository for InMemoryBlockRepo {
         // `created_by` property, sorted ASC, optionally filtered by
         // a `LIKE` prefix. NULLs and non-string values are skipped.
         let repo = self.repo.read();
-        let mut authors: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
+        let mut authors: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
         for block in repo.values() {
             if let Some(value) = block.properties.get("created_by") {
                 if let quilt_domain::value_objects::PropertyValue::String(s) = value {

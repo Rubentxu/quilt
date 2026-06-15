@@ -31,9 +31,7 @@ use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::AppState;
-use quilt_application::property::{
-    PropertyService, PropertyServiceTrait, PropertySuggestion,
-};
+use quilt_application::property::{PropertyService, PropertyServiceTrait, PropertySuggestion};
 use quilt_domain::properties::analytics::AnalyticsParams;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::repositories::{BlockRepository, PropertyRepository};
@@ -241,10 +239,7 @@ pub async fn list_properties(
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let count = definitions.len();
-    Ok(Json(PropertiesResponse {
-        definitions,
-        count,
-    }))
+    Ok(Json(PropertiesResponse { definitions, count }))
 }
 
 // ── PI-4: Property suggestions (discovery UX) ──
@@ -297,10 +292,7 @@ pub async fn suggest_properties(
         .map_err(|e| AppError::BadRequest(e.to_string()))?;
 
     let count = suggestions.len();
-    Ok(Json(SuggestResponse {
-        suggestions,
-        count,
-    }))
+    Ok(Json(SuggestResponse { suggestions, count }))
 }
 
 // ── PI-5: Property Analytics ──

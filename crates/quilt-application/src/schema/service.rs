@@ -173,13 +173,12 @@ impl SchemaServiceTrait for SchemaService {
                 break;
             }
 
-            let key_set: std::collections::HashSet<String> =
-                cluster.iter().cloned().collect();
+            let key_set: std::collections::HashSet<String> = cluster.iter().cloned().collect();
 
             // Skip if this cluster is a subset of an existing schema
-            let is_duplicate = existing_key_sets.iter().any(|existing| {
-                key_set.iter().all(|k| existing.contains(k))
-            });
+            let is_duplicate = existing_key_sets
+                .iter()
+                .any(|existing| key_set.iter().all(|k| existing.contains(k)));
             if is_duplicate {
                 continue;
             }

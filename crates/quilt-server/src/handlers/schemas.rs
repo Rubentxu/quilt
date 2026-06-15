@@ -1,17 +1,16 @@
 //! HTTP handlers for property schema endpoints (PI-7).
 
 use axum::{
-    Extension, Json,
+    Extension, Json, Router,
     extract::Query,
     routing::{get, post},
-    Router,
 };
-use std::sync::Arc;
 use quilt_application::schema::{SchemaService, SchemaServiceTrait};
 use quilt_domain::properties::schema::{AutoDetectParams, PropertySchema};
 use quilt_domain::repositories::{PropertyRepository, SchemaRepository};
 use quilt_domain::value_objects::Uuid;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 use crate::error::AppError;
 
@@ -45,10 +44,18 @@ pub struct AutoDetectQueryParams {
     pub min_properties: usize,
 }
 
-fn default_min_co() -> u64 { 3 }
-fn default_min_pmi() -> f64 { 0.5 }
-fn default_max() -> usize { 10 }
-fn default_min_props() -> usize { 2 }
+fn default_min_co() -> u64 {
+    3
+}
+fn default_min_pmi() -> f64 {
+    0.5
+}
+fn default_max() -> usize {
+    10
+}
+fn default_min_props() -> usize {
+    2
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -73,7 +80,10 @@ pub async fn list_schemas(
 ) -> Result<Json<SchemaListResponse>, AppError> {
     let service = SchemaService::new(schema_repo, property_repo);
 
-    let schemas = service.list_all().await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let schemas = service
+        .list_all()
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = schemas.len();
     Ok(Json(SchemaListResponse { schemas, count }))
 }
@@ -84,10 +94,15 @@ pub async fn get_schema(
     Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
     Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
+    let id = id_str
+        .parse::<Uuid>()
+        .map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
     let service = SchemaService::new(schema_repo, property_repo);
 
-    let schema = service.get_by_id(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let schema = service
+        .get_by_id(id)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     match schema {
         Some(s) => Ok(Json(serde_json::to_value(s).unwrap())),
         None => Err(AppError::BadRequest("Schema not found".to_string())),
@@ -102,7 +117,10 @@ pub async fn get_schema_by_name(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let service = SchemaService::new(schema_repo, property_repo);
 
-    let schema = service.get_by_name(&name).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let schema = service
+        .get_by_name(&name)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     match schema {
         Some(s) => Ok(Json(serde_json::to_value(s).unwrap())),
         None => Err(AppError::BadRequest("Schema not found".to_string())),
@@ -125,7 +143,10 @@ pub async fn create_schema(
         false,
     );
 
-    service.create(&schema).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    service
+        .create(&schema)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     Ok(Json(serde_json::to_value(&schema).unwrap()))
 }
 
@@ -135,10 +156,15 @@ pub async fn delete_schema(
     Extension(schema_repo): Extension<Arc<dyn SchemaRepository>>,
     Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let id = id_str.parse::<Uuid>().map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
+    let id = id_str
+        .parse::<Uuid>()
+        .map_err(|_| AppError::BadRequest("Invalid UUID".to_string()))?;
     let service = SchemaService::new(schema_repo, property_repo);
 
-    service.delete(id).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    service
+        .delete(id)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     Ok(Json(serde_json::json!({"deleted": true})))
 }
 
@@ -157,7 +183,10 @@ pub async fn auto_detect_schemas(
         min_properties: params.min_properties,
     };
 
-    let detected = service.auto_detect(&detect_params).await.map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let detected = service
+        .auto_detect(&detect_params)
+        .await
+        .map_err(|e| AppError::BadRequest(e.to_string()))?;
     let count = detected.len();
     Ok(Json(AutoDetectResponse { detected, count }))
 }
