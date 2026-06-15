@@ -30,6 +30,7 @@ import { api } from '@core/api-client'
 import { resolveNaturalDate, isDatePropertyKey } from '@shared/utils/naturalDate'
 import { getInlinePropertyKeys } from './propertyTemplate'
 import type { Block, BlockProperty } from '@shared/types/api'
+import { DatePicker } from '@shared/components/DatePicker'
 
 interface InlinePropertyBadgesProps {
   block: Block
@@ -144,6 +145,37 @@ export function InlinePropertyBadges({ block, onUpdate }: InlinePropertyBadgesPr
     }
   }
 
+  // Date-type properties (deadline, scheduled) use a DatePicker instead of a text input.
+  const isDateKey = (key: string): boolean =>
+    isDatePropertyKey(key)
+
+  function handleDatePickerSelect(key: string, isoDate: string) {
+    // Empty string → clear the field
+    if (!isoDate) {
+      api
+        .updateBlock(block.id, { [key]: null })
+        .then(updated => {
+          onUpdate(updated)
+        })
+        .catch(() => {
+          // On failure, the parent will re-sync on next fetch
+        })
+      closeEditor()
+      return
+    }
+    const isoTimestamp = `${isoDate}T00:00:00Z`
+    // Write structured field via updateBlock
+    api
+      .updateBlock(block.id, { [key]: isoTimestamp })
+      .then(updated => {
+        onUpdate(updated)
+      })
+      .catch(() => {
+        // On failure, the parent will re-sync on next fetch
+      })
+    closeEditor()
+  }
+
   return (
     <div
       data-testid="inline-property-badges"
@@ -152,7 +184,27 @@ export function InlinePropertyBadges({ block, onUpdate }: InlinePropertyBadgesPr
       {inlineKeys.map(key => {
         const isEditing = editingKey === key
         const value = readPropValue(block, key) ?? ''
+        const isDate = isDateKey(key)
+
         if (isEditing) {
+          // Date-type properties get a DatePicker; others get a text input.
+          if (isDate) {
+            return (
+              <div
+                key={key}
+                data-testid={`inline-datepicker-${key}`}
+                style={{ position: 'relative' }}
+              >
+                <DatePicker
+                  value={value ? value.split('T')[0] : null}
+                  onChange={iso => handleDatePickerSelect(key, iso)}
+                  onCancel={closeEditor}
+                  placeholder="today, tomorrow…"
+                  testId={`inline-datepicker-${key}`}
+                />
+              </div>
+            )
+          }
           return (
             <input
               key={key}

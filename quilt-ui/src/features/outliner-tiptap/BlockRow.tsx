@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, useRef, useCallback, useEffect, useMemo, type KeyboardEvent } from 'react'
+import { DatePicker } from '@shared/components/DatePicker'
 import { GripVertical, Plus, MoreHorizontal, ChevronDown, ChevronRight, Settings2, MessageCircle } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import toast from 'react-hot-toast'
@@ -249,6 +250,10 @@ export function BlockRow({
     query: string
     position: { top: number; left: number }
   } | null>(null)
+  /** The date picker field ('deadline' | 'scheduled') when open, null when closed. */
+  const [datePickerField, setDatePickerField] = useState<'deadline' | 'scheduled' | null>(null)
+  /** Ref to the trigger element for the date picker popover positioning. */
+  const datePickerTriggerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const rowRef = useRef<HTMLDivElement>(null)
@@ -525,6 +530,9 @@ export function BlockRow({
         // Read from the ref so the slash dispatcher doesn't need to
         // know where `handleInsertTemplate` is declared.
         templateInsert: templateInsertRef.current,
+        openDatePicker: (field) => {
+          setDatePickerField(field)
+        },
       }
 
       const handler = defaultRegistry.getHandler(item.id)
@@ -558,6 +566,50 @@ export function BlockRow({
       localContent,
       onAddComment,
     ],
+  )
+
+  /** Handles date selection from the DatePicker popover.
+   *  Writes both the inline property text and the structured API field.
+   *  Empty string isoDate means the user clicked "Clear". */
+  const handleDatePickerSelect = useCallback(
+    (isoDate: string) => {
+      const field = datePickerField
+      if (!field) return
+      // Clear: remove the inline property and null the API field
+      if (!isoDate) {
+        setLocalContent('')
+        if (contentRef.current) contentRef.current.textContent = ''
+        debouncedSave('')
+        api
+          .updateBlock(block.id, { [field]: null })
+          .then(updated => {
+            onUpdate(updated)
+          })
+          .catch(() => {
+            toast.error(`Failed to clear ${field}`)
+          })
+        setDatePickerField(null)
+        return
+      }
+      // Build the ISO-8601 full timestamp (start of day in UTC) for the API
+      const isoTimestamp = `${isoDate}T00:00:00Z`
+      // Write inline property: "deadline:: YYYY-MM-DD"
+      const propStr = `${field}:: ${isoDate}`
+      setLocalContent(propStr)
+      if (contentRef.current) contentRef.current.textContent = propStr
+      debouncedSave(propStr)
+      // Write structured API field
+      api
+        .updateBlock(block.id, { [field]: isoTimestamp })
+        .then(updated => {
+          onUpdate(updated)
+        })
+        .catch(() => {
+          toast.error(`Failed to set ${field}`)
+        })
+      setDatePickerField(null)
+    },
+    [datePickerField, block.id, debouncedSave, onUpdate, api, toast],
   )
 
   // ── Keyboard handling ─────────────────────────────────────────
@@ -1641,6 +1693,37 @@ export function BlockRow({
           onShowProperties: () => setShowProperties(true),
         }}
       />
+
+      {/* Date picker popover anchored to the block row.
+          Rendered at the row level (not inside InlinePropertyBadges) so
+          the slash command handler can also trigger it. */}
+      {datePickerField && (
+        <div
+          ref={datePickerTriggerRef}
+          style={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            zIndex: 9999,
+          }}
+        >
+          <DatePicker
+            // Read the current value from the block's scheduling fields.
+            // ISO string "2026-06-15T00:00:00Z" → just the date portion "2026-06-15".
+            value={
+              (datePickerField === 'deadline' ? block.deadline : block.scheduled)
+                ?.split('T')[0] ?? null
+            }
+            onChange={handleDatePickerSelect}
+            onCancel={() => setDatePickerField(null)}
+            placeholder={
+              datePickerField === 'deadline'
+                ? 'today, tomorrow…'
+                : 'today, tomorrow…'
+            }
+          />
+        </div>
+      )}
     </div>
   )
 }

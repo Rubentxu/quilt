@@ -104,6 +104,11 @@ export interface SlashContext {
    *  (prompt → pick template → create → navigate). The registry
    *  handler delegates here so the switch is gone. */
   templateInsert?: (originalContent: string) => Promise<void> | void
+  /** Opens the date picker popover anchored to the block.
+   *  Field is 'deadline' or 'scheduled'.
+   *  BlockRow provides this callback so the handler can signal
+   *  the popover to open without owning the React state directly. */
+  openDatePicker?: (field: 'deadline' | 'scheduled') => void
 }
 
 /** A slash action handler. Receives the active context and the
@@ -239,6 +244,27 @@ const makePropertyHandler: (value: string) => SlashHandler = (value) => (ctx) =>
   ctx.setContentAtEnd(propStr)
 }
 
+/**
+ * Date picker handler — signals BlockRow to open the DatePicker popover
+ * for the given date field ('deadline' or 'scheduled').
+ *
+ * The handler delegates to `ctx.openDatePicker` (provided by BlockRow)
+ * which sets React state that mounts the DatePicker popover. On select,
+ * BlockRow calls `ctx.setContentAtEnd` AND `ctx.api.updateBlock`.
+ *
+ * Falls back to the old text-insertion behaviour when `openDatePicker`
+ * is not wired (e.g. in legacy/test contexts without BlockRow).
+ */
+const makeDatePickerHandler: (field: 'deadline' | 'scheduled') => SlashHandler =
+  (field) => (ctx) => {
+    if (ctx.openDatePicker) {
+      ctx.openDatePicker(field)
+    } else {
+      // Legacy fallback — just insert the property text
+      ctx.setContentAtEnd(`${field}:: `)
+    }
+  }
+
 const makeRefHandler: (value: string) => SlashHandler = (value) => (ctx) => {
   if (value === 'page') {
     ctx.setContentAtEnd('[[')
@@ -359,11 +385,11 @@ export const defaultRegistry: SlashActionRegistry = (() => {
   )
   reg.register(
     { id: 'prop-deadline', label: 'Deadline', description: 'Set a deadline', icon: <CalendarX size={18} />, action: 'property:deadline', keywords: ['deadline', 'due', 'by'], category: 'Dates' },
-    makePropertyHandler('deadline'),
+    makeDatePickerHandler('deadline'),
   )
   reg.register(
     { id: 'prop-scheduled', label: 'Scheduled', description: 'Schedule for a date', icon: <CalendarClock size={18} />, action: 'property:scheduled', keywords: ['scheduled', 'plan', 'for'], category: 'Dates' },
-    makePropertyHandler('scheduled'),
+    makeDatePickerHandler('scheduled'),
   )
 
   // ── References ──

@@ -162,6 +162,16 @@ export interface Block {
   properties?: BlockProperty[];
   createdAt: string;
   updatedAt: string;
+  /** ISO-8601 string (YYYY-MM-DDTHH:MM:SSZ). Written by the /Scheduled slash command or InlinePropertyBadges. */
+  scheduled?: string | null;
+  /** ISO-8601 string (YYYY-MM-DDTHH:MM:SSZ). Written by the /Deadline slash command or InlinePropertyBadges. */
+  deadline?: string | null;
+  /** ISO-8601 string. Set automatically when marker becomes Done/Cancelled. */
+  logbook?: string | null;
+  /** ISO-8601 string. Set when marker becomes Doing/Now (P2). */
+  startTime?: string | null;
+  /** ISO-8601 string. Next occurrence for recurring tasks (P2). */
+  repeated?: string | null;
 }
 
 export interface CreateBlockRequest {
@@ -193,6 +203,10 @@ export interface UpdateBlockRequest {
   order?: number;
   level?: number;
   collapsed?: boolean;
+  /** ISO-8601 string (YYYY-MM-DDTHH:MM:SSZ) to set; null to clear; absent to leave unchanged. */
+  scheduled?: string | null;
+  /** ISO-8601 string (YYYY-MM-DDTHH:MM:SSZ) to set; null to clear; absent to leave unchanged. */
+  deadline?: string | null;
 }
 
 // ──── Settings ──────────────────────────────────────────────────

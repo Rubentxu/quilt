@@ -100,6 +100,7 @@ fn marker_to_str(m: &TaskMarker) -> &'static str {
         TaskMarker::Doing => "doing",
         TaskMarker::Done => "done",
         TaskMarker::Cancelled => "cancelled",
+        TaskMarker::Waiting => "waiting",
     }
 }
 

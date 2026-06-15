@@ -51,6 +51,23 @@ pub struct BlockDto {
     /// See [`PropertyValue::to_json`] / [`PropertyValue::from_json`].
     #[serde(default)]
     pub properties: HashMap<String, serde_json::Value>,
+    /// Scheduled date — ISO-8601 string (YYYY-MM-DDTHH:MM:SSZ) or null.
+    /// Written via the `/Scheduled` slash command or InlinePropertyBadges.
+    #[serde(default)]
+    pub scheduled: Option<String>,
+    /// Deadline date — ISO-8601 string (YYYY-MM-DDTHH:MM:SSZ) or null.
+    /// Written via the `/Deadline` slash command or InlinePropertyBadges.
+    #[serde(default)]
+    pub deadline: Option<String>,
+    /// Logbook timestamp — ISO-8601 string. Set when marker becomes Done/Cancelled.
+    #[serde(default)]
+    pub logbook: Option<String>,
+    /// Start time — ISO-8601 string. Set when marker becomes Doing/Now (P2).
+    #[serde(default)]
+    pub start_time: Option<String>,
+    /// Repeated task next occurrence — ISO-8601 string (P2).
+    #[serde(default)]
+    pub repeated: Option<String>,
 }
 
 impl From<(Block, Option<String>)> for BlockDto {
@@ -79,6 +96,11 @@ impl From<(Block, Option<String>)> for BlockDto {
             created_at: block.created_at.to_rfc3339(),
             updated_at: block.updated_at.to_rfc3339(),
             properties,
+            scheduled: block.scheduled.map(|dt| dt.to_rfc3339()),
+            deadline: block.deadline.map(|dt| dt.to_rfc3339()),
+            logbook: block.logbook.map(|dt| dt.to_rfc3339()),
+            start_time: block.start_time.map(|dt| dt.to_rfc3339()),
+            repeated: block.repeated.map(|dt| dt.to_rfc3339()),
         }
     }
 }
@@ -157,6 +179,15 @@ pub struct UpdateBlockRequest {
     pub order: Option<f64>,
     pub level: Option<i32>,
     pub collapsed: Option<bool>,
+    /// Scheduled date. Double-Option semantics:
+    /// - `None` → don't touch (no-op, preserves existing value)
+    /// - `Some(None)` → clear (set to null)
+    /// - `Some(Some(iso))` → set (ISO-8601 string, e.g. "2026-06-15T00:00:00Z")
+    #[serde(default)]
+    pub scheduled: Option<Option<String>>,
+    /// Deadline date. Same double-Option semantics as `scheduled`.
+    #[serde(default)]
+    pub deadline: Option<Option<String>>,
 }
 
 /// Link blocks request
@@ -570,6 +601,45 @@ pub async fn update_block(
         None => None,
     };
 
+    // Parse scheduling fields from ISO-8601 strings.
+    // Double-Option: Some(None) = clear, Some(Some(dt)) = set, None = don't touch.
+    let scheduled_update: Option<Option<chrono::DateTime<chrono::Utc>>> =
+        match payload.scheduled {
+            Some(maybe_iso) => Some(
+                maybe_iso
+                    .map(|iso| {
+                        chrono::DateTime::parse_from_rfc3339(&iso)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .map_err(|_| {
+                                AppError::BadRequest(format!(
+                                    "Invalid scheduled date: '{}'. Expected ISO-8601 format.",
+                                    iso
+                                ))
+                            })
+                    })
+                    .transpose()?,
+            ),
+            None => None,
+        };
+    let deadline_update: Option<Option<chrono::DateTime<chrono::Utc>>> =
+        match payload.deadline {
+            Some(maybe_iso) => Some(
+                maybe_iso
+                    .map(|iso| {
+                        chrono::DateTime::parse_from_rfc3339(&iso)
+                            .map(|dt| dt.with_timezone(&chrono::Utc))
+                            .map_err(|_| {
+                                AppError::BadRequest(format!(
+                                    "Invalid deadline date: '{}'. Expected ISO-8601 format.",
+                                    iso
+                                ))
+                            })
+                    })
+                    .transpose()?,
+            ),
+            None => None,
+        };
+
     let update = BlockUpdate {
         content: payload.content,
         parent_id,
@@ -579,6 +649,8 @@ pub async fn update_block(
         block_type: block_type_update,
         marker: marker_update,
         priority: priority_update,
+        scheduled: scheduled_update,
+        deadline: deadline_update,
         ..Default::default()
     };
 
