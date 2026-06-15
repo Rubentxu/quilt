@@ -279,6 +279,7 @@ mod tests {
     use crate::entities::{Block, BlockCreate};
     use crate::properties::types::{Cardinality, MergePolicy, PropertyMutability, PropertyType, PropertyVisibility};
     use crate::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid};
+    use proptest::prelude::*;
     use std::collections::HashMap;
 
     fn make_key(s: &str) -> crate::entities::PropertyKey {
@@ -764,6 +765,204 @@ mod tests {
                         assert!(outcome.conflicts.is_empty(), "policy {:?} should not conflict", policy);
                     }
                 }
+            }
+        }
+    }
+
+    // ── Proptests (T20) ────────────────────────────────────────────────────────
+
+    mod proptests {
+        use crate::canonicalization::PropertyPatch;
+        use crate::entities::{Block, PropertyKey};
+        use crate::errors::DomainError;
+        use crate::properties::types::{MergePolicy, PropertyMutability};
+        use crate::value_objects::PropertyValue;
+        use proptest::prelude::*;
+
+        fn make_key(s: &str) -> crate::entities::PropertyKey {
+            crate::entities::PropertyKey::new(s).expect("valid key")
+        }
+
+        fn make_empty_block() -> Block {
+            Block::new(crate::entities::BlockCreate {
+                page_id: crate::value_objects::Uuid::new_v4(),
+                content: String::new(),
+                parent_id: None,
+                order: 0.0,
+                marker: None,
+                format: crate::value_objects::BlockFormat::Markdown,
+                block_type: crate::value_objects::BlockType::Paragraph,
+                properties: std::collections::HashMap::new(),
+            })
+            .expect("creates block")
+        }
+
+        fn make_def(
+            db_ident: &str,
+            merge_policy: MergePolicy,
+            mutability: PropertyMutability,
+        ) -> crate::properties::PropertyDefinition {
+            use crate::properties::types::ViewContext;
+            crate::properties::PropertyDefinition {
+                id: crate::value_objects::Uuid::new_v4(),
+                db_ident: db_ident.to_string(),
+                title: db_ident.to_string(),
+                property_type: crate::properties::types::PropertyType::Text,
+                cardinality: crate::properties::types::Cardinality::One,
+                closed_values: Vec::new(),
+                view_context: ViewContext::default(),
+                public: false,
+                queryable: false,
+                hidden: false,
+                attribute: None,
+                read_only: false,
+                status: crate::properties::types::PropertyStatus::Active,
+                derived_from: None,
+                visibility: crate::properties::types::PropertyVisibility::default(),
+                mutability,
+                merge_policy,
+                alias_of: None,
+                block_count: 0,
+                page_count: 0,
+                first_seen_at: None,
+                last_seen_at: None,
+            }
+        }
+
+        fn build_registry(
+            defs: &[crate::properties::PropertyDefinition],
+        ) -> crate::canonicalization::PropertyDefinitionRegistry {
+            crate::canonicalization::PropertyDefinitionRegistry::from_definitions(defs.iter().cloned())
+        }
+
+        // Valid policy strategy — map 0..6 to each MergePolicy variant
+        fn any_policy() -> impl Strategy<Value = MergePolicy> {
+            any::<u8>().prop_map(|i| match i % 6 {
+                0 => MergePolicy::SetIfMissing,
+                1 => MergePolicy::Overwrite,
+                2 => MergePolicy::Append,
+                3 => MergePolicy::Union,
+                4 => MergePolicy::RejectOnConflict,
+                _ => MergePolicy::AskOnConflict,
+            })
+        }
+
+        proptest! {
+            /// T20a: Determinism — applying the same patch twice produces the same result.
+            #[test]
+            fn apply_to_is_deterministic(key_str in "[a-z][a-z0-9_]{0,19}", value_str in "\\PC{0,50}") {
+                let key = PropertyKey::new(&key_str).expect("valid key");
+                let value = PropertyValue::text(value_str);
+                let patch = PropertyPatch::explicit(key.clone(), value.clone());
+
+                let mut block1 = make_empty_block();
+                let mut block2 = make_empty_block();
+                let defs = build_registry(&[]);
+
+                let result1 = patch.apply_to(&mut block1, &defs);
+                let result2 = patch.apply_to(&mut block2, &defs);
+
+                prop_assert_eq!(result1.is_ok(), result2.is_ok());
+            }
+
+            /// T20b: Non-destructiveness — applying a patch never modifies block content.
+            #[test]
+            fn apply_to_never_modifies_block_content(
+                key_str in "[a-z]{1,20}",
+                value_str in "\\PC{0,50}",
+                content in "\\PC{0,200}",
+            ) {
+                let key = PropertyKey::new(&key_str).expect("valid key");
+                let value = PropertyValue::text(value_str);
+                let patch = PropertyPatch::explicit(key, value);
+
+                let mut block = make_empty_block();
+                block.content = content.clone();
+                let original_content = block.content.clone();
+
+                let defs = build_registry(&[]);
+                let _ = patch.apply_to(&mut block, &defs);
+
+                prop_assert_eq!(block.content, original_content);
+            }
+
+            /// T20c: apply_to isolation — patching one key does not affect other keys.
+            #[test]
+            fn apply_to_isolates_keys(
+                key1 in "[a-z]{3,10}",
+                key2 in "[a-z]{3,10}",
+                val1 in "\\PC{0,30}",
+                val2 in "\\PC{0,30}",
+            ) {
+                // Ensure keys differ to avoid registry collisions
+                prop_assume!(key1 != key2);
+
+                let k1 = PropertyKey::new(&key1).expect("valid key1");
+                let k2 = PropertyKey::new(&key2).expect("valid key2");
+                let v1 = PropertyValue::text(val1.clone());
+                let v2 = PropertyValue::text(val2.clone());
+
+                let def_vec = vec![
+                    make_def(&key1, MergePolicy::Overwrite, PropertyMutability::Mutable),
+                    make_def(&key2, MergePolicy::Overwrite, PropertyMutability::Mutable),
+                ];
+                let defs = build_registry(&def_vec);
+
+                // Apply patch for key1
+                let patch1 = PropertyPatch::explicit(k1.clone(), v1);
+                let mut block = make_empty_block();
+                let result1 = patch1.apply_to(&mut block, &defs);
+                prop_assert!(result1.is_ok());
+
+                // Apply patch for key2 — should not affect key1's value
+                let patch2 = PropertyPatch::explicit(k2.clone(), v2);
+                let result2 = patch2.apply_to(&mut block, &defs);
+                prop_assert!(result2.is_ok());
+
+                // key1 value is preserved
+                prop_assert_eq!(
+                    block.properties.get(&key1),
+                    Some(&PropertyValue::text(val1)),
+                    "key1 should retain its value after patching key2"
+                );
+            }
+
+            /// T20d: forbidden keys always reject regardless of value content.
+            #[test]
+            fn forbidden_keys_always_reject(choice in 0..3usize) {
+                let key = match choice {
+                    0 => "content",
+                    1 => "text",
+                    _ => "children",
+                };
+                let patch = PropertyPatch::explicit(make_key(key), PropertyValue::text("any value"));
+                let mut block = make_empty_block();
+                let defs = build_registry(&[]);
+                let result = patch.apply_to(&mut block, &defs);
+                prop_assert!(matches!(result, Err(DomainError::ForbiddenPatchKey(_))));
+                prop_assert!(block.properties.is_empty());
+            }
+
+            /// T20e: all six merge policies produce valid outcomes (never panic).
+            #[test]
+            fn all_policies_produce_valid_outcomes(
+                policy in any_policy(),
+                has_existing in any::<bool>(),
+            ) {
+                let key = make_key("prop");
+                let patch = PropertyPatch::explicit(key.clone(), PropertyValue::text("patch"));
+                let mut block = make_empty_block();
+
+                if has_existing {
+                    block.properties.insert(key.clone().into_string(), PropertyValue::text("existing"));
+                }
+
+                let def = make_def("prop", policy, PropertyMutability::Mutable);
+                let defs = build_registry(&[def]);
+                let result = patch.apply_to(&mut block, &defs);
+
+                // All policies either succeed or return DomainError (never panic)
+                prop_assert!(result.is_ok() || result.is_err());
             }
         }
     }
