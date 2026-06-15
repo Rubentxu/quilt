@@ -206,31 +206,45 @@ fn round_trip_image_embed_applies_embed_patches() {
 }
 
 #[test]
-fn round_trip_todo_marker_applies_marker_patch() {
+fn round_trip_todo_marker_applies_status_and_type_patches() {
     let c = new_canonicalizer();
     let input = "TODO: Fix the login bug";
     let result = c.canonicalize_block(input);
 
-    let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-    assert!(marker_patch.is_some(), "expected marker patch: {:?}", result.derived);
-    assert_eq!(extract_str(&marker_patch.unwrap().value), Some("todo"));
+    // New behavior: emits status:: todo + type:: task + projection:: auto (no marker::)
+    let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+    assert!(status_patch.is_some(), "expected status patch: {:?}", result.derived);
+    assert_eq!(extract_str(&status_patch.unwrap().value), Some("todo"));
 
+    let type_patch = result.derived.iter().find(|p| p.key.as_str() == "type");
+    assert!(type_patch.is_some(), "expected type patch: {:?}", result.derived);
+    assert_eq!(extract_str(&type_patch.unwrap().value), Some("task"));
+
+    // Apply with a registry that defines status + type + projection
     let mut block = make_empty_block();
-    let defs = make_registry(&[("marker", MergePolicy::SetIfMissing)]);
+    let defs = make_registry(&[
+        ("status", MergePolicy::SetIfMissing),
+        ("type", MergePolicy::SetIfMissing),
+        ("projection", MergePolicy::SetIfMissing),
+    ]);
     for patch in &result.derived {
         let _ = patch.apply_to(&mut block, &defs);
     }
-    assert_eq!(extract_str(block.properties.get("marker").unwrap()), Some("todo"));
+    assert_eq!(extract_str(block.properties.get("status").unwrap()), Some("todo"));
+    assert_eq!(extract_str(block.properties.get("type").unwrap()), Some("task"));
+    assert_eq!(extract_str(block.properties.get("projection").unwrap()), Some("auto"));
 }
 
 #[test]
-fn round_trip_brackets_done_applies_done_marker() {
+fn round_trip_brackets_done_applies_status_done() {
     let c = new_canonicalizer();
     let input = "[x] Task completed";
     let result = c.canonicalize_block(input);
 
-    let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-    assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("done")));
+    // New behavior: emits status:: done (no marker::)
+    let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+    assert!(status_patch.is_some(), "expected status patch: {:?}", result.derived);
+    assert_eq!(extract_str(&status_patch.unwrap().value), Some("done"));
 }
 
 #[test]
@@ -301,23 +315,27 @@ fn round_trip_unknown_keys_are_skipped() {
 }
 
 #[test]
-fn round_trip_overwrite_policy_replaces_values() {
+fn round_trip_overwrite_policy_replaces_status_values() {
     let c = new_canonicalizer();
     let input = "TODO: old task";
     let result = c.canonicalize_block(input);
 
     let mut block = make_empty_block();
-    // Pre-populate with existing marker
-    block.properties.insert("marker".into(), PropertyValue::text("done"));
+    // Pre-populate with existing status
+    block.properties.insert("status".into(), PropertyValue::text("done"));
 
     // Use Overwrite policy so it replaces
-    let defs = make_registry(&[("marker", MergePolicy::Overwrite)]);
+    let defs = make_registry(&[
+        ("status", MergePolicy::Overwrite),
+        ("type", MergePolicy::Overwrite),
+        ("projection", MergePolicy::Overwrite),
+    ]);
     for patch in &result.derived {
         let _ = patch.apply_to(&mut block, &defs);
     }
 
     // Should be overwritten to "todo"
-    assert_eq!(extract_str(block.properties.get("marker").unwrap()), Some("todo"));
+    assert_eq!(extract_str(block.properties.get("status").unwrap()), Some("todo"));
 }
 
 #[test]

@@ -142,9 +142,19 @@ fn collect_derived_patches(parsed: &ParsedContent, raw_text: &str) -> Vec<Proper
             Segment::Text { content, .. } => {
                 // Check for task marker patterns at the start of text content
                 if let Some(marker) = detect_marker(content) {
+                    // Emit the full triple: type:: task, status:: <marker>, projection:: auto
+                    // This replaces the old single-marker patch per the canonicalizer fix
                     patches.push(PropertyPatch::derived(
-                        PropertyKey::new("marker").expect("valid key"),
+                        PropertyKey::new("type").expect("valid key"),
+                        PropertyValue::text("task"),
+                    ));
+                    patches.push(PropertyPatch::derived(
+                        PropertyKey::new("status").expect("valid key"),
                         PropertyValue::text(marker),
+                    ));
+                    patches.push(PropertyPatch::derived(
+                        PropertyKey::new("projection").expect("valid key"),
+                        PropertyValue::text("auto"),
                     ));
                 }
             }
@@ -500,87 +510,116 @@ mod tests {
         );
     }
 
-    // T19: task marker row mapping
+    // T19: task marker row mapping — emits triple: type:: task, status:: <marker>, projection:: auto
     #[test]
     fn canonicalize_todo_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("TODO: Fix the bug");
-        let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
-        assert!(keys.contains(&"marker"), "expected marker: {:?}", keys);
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches: {:?}", result.derived);
+        let type_patch = result.derived.iter().find(|p| p.key.as_str() == "type");
+        assert_eq!(type_patch.map(|p| extract_str(&p.value)), Some(Some("task")));
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
+        let proj_patch = result.derived.iter().find(|p| p.key.as_str() == "projection");
+        assert_eq!(proj_patch.map(|p| extract_str(&p.value)), Some(Some("auto")));
+        // Regression guard: no marker:: patch
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_brackets_todo() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("[ ] Implement feature");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_done_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("DONE: Task completed");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("done")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("done")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_brackets_done() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("[x] Task finished");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("done")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("done")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_now_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("NOW: Working on this");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("now")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("now")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_later_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("LATER: Plan for future");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("later")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("later")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_doing_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("DOING: In progress");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("doing")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("doing")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_waiting_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("WAITING: Blocked");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("waiting")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("waiting")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_cancelled_marker() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("CANCELLED: No longer needed");
+        assert_eq!(result.derived.len(), 3, "expected 3 derived patches");
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("cancelled")));
         let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert_eq!(marker_patch.map(|p| extract_str(&p.value)), Some(Some("cancelled")));
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     #[test]
     fn canonicalize_no_marker_returns_empty_derived() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("Just plain text without markers");
-        let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
-        assert!(marker_patch.is_none());
+        assert!(result.derived.is_empty(), "expected no derived patches, got: {:?}", result.derived);
     }
 
     // T19 + T18: task marker followed by page ref
@@ -588,9 +627,20 @@ mod tests {
     fn canonicalize_todo_then_page_ref() {
         let c = new_canonicalizer();
         let result = c.canonicalize_block("TODO: See [[My Task]] for details");
-        let keys: Vec<_> = result.derived.iter().map(|p| p.key.as_str()).collect();
-        assert!(keys.contains(&"marker"), "expected marker: {:?}", keys);
-        assert!(keys.contains(&"page-ref"), "expected page-ref: {:?}", keys);
+        // 3 marker patches + 1 page-ref patch = 4
+        assert_eq!(result.derived.len(), 4, "expected 4 derived patches: {:?}", result.derived);
+        // Marker triple present
+        let type_patch = result.derived.iter().find(|p| p.key.as_str() == "type");
+        assert_eq!(type_patch.map(|p| extract_str(&p.value)), Some(Some("task")));
+        let status_patch = result.derived.iter().find(|p| p.key.as_str() == "status");
+        assert_eq!(status_patch.map(|p| extract_str(&p.value)), Some(Some("todo")));
+        let proj_patch = result.derived.iter().find(|p| p.key.as_str() == "projection");
+        assert_eq!(proj_patch.map(|p| extract_str(&p.value)), Some(Some("auto")));
+        // Page ref present
+        assert!(result.derived.iter().any(|p| p.key.as_str() == "page-ref"));
+        // No marker patch (regression guard)
+        let marker_patch = result.derived.iter().find(|p| p.key.as_str() == "marker");
+        assert!(marker_patch.is_none(), "should not have marker:: patch");
     }
 
     // All provenance is Derived
