@@ -77,6 +77,49 @@ vi.mock('@core/wasm-bridge/WasmProvider', () => ({
   ensureWasmLoaded: vi.fn().mockResolvedValue(undefined),
 }))
 
+// ──── useProjection mock ────────────────────────────────────────────────
+// ADR-0025: ProjectionRenderer requires useProjection to return a
+// resolved projection. Without this mock, read-mode blocks show a
+// skeleton instead of text, breaking tests that assert on text content.
+
+const { mockUseProjection } = vi.hoisted(() => {
+  const fn = vi.fn()
+  return { mockUseProjection: fn }
+})
+
+function makeProjection(text: string) {
+  return {
+    projection: {
+      text,
+      links: [],
+      children: [],
+      decorations: [],
+      conflicts: [],
+      properties: {},
+    },
+    loading: false,
+    error: null,
+  }
+}
+
+vi.mock('@features/projection/hooks', () => ({
+  useProjection: (...args: any[]) => mockUseProjection(...args),
+}))
+
+// Map from blockId → content, populated in beforeEach / individual tests
+const blockContentMap = new Map<string, string>()
+
+function setProjectionMocks(blocks: Block[]) {
+  blockContentMap.clear()
+  for (const b of blocks) {
+    blockContentMap.set(b.id, b.content)
+  }
+  mockUseProjection.mockImplementation((opts: { blockId: string }) => {
+    const text = blockContentMap.get(opts.blockId) ?? 'PLACEHOLDER'
+    return makeProjection(text)
+  })
+}
+
 // ──── Harness ──────────────────────────────────────────────────────────
 //
 // Renders a BlockRow with a real UndoManager and the cut/undo wiring
@@ -189,10 +232,38 @@ function CutUndoHarness({ initialBlocks, createdBlock, pageName = 'demo' }: Harn
 
 // ──── Helpers ──────────────────────────────────────────────────────────
 
+// Legacy path (VITE_PROJECTION_RENDERER=off):
+//   - read mode has class `block-content-read` on the clickable div
+// ProjectionRenderer path (VITE_PROJECTION_RENDERER=on):
+//   - read mode has no `.block-content-read`; the wrapper div around
+//     ProjectionRenderer is clickable via `onStartEdit`
 function clickToEdit() {
-  const read = document.querySelector('.block-content-read') as HTMLElement | null
-  expect(read).not.toBeNull()
-  fireEvent.click(read!)
+  // Try legacy path first
+  let read = document.querySelector('.block-content-read') as HTMLElement | null
+  if (read) {
+    fireEvent.click(read)
+    return
+  }
+  // ProjectionRenderer path: click the clickable wrapper around the
+  // projection renderer (the outer div with onStartEdit).
+  // The projection renderer root has data-testid="projection-renderer".
+  const projectionRead = document.querySelector(
+    '[data-testid="projection-renderer"]',
+  ) as HTMLElement | null
+  if (projectionRead) {
+    // The wrapper div that owns onStartEdit is the parentElement
+    const wrapper = projectionRead.parentElement
+    expect(wrapper).not.toBeNull()
+    fireEvent.click(wrapper!)
+    return
+  }
+  // Fallback: try to find any element with role=textbox (edit mode) and skip click
+  // This handles cases where the test is already in edit mode
+  const textbox = document.querySelector('[role="textbox"]') as HTMLElement | null
+  if (textbox) return
+  throw new Error(
+    'clickToEdit: could not find .block-content-read or [data-testid="projection-renderer"]',
+  )
 }
 
 function getEditor(): HTMLElement {
@@ -217,6 +288,7 @@ describe('CutBlock + UndoManager', () => {
   it('Cmd+X on a block calls onCutBlock with a snapshot and removes the block', async () => {
     const block = makeBlock({ id: 'b-cut-me', content: 'to be cut' })
     mockDeleteBlock.mockResolvedValueOnce({ deleted: true })
+    setProjectionMocks([block])
 
     render(<CutUndoHarness initialBlocks={[block]} createdBlock={block} />)
 
@@ -246,6 +318,7 @@ describe('CutBlock + UndoManager', () => {
     const recreated = makeBlock({ id: 'b-restore', content: 'come back soon' })
     mockDeleteBlock.mockResolvedValueOnce({ deleted: true })
     mockCreateBlock.mockResolvedValueOnce(recreated)
+    setProjectionMocks([original])
 
     render(<CutUndoHarness initialBlocks={[original]} createdBlock={recreated} />)
 
