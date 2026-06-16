@@ -868,6 +868,81 @@ mod tests {
         }
     }
 
+    // ── ADR-0025: T5 — from_legacy_fields 12-combo derivation ─────────────────
+
+    #[test]
+    fn from_legacy_fields_12_combo_derivation() {
+        // 3 ViewContext × 2 hidden × 2 read_only = 12 combos
+        // Derivation rules:
+        //   visibility: hidden=true → Hidden; else Block→Inline, Page→Panel, Never→System
+        //   mutability: read_only=true → Immutable; read_only=false → Mutable
+        //   derived_from: always None
+        //   merge_policy: always SetIfMissing
+        //   closed_values: always Vec::new()
+        let combos: Vec<(ViewContext, bool, bool)> = vec![
+            // (view_context, hidden, read_only)
+            (ViewContext::Block, false, false),
+            (ViewContext::Block, false, true),
+            (ViewContext::Block, true, false),
+            (ViewContext::Block, true, true),
+            (ViewContext::Page, false, false),
+            (ViewContext::Page, false, true),
+            (ViewContext::Page, true, false),
+            (ViewContext::Page, true, true),
+            (ViewContext::Never, false, false),
+            (ViewContext::Never, false, true),
+            (ViewContext::Never, true, false),
+            (ViewContext::Never, true, true),
+        ];
+
+        for (vc, hidden, read_only) in combos {
+            // Compute expected values BEFORE moving `vc` into from_legacy_fields
+            let expected_visibility = if hidden {
+                PropertyVisibility::Hidden
+            } else {
+                PropertyVisibility::from_view_context(&vc)
+            };
+            let expected_mutability = PropertyMutability::from_read_only(read_only);
+
+            let def = PropertyDefinition::from_legacy_fields(
+                Uuid::new_v4(),
+                "x",
+                "X",
+                PropertyType::Text,
+                vc.clone(), // ViewContext is not Copy, so clone needed
+                false,      // public (unused in new model)
+                false,      // queryable (unused in new model)
+                hidden,
+                read_only,
+            );
+            assert_eq!(
+                def.visibility, expected_visibility,
+                "view_context={:?}, hidden={}, read_only={} → visibility {:?} (expected {:?})",
+                vc, hidden, read_only, def.visibility, expected_visibility
+            );
+
+            assert_eq!(
+                def.mutability, expected_mutability,
+                "view_context={:?}, hidden={}, read_only={} → mutability {:?} (expected {:?})",
+                vc, hidden, read_only, def.mutability, expected_mutability
+            );
+
+            // Invariants
+            assert!(
+                def.derived_from.is_none(),
+                "derived_from must always be None"
+            );
+            assert_eq!(
+                def.merge_policy, MergePolicy::SetIfMissing,
+                "merge_policy must always be SetIfMissing"
+            );
+            assert!(
+                def.closed_values.is_empty(),
+                "closed_values must always be empty"
+            );
+        }
+    }
+
     // ── ADR-0025: T4 — mutability builder ──
 
     #[test]

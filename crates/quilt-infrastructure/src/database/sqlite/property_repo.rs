@@ -10,7 +10,7 @@ use crate::database::sqlite::connection::DbPool;
 use crate::errors::map_sqlx_error;
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
-use quilt_domain::properties::types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext};
+use quilt_domain::properties::types::{Cardinality, ClosedValue, PropertyStatus, PropertyType, PropertyVisibility, ViewContext};
 use quilt_domain::repositories::PropertyRepository;
 use quilt_domain::value_objects::Uuid;
 
@@ -220,12 +220,12 @@ impl PropertyRepository for SqlitePropertyRepository {
         .bind(&def.title)
         .bind(def.property_type.as_str())
         .bind(def.cardinality.as_str())
-        .bind(def.view_context.as_str())
-        .bind(def.public as i64)
-        .bind(def.queryable as i64)
-        .bind(def.hidden as i64)
+        .bind(PropertyDefinition::visibility_to_sql_column(def.visibility))
+        .bind((def.visibility == PropertyVisibility::Inline || def.visibility == PropertyVisibility::Panel) as i64)
+        .bind(def.is_queryable() as i64)
+        .bind((def.visibility == PropertyVisibility::Hidden) as i64)
         .bind(def.attribute.as_deref())
-        .bind(def.read_only as i64)
+        .bind(def.mutability.to_read_only() as i64)
         .bind(def.status.as_str())
         .bind(def.alias_of.as_deref())
         .bind(def.block_count as i64)
@@ -273,12 +273,12 @@ impl PropertyRepository for SqlitePropertyRepository {
         .bind(&def.title)
         .bind(def.property_type.as_str())
         .bind(def.cardinality.as_str())
-        .bind(def.view_context.as_str())
-        .bind(def.public as i64)
-        .bind(def.queryable as i64)
-        .bind(def.hidden as i64)
+        .bind(PropertyDefinition::visibility_to_sql_column(def.visibility))
+        .bind((def.visibility == PropertyVisibility::Inline || def.visibility == PropertyVisibility::Panel) as i64)
+        .bind(def.is_queryable() as i64)
+        .bind((def.visibility == PropertyVisibility::Hidden) as i64)
         .bind(def.attribute.as_deref())
-        .bind(def.read_only as i64)
+        .bind(def.mutability.to_read_only() as i64)
         .bind(def.status.as_str())
         .bind(def.alias_of.as_deref())
         .bind(def.block_count as i64)
@@ -641,5 +641,86 @@ impl PropertyRepository for SqlitePropertyRepository {
 
         let count: i64 = row.get("cnt");
         Ok(count as u64)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quilt_domain::properties::types::{PropertyMutability, PropertyVisibility};
+
+    // ── T3: bind expression mapping tests ─────────────────────────────────────
+
+    #[test]
+    fn insert_binds_visibility_to_view_context_column() {
+        // Each PropertyVisibility variant maps to the correct SQL column string
+        for (visibility, expected_sql) in [
+            (PropertyVisibility::Inline, "inline"),
+            (PropertyVisibility::Panel, "panel"),
+            (PropertyVisibility::System, "never"),
+            (PropertyVisibility::Hidden, "hidden"),
+        ] {
+            let sql_str = PropertyDefinition::visibility_to_sql_column(visibility);
+            assert_eq!(
+                sql_str, expected_sql,
+                "visibility {:?} must map to SQL '{}'",
+                visibility, expected_sql
+            );
+        }
+    }
+
+    #[test]
+    fn insert_binds_visibility_to_public_column() {
+        // Inline and Panel → 1 (public); System and Hidden → 0
+        for (visibility, expected) in [
+            (PropertyVisibility::Inline, true),
+            (PropertyVisibility::Panel, true),
+            (PropertyVisibility::System, false),
+            (PropertyVisibility::Hidden, false),
+        ] {
+            let public = visibility == PropertyVisibility::Inline
+                || visibility == PropertyVisibility::Panel;
+            assert_eq!(
+                public, expected,
+                "visibility {:?} must map to public={}",
+                visibility, expected
+            );
+        }
+    }
+
+    #[test]
+    fn insert_binds_is_queryable_to_queryable_column() {
+        // System → NOT queryable (0); others → queryable (1)
+        let def_inline =
+            PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+                .with_visibility(PropertyVisibility::Inline);
+        let def_panel =
+            PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+                .with_visibility(PropertyVisibility::Panel);
+        let def_system =
+            PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+                .with_visibility(PropertyVisibility::System);
+        let def_hidden =
+            PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+                .with_visibility(PropertyVisibility::Hidden);
+
+        assert!(def_inline.is_queryable());
+        assert!(def_panel.is_queryable());
+        assert!(!def_system.is_queryable());
+        assert!(def_hidden.is_queryable()); // Hidden IS queryable per ADR-0025
+    }
+
+    #[test]
+    fn insert_binds_mutability_to_read_only_column() {
+        // Immutable → read_only=true (1); Mutable → read_only=false (0)
+        let def_mutable =
+            PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+                .with_mutability(PropertyMutability::Mutable);
+        let def_immutable =
+            PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
+                .with_mutability(PropertyMutability::Immutable);
+
+        assert!(!def_mutable.mutability.to_read_only());
+        assert!(def_immutable.mutability.to_read_only());
     }
 }

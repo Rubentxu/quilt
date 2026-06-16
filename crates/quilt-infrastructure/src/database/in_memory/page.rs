@@ -67,11 +67,11 @@ impl InMemoryPageRepository {
     async fn is_read_only_key(&self, key: &str) -> bool {
         if let Some(repo) = &self.property_repo {
             if let Ok(Some(def)) = repo.get_by_db_ident(key).await {
-                return def.read_only;
+                return def.mutability.to_read_only();
             }
             // Check builtin fallback.
             if let Some(def) = quilt_domain::properties::builtin::get_builtin_property(key) {
-                return def.read_only;
+                return def.mutability.to_read_only();
             }
             // Unknown key — not read-only (allow).
             return false;
