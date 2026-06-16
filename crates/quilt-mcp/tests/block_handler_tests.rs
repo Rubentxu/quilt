@@ -68,12 +68,34 @@ impl MockBlockUseCases {
             collapsed: false,
             created_at: now,
             updated_at: now,
+            ..Default::default()
         }
     }
 }
 
 #[async_trait]
 impl BlockUseCases for MockBlockUseCases {
+    async fn create_block(
+        &self,
+        _page_name: &str,
+        content: &str,
+        _parent_id: Option<Uuid>,
+        _preceding_block_id: Option<Uuid>,
+        _marker: Option<TaskMarker>,
+        _block_type: BlockType,
+        _created_by: Option<&str>,
+        _raw_properties: HashMap<String, serde_json::Value>,
+    ) -> Result<Block, ApplicationError> {
+        if let Some(err) = self.inject_error.lock().unwrap().take() {
+            return Err(ApplicationError::Domain(
+                quilt_domain::errors::DomainError::Storage(err),
+            ));
+        }
+        let block = Self::make_block(Uuid::new_v4(), content);
+        self.created_blocks.lock().unwrap().push(block.clone());
+        Ok(block)
+    }
+
     async fn create_with_page(
         &self,
         _page_name: &str,

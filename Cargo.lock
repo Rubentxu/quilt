@@ -1857,6 +1857,7 @@ name = "quilt-bin"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "clap",
  "quilt-application",
  "quilt-infrastructure",
@@ -1864,6 +1865,8 @@ dependencies = [
  "quilt-search",
  "sqlx",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1938,6 +1941,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "url",
  "uuid",
 ]
 

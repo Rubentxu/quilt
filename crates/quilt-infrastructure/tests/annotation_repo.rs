@@ -14,7 +14,7 @@ use quilt_domain::repositories::{
 };
 use quilt_domain::value_objects::Uuid;
 use quilt_infrastructure::database::sqlite::connection;
-use quilt_infrastructure::database::sqlite::repositories::SqliteAnnotationRepository;
+use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 
 /// Connect to an in-memory SQLite, run migrations, return the pool.
 async fn setup_test_db() -> SqlitePool {

@@ -70,12 +70,12 @@ mod tests {
     use crate::morning_briefing::types::DecayAlert;
     use chrono::Duration;
 
-    fn fake_alert(severity: &str) -> DecayAlert {
+    fn fake_alert(severity: &str, days_since_update: i64) -> DecayAlert {
         DecayAlert {
             block_id: "b-1".to_string(),
             content_preview: "preview".to_string(),
             page_name: "page-1".to_string(),
-            days_since_update: 30,
+            days_since_update,
             severity: severity.to_string(),
             reason: format!("test reason ({})", severity),
         }
@@ -84,10 +84,10 @@ mod tests {
     #[test]
     fn severity_counts_from_alerts_groups_correctly() {
         let alerts = vec![
-            fake_alert("high"),
-            fake_alert("high"),
-            fake_alert("medium"),
-            fake_alert("low"),
+            fake_alert("high", 30),
+            fake_alert("high", 31),
+            fake_alert("medium", 20),
+            fake_alert("low", 5),
         ];
         let counts = SeverityCounts::from_alerts(&alerts);
         assert_eq!(counts.high, 2);
@@ -124,8 +124,8 @@ mod tests {
     #[test]
     fn alert_severity_age_relation() {
         // Sanity check the buckets: medium is 14..30 days, high is >= 30
-        let medium = fake_alert("medium");
-        let high = fake_alert("high");
+        let medium = fake_alert("medium", 15);
+        let high = fake_alert("high", 30);
         assert!(medium.days_since_update < 30);
         assert!(high.days_since_update >= 30);
         // Avoid unused warning when running in isolation

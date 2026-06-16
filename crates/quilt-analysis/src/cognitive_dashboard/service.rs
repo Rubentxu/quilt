@@ -7,7 +7,9 @@ use crate::cognitive_dashboard::types::{CognitiveGraphDto, GraphCluster, GraphEd
 use crate::structural_mirror::{build_structure_map, LightweightGraph};
 use chrono::Utc;
 use quilt_domain::entities::Block;
+use quilt_domain::properties::entry::DefaultPropertyEntry;
 use quilt_domain::repositories::{BlockRepository, PageRepository};
+use quilt_domain::value_objects::PropertyValue;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::instrument;
@@ -239,6 +241,7 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            ..Default::default()
         }
     }
 
@@ -276,7 +279,7 @@ mod tests {
             Ok(vec![])
         }
         async fn get_with_refs(&self, _id: Uuid) -> Result<(Block, Vec<Uuid>), DomainError> {
-            Err(DomainError::NotImplemented("mock".to_string()))
+            Err(DomainError::NotImplemented("mock"))
         }
         async fn insert(&self, _block: &Block) -> Result<(), DomainError> {
             Ok(())
@@ -363,14 +366,17 @@ mod tests {
         async fn get_recent(&self, _limit: usize) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
             Ok(vec![])
         }
-        async fn count_all(&self) -> Result<usize, DomainError> {
+        async fn count(&self) -> Result<usize, DomainError> {
             Ok(0)
         }
-        async fn get_or_create_journal(&self, _: quilt_domain::value_objects::JournalDay) -> Result<quilt_domain::entities::Page, DomainError> {
-            Err(DomainError::NotImplemented("mock".to_string()))
+        async fn search(&self, _: &str, _: usize) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
+            Ok(vec![])
         }
-        async fn get_or_create_page(&self, _: &str) -> Result<quilt_domain::entities::Page, DomainError> {
-            Err(DomainError::NotImplemented("mock".to_string()))
+        async fn search_by_name_or_title(&self, _: &str, _: usize) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
+            Ok(vec![])
+        }
+        async fn update_properties(&self, _page_id: Uuid, _props: std::collections::HashMap<String, DefaultPropertyEntry<PropertyValue>>) -> Result<quilt_domain::entities::Page, DomainError> {
+            Err(DomainError::NotImplemented("mock"))
         }
     }
 
@@ -383,6 +389,7 @@ mod tests {
             journal_day: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            ..Default::default()
         }
     }
 

@@ -17,5 +17,6 @@
 
 // Stubbed out for now - full implementation pending
 pub mod database;
+pub mod errors;
 pub mod logging;
 pub mod serialization;

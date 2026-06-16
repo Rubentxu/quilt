@@ -5,6 +5,7 @@
 use anyhow::Result;
 use clap::Parser;
 use quilt_application::bootstrap::AppServices;
+use quilt_application::services::ref_service::RefService;
 use quilt_application::use_cases::*;
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::*;
@@ -23,11 +24,15 @@ async fn main() -> Result<()> {
     let block_repo = Arc::new(SqliteBlockRepository::new(pool.clone()));
     let page_repo = Arc::new(SqlitePageRepository::new(pool.clone()));
     let tag_repo = Arc::new(SqliteTagRepository::new(pool.clone()));
+    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let ref_service = Arc::new(RefService::new(ref_repo));
+    let tour_state_repo = Arc::new(SqliteTourStateRepository::new(pool.clone()));
 
     let services = AppServices::new(
         Arc::new(BlockUseCasesImpl::new(
             block_repo.clone(),
             page_repo.clone(),
+            ref_service,
         )),
         Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone())),
         Arc::new(
@@ -35,7 +40,9 @@ async fn main() -> Result<()> {
                 .with_search_service(Arc::new(SearchService::new(Arc::new(pool.clone()))))
                 .with_block_repo(block_repo.clone()),
         ),
-        Arc::new(ResourceUseCasesImpl::new(block_repo, page_repo, tag_repo)),
+        Arc::new(ResourceUseCasesImpl::new(block_repo.clone(), page_repo.clone(), tag_repo)),
+        Arc::new(TemplateUseCasesImpl::new(page_repo, block_repo)),
+        Arc::new(TourStateUseCasesImpl::new(tour_state_repo)),
     );
 
     // Presentation receives pre-wired services

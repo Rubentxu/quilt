@@ -413,6 +413,7 @@ mod tests {
             collapsed: false,
             created_at,
             updated_at: created_at,
+            ..Default::default()
         }
     }
 

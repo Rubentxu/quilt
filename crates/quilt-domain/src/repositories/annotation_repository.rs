@@ -5,6 +5,34 @@ use crate::errors::DomainError;
 use crate::value_objects::Uuid;
 use async_trait::async_trait;
 
+/// Filter criteria for annotation queries
+#[derive(Debug, Clone, Default)]
+pub struct AnnotationFilters {
+    pub block_id: Option<Uuid>,
+    pub author_name: Option<String>,
+    pub status: Option<String>,
+    pub scope: Option<crate::entities::AnnotationScope>,
+}
+
+impl AnnotationFilters {
+    pub fn with_block_id(mut self, block_id: Uuid) -> Self {
+        self.block_id = Some(block_id);
+        self
+    }
+    pub fn with_author_name(mut self, author_name: impl Into<String>) -> Self {
+        self.author_name = Some(author_name.into());
+        self
+    }
+    pub fn with_status(mut self, status: impl Into<String>) -> Self {
+        self.status = Some(status.into());
+        self
+    }
+    pub fn with_scope(mut self, scope: crate::entities::AnnotationScope) -> Self {
+        self.scope = Some(scope);
+        self
+    }
+}
+
 #[async_trait]
 pub trait AnnotationRepository: Send + Sync {
     async fn insert(&self, annotation: &Annotation) -> Result<(), DomainError>;
@@ -16,6 +44,7 @@ pub trait AnnotationRepository: Send + Sync {
     async fn get_by_status(&self, status: &str) -> Result<Vec<Annotation>, DomainError>;
     async fn get_root_annotations(&self) -> Result<Vec<Annotation>, DomainError>;
     async fn get_thread_replies(&self, parent_id: Uuid) -> Result<Vec<Annotation>, DomainError>;
+    async fn get_by_filters(&self, filters: &AnnotationFilters) -> Result<Vec<Annotation>, DomainError>;
 }
 
 #[async_trait]

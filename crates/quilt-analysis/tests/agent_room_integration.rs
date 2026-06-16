@@ -447,12 +447,12 @@ async fn list_filter_by_context_page_null_context() {
     .await
     .unwrap();
 
-    // Filter by None context_page — should only match the second agent
+    // Filter by empty context_page — should only match the second agent
     let listed = lc.list(AgentListFilter {
         status: None,
         agent_type: None,
         limit: None,
-        context_page: None,
+        context_page: Some("".to_string()),
     });
     assert_eq!(listed.total, 1);
     assert_eq!(listed.agents[0].context_page, None);

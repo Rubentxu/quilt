@@ -98,12 +98,12 @@ pub struct AgentListResponse {
 #[serde(rename_all = "camelCase")]
 pub struct SpawnAgentRequest {
     pub agent_type: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_page: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
     /// Accepted for forward compatibility; ignored in V1.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_mode: Option<String>,
 }
 

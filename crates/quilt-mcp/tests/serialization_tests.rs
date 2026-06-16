@@ -48,6 +48,7 @@ fn make_block(
         collapsed,
         created_at: now,
         updated_at: now,
+        ..Default::default()
     }
 }
 

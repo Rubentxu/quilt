@@ -11,7 +11,7 @@ mod settings_repository;
 mod tag_repository;
 mod tour_state_repository;
 
-pub use annotation_repository::{AnnotationRepository, AnnotationRepositoryExt};
+pub use annotation_repository::{AnnotationFilters, AnnotationRepository, AnnotationRepositoryExt};
 pub use block_repository::{BlockRepository, BlockRepositoryExt};
 pub use page_repository::{PageRepository, PageRepositoryExt};
 pub use property_repository::{PropertyRepository, PropertyRepositoryExt};

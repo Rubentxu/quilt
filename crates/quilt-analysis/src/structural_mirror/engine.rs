@@ -72,6 +72,7 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            ..Default::default()
         }
     }
 

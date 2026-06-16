@@ -276,6 +276,7 @@ mod tests {
             collapsed: false,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
+            ..Default::default()
         }
     }
 
@@ -466,6 +467,7 @@ mod tests {
             collapsed: false,
             created_at: seven_days_later,
             updated_at: seven_days_later,
+            ..Default::default()
         };
         let prox = temporal_proximity(&a, &b, 7.0);
         assert!((prox - 0.5).abs() < 0.05);

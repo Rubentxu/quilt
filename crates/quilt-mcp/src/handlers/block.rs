@@ -435,6 +435,20 @@ mod tests {
 
     #[async_trait]
     impl quilt_application::use_cases::BlockUseCases for NoopBlockUseCases {
+        async fn create_block(
+            &self,
+            _page_name: &str,
+            _content: &str,
+            _parent_id: Option<quilt_application::Uuid>,
+            _preceding_block_id: Option<quilt_application::Uuid>,
+            _marker: Option<quilt_application::TaskMarker>,
+            _block_type: quilt_domain::value_objects::BlockType,
+            _created_by: Option<&str>,
+            _raw_properties: std::collections::HashMap<String, serde_json::Value>,
+        ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
+            Err(quilt_application::ApplicationError::Validation("noop".into()))
+        }
+
         async fn create_with_page(
             &self,
             _page_name: &str,

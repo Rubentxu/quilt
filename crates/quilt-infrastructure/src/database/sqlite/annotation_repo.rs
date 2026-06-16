@@ -30,7 +30,7 @@ use sqlx::{QueryBuilder, Row, Sqlite};
 use tracing::instrument;
 
 use crate::database::sqlite::connection::DbPool;
-use crate::errors::{map_sqlx_error, map_storage_error};
+use crate::errors::map_sqlx_error;
 use quilt_domain::entities::{Annotation, AnnotationScope, AnnotationStatus, AuthorType};
 use quilt_domain::errors::DomainError;
 use quilt_domain::repositories::{AnnotationFilters, AnnotationRepository};
@@ -81,12 +81,12 @@ impl AnnotationRow {
         // the entity directly, having already validated the row's
         // column values (via `try_from_str` and `bytes_to_uuid`).
         let scope = AnnotationScope::try_from_str(&self.scope)
-            .ok_or_else(|| map_storage_error(format!("Unknown annotation scope: {}", self.scope)))?;
+            .ok_or_else(|| DomainError::InvalidData(format!("Unknown annotation scope: {}", self.scope)))?;
         let author_type = AuthorType::try_from_str(&self.author_type).ok_or_else(|| {
-            map_storage_error(format!("Unknown author_type: {}", self.author_type))
+            DomainError::InvalidData(format!("Unknown author_type: {}", self.author_type))
         })?;
         let status = AnnotationStatus::try_from_str(&self.status)
-            .ok_or_else(|| map_storage_error(format!("Unknown annotation status: {}", self.status)))?;
+            .ok_or_else(|| DomainError::InvalidData(format!("Unknown annotation status: {}", self.status)))?;
         let id = bytes_to_uuid(&self.id)?;
         let block_id = bytes_to_uuid(&self.block_id)?;
         let parent = match self.parent_annotation_id.as_deref() {
@@ -120,7 +120,7 @@ impl AnnotationRow {
 fn bytes_to_uuid(blob: &[u8]) -> Result<Uuid, DomainError> {
     let bytes: [u8; 16] = blob
         .try_into()
-        .map_err(|_| map_storage_error(format!("Invalid UUID blob length: {}", blob.len())))?;
+        .map_err(|_| DomainError::InvalidData(format!("Invalid UUID blob length: {}", blob.len())))?;
     Ok(Uuid::from_bytes(bytes))
 }
 
@@ -333,8 +333,8 @@ impl AnnotationRepository for SqliteAnnotationRepository {
         if let Some(ref status) = filters.status {
             qb.push(" AND status = ").push_bind(status.clone());
         }
-        if let Some(scope) = filters.scope {
-            qb.push(" AND scope = ").push_bind(scope_to_str(&scope).to_string());
+        if let Some(ref scope) = filters.scope {
+            qb.push(" AND scope = ").push_bind(scope_to_str(scope).to_string());
         }
         if let Some(ref author_name) = filters.author_name {
             qb.push(" AND author_name = ").push_bind(author_name.clone());

@@ -25,13 +25,15 @@ use quilt_application::templates::contract::{
     ApplyTemplateWithContractUseCase, ApplyTemplateWithContractUseCaseImpl,
 };
 use quilt_application::templates::reapply::{ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl};
+use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
     ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
 };
+use quilt_domain::repositories::RefRepository;
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqliteTagRepository,
+    SqliteBlockRepository, SqlitePageRepository, SqliteRefRepository, SqliteTagRepository,
 };
 use quilt_mcp::McpServer;
 use quilt_mcp::handlers::block::BlockToolHandler;
@@ -56,10 +58,13 @@ async fn setup_server() -> (McpServer, SqlitePool) {
     let block_repo = Arc::new(SqliteBlockRepository::new(pool.clone()));
     let page_repo = Arc::new(SqlitePageRepository::new(pool.clone()));
     let tag_repo = Arc::new(SqliteTagRepository::new(pool.clone()));
+    let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
+    let ref_service: Arc<dyn RefServiceTrait> = Arc::new(RefService::new(ref_repo));
 
     let block_use_cases: Arc<dyn BlockUseCases> = Arc::new(BlockUseCasesImpl::new(
         block_repo.clone(),
         page_repo.clone(),
+        ref_service,
     ));
     let page_use_cases: Arc<dyn PageUseCases> =
         Arc::new(PageUseCasesImpl::new(page_repo.clone(), block_repo.clone()));

@@ -75,6 +75,32 @@ impl AnnotationStatus {
     }
 }
 
+/// Annotation scope - what the annotation is attached to
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotationScope {
+    /// Annotation attached to the entire block
+    Block,
+    /// Annotation attached to a specific range within the block content
+    Inline,
+}
+
+impl AnnotationScope {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            AnnotationScope::Block => "block",
+            AnnotationScope::Inline => "inline",
+        }
+    }
+
+    pub fn try_from_str(s: &str) -> Option<Self> {
+        match s {
+            "block" => Some(AnnotationScope::Block),
+            "inline" => Some(AnnotationScope::Inline),
+            _ => None,
+        }
+    }
+}
+
 /// Annotation represents a comment or mark on a block, directed at an agent
 /// for review, correction, or enrichment. Like Google Docs comments.
 ///
@@ -98,6 +124,9 @@ pub struct Annotation {
     pub content: String,
     pub status: AnnotationStatus,
     pub parent_annotation_id: Option<Uuid>,
+    pub scope: AnnotationScope,
+    pub highlight_start: Option<u32>,
+    pub highlight_end: Option<u32>,
     pub created_at: DateTime<Utc>,
     pub resolved_at: Option<DateTime<Utc>>,
     pub resolved_by: Option<String>,
@@ -111,6 +140,9 @@ pub struct AnnotationCreate {
     pub author_name: String,
     pub content: String,
     pub parent_annotation_id: Option<Uuid>,
+    pub scope: AnnotationScope,
+    pub highlight_start: Option<u32>,
+    pub highlight_end: Option<u32>,
 }
 
 impl Annotation {
@@ -129,6 +161,9 @@ impl Annotation {
             content: create.content,
             status: AnnotationStatus::Pending,
             parent_annotation_id: create.parent_annotation_id,
+            scope: create.scope,
+            highlight_start: create.highlight_start,
+            highlight_end: create.highlight_end,
             created_at: Utc::now(),
             resolved_at: None,
             resolved_by: None,
@@ -178,6 +213,9 @@ mod tests {
             author_name: "test_user".to_string(),
             content: content.to_string(),
             parent_annotation_id: None,
+            scope: AnnotationScope::Block,
+            highlight_start: None,
+            highlight_end: None,
         })
     }
 
@@ -233,6 +271,9 @@ mod tests {
             author_name: "ruben".to_string(),
             content: "Test".to_string(),
             parent_annotation_id: None,
+            scope: AnnotationScope::Block,
+            highlight_start: None,
+            highlight_end: None,
         })
         .unwrap();
 
