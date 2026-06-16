@@ -384,3 +384,43 @@ export interface Evidence {
 export interface MetaEnvelope {
   evidence?: Evidence;
 }
+
+// ──── Morning Briefing ────────────────────────────────────────────────
+
+/** An item in today's agenda — a block from today's journal page. */
+export interface AgendaItem {
+  blockId: string;
+  contentPreview: string;
+  pageName: string;
+  hasChildren: boolean;
+  updatedAt: string;
+}
+
+/** A block that has decayed — not updated in a while and may need attention. */
+export interface DecayAlert {
+  blockId: string;
+  contentPreview: string;
+  pageName: string;
+  daysSinceUpdate: number;
+  severity: 'low' | 'medium' | 'high';
+  reason: string;
+}
+
+/** A serendipitous connection discovered between two blocks. */
+export interface SerendipityHighlight {
+  blockAId: string;
+  blockBId: string;
+  blockAPreview: string;
+  blockBPreview: string;
+  explanation: string;
+  confidence: number;
+}
+
+/** The complete morning briefing response. */
+export interface MorningBriefingDto {
+  agendaItems: AgendaItem[];
+  decayAlerts: DecayAlert[];
+  serendipityHighlights: SerendipityHighlight[];
+  generatedAt: string;
+  daysSinceLastJournal: number;
+}

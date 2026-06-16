@@ -42,6 +42,7 @@ quilt-mcp = { path = "../quilt-mcp" }
 quilt-search = { path = "../quilt-search" }
 quilt-platform = { path = "../quilt-platform" }
 quilt-query = { path = "../quilt-query" }
+quilt-analysis = { path = "../quilt-analysis" }
 
 # UUID
 uuid.workspace = true

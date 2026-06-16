@@ -16,6 +16,7 @@ import type {
   TemplateSchema,
   TourStateResponse,
   DismissTourRequest,
+  MorningBriefingDto,
 } from '@shared/types/api';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
@@ -783,6 +784,21 @@ export const api = {
       'GET',
       '/presets',
     ),
+
+  // ─── Morning Briefing ───────────────────────────────────────────────────────
+  //
+  // `GET /api/v1/cognitive/morning-briefing` — returns a daily snapshot of the
+  // knowledge graph including today's agenda, decay alerts, and serendipity
+  // highlights.
+
+  /**
+   * Get the morning briefing — a daily snapshot of the knowledge graph.
+   *
+   * Aggregates agenda items from today's updates, decay alerts for stale blocks,
+   * and serendipity highlights from the connection engine.
+   */
+  getMorningBriefing: () =>
+    cachedFetch<MorningBriefingDto>('GET', '/cognitive/morning-briefing'),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────

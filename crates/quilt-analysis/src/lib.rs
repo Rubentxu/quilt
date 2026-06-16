@@ -17,6 +17,7 @@
 
 pub mod agent_store;
 pub mod connection_engine;
+pub mod morning_briefing;
 pub mod structural_mirror;
 pub mod structure_gardener;
 pub mod structure_mapper;
@@ -50,6 +51,7 @@ pub enum AnalysisError {
 
 pub use agent_store::AgentStore;
 pub use connection_engine::ConnectionEngine;
+pub use morning_briefing::{AgendaItem, DecayAlert, MorningBriefing, MorningBriefingDto, SerendipityHighlight};
 pub use structural_mirror::StructuralMirror;
 pub use structure_gardener::{
     Belief, BeliefSnapshot, Contradiction, DeepeningSuggestion, DefaultRegistry, DiagnosisReport,

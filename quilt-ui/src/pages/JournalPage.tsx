@@ -3,6 +3,7 @@ import { useParams } from '@tanstack/react-router'
 import { PageView } from '@features/outliner-tiptap/PageView'
 import { ErrorBoundary } from '@shared/components/ErrorBoundary'
 import { JournalAggregator } from '@features/journal/JournalAggregator'
+import { MorningBriefing } from '@features/cognitive/MorningBriefing'
 import { api, QuiltApiError } from '@core/api-client'
 import { useWasm } from '@core/wasm-bridge/WasmProvider'
 import { useTabs } from '@shared/contexts/TabsContext'
@@ -145,6 +146,9 @@ export function JournalPage() {
         </div>
       }
     >
+      <div style={{ padding: 'var(--space-3)' }}>
+        <MorningBriefing />
+      </div>
       <PageView
         pageName={page.name}
         isJournal

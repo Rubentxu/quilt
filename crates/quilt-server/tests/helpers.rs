@@ -3,12 +3,16 @@
 //! Provides common setup utilities for integration tests.
 
 use quilt_application::bootstrap::AppServices;
+use quilt_application::services::presets::StaticPresetRegistry;
+use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
     ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
     TourStateUseCases, TourStateUseCasesImpl,
 };
+use quilt_application::use_cases::projection_resolver::ProjectionResolver;
+use quilt_domain::canonicalization::PresetRegistry;
 use quilt_infrastructure::database::sqlite::connection::{DbPool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
@@ -131,6 +135,8 @@ pub async fn build_test_app_state_with_repos(
         search_index,
         ref_service,
         Arc::new(services),
+        Arc::new(ProjectionResolver::new(StaticProjectionRegistry::v1())),
+        Arc::new(StaticPresetRegistry::v1()) as Arc<dyn PresetRegistry>,
     );
 
     (

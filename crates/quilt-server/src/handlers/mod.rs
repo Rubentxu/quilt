@@ -3,6 +3,7 @@
 //! Each module handles a specific domain area of the API.
 
 pub mod blocks;
+pub mod cognitive;
 pub mod frontend;
 pub mod graph;
 pub mod health;

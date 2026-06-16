@@ -1,0 +1,1 @@
+impl Future<Output = ({type error}, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>, Arc<{type error}, {type error}>)>
