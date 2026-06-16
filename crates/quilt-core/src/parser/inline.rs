@@ -308,6 +308,28 @@ impl InlineParser {
                 while end < content.len() {
                     // Check if we're at a special pattern start
                     let remaining = &content[end..];
+                    // Special case for `::`: if it is immediately preceded
+                    // by an alphanumeric char (a word key), back up to the
+                    // start of that word. This leaves the word for the
+                    // property parser at word_start to match as the key of
+                    // a `key::value` pair, instead of having the text
+                    // fallback consume it as plain text and forcing the
+                    // property parser to produce a segment that overlaps
+                    // already-emitted text (which violated the
+                    // `segments_dont_overlap` proptest invariant).
+                    if remaining.starts_with("::")
+                        && end > start
+                        && bytes[end - 1].is_ascii_alphanumeric()
+                    {
+                        let mut word_start = end;
+                        while word_start > start
+                            && bytes[word_start - 1].is_ascii_alphanumeric()
+                        {
+                            word_start -= 1;
+                        }
+                        end = word_start;
+                        break;
+                    }
                     if remaining.starts_with("[[")
                         || remaining.starts_with("((")
                         || remaining.starts_with("***")
@@ -558,17 +580,6 @@ impl InlineParser {
             .last()
             .map(|(i, c)| i + c.len_utf8())
             .unwrap_or(0);
-
-        // Guard: the property key must start at or after the current
-        // parse position. If `word_start < pos`, the key begins in a
-        // region the main loop has already consumed (e.g. as plain text
-        // or another segment). Producing a segment whose range starts
-        // before `pos` would overlap previously-emitted segments and
-        // violate the proptest invariants `segments_dont_overlap` and
-        // `total_consumed_at_most_input`. Bail out instead.
-        if word_start < pos {
-            return None;
-        }
 
         // Check if there's a :: immediately after the word
         let after_word = &content[word_start..];
