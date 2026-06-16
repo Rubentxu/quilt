@@ -61,9 +61,7 @@ mod tests {
     use crate::properties::types::{Cardinality, PropertyType, PropertyVisibility};
     use std::sync::Arc;
 
-    #[allow(deprecated)]
     fn make_def(db_ident: &str) -> PropertyDefinition {
-        use crate::properties::types::ViewContext;
         PropertyDefinition {
             id: crate::value_objects::Uuid::new_v4(),
             db_ident: db_ident.to_string(),
@@ -71,12 +69,7 @@ mod tests {
             property_type: PropertyType::Text,
             cardinality: Cardinality::One,
             closed_values: Vec::new(),
-            view_context: ViewContext::default(),
-            public: false,
-            queryable: false,
-            hidden: false,
             attribute: None,
-            read_only: false,
             status: crate::properties::types::PropertyStatus::Active,
             derived_from: None,
             visibility: PropertyVisibility::default(),
