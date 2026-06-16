@@ -45,6 +45,8 @@ pub struct AgentListFilter {
     pub status: Option<AgentStatus>,
     pub agent_type: Option<String>,
     pub limit: Option<usize>,
+    /// Filter agents that were spawned with this context page name.
+    pub context_page: Option<String>,
 }
 
 /// Errors that the lifecycle can surface to the HTTP layer.
@@ -171,6 +173,14 @@ impl AgentLifecycle {
         }
         if let Some(t) = &filter.agent_type {
             all.retain(|r| &r.agent_type == t);
+        }
+        if let Some(cp) = &filter.context_page {
+            // Empty string means "filter for agents with no context page (null)"
+            if cp.is_empty() {
+                all.retain(|r| r.context_page.is_none());
+            } else {
+                all.retain(|r| r.context_page.as_deref() == Some(cp));
+            }
         }
         let total = all.len();
         let limit = filter.limit.unwrap_or(DEFAULT_AGENT_LIST_LIMIT);

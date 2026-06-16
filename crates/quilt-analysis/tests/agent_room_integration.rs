@@ -172,6 +172,7 @@ async fn list_filter_by_status() {
         status: Some(AgentStatus::Running),
         agent_type: None,
         limit: None,
+        context_page: None,
     });
     assert_eq!(listed.total, 1);
     assert_eq!(listed.agents[0].id, a.id);
@@ -347,4 +348,112 @@ async fn fifo_ordering_via_fake_executor() {
         lc.get(b_id).unwrap().status,
         AgentStatus::Completed.as_str()
     );
+}
+
+// ── context_page filter tests ──────────────────────────────────────
+
+#[tokio::test]
+async fn list_filter_by_context_page() {
+    let lc = lifecycle();
+
+    // Spawn two agents with different context pages
+    lc.spawn(
+        SpawnAgentRequest {
+            agent_type: "decay-annotator".to_string(),
+            context_page: Some("page/foo".to_string()),
+            model: None,
+            queue_mode: None,
+        },
+        &known(),
+    )
+    .await
+    .unwrap();
+
+    lc.spawn(
+        SpawnAgentRequest {
+            agent_type: "decay-annotator".to_string(),
+            context_page: Some("page/bar".to_string()),
+            model: None,
+            queue_mode: None,
+        },
+        &known(),
+    )
+    .await
+    .unwrap();
+
+    // Filter by page/foo
+    let listed = lc.list(AgentListFilter {
+        status: None,
+        agent_type: None,
+        limit: None,
+        context_page: Some("page/foo".to_string()),
+    });
+    assert_eq!(listed.total, 1);
+    assert_eq!(listed.agents[0].context_page.as_deref(), Some("page/foo"));
+}
+
+#[tokio::test]
+async fn list_filter_by_context_page_no_match() {
+    let lc = lifecycle();
+
+    lc.spawn(
+        SpawnAgentRequest {
+            agent_type: "decay-annotator".to_string(),
+            context_page: Some("page/exists".to_string()),
+            model: None,
+            queue_mode: None,
+        },
+        &known(),
+    )
+    .await
+    .unwrap();
+
+    let listed = lc.list(AgentListFilter {
+        status: None,
+        agent_type: None,
+        limit: None,
+        context_page: Some("page/nonexistent".to_string()),
+    });
+    assert_eq!(listed.total, 0);
+    assert!(listed.agents.is_empty());
+}
+
+#[tokio::test]
+async fn list_filter_by_context_page_null_context() {
+    let lc = lifecycle();
+
+    // One agent with context_page, one without
+    lc.spawn(
+        SpawnAgentRequest {
+            agent_type: "decay-annotator".to_string(),
+            context_page: Some("page/with".to_string()),
+            model: None,
+            queue_mode: None,
+        },
+        &known(),
+    )
+    .await
+    .unwrap();
+
+    lc.spawn(
+        SpawnAgentRequest {
+            agent_type: "decay-annotator".to_string(),
+            context_page: None,
+            model: None,
+            queue_mode: None,
+        },
+        &known(),
+    )
+    .await
+    .unwrap();
+
+    // Filter by None context_page — should only match the second agent
+    let listed = lc.list(AgentListFilter {
+        status: None,
+        agent_type: None,
+        limit: None,
+        context_page: None,
+    });
+    assert_eq!(listed.total, 1);
+    assert_eq!(listed.agents[0].context_page, None);
 }
