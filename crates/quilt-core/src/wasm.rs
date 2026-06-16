@@ -497,6 +497,37 @@ pub fn fts_snippet(content: String, query: String, max_length: usize) -> String 
     crate::search::fts::generate_snippet(&content, &query, max_length)
 }
 
+// ── Projection WASM exports ────────────────────────────────────────
+//
+// The `WasmProjectionResolver` (in `crates/quilt-core/src/projection/`)
+// is a pure-function port of the server's `ProjectionResolver` (slice
+// #4). It accepts a `BlockDto` JSON, runs the V1 contract resolution
+// algorithm, and returns a `WasmProjectionView` JSON with the same
+// shape as the server's `ProjectionView` (plus three WASM-specific
+// metadata fields: `wasm_source`, `wasm_contract_id`,
+// `wasm_had_conflict`).
+//
+// The TypeScript bridge (`quilt-ui/src/core/wasm-bridge/wasm-loader.ts`)
+// wraps this export with `wasmProjectionResolve(block)` and handles
+// the `BlockProperty[]` → `BlockDto` JSON conversion.
+
+/// Resolve the projection view for a single block via the V1 registry.
+///
+/// `block_json` is a JSON-serialized `BlockDto`. Returns a
+/// JSON-serialized `WasmProjectionView` on success. On parse
+/// error, returns `Err(JsValue)` with a clear message. The
+/// resolver catches all internal errors and returns a default view
+/// (the caller never has to handle a "no view" case).
+#[wasm_bindgen]
+pub fn projection_resolve(block_json: String) -> Result<JsValue, JsValue> {
+    let block: BlockDto = serde_json::from_str(&block_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid BlockDto JSON: {e}")))?;
+    let view = crate::projection::WasmProjectionResolver::v1().resolve(&block);
+    let json = serde_json::to_string(&view)
+        .map_err(|e| JsValue::from_str(&format!("Serialize error: {e}")))?;
+    Ok(JsValue::from_str(&json))
+}
+
 // ── Schema Validation WASM exports ──────────────────────────────────
 
 use crate::schema::classes::{self as schema_classes, Class};
