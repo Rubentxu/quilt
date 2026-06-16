@@ -13,6 +13,9 @@
   - ADR-0028: WASM client-side projection
   - ADR-0029: Pre-existing test fixes (7 tests)
   - OpenSpec cleanup: 8 done items archived to `archive/done-2026-06-16/`; INDEX.md created
+  - Roadmap-gaps P0 docs: 3 issues (schema unification, sync strategy, task markers)
+  - Phase 9 CG-1 Morning Briefing end-to-end: backend endpoint + UI component + 11 tests
+  - Fixed 2 MorningBriefing test bugs (getAllByText + getByRole)
   - OpenSpec cleanup: 6 done items archived, 16 active grouped by category → INDEX.md
 
 **Leyenda**: ✅ completado | 🚧 en progreso | 🔲 pendiente | `commit` = commit SHA
@@ -315,17 +318,17 @@ Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 
 **Archivados (2026-06-16)**: `domain-properties-v1`, `slash-command-functional-behavior`, `dsl-aggregates`, `dsl-analyze`, `evidence-contract-v1`, `frontend-templates-v1` → `openspec/changes/archive/done-2026-06-16/`
 
-### Phase 9: UI Cognitive (propuesta — próximo)
+### Phase 9: UI Cognitive
 
-| ID | Qué | Backend | Falta |
-|----|-----|---------|-------|
-| CG-1 | Morning Briefing end-to-end | ✅ Existe | UI render + estados |
-| CG-2 | Cognitive Dashboard / Graph View | ✅ Existe | Visualización clusters |
-| CG-3 | Serendipity UI | ✅ Existe | Feed sugerencias |
-| CG-4 | Query UI avanzada | ✅ Existe | Builder UX + feedback |
-| CG-5 | Agent Room multi-agente | — | Diseño + implementación |
-| CG-6 | Focus mode con AI panel | — | Diseño + implementación |
-| CG-7 | Decay monitor + weekly review | ✅ Existe | UI workflow |
+| ID | Qué | Backend | Estado |
+|----|-----|---------|--------|
+| CG-1 | Morning Briefing end-to-end | ✅ Existe | ✅ DONE (`af8191f`, `c9bf6b9`) |
+| CG-2 | Cognitive Dashboard / Graph View | ✅ Existe | 🔲 Pendiente |
+| CG-3 | Serendipity UI | ✅ Existe | 🔲 Pendiente |
+| CG-4 | Query UI avanzada | ✅ Existe | 🔲 Pendiente |
+| CG-5 | Agent Room multi-agente | — | 🔲 Pendiente (diseño) |
+| CG-6 | Focus mode con AI panel | — | 🔲 Pendiente (diseño) |
+| CG-7 | Decay monitor + weekly review | ✅ Existe | 🔲 Pendiente |
 
 ### Diferido (V3+)
 
