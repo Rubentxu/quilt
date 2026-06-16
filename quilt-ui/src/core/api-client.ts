@@ -20,6 +20,7 @@ import type {
   DecayMonitorDto,
   WeeklyReviewDto,
   SerendipityResponseDto,
+  CognitiveGraphDto,
 } from '@shared/types/api';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
@@ -852,6 +853,20 @@ export const api = {
    */
   getSerendipity: () =>
     cachedFetch<SerendipityResponseDto>('GET', '/cognitive/serendipity'),
+
+  // ─── Cognitive Graph (CG-2) ─────────────────────────────────────────────────
+  //
+  // `GET /api/v1/cognitive/graph` — returns the global knowledge graph with
+  // clusters, frontier nodes (highly connected hubs), and gap nodes (isolated).
+
+  /**
+   * Get the cognitive graph — a global view of the knowledge graph.
+   *
+   * Returns nodes, edges, clusters, frontier nodes, and gap nodes for
+   * the full knowledge graph. Used by the Cognitive Dashboard / Graph View.
+   */
+  getCognitiveGraph: () =>
+    cachedFetch<CognitiveGraphDto>('GET', '/cognitive/graph'),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────
