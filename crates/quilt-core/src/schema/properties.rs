@@ -462,11 +462,6 @@ pub struct PropertyDefinition {
     pub property_type: PropertyType,
     pub cardinality: Cardinality,
     pub closed_values: Vec<ClosedValue>,
-    // Legacy fields (deprecated in favor of visibility/mutability)
-    pub view_context: ViewContext,
-    pub public: bool,
-    pub queryable: bool,
-    pub hidden: bool,
     pub attribute: Option<String>,
     // ADR-0025: First-class configuration fields
     #[serde(default)]
@@ -493,10 +488,6 @@ impl PropertyDefinition {
             property_type,
             cardinality: Cardinality::One,
             closed_values: Vec::new(),
-            view_context: ViewContext::default(),
-            public: true,
-            queryable: true,
-            hidden: false,
             attribute: None,
             // ADR-0025: first-class fields default
             visibility: PropertyVisibility::default(),
@@ -516,31 +507,10 @@ impl PropertyDefinition {
         self
     }
 
-    pub fn with_view_context(mut self, view_context: ViewContext) -> Self {
-        self.view_context = view_context;
-        self
-    }
-
     /// Set the first-class visibility tier (ADR-0025).
     #[must_use]
     pub fn with_visibility(mut self, visibility: PropertyVisibility) -> Self {
         self.visibility = visibility;
-        self
-    }
-
-    /// Legacy 3-flag visibility builder (deprecated).
-    #[deprecated(note = "use with_visibility(PropertyVisibility) instead")]
-    pub fn with_visibility_flags(mut self, public: bool, queryable: bool, hidden: bool) -> Self {
-        self.public = public;
-        self.queryable = queryable;
-        self.hidden = hidden;
-        if hidden {
-            self.visibility = PropertyVisibility::Hidden;
-        } else if public {
-            self.visibility = PropertyVisibility::Inline;
-        } else {
-            self.visibility = PropertyVisibility::System;
-        }
         self
     }
 
@@ -590,16 +560,18 @@ impl PropertyDefinition {
         db_ident: impl Into<String>,
         title: impl Into<String>,
         property_type: PropertyType,
-        view_context: ViewContext,
-        public: bool,
-        queryable: bool,
-        hidden: bool,
-        read_only: bool,
+        _view_context: ViewContext,
+        _public: bool,
+        _queryable: bool,
+        _hidden: bool,
+        _read_only: bool,
     ) -> Self {
-        let visibility = if hidden {
+        // Derive visibility from view_context (per spec):
+        // hidden=true → Hidden (dominant), else Block → Inline, Page → Panel, Never → System
+        let visibility = if _hidden {
             PropertyVisibility::Hidden
         } else {
-            PropertyVisibility::from_view_context(&view_context)
+            PropertyVisibility::from_view_context(&_view_context)
         };
 
         Self {
@@ -609,13 +581,9 @@ impl PropertyDefinition {
             property_type,
             cardinality: Cardinality::One,
             closed_values: Vec::new(),
-            view_context,
-            public,
-            queryable,
-            hidden,
             attribute: None,
             visibility,
-            mutability: PropertyMutability::from_read_only(read_only),
+            mutability: PropertyMutability::from_read_only(_read_only),
             derived_from: None,
             merge_policy: MergePolicy::SetIfMissing,
         }
@@ -784,7 +752,6 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
         )
         .with_cardinality(Cardinality::One)
         .with_closed_values(status_closed)
-        .with_view_context(ViewContext::Page)
         .with_visibility(PropertyVisibility::Panel),
     );
 
@@ -809,7 +776,6 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
         )
         .with_cardinality(Cardinality::One)
         .with_closed_values(priority_closed)
-        .with_view_context(ViewContext::Page)
         .with_visibility(PropertyVisibility::Panel),
     );
 
@@ -822,7 +788,6 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
             PropertyType::Date,
         )
         .with_cardinality(Cardinality::One)
-        .with_view_context(ViewContext::Page)
         .with_visibility(PropertyVisibility::Panel),
     );
 
@@ -835,7 +800,6 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
             PropertyType::Date,
         )
         .with_cardinality(Cardinality::One)
-        .with_view_context(ViewContext::Page)
         .with_visibility(PropertyVisibility::Panel),
     );
 
@@ -848,7 +812,6 @@ pub fn builtin_properties() -> Vec<PropertyDefinition> {
             PropertyType::Url,
         )
         .with_cardinality(Cardinality::One)
-        .with_view_context(ViewContext::Page)
         .with_visibility(PropertyVisibility::Panel),
     );
 
@@ -924,8 +887,9 @@ mod tests {
     }
 
     #[test]
-    fn test_view_context_default() {
-        assert_eq!(ViewContext::default(), ViewContext::Block);
+    fn test_visibility_default() {
+        // ADR-0025: new PropertyDefinition has Inline visibility (default)
+        assert_eq!(PropertyVisibility::default(), PropertyVisibility::Inline);
     }
 
     // ── ClosedValue ─────────────────────────────────────────────────
@@ -950,16 +914,15 @@ mod tests {
         let id = uuid::Uuid::new_v4();
         let prop = PropertyDefinition::new(id, "status", "Status", PropertyType::Text)
             .with_cardinality(Cardinality::One)
-            .with_view_context(ViewContext::Page);
+            .with_visibility(PropertyVisibility::Panel);
 
         assert_eq!(prop.db_ident, "status");
         assert_eq!(prop.title, "Status");
         assert_eq!(prop.property_type, PropertyType::Text);
         assert_eq!(prop.cardinality, Cardinality::One);
-        assert_eq!(prop.view_context, ViewContext::Page);
-        assert!(prop.public);
-        assert!(prop.queryable);
-        assert!(!prop.hidden);
+        assert_eq!(prop.visibility, PropertyVisibility::Panel);
+        // ADR-0025: mutability defaults to Mutable
+        assert_eq!(prop.mutability, PropertyMutability::Mutable);
     }
 
     #[test]
@@ -994,6 +957,29 @@ mod tests {
         let json = serde_json::to_string(&prop).unwrap();
         let restored: PropertyDefinition = serde_json::from_str(&json).unwrap();
         assert_eq!(prop, restored);
+    }
+
+    // ── WASM parity: from_legacy_fields ─────────────────────────────
+
+    #[test]
+    fn wasm_from_legacy_fields_produces_visibility_system_and_mutability_immutable() {
+        // Parity with domain: from_legacy_fields(Never, false, false, true) →
+        // visibility=System, mutability=Immutable
+        let def = PropertyDefinition::from_legacy_fields(
+            uuid::Uuid::new_v4(),
+            "test",
+            "Test",
+            PropertyType::Text,
+            ViewContext::Never,
+            false,
+            false,
+            false,
+            true,
+        );
+        assert_eq!(def.visibility, PropertyVisibility::System);
+        assert_eq!(def.mutability, PropertyMutability::Immutable);
+        assert!(def.derived_from.is_none());
+        assert_eq!(def.merge_policy, MergePolicy::SetIfMissing);
     }
 
     // ── Sync Validation ─────────────────────────────────────────────
