@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use url::Url;
+
 /// PropertyValue represents a typed property value.
 ///
 /// Quilt properties can have different types:
@@ -28,6 +30,10 @@ pub enum PropertyValue {
     Ref(String),
     /// Array of values
     Array(Vec<PropertyValue>),
+    /// URL value
+    Url(Url),
+    /// Naive date value (YYYY-MM-DD, no timezone)
+    NaiveDate(chrono::NaiveDate),
 }
 
 impl PropertyValue {
@@ -69,6 +75,18 @@ impl PropertyValue {
         PropertyValue::Ref(s.into())
     }
 
+    /// Create a URL property value
+    pub fn url(u: Url) -> Self {
+        PropertyValue::Url(u)
+    }
+
+    /// Create a naive date property value (YYYY-MM-DD, no timezone).
+    ///
+    /// Use this for calendar dates that have no time or timezone component.
+    pub fn naive_date(d: chrono::NaiveDate) -> Self {
+        PropertyValue::NaiveDate(d)
+    }
+
     /// Get the type name
     pub fn type_name(&self) -> &'static str {
         match self {
@@ -79,6 +97,8 @@ impl PropertyValue {
             PropertyValue::Date(_) => "date",
             PropertyValue::Ref(_) => "ref",
             PropertyValue::Array(_) => "array",
+            PropertyValue::Url(_) => "url",
+            PropertyValue::NaiveDate(_) => "date", // Shared with Date (distinguished via serde shape)
         }
     }
 
@@ -95,6 +115,10 @@ impl PropertyValue {
             PropertyValue::Ref(s) => serde_json::Value::String(s.clone()),
             PropertyValue::Array(arr) => {
                 serde_json::Value::Array(arr.iter().map(|v| v.to_json()).collect())
+            }
+            PropertyValue::Url(u) => serde_json::Value::String(u.to_string()),
+            PropertyValue::NaiveDate(d) => {
+                serde_json::Value::String(d.format("%Y-%m-%d").to_string())
             }
         }
     }
@@ -142,6 +166,8 @@ impl PropertyValue {
                     .collect();
                 format!("[{}]", parts.join(", "))
             }
+            PropertyValue::Url(u) => u.to_string(),
+            PropertyValue::NaiveDate(d) => d.format("%Y-%m-%d").to_string(),
         };
         let type_hint = self.type_name().to_string();
         (stringified, type_hint)
@@ -172,6 +198,8 @@ impl fmt::Display for PropertyValue {
                 }
                 write!(f, "]")
             }
+            PropertyValue::Url(u) => write!(f, "{}", u),
+            PropertyValue::NaiveDate(d) => write!(f, "{}", d.format("%Y-%m-%d")),
         }
     }
 }
@@ -535,5 +563,161 @@ mod tests {
         let map = serde_json::Map::new();
         let props = parse_properties(&map);
         assert!(props.is_empty());
+    }
+
+    // ── Url variant ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn url_constructor_creates_url_variant() {
+        let url = Url::parse("https://quilt.dev").unwrap();
+        let pv = PropertyValue::url(url.clone());
+        assert!(matches!(pv, PropertyValue::Url(u) if u == url));
+    }
+
+    #[test]
+    fn type_name_for_url_is_url() {
+        let url = Url::parse("https://x.com").unwrap();
+        assert_eq!(PropertyValue::url(url).type_name(), "url");
+    }
+
+    #[test]
+    fn to_json_for_url_emits_string() {
+        let url = Url::parse("https://quilt.dev/path?q=1").unwrap();
+        let pv = PropertyValue::url(url);
+        assert_eq!(pv.to_json(), serde_json::json!("https://quilt.dev/path?q=1"));
+    }
+
+    #[test]
+    fn to_json_for_url_roundtrips_through_from_json_as_string() {
+        // from_json cannot distinguish a URL string from a plain string (flat JSON limitation)
+        let url = Url::parse("https://quilt.dev").unwrap();
+        let pv = PropertyValue::url(url);
+        let json = pv.to_json();
+        let restored = PropertyValue::from_json(&json).unwrap();
+        assert!(matches!(restored, PropertyValue::String(s) if s.starts_with("https://quilt.dev")));
+    }
+
+    #[test]
+    fn display_for_url() {
+        let url = Url::parse("https://quilt.dev").unwrap();
+        let pv = PropertyValue::url(url);
+        let display = format!("{}", pv);
+        assert!(display.starts_with("https://quilt.dev"), "got: {}", display);
+    }
+
+    #[test]
+    fn to_display_string_for_url() {
+        let url = Url::parse("https://quilt.dev").unwrap();
+        let pv = PropertyValue::url(url);
+        let (s, t) = pv.to_display_string();
+        assert!(s.starts_with("https://quilt.dev"), "got string: {}", s);
+        assert_eq!(t, "url");
+    }
+
+    #[test]
+    fn serde_roundtrip_for_url_uses_externally_tagged_shape() {
+        let url = Url::parse("https://quilt.dev").unwrap();
+        let pv = PropertyValue::url(url);
+        let s = serde_json::to_string(&pv).unwrap();
+        // Externally tagged shape: {"Url":"..."} where ... is the URL string
+        assert!(s.starts_with(r#"{"Url":"https://quilt.dev"#), "got: {}", s);
+        assert!(s.ends_with(r#""}"#), "got: {}", s);
+    }
+
+    #[test]
+    fn url_inside_array_roundtrips() {
+        let url = Url::parse("https://quilt.dev").unwrap();
+        let arr = PropertyValue::Array(vec![PropertyValue::url(url)]);
+        let json = arr.to_json();
+        // to_json produces a JSON array with the URL as a string (lossy)
+        // Note: url crate may add trailing slash
+        let s = json.as_array().unwrap()[0].as_str().unwrap();
+        assert!(s.starts_with("https://quilt.dev"));
+    }
+
+    // ── NaiveDate variant ───────────────────────────────────────────────────────
+
+    #[test]
+    fn naive_date_constructor_creates_naive_date_variant() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let pv = PropertyValue::naive_date(d);
+        assert!(matches!(pv, PropertyValue::NaiveDate(d2) if d2 == d));
+    }
+
+    #[test]
+    fn type_name_for_naive_date_is_date() {
+        // NaiveDate shares "date" type_name with Date (distinguished via serde shape)
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        assert_eq!(PropertyValue::naive_date(d).type_name(), "date");
+    }
+
+    #[test]
+    fn to_json_for_naive_date_emits_iso_date_string() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let pv = PropertyValue::naive_date(d);
+        assert_eq!(pv.to_json(), serde_json::json!("2026-06-15"));
+    }
+
+    #[test]
+    fn to_json_for_naive_date_roundtrips_through_from_json_as_string() {
+        // from_json cannot distinguish a date string from a plain string (flat JSON limitation)
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let pv = PropertyValue::naive_date(d);
+        let json = pv.to_json();
+        let restored = PropertyValue::from_json(&json).unwrap();
+        assert!(matches!(restored, PropertyValue::String(s) if s == "2026-06-15"));
+    }
+
+    #[test]
+    fn display_for_naive_date() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let pv = PropertyValue::naive_date(d);
+        assert_eq!(format!("{}", pv), "2026-06-15");
+    }
+
+    #[test]
+    fn to_display_string_for_naive_date() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let pv = PropertyValue::naive_date(d);
+        assert_eq!(pv.to_display_string(), ("2026-06-15".to_string(), "date".to_string()));
+    }
+
+    #[test]
+    fn serde_roundtrip_for_naive_date_uses_externally_tagged_shape() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let pv = PropertyValue::naive_date(d);
+        let s = serde_json::to_string(&pv).unwrap();
+        assert_eq!(s, r#"{"NaiveDate":"2026-06-15"}"#);
+    }
+
+    #[test]
+    fn naive_date_and_date_distinguishable_via_serde() {
+        // Date uses RFC3339 (with time+timezone), NaiveDate uses YYYY-MM-DD
+        let dt = chrono::Utc.with_ymd_and_hms(2026, 6, 15, 0, 0, 0).unwrap();
+        let date_pv = PropertyValue::Date(dt);
+        let naive_pv = PropertyValue::naive_date(dt.date_naive());
+
+        let date_json = serde_json::to_string(&date_pv).unwrap();
+        let naive_json = serde_json::to_string(&naive_pv).unwrap();
+        assert_ne!(date_json, naive_json, "Date and NaiveDate must be distinguishable via serde");
+        assert!(
+            date_json.contains("+00:00") || date_json.contains("T00:00:00"),
+            "Date must use RFC3339 format: got {}",
+            date_json
+        );
+        assert!(
+            naive_json.contains("NaiveDate"),
+            "NaiveDate must use externally tagged shape: got {}",
+            naive_json
+        );
+    }
+
+    #[test]
+    fn naive_date_inside_array_roundtrips() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let arr = PropertyValue::Array(vec![PropertyValue::naive_date(d)]);
+        let json = arr.to_json();
+        // to_json produces a JSON array with the date as a string (lossy)
+        assert_eq!(json, serde_json::json!(["2026-06-15"]));
     }
 }

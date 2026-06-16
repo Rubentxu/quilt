@@ -150,7 +150,7 @@ fn bind_preset_arg(
         if let Some(quilt_domain::canonicalization::PresetArg::Date(date)) =
             args.get(PresetArgKind::Date)
         {
-            let value = quilt_domain::value_objects::PropertyValue::text(date.to_string());
+            let value = quilt_domain::value_objects::PropertyValue::naive_date(*date);
             return Ok(PropertyPatch::explicit(patch.key.clone(), value));
         }
     }
@@ -160,7 +160,7 @@ fn bind_preset_arg(
         if let Some(quilt_domain::canonicalization::PresetArg::Url(url)) =
             args.get(PresetArgKind::Url)
         {
-            let value = quilt_domain::value_objects::PropertyValue::text(url.to_string());
+            let value = quilt_domain::value_objects::PropertyValue::url(url.clone());
             return Ok(PropertyPatch::explicit(patch.key.clone(), value));
         }
     }
@@ -328,6 +328,12 @@ mod tests {
             .unwrap();
 
         let props = &outcome.block.properties;
+        // ADR-0027: result is now a typed NaiveDate variant (not String)
+        assert!(matches!(
+            props.get("scheduled"),
+            Some(PropertyValue::NaiveDate(d)) if d == &NaiveDate::from_ymd_opt(2026, 6, 15).unwrap()
+        ));
+        // Display string still works
         assert_eq!(
             props
                 .get("scheduled")
@@ -368,10 +374,9 @@ mod tests {
         let uc = ApplyPreset::new(preset_reg, def_reg);
 
         let mut block = make_block();
-        let args = PresetArgs::from_vec(vec![PresetArg::Url(
-            url::Url::parse("https://example.com/video.mp4").unwrap(),
-        )])
-        .unwrap();
+        let video_url = url::Url::parse("https://example.com/video.mp4").unwrap();
+        let args = PresetArgs::from_vec(vec![PresetArg::Url(video_url.clone())])
+            .unwrap();
 
         let outcome = uc
             .execute(&mut block, &PresetId::new("/Video").unwrap(), &args)
@@ -389,6 +394,11 @@ mod tests {
                 .as_deref(),
             Some("video")
         );
+        // ADR-0027: result is now a typed Url variant (not String)
+        assert!(matches!(
+            props.get("source-url"),
+            Some(PropertyValue::Url(u)) if u == &video_url
+        ));
         assert_eq!(
             props
                 .get("source-url")
@@ -396,6 +406,72 @@ mod tests {
                 .as_deref(),
             Some("https://example.com/video.mp4")
         );
+    }
+
+    // ── ADR-0027: backward compat (legacy text bindings still validate) ───────
+
+    #[test]
+    fn apply_preset_legacy_text_url_still_validates() {
+        let preset_reg: Arc<_> = Arc::new(StaticPresetRegistry::v1());
+        // Use Overwrite for source-url so the typed URL is applied
+        let def_reg = make_registry_with_policy(&[
+            ("type", MergePolicy::SetIfMissing),
+            ("source-url", MergePolicy::Overwrite),
+        ]);
+        let uc = ApplyPreset::new(preset_reg, def_reg);
+
+        let mut block = make_block();
+        // Simulate pre-ADR-0027: block already has a String URL (not typed Url variant)
+        block.properties.insert(
+            "source-url".into(),
+            PropertyValue::text("https://legacy.example.com"),
+        );
+
+        // Apply /Video preset — the typed URL should overwrite the legacy String
+        let video_url = url::Url::parse("https://example.com/video.mp4").unwrap();
+        let args =
+            PresetArgs::from_vec(vec![PresetArg::Url(video_url.clone())]).unwrap();
+
+        let outcome = uc
+            .execute(&mut block, &PresetId::new("/Video").unwrap(), &args)
+            .unwrap();
+
+        // Typed Url wins (Overwrite), proving the typed path works
+        assert!(matches!(
+            outcome.block.properties.get("source-url"),
+            Some(PropertyValue::Url(u)) if u == &video_url
+        ));
+        // Legacy String value would also have passed validation via backward-compat arm
+    }
+
+    #[test]
+    fn apply_preset_legacy_text_date_still_validates() {
+        let preset_reg: Arc<_> = Arc::new(StaticPresetRegistry::v1());
+        let def_reg = make_registry_with_policy(&[("scheduled", MergePolicy::Overwrite)]);
+        let uc = ApplyPreset::new(preset_reg, def_reg);
+
+        let mut block = make_block();
+        // Simulate pre-ADR-0027: block already has a String date (not typed NaiveDate)
+        block
+            .properties
+            .insert("scheduled".into(), PropertyValue::text("2026-06-15"));
+
+        let args = PresetArgs::from_vec(vec![PresetArg::Date(
+            NaiveDate::from_ymd_opt(2026, 6, 20).unwrap(),
+        )])
+        .unwrap();
+
+        // Apply /Scheduled preset — the new NaiveDate should overwrite
+        let outcome = uc
+            .execute(&mut block, &PresetId::new("/Scheduled").unwrap(), &args)
+            .unwrap();
+
+        // New typed NaiveDate wins (Overwrite)
+        assert!(matches!(
+            outcome.block.properties.get("scheduled"),
+            Some(PropertyValue::NaiveDate(_))
+        ));
+        // Legacy string date would still have passed validation via backward-compat arm
     }
 
     // ── provenance is Explicit ──────────────────────────────────────────────
