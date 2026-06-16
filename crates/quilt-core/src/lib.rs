@@ -13,6 +13,7 @@
 pub mod graph;
 pub mod outliner;
 pub mod parser;
+pub mod projection;
 pub mod query;
 pub mod schema;
 pub mod scoring;
