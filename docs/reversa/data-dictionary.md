@@ -8,6 +8,9 @@
 > **⚠️ CANONICAL SCHEMA SOURCE**: Este documento describe el schema de **Logseq (ClojureScript original)**.
 > Para el schema canonical de **Quilt (Rust)**, ver `docs/roadmap.md` Sección 1.3 y `docs/architecture-ddd.md`.
 >
+> **📌 CONVENCIÓN**: Si `erd.md` y este archivo divergen, **este archivo es canónico**.
+> `erd.md` es un índice visual complementario; para detalles completos ver este diccionario.
+>
 > **Reconciliación**: El schema de Quilt/Rust es una reimplementación del schema de Logseq. Las diferencias
 > principales están documentadas en `docs/reversa/rust-reimplementation-proposal.md`.
 

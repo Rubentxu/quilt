@@ -394,7 +394,7 @@ pub trait Notifications {
 
 > **⚠️ IMPLEMENTATION NOTE**: This describes the **PLANNED** strategy using Loro CRDT.
 > **CURRENT IMPLEMENTATION** uses custom LWW (Last-Write-Wins) in `quilt-sync/src/crdt.rs`.
-> This is a known gap documented in `docs/reversa/_reversa_sdd/LLM_FIRST_ROADMAP.md`.
+> For full details, see [`docs/SYNC_STRATEGY.md`](../../SYNC_STRATEGY.md).
 >
 > **Decision needed**: Either adopt Loro per this design, or formalize LWW as intentional.
 

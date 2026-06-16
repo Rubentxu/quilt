@@ -173,7 +173,7 @@ The spec/design documents describe Loro CRDT as the sync strategy, but the actua
 1. **Adopt Loro**: Integrate `loro` crate per design spec
 2. **Formalize LWW**: Document LWW as the intentional strategy with rationale
 
-See: `docs/reversa/_reversa_sdd/LLM_FIRST_ROADMAP.md` §"Sync Strategy Clarification"
+See: [`docs/SYNC_STRATEGY.md`](../../SYNC_STRATEGY.md) para la documentación completa de la estrategia actual.
 
 ---
 

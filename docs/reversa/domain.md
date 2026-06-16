@@ -120,20 +120,27 @@ Namespace (parent)
 
 ### 2.1 Task Markers
 
-**Estados válidos**:
+> **📌 Canonicalización**: Los task markers se almacenan en lowercase en persistencia.
+> La forma canónica es: `now`, `todo`, `doing`, `done`, `later`, `waiting`, `cancelled`.
+> El `MarkdownCanonicalizer` deriva la forma canónica desde el marker lowercase (ADR-0025 slice #3).
+
+**Estados válidos** (forma canónica en storage):
 
 | Marker | Keyword | Significado | Categoría |
 |--------|---------|-------------|-----------|
-| `NOW` | `:logseq.property/status.doing` | En progreso | Activo |
-| `LATER` | `:logseq.property/status.later` | Planificado | Pendiente |
-| `TODO` | `:logseq.property/status.todo` | Por hacer | Pendiente |
-| `DONE` | `:logseq.property/status.done` | Completado | Completo |
-| `CANCELLED` | `:logseq.property/status.canceled` | Cancelado | Cancelado |
+| `now` | `:logseq.property/status.doing` | En progreso | Activo |
+| `later` | `:logseq.property/status.later` | Planificado | Pendiente |
+| `todo` | `:logseq.property/status.todo` | Por hacer | Pendiente |
+| `doing` | `:logseq.property/status.doing` | En progreso (alias) | Activo |
+| `done` | `:logseq.property/status.done` | Completado | Completo |
+| `cancelled` | `:logseq.property/status.canceled` | Cancelado | Cancelado |
+| `waiting` | `:logseq.property/status.waiting` | Bloqueado | Pendiente |
 
 **Reglas**:
 - 🟢 **CONFIRMADO**: Los markers son valores cerrados (closed values) del schema
+- 🟢 **CONFIRMADO**: Storage usa lowercase (`now`, `todo`, `done`, etc.)
 - 🟡 **INFERIDO**: Solo un marker activo por bloque a la vez
-- 🟡 **INFERIDO**: DONE y CANCELLED son estados terminales
+- 🟡 **INFERIDO**: `done` y `cancelled` son estados terminales
 
 ### 2.2 Priority System
 

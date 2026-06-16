@@ -1042,7 +1042,7 @@ impl AILinkDiscovery {
 > not true CRDT. This is documented as an architectural decision to be revisited.
 >
 > **Key mismatch**: The spec/design documents reference Loro CRDT integration, but the actual `quilt-sync` crate
-> implements a simpler LWW approach. For details, see `docs/reversa/_reversa_sdd/LLM_FIRST_ROADMAP.md`.
+> implements a simpler LWW approach. For full details, see [`docs/SYNC_STRATEGY.md`](../../SYNC_STRATEGY.md).
 >
 > **Planned resolution**: Either adopt true Loro CRDT per the design, or formalize LWW as the intentional strategy.
 

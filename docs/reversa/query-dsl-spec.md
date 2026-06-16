@@ -224,6 +224,10 @@ Filters blocks by task marker.
 
 **Grammar**: `task = "(" "task" task-marker+ ")"`
 
+> **📌 Canonicalización**: Los task markers en storage son lowercase (`now`, `todo`, `done`, etc.).
+> La implementación Rust (`TaskMarker` enum) parsea case-insensitive pero almacena en lowercase.
+> Ver [`docs/reversa/domain.md`](domain.md#21-task-markers) para la tabla completa de markers.
+
 **Markers**: `now`, `later`, `todo`, `done`, `cancelled`
 
 **Syntax**:
