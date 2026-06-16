@@ -47,6 +47,7 @@ export const PANEL_LABELS: Record<PanelId, string> = {
   'semantic-insight': 'Semantic insight',
   'decay-monitor': 'Decay monitor',
   'weekly-review': 'Weekly review',
+  serendipity: 'Serendipity',
 }
 
 /** localStorage key for the dashboard layout. */
@@ -93,6 +94,7 @@ export const DEFAULT_PANELS: readonly PanelId[] = [
   'semantic-insight',
   'decay-monitor',
   'weekly-review',
+  'serendipity',
 ]
 
 /** Shape of the public context. */

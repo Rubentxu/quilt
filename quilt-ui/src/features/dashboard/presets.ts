@@ -19,6 +19,7 @@ export type PanelId =
   | 'semantic-insight'
   | 'decay-monitor'
   | 'weekly-review'
+  | 'serendipity'
 
 /**
  * Re-export of the canonical `PANEL_LABELS` from
