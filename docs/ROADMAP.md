@@ -1,8 +1,17 @@
 # Quilt — Action Roadmap
 
 > Generated: 2026-06-07
-> Last updated: 2026-06-14 (post Architecture Deepening + Pool Removal + Property Intelligence PI-1..PI-8)
-> Sources: auto-grill 30+ cycles, architecture review (7 candidates), git log (commits be18a7d..aa98546)
+> Last updated: 2026-06-16 (post ADR-0025 series + post-ADR-0025 cleanup)
+> Sources: auto-grill 30+ cycles, architecture review (7 candidates), git log (commits be18a7d..2abfe38)
+
+## Changelog
+- 2026-06-14: Phase 6 (Architecture Deepening) completed
+- 2026-06-15: Phase 7 (ADR-0025: Property-First Architecture) completed — 5 slices, 12,800 LOC, 3,000+ tests
+- 2026-06-16: Phase 8 (Post-ADR-0025 cleanup) completed:
+  - ADR-0026: Deprecation cleanup (33 deprecation warnings → 0)
+  - ADR-0027: Typed PropertyValue (Url + NaiveDate variants)
+  - ADR-0028: WASM client-side projection
+  - ADR-0029: Pre-existing test fixes (7 tests)
 
 **Leyenda**: ✅ completado | 🚧 en progreso | 🔲 pendiente | `commit` = commit SHA
 
@@ -208,34 +217,97 @@ Actualizado con nuevos términos del roadmap:
 | S2-05 | graph.rs depth bounds | WARNING | Constants | local |
 | S2-06 | template_doctor.rs 49K lines | WARNING | Split 4 módulos | local |
 
+### Phase 7: Property-First Architecture (ADR-0025) ✅ COMPLETADO (2026-06-15)
+
+**Gran cambio arquitectónico**: Properties son source of truth del Bloque (semántica, estructura, proyección, metadata). Elimina 23 referencias hardcodeadas a `block.marker`/`block.blockType` en `BlockRow.tsx`.
+
+| Slice | Qué | Commit |
+|-------|-----|--------|
+| **#1** Property Configuration Domain Model | PropertyVisibility, PropertyMutability, DerivedSource, MergePolicy + 4 fields en PropertyDefinition + from_legacy_fields + assert_invariants + WASM mirror | `5e41eb1`..`ee35d72` |
+| **#2** Input Canonicalization Pipeline | Canonicalizer trait + MarkdownCanonicalizer + 4 VOs + PropertyPatch::apply_to con 6 MergePolicies + proptests | `b63bde0`..`2a00b1e` |
+| **#3** Slash Command Property Presets | PropertyPreset, PresetRegistry, StaticPresetRegistry::v1 con 9 V1 presets, ApplyPreset use case, cross-feature equivalence, **fix task-marker gap** | `44027c0`..`256aad8` |
+| **#4** Projection Resolver | PropertyPredicate, ProjectionContract, ProjectionView, Projection trait, DefaultProjection, ProjectionLayerConflict, ProjectionRegistry, 6 V1 contracts, ProjectionResolver use case, conflict materialization, 1000-iter proptest | `620f385`..`ce2cd95` |
+| **#5** UI Surface Refactor | 2 server endpoints (projection + presets), ProjectionRenderer, PresetMenu, SystemPropertyToggle, BlockPropertiesPanel refactored (visibility + mutability), BlockRow delegates to ProjectionRenderer, slashRegistry consumes PresetRegistry, edit mode shows all properties | `e0beb4a`..`ea67da7` |
+
+**Cambios de raíz en main**:
+- 23 referencias hardcodeadas a `block.marker`/`block.blockType` eliminadas
+- Single source of truth para projection en el `ProjectionResolver` (Rust)
+- Visualización Genérica de Texto como fallback obligatorio en conflictos
+- Conflict materialization como system properties (`projection-conflict`, `projection-conflict-reason`, `projection-conflict-candidates`)
+- Slash commands = Property Presets no destructivos
+- Canonización de Entrada: paste/Markdown/slash/API/MCP → Block Content + Property Patches
+
+**Tests**: 432 + 514 + 557 + 636 + 1289 (UI) + 25 (integration) + 1000-iter proptest = **~3500 tests passing**.
+
+**OpenSpec artifacts** (archived in `openspec/changes/archive/adr-0025-merged/`):
+- `property-configuration-domain-model/`
+- `input-canonicalization-pipeline/`
+- `slash-command-property-presets/`
+- `projection-resolver-declarative-contracts/`
+- `ui-surface-refactor-projection-aware/`
+
+### Phase 8: Post-ADR-0025 Cleanup ✅ COMPLETADO (2026-06-16)
+
+| ADR | Qué | Commit |
+|-----|-----|--------|
+| **0026** Deprecation Cleanup | 33 deprecation warnings → 0 (5 legacy fields removed: view_context, public, queryable, hidden, read_only) | `2358b27` |
+| **0027** Typed PropertyValue | `Url(url::Url)` y `NaiveDate(chrono::NaiveDate)` variantes + slice #3 workaround removido | `abf4467` |
+| **0028** WASM Client-Side Projection | ProjectionResolver portado a `quilt-core` WASM + 6 V1 contracts reimplementados como funciones puras + `useProjection` con WASM-first + HTTP-fallback + 18-row parity test + metrics | `2abfe38` |
+| **0029** Pre-existing Test Fixes | 7 tests fixed: order_proptest + GraphViewPage (6) + JournalAggregator | `8437ebb` + `105983a` + `c78eb36` |
+
 ---
 
 ## 4. Dependencias (estado actual)
 
 ```
-Phase 0 ✅ COMPLETO
-Phase 1 ✅ COMPLETO
-Phase 2 ✅ COMPLETO
-Phase 3 ✅ COMPLETO
-Phase 4 ✅ COMPLETO
+Phase 0 ✅ COMPLETO (P0 Fixes)
+Phase 1 ✅ COMPLETO (Fundamentos)
+Phase 2 ✅ COMPLETO (UX Block-Level)
+Phase 3 ✅ COMPLETO (Infra + Avanzado)
+Phase 4 ✅ COMPLETO (Re-grill Remedies)
 Phase 5 ✅ COMPLETO (Property Intelligence PI-1..PI-8)
 Phase 6 ✅ COMPLETO (Architecture Deepening, 7 candidates)
+Phase 7 ✅ COMPLETO (ADR-0025: Property-First Architecture, 5 slices)
+Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 ```
 
 ---
 
 ## 5. Estado Final — TODAS LAS FASES COMPLETADAS
 
-**Phase 0-6 ✅ — 31 items originales + 8 PI items + 7 AD items completados**
+**Phase 0-8 ✅ — 31 items originales + 8 PI items + 7 AD items + 5 ADR-0025 slices + 4 post-ADR-0025 ADRs completados**
 
 ### Pendiente técnico (no-bloqueantes)
 
-- 🔲 Promover 5 ADR drafts (0025-0029)
-- 🔲 User manual (HTML) — deploy o hosting
 - 🔲 Reconciliar documentación con schema real (roadmap-gaps P0)
 - 🔲 Formalizar Query DSL como contrato documentado
+- 🔲 User manual (HTML) — deploy o hosting
+- 🔲 Documentar estrategia real de sync (LWW vs CRDT visión) — `roadmap-gaps/ ISSUE-002`
+- 🔲 Normalizar task markers casing — `roadmap-gaps/ ISSUE-003`
+- 🔲 Pre-existente: doctests en `quilt-domain` (presets, graph_builder) y errores `quilt-bin` (chrono/migrate-comments) — ajenos a ADRs
 
-### Phase 7: UI Cognitive (propuesta — próximo)
+### OpenSpec work items activos (en `openspec/changes/`)
+
+| Item | Tipo | Estado |
+|------|------|--------|
+| `domain-properties-v1` | Foundation | Done (F5/F6/F8/F9) |
+| `slash-command-functional-behavior` | UX | Superseded por slice #3 (archivar cuando convenga) |
+| `dsl-aggregates` | Query | Done (PI-1) |
+| `dsl-analyze` | Query | Done (PI-1) |
+| `evidence-contract-v1` | MCP | Done |
+| `frontend-templates-v1` | UX | Done |
+| `intent-search-v3a` | Search | Pendiente (V3+ deferido) |
+| `journal-editing-and-config` | UX | Pendiente |
+| `outliner-keyboard` | UX | Pendiente |
+| `petgraph-graph-engine` | Foundation | Pendiente (Graph V2) |
+| `query-refactor-v1` | Query | Pendiente |
+| `retrieval-graph-v1` | Search | Pendiente |
+| `quilt-architecture-review*` | Docs | Pendiente (revisión arquitectural) |
+| `quilt-fase2-ux-*` | UX | Pendiente |
+| `quilt-fase3-backlog-*` | E2E | Pendiente |
+| `quilt-fase4-*` | Onboarding | Pendiente |
+
+### Phase 9: UI Cognitive (propuesta — próximo)
 
 | ID | Qué | Backend | Falta |
 |----|-----|---------|-------|
@@ -255,3 +327,5 @@ Phase 6 ✅ COMPLETO (Architecture Deepening, 7 candidates)
 - E2EE
 - File watching end-to-end
 - WASM como producto completo (más allá de compilación)
+- Typed PropertyValue V2 (full AST propagation)
+- Dynamic PropertyPresets/ProjectionRegistry loaders (plugins)
