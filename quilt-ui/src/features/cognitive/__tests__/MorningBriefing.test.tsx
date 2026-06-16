@@ -136,7 +136,8 @@ describe('MorningBriefing', () => {
 
     expect(screen.getByTestId('morning-briefing-agenda-list')).toBeInTheDocument()
     expect(screen.getByTestId('morning-briefing-agenda-item-block-1')).toBeInTheDocument()
-    expect(screen.getByText('journals/2024-01-15')).toBeInTheDocument()
+    // pageName appears in both agenda items, so use getAllByText
+    expect(screen.getAllByText('journals/2024-01-15')).toHaveLength(2)
   })
 
   it('renders decay alerts with correct severity colors', async () => {
@@ -227,9 +228,10 @@ describe('MorningBriefing', () => {
       expect(screen.getByRole('region', { name: 'Morning Briefing' })).toBeInTheDocument()
     })
 
-    expect(screen.getByLabelText("Today's Agenda")).toBeInTheDocument()
-    expect(screen.getByLabelText('Decay Alerts')).toBeInTheDocument()
-    expect(screen.getByLabelText('Serendipity Highlights')).toBeInTheDocument()
+    // aria-labelledby points to the section's heading; use getByRole('region', { name })
+    expect(screen.getByRole('region', { name: /Today's Agenda/ })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /Decay Alerts/ })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: /Serendipity Highlights/ })).toBeInTheDocument()
   })
 
   it('shows generated timestamp in footer', async () => {
