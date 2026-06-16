@@ -424,3 +424,39 @@ export interface MorningBriefingDto {
   generatedAt: string;
   daysSinceLastJournal: number;
 }
+
+// ──── Decay Monitor (CG-7) ─────────────────────────────────────────────
+
+/** Per-severity counts of decay alerts (mirrors the Rust DTO). */
+export interface SeverityCounts {
+  low: number;
+  medium: number;
+  high: number;
+}
+
+/** Response body for `GET /api/v1/cognitive/decay`. */
+export interface DecayMonitorDto {
+  alerts: DecayAlert[];
+  totalAlerts: number;
+  countsBySeverity: SeverityCounts;
+  generatedAt: string;
+}
+
+// ──── Weekly Review (CG-7) ─────────────────────────────────────────────
+
+/** Direction of the decay trend over the last two weeks. */
+export type DecayTrend = 'worsening' | 'improving' | 'stable';
+
+/** Response body for `GET /api/v1/cognitive/weekly-review`. */
+export interface WeeklyReviewDto {
+  weekStart: string;
+  weekEnd: string;
+  blocksCreated: number;
+  blocksUpdated: number;
+  tasksCompleted: number;
+  decayTrend: DecayTrend;
+  decayDelta: number;
+  journalDays: number;
+  suggestions: string[];
+  generatedAt: string;
+}

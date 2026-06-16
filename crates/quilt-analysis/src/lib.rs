@@ -17,10 +17,13 @@
 
 pub mod agent_store;
 pub mod connection_engine;
+pub mod decay_monitor;
 pub mod morning_briefing;
+pub mod shared_decay;
 pub mod structural_mirror;
 pub mod structure_gardener;
 pub mod structure_mapper;
+pub mod weekly_review;
 
 // Re-export error types for convenience
 pub use agent_store::StoreError;
@@ -51,8 +54,10 @@ pub enum AnalysisError {
 
 pub use agent_store::AgentStore;
 pub use connection_engine::ConnectionEngine;
+pub use decay_monitor::{DecayMonitorDto, DecayMonitorService, SeverityCounts};
 pub use morning_briefing::{AgendaItem, DecayAlert, MorningBriefing, MorningBriefingDto, SerendipityHighlight};
 pub use structural_mirror::StructuralMirror;
+pub use weekly_review::{DecayTrend, WeeklyReviewDto, WeeklyReviewService};
 pub use structure_gardener::{
     Belief, BeliefSnapshot, Contradiction, DeepeningSuggestion, DefaultRegistry, DiagnosisReport,
     GardenerCare, Issue, IssueKind, MentalModel, RepairAction, RepairReport, StructureGardener,

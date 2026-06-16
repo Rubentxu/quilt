@@ -17,6 +17,8 @@ import type {
   TourStateResponse,
   DismissTourRequest,
   MorningBriefingDto,
+  DecayMonitorDto,
+  WeeklyReviewDto,
 } from '@shared/types/api';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
@@ -799,6 +801,40 @@ export const api = {
    */
   getMorningBriefing: () =>
     cachedFetch<MorningBriefingDto>('GET', '/cognitive/morning-briefing'),
+
+  // ─── Decay Monitor (CG-7) ──────────────────────────────────────────────────
+  //
+  // `GET /api/v1/cognitive/decay` — returns the same DecayAlert shape the
+  // morning briefing uses, but exposed as a focused DTO with precomputed
+  // per-severity counts and a standalone cap. Reuses the morning briefing's
+  // detection algorithm on the server side.
+
+  /**
+   * Get the decay monitor snapshot.
+   *
+   * Returns blocks that haven't been updated in a while, grouped by
+   * severity (high, medium, low). The list is sorted by `daysSinceUpdate`
+   * descending and capped at 10.
+   */
+  getDecayAlerts: () =>
+    cachedFetch<DecayMonitorDto>('GET', '/cognitive/decay'),
+
+  // ─── Weekly Review (CG-7) ─────────────────────────────────────────────────
+  //
+  // `GET /api/v1/cognitive/weekly-review` — returns aggregate statistics
+  // for the last 7 days plus a heuristic list of "suggestions for next
+  // week". Per ADR-0001, no LLM integration; the heuristic is intentionally
+  // simple and lives in `quilt-analysis::weekly_review::service::suggestions`.
+
+  /**
+   * Get the weekly review snapshot.
+   *
+   * Returns counts of created / updated / completed blocks in the last
+   * 7 days, a decay trend direction, and a short list of "what to focus
+   * on next week" suggestions.
+   */
+  getWeeklyReview: () =>
+    cachedFetch<WeeklyReviewDto>('GET', '/cognitive/weekly-review'),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────

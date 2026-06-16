@@ -3,16 +3,12 @@
 //! Generates a daily briefing by aggregating data from the knowledge graph.
 
 use crate::morning_briefing::types::*;
+use crate::shared_decay::detect_decay_alerts;
 use crate::ConnectionEngine;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use std::sync::Arc;
 use tracing::instrument;
-
-/// Threshold in days after which a block is considered "medium" decay.
-const DECAY_MEDIUM_DAYS: i64 = 14;
-/// Threshold in days after which a block is considered "high" decay.
-const DECAY_HIGH_DAYS: i64 = 30;
 
 /// The Morning Briefing service.
 ///
@@ -61,8 +57,11 @@ impl MorningBriefing {
         // 1. Build today's agenda from recent blocks
         let agenda_items = self.build_agenda(today_start).await;
 
-        // 2. Detect decay alerts
-        let decay_alerts = self.detect_decay_alerts(today_start).await;
+        // 2. Detect decay alerts (delegated to the shared free function
+        //    so the Decay Monitor service gets the same algorithm).
+        let decay_alerts =
+            detect_decay_alerts(self.block_repo.as_ref(), self.page_repo.as_ref(), today_start)
+                .await;
 
         // 3. Find serendipity highlights
         let serendipity_highlights = self.find_serendipity_highlights().await;
@@ -124,63 +123,15 @@ impl MorningBriefing {
     }
 
     /// Detect blocks that haven't been updated in a while.
-    async fn detect_decay_alerts(&self, today_start: DateTime<Utc>) -> Vec<DecayAlert> {
-        // Look at blocks updated in the last 90 days as candidates
-        let window = today_start - Duration::days(90);
-        let blocks = match self.block_repo.get_updated_since(window).await {
-            Ok(blocks) => blocks,
-            Err(_) => return Vec::new(),
-        };
-
-        let now = Utc::now();
-        let mut alerts = Vec::new();
-
-        for block in blocks {
-            let days_since = (now - block.updated_at).num_days();
-
-            // Only flag blocks older than DECAY_MEDIUM_DAYS
-            if days_since < DECAY_MEDIUM_DAYS {
-                continue;
-            }
-
-            let severity = if days_since >= DECAY_HIGH_DAYS {
-                "high".to_string()
-            } else {
-                "medium".to_string()
-            };
-
-            let reason = if days_since >= DECAY_HIGH_DAYS {
-                format!("No updates in {} days — significantly stale", days_since)
-            } else {
-                format!("No updates in {} days — consider reviewing", days_since)
-            };
-
-            let content_preview = if block.content.len() > 150 {
-                block.content[..150].to_string() + "…"
-            } else {
-                block.content.clone()
-            };
-
-            // Resolve page name from page_id
-            let page_name = match self.page_repo.get_by_id(block.page_id).await {
-                Ok(Some(page)) => page.name,
-                _ => format!("page:{}", block.page_id),
-            };
-
-            alerts.push(DecayAlert {
-                block_id: block.id.to_string(),
-                content_preview,
-                page_name,
-                days_since_update: days_since,
-                severity,
-                reason,
-            });
-        }
-
-        // Sort by days_since_update desc and cap at 10
-        alerts.sort_by(|a, b| b.days_since_update.cmp(&a.days_since_update));
-        alerts.truncate(10);
-        alerts
+    ///
+    /// **Deprecated as a method** — use the free function
+    /// [`crate::shared_decay::detect_decay_alerts`] instead. The
+    /// method form is kept here for backward compatibility with
+    /// any external caller that may have used it; it delegates to
+    /// the shared function and is therefore byte-equivalent.
+    #[allow(dead_code)]
+    pub async fn detect_decay_alerts(&self, today_start: DateTime<Utc>) -> Vec<DecayAlert> {
+        detect_decay_alerts(self.block_repo.as_ref(), self.page_repo.as_ref(), today_start).await
     }
 
     /// Find serendipitous connections from the connection engine.

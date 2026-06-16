@@ -1,6 +1,6 @@
 // ─── CognitivePanels — right-side container for the cognitivo:: family ──
 //
-// Renders the three cognitive panels as a single right-side column:
+// Renders the cognitive panels as a single right-side column:
 //
 //   - AgentActivityFeed (always available; reads from the global
 //                        `agent-activity` panel flag).
@@ -8,6 +8,8 @@
 //                        name).
 //   - SemanticInsight   (page-scoped; reads from the current page
 //                        name).
+//   - DecayMonitor      (CG-7; stale-blocks explorer).
+//   - WeeklyReview      (CG-7; guided weekly workflow).
 //
 // Each panel honours its own flag in `PanelVisibilityContext` —
 // toggling a panel via the CommandRegistry (e.g.
@@ -24,6 +26,8 @@ import { usePanelVisibility } from '@features/dashboard'
 import { AgentActivityFeed } from './AgentActivityFeed'
 import { StructuralGraph } from './StructuralGraph'
 import { SemanticInsight } from './SemanticInsight'
+import { DecayMonitor } from './DecayMonitor'
+import { WeeklyReview } from './WeeklyReview'
 
 interface CognitivePanelsProps {
   pageName: string | null
@@ -35,10 +39,20 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
   const showAgentActivity = visiblePanels.has('agent-activity')
   const showStructural = visiblePanels.has('structural-graph')
   const showSemantic = visiblePanels.has('semantic-insight')
+  const showDecay = visiblePanels.has('decay-monitor')
+  const showWeekly = visiblePanels.has('weekly-review')
 
   // Skip the entire column if no cognitive panel is enabled — saves
   // a column of dead space.
-  if (!showAgentActivity && !showStructural && !showSemantic) return null
+  if (
+    !showAgentActivity &&
+    !showStructural &&
+    !showSemantic &&
+    !showDecay &&
+    !showWeekly
+  ) {
+    return null
+  }
 
   return (
     <aside
@@ -69,8 +83,24 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
         </section>
       )}
       {showSemantic && (
-        <section data-testid="cognitive-panel-semantic-insight">
+        <section
+          data-testid="cognitive-panel-semantic-insight"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
           <SemanticInsight pageName={pageName} isOpen={showSemantic} />
+        </section>
+      )}
+      {showDecay && (
+        <section
+          data-testid="cognitive-panel-decay-monitor"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <DecayMonitor />
+        </section>
+      )}
+      {showWeekly && (
+        <section data-testid="cognitive-panel-weekly-review">
+          <WeeklyReview />
         </section>
       )}
     </aside>

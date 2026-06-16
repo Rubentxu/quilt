@@ -17,6 +17,8 @@ export type PanelId =
   | 'outline'
   | 'structural-graph'
   | 'semantic-insight'
+  | 'decay-monitor'
+  | 'weekly-review'
 
 /**
  * Re-export of the canonical `PANEL_LABELS` from
