@@ -51,6 +51,7 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/graph", handlers::graph::routes())
         .nest("/api/v1/cognitive", handlers::cognitive::routes())
         .nest("/api/v1/presets", handlers::presets::routes())
+        .nest("/api/v1/agents", handlers::agent_room::routes())
         // Frontend serving (catch-all for SPA)
         .route(
             "/",

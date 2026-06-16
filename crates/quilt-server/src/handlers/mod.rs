@@ -2,6 +2,7 @@
 //!
 //! Each module handles a specific domain area of the API.
 
+pub mod agent_room;
 pub mod blocks;
 pub mod cognitive;
 pub mod frontend;
@@ -12,8 +13,8 @@ pub mod migration;
 pub mod navigate;
 pub mod pages;
 pub mod presets;
-pub mod properties;
 pub mod projection;
+pub mod properties;
 pub mod query;
 pub mod references;
 pub mod relations;

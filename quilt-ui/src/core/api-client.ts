@@ -21,6 +21,9 @@ import type {
   WeeklyReviewDto,
   SerendipityResponseDto,
   CognitiveGraphDto,
+  AgentDto,
+  AgentListResponse,
+  SpawnAgentRequest,
 } from '@shared/types/api';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
@@ -867,6 +870,67 @@ export const api = {
    */
   getCognitiveGraph: () =>
     cachedFetch<CognitiveGraphDto>('GET', '/cognitive/graph'),
+
+  // ─── Agent Room (CG-5) ─────────────────────────────────────────────────────
+  //
+  // `GET /api/v1/agents`           — list runs (filter by status, type, limit)
+  // `POST /api/v1/agents`          — spawn a new run
+  // `GET /api/v1/agents/:id`       — single-run status
+  // `POST /api/v1/agents/:id/cancel` — cancel a run
+  //
+  // The list and the status endpoint are GETs and use
+  // `cachedFetch`. The mutation endpoints (spawn, cancel)
+  // bypass the cache and invalidate the list cache so the
+  // next read sees the new state.
+
+  /**
+   * List agent runs. Optional `status`, `type`, and `limit`
+   * query params narrow the result; the `total` field on the
+   * response is the full registry size regardless of the
+   * `limit` filter.
+   */
+  listAgents: (params?: { status?: string; type?: string; limit?: number }) => {
+    const search = new URLSearchParams()
+    if (params?.status) search.set('status', params.status)
+    if (params?.type) search.set('type', params.type)
+    if (params?.limit !== undefined) search.set('limit', String(params.limit))
+    const qs = search.toString()
+    return cachedFetch<AgentListResponse>('GET', `/agents${qs ? `?${qs}` : ''}`)
+  },
+
+  /**
+   * Spawn a new agent run. Returns the `Queued` DTO. The
+   * `GET /agents` cache is invalidated so the next
+   * `listAgents` call sees the new state.
+   */
+  spawnAgent: (data: SpawnAgentRequest) =>
+    fetchJson<AgentDto>('/agents', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }).then(dto => {
+      sessionCache.invalidate('GET /agents')
+      return dto
+    }),
+
+  /**
+   * Get the current status of a single agent run. Cached.
+   */
+  getAgent: (id: string) =>
+    cachedFetch<AgentDto>('GET', `/agents/${encodeURIComponent(id)}`),
+
+  /**
+   * Cancel a run. Idempotent — calling on a terminal run
+   * returns 200 with the same DTO. Invalidates the list
+   * cache on success.
+   */
+  cancelAgent: (id: string) =>
+    fetchJson<AgentDto>(
+      `/agents/${encodeURIComponent(id)}/cancel`,
+      { method: 'POST' },
+    ).then(dto => {
+      sessionCache.invalidate('GET /agents')
+      return dto
+    }),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────

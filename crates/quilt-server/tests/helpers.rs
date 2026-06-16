@@ -2,16 +2,17 @@
 //!
 //! Provides common setup utilities for integration tests.
 
+use quilt_analysis::agent_room::{AgentLifecycle, AgentRegistry};
 use quilt_application::bootstrap::AppServices;
 use quilt_application::services::presets::StaticPresetRegistry;
 use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
+use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
     ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
     TourStateUseCases, TourStateUseCasesImpl,
 };
-use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_infrastructure::database::sqlite::connection::{DbPool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
@@ -151,4 +152,47 @@ pub async fn build_test_app_state_with_repos(
         property_repo,
         tour_state_repo,
     )
+}
+
+/// Build an AppState with the Agent Room wired in (CG-5).
+/// Returns the state, the lifecycle, and the registry for
+/// tests that want to assert on internal state.
+pub async fn build_test_app_state_with_agents(
+    pool: DbPool,
+) -> (
+    quilt_server::state::AppState,
+    Arc<AgentLifecycle>,
+    Arc<AgentRegistry>,
+) {
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+        build_test_app_state_with_repos(pool).await;
+    let lifecycle = Arc::new(AgentLifecycle::new(
+        state.repos.block.clone(),
+        state.repos.page.clone(),
+    ));
+    let registry = Arc::new(AgentRegistry::with_defaults());
+
+    // Spawn the worker so the HTTP handlers see real
+    // executor-driven state transitions. The handle is
+    // intentionally dropped — in production the server
+    // holds it for clean shutdown; tests just need the
+    // worker running.
+    let queue = quilt_analysis::agent_room::AgentQueue::new(
+        (*lifecycle).clone(),
+        registry.clone(),
+    );
+    let _ = quilt_analysis::agent_room::queue::spawn_worker(queue);
+
+    let state = quilt_server::state::AppState::new_with_repos_and_agents(
+        state.repos.clone(),
+        state.search_service.clone(),
+        state.search_index.clone(),
+        state.ref_service.clone(),
+        state.services.clone(),
+        state.projection_resolver.clone(),
+        state.preset_registry.clone(),
+        Some(lifecycle.clone()),
+        Some(registry.clone()),
+    );
+    (state, lifecycle, registry)
 }

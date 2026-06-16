@@ -24,6 +24,7 @@
 
 import { usePanelVisibility } from '@features/dashboard'
 import { AgentActivityFeed } from './AgentActivityFeed'
+import { AgentRoom } from '@features/agent-room'
 import { StructuralGraph } from './StructuralGraph'
 import { SemanticInsight } from './SemanticInsight'
 import { CognitiveGraph } from './CognitiveGraph'
@@ -39,6 +40,7 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
   const { visiblePanels } = usePanelVisibility()
 
   const showAgentActivity = visiblePanels.has('agent-activity')
+  const showAgentRoom = visiblePanels.has('agent-room')
   const showStructural = visiblePanels.has('structural-graph')
   const showSemantic = visiblePanels.has('semantic-insight')
   const showCognitiveGraph = visiblePanels.has('cognitive-graph')
@@ -50,6 +52,7 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
   // a column of dead space.
   if (
     !showAgentActivity &&
+    !showAgentRoom &&
     !showStructural &&
     !showSemantic &&
     !showCognitiveGraph &&
@@ -78,6 +81,14 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
           style={{ borderBottom: '1px solid var(--color-border)' }}
         >
           <AgentActivityFeed maxItems={15} />
+        </section>
+      )}
+      {showAgentRoom && (
+        <section
+          data-testid="cognitive-panel-agent-room"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <AgentRoom />
         </section>
       )}
       {showStructural && (

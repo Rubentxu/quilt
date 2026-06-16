@@ -508,3 +508,60 @@ export interface CognitiveGraphDto {
   gapNodes: string[];
   generatedAt: string;
 }
+
+// ─── Agent Room (CG-5) ───────────────────────────────────────────────────────
+//
+// The V1 Agent Room surface. The string set of `status` matches the one
+// `AgentRunRenderer` already renders — `Queued`, `Running`, `Completed`,
+// `Failed`, `Cancelled`. New agent types (only `decay-annotator` in V1)
+// are added by registering an `AgentExecutor` in
+// `quilt-analysis::agent_room::registry::AgentRegistry` server-side; the
+// wire format is unchanged.
+
+/** Lifecycle state of an agent run. */
+export type AgentStatus =
+  | 'Queued'
+  | 'Running'
+  | 'Completed'
+  | 'Failed'
+  | 'Cancelled';
+
+/** A single agent run. The shape matches the Rust `AgentDto`. */
+export interface AgentDto {
+  /** UUID of the underlying AgentRun block. */
+  id: string;
+  /** Agent type id, e.g. `decay-annotator` in V1. */
+  agentType: string;
+  /** Informational model label (no LLM in V1, per ADR-0001). */
+  model?: string | null;
+  /** Current lifecycle state. */
+  status: AgentStatus;
+  /** Optional context page the agent was scoped to. */
+  contextPage?: string | null;
+  /** One-line summary set when the agent reaches `Completed`. */
+  summary?: string | null;
+  /** Number of blocks this agent has written to the graph. */
+  blocksModified: number;
+  /** When the worker started. `null` while `Queued`. */
+  startedAt?: string | null;
+  /** When the run reached a terminal state. */
+  completedAt?: string | null;
+  /** Error message; populated only when `status === 'Failed'`. */
+  error?: string | null;
+}
+
+/** Response body for `GET /api/v1/agents`. */
+export interface AgentListResponse {
+  agents: AgentDto[];
+  /** Full registry size regardless of the `?limit=` filter. */
+  total: number;
+}
+
+/** Request body for `POST /api/v1/agents`. Optional fields default to `null`. */
+export interface SpawnAgentRequest {
+  agentType: string;
+  contextPage?: string;
+  model?: string;
+  /** Accepted for forward compatibility; ignored in V1. */
+  queueMode?: 'sequential' | 'parallel';
+}

@@ -557,6 +557,12 @@ describe('api surface (P0 — only mounted routes)', () => {
       'getDecayAlerts',
       'getWeeklyReview',
       'getSerendipity',
+      'getCognitiveGraph',
+      // Agent Room (CG-5)
+      'listAgents',
+      'spawnAgent',
+      'getAgent',
+      'cancelAgent',
     ].sort()
     expect(Object.keys(api).sort()).toEqual(expected)
   })
