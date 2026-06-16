@@ -492,6 +492,45 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // Migration 008: annotations table (the "comments 2.0" system).
+    // See `migrations/008_annotations.sql` for the canonical schema.
+    // This is the inlined idempotent version that runs every time
+    // `run_migrations` is called. The `if not exists` and
+    // `create index if not exists` clauses keep it safe to re-run.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS annotations (
+            id BLOB PRIMARY KEY NOT NULL,
+            block_id BLOB NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+            scope TEXT NOT NULL DEFAULT 'block' CHECK(scope IN ('block','inline')),
+            author_type TEXT NOT NULL CHECK(author_type IN ('human','agent')),
+            author_name TEXT NOT NULL,
+            content TEXT NOT NULL CHECK(length(content) > 0),
+            status TEXT NOT NULL CHECK(status IN ('pending','in_progress','resolved','dismissed')),
+            highlight_start INTEGER,
+            highlight_end INTEGER,
+            parent_annotation_id BLOB REFERENCES annotations(id) ON DELETE CASCADE,
+            created_at INTEGER NOT NULL,
+            resolved_at INTEGER,
+            resolved_by TEXT
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_annotations_block ON annotations(block_id, created_at)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_annotations_status ON annotations(status, created_at)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_annotations_parent ON annotations(parent_annotation_id, created_at)")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_annotations_author ON annotations(author_name)")
+        .execute(pool)
+        .await?;
+
     // Migration 009b: add `journal_aggregate` column to `user_settings`
     // (T7 of `slash-command-functional-behavior`). This setting controls whether
     // the journal page renders 4 default query blocks (NOW, Scheduled today,
