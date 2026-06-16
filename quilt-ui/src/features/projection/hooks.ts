@@ -4,10 +4,30 @@
 //! - AbortController support for cancellation
 //! - Short TTL caching via the api client
 //! - Proper error handling
+//!
+//! Also exports `useProjectionMetrics` (ADR-0028) for the debug panel.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { api } from '@core/api-client';
 import type { ProjectionView, Preset, PresetListResponse } from './types';
+import { projectionMetricsStore, type ProjectionMetrics } from './metrics';
+
+// ─── useProjectionMetrics (ADR-0028) ───────────────────────────────────────
+
+/**
+ * React hook that subscribes to `ProjectionMetricsStore` and returns
+ * the current snapshot. Re-renders on every counter change.
+ *
+ * Used by the debug panel (gated by `VITE_DEBUG_PANEL=true`) and any
+ * other surface that wants to display the WASM vs HTTP ratio.
+ */
+export function useProjectionMetrics(): ProjectionMetrics {
+  return useSyncExternalStore(
+    (listener) => projectionMetricsStore.subscribe(listener),
+    () => projectionMetricsStore.snapshot(),
+    () => projectionMetricsStore.snapshot(),
+  )
+}
 
 // ─── useProjection ─────────────────────────────────────────────────────────
 
@@ -206,3 +226,7 @@ export function usePresetApplication() {
 
 // Re-export types
 export type { ProjectionView, Preset };
+
+// Re-export the metrics store for callers that want to record
+// metrics without going through the hook (e.g., E2E tests).
+export { projectionMetricsStore, type ProjectionMetrics } from './metrics';
