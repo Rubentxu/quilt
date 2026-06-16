@@ -46,17 +46,7 @@ fn make_registry(patches: &[(&str, MergePolicy)]) -> Arc<PropertyDefinitionRegis
             property_type: PropertyType::Text,
             cardinality: quilt_domain::properties::types::Cardinality::One,
             closed_values: Vec::new(),
-            #[allow(deprecated)]
-            view_context: Default::default(),
-            #[allow(deprecated)]
-            public: false,
-            #[allow(deprecated)]
-            queryable: false,
-            #[allow(deprecated)]
-            hidden: false,
             attribute: None,
-            #[allow(deprecated)]
-            read_only: false,
             status: quilt_domain::properties::types::PropertyStatus::Active,
             alias_of: None,
             block_count: 0,

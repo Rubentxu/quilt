@@ -253,7 +253,7 @@ mod tests {
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
     use quilt_domain::properties::definition::PropertyDefinition;
-    use quilt_domain::properties::types::{Cardinality, PropertyType, ViewContext};
+    use quilt_domain::properties::types::{Cardinality, PropertyType, PropertyVisibility, ViewContext};
     use std::collections::HashMap;
 
     #[test]
@@ -416,7 +416,7 @@ mod tests {
             PropertyType::Text,
         )
         .with_cardinality(Cardinality::One)
-        .with_view_context(ViewContext::Block);
+        .with_visibility(PropertyVisibility::Inline);
 
         let mock_repo = MockPropertyRepo {
             properties: HashMap::from([(custom_prop.db_ident.clone(), custom_prop.clone())]),

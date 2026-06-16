@@ -34,8 +34,6 @@ fn extract_str(v: &PropertyValue) -> Option<&str> {
 
 /// Build a minimal PropertyDefinitionRegistry from a list of (db_ident, merge_policy).
 fn make_registry(defs: &[(&str, MergePolicy)]) -> PropertyDefinitionRegistry {
-    use quilt_domain::properties::types::ViewContext;
-
     let definitions: Vec<quilt_domain::properties::PropertyDefinition> = defs
         .iter()
         .map(
@@ -46,12 +44,7 @@ fn make_registry(defs: &[(&str, MergePolicy)]) -> PropertyDefinitionRegistry {
                 property_type: PropertyType::Text,
                 cardinality: Cardinality::One,
                 closed_values: Vec::new(),
-                view_context: ViewContext::default(),
-                public: false,
-                queryable: false,
-                hidden: false,
                 attribute: None,
-                read_only: false,
                 status: quilt_domain::properties::types::PropertyStatus::Active,
                 derived_from: None,
                 visibility: PropertyVisibility::default(),

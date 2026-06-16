@@ -36,7 +36,7 @@ use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
 use quilt_domain::properties::types::{
-    Cardinality, ClosedValue, PropertyStatus, PropertyType, ViewContext,
+    Cardinality, ClosedValue, PropertyStatus, PropertyType, PropertyVisibility, ViewContext,
 };
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
@@ -884,10 +884,10 @@ impl SqlitePageRepository {
     async fn is_read_only_key(&self, key: &str) -> bool {
         if let Some(repo) = &self.property_repo {
             if let Ok(Some(def)) = repo.get_by_db_ident(key).await {
-                return def.read_only;
+                return def.mutability.to_read_only();
             }
             if let Some(def) = quilt_domain::properties::builtin::get_builtin_property(key) {
-                return def.read_only;
+                return def.mutability.to_read_only();
             }
             return false;
         }
@@ -1958,12 +1958,12 @@ impl PropertyRepository for SqlitePropertyRepository {
         .bind(&def.title)
         .bind(def.property_type.as_str())
         .bind(def.cardinality.as_str())
-        .bind(def.view_context.as_str())
-        .bind(def.public as i64)
-        .bind(def.queryable as i64)
-        .bind(def.hidden as i64)
+        .bind(PropertyDefinition::visibility_to_sql_column(def.visibility))
+        .bind((def.visibility == PropertyVisibility::Inline || def.visibility == PropertyVisibility::Panel) as i64)
+        .bind(def.is_queryable() as i64)
+        .bind((def.visibility == PropertyVisibility::Hidden) as i64)
         .bind(def.attribute.as_deref())
-        .bind(def.read_only as i64)
+        .bind(def.mutability.to_read_only() as i64)
         .bind(def.status.as_str())
         .bind(def.alias_of.as_deref())
         .bind(def.block_count as i64)
@@ -2011,12 +2011,12 @@ impl PropertyRepository for SqlitePropertyRepository {
         .bind(&def.title)
         .bind(def.property_type.as_str())
         .bind(def.cardinality.as_str())
-        .bind(def.view_context.as_str())
-        .bind(def.public as i64)
-        .bind(def.queryable as i64)
-        .bind(def.hidden as i64)
+        .bind(PropertyDefinition::visibility_to_sql_column(def.visibility))
+        .bind((def.visibility == PropertyVisibility::Inline || def.visibility == PropertyVisibility::Panel) as i64)
+        .bind(def.is_queryable() as i64)
+        .bind((def.visibility == PropertyVisibility::Hidden) as i64)
         .bind(def.attribute.as_deref())
-        .bind(def.read_only as i64)
+        .bind(def.mutability.to_read_only() as i64)
         .bind(def.status.as_str())
         .bind(def.alias_of.as_deref())
         .bind(def.block_count as i64)

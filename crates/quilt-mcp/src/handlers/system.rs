@@ -116,11 +116,11 @@ impl SystemToolHandler {
                     "property_type": type_str,
                     "cardinality": cardinality_str,
                     "closed_values": closed_values,
-                    "view_context": def.view_context.as_str(),
-                    "public": def.public,
-                    "queryable": def.queryable,
-                    "hidden": def.hidden,
-                    "read_only": def.read_only,
+                    // ADR-0025: new visibility system (replaces view_context/public/queryable/hidden/read_only)
+                    "visibility": def.visibility.as_str(),
+                    "is_queryable": def.is_queryable(),
+                    "is_hidden": def.visibility == quilt_domain::properties::PropertyVisibility::Hidden,
+                    "is_read_only": def.mutability.to_read_only(),
                     "source": "builtin",
                 })
             })

@@ -32,26 +32,8 @@ pub struct PropertyDefinition {
     pub cardinality: Cardinality,
     /// Predefined values for closed-set properties
     pub closed_values: Vec<ClosedValue>,
-
-    // ── PI-1: Legacy visibility/mutability fields (deprecated) ──
-    /// Where to display this property in the UI (legacy).
-    #[deprecated(note = "use visibility: PropertyVisibility instead")]
-    pub view_context: ViewContext,
-    /// Whether this property is publicly visible (legacy).
-    #[deprecated(note = "use visibility: PropertyVisibility instead")]
-    pub public: bool,
-    /// Whether this property is queryable (searchable) (legacy).
-    #[deprecated(note = "use visibility: PropertyVisibility instead")]
-    pub queryable: bool,
-    /// Whether this property is hidden in UI (legacy).
-    #[deprecated(note = "use visibility: PropertyVisibility instead")]
-    pub hidden: bool,
     /// Optional attribute for custom external storage paths
     pub attribute: Option<String>,
-    /// Whether this property is read-only (system/computed) (legacy).
-    #[serde(default)]
-    #[deprecated(note = "use mutability: PropertyMutability instead")]
-    pub read_only: bool,
 
     // ── PI-2: Lifecycle & usage metadata ──
     /// Lifecycle status of this property.
@@ -89,6 +71,28 @@ pub struct PropertyDefinition {
 }
 
 impl PropertyDefinition {
+    /// Map `PropertyVisibility` to the legacy `view_context` SQL column string.
+    ///
+    /// Used by SQL bind sites to derive the `view_context` column value from
+    /// the first-class `visibility` field (ADR-0025). This is the single
+    /// authoritative mapping for all bind sites.
+    ///
+    /// | `PropertyVisibility` | SQL column value |
+    /// |---------------------|------------------|
+    /// | `Inline`            | `"inline"`        |
+    /// | `Panel`             | `"panel"`         |
+    /// | `System`            | `"never"`         |
+    /// | `Hidden`            | `"hidden"`        |
+    #[must_use]
+    pub const fn visibility_to_sql_column(v: PropertyVisibility) -> &'static str {
+        match v {
+            PropertyVisibility::Inline => "inline",
+            PropertyVisibility::Panel => "panel",
+            PropertyVisibility::System => "never",
+            PropertyVisibility::Hidden => "hidden",
+        }
+    }
+
     /// Create a new property definition.
     ///
     /// The `db_ident` is stored as-is. Use [`Self::normalize_key`] to
@@ -106,12 +110,7 @@ impl PropertyDefinition {
             property_type,
             cardinality: Cardinality::One,
             closed_values: Vec::new(),
-            view_context: ViewContext::default(),
-            public: true,
-            queryable: true,
-            hidden: false,
             attribute: None,
-            read_only: false,
             status: PropertyStatus::default(),
             alias_of: None,
             block_count: 0,
@@ -207,66 +206,16 @@ impl PropertyDefinition {
         self
     }
 
-    /// Set view context (legacy).
-    #[deprecated(note = "use with_visibility(PropertyVisibility) instead")]
-    pub fn with_view_context(mut self, view_context: ViewContext) -> Self {
-        self.view_context = view_context;
-        self
-    }
-
     /// Set the first-class visibility tier (ADR-0025).
-    ///
-    /// This is the preferred builder for visibility. The legacy
-    /// `with_visibility(bool, bool, bool)` is deprecated.
     #[must_use]
     pub fn with_visibility(mut self, visibility: PropertyVisibility) -> Self {
         self.visibility = visibility;
         self
     }
 
-    /// Set visibility using the legacy three-flag form (deprecated).
-    ///
-    /// Derives the new `visibility` field from the flags:
-    /// - `hidden = true` → `PropertyVisibility::Hidden` (dominant)
-    /// - else `public = true` → `PropertyVisibility::Inline` (or `Panel` depending on `view_context`)
-    /// - else → `PropertyVisibility::System`
-    ///
-    /// NOTE: This is the legacy builder preserved for backward compatibility.
-    /// New code should use `with_visibility(PropertyVisibility)` directly.
-    #[deprecated(note = "use with_visibility(PropertyVisibility) instead")]
-    pub fn with_visibility_flags(mut self, public: bool, queryable: bool, hidden: bool) -> Self {
-        self.public = public;
-        self.queryable = queryable;
-        self.hidden = hidden;
-        // Derive the new visibility field from legacy flags:
-        // hidden is the dominant signal
-        if hidden {
-            self.visibility = PropertyVisibility::Hidden;
-        } else if public {
-            // Default to Inline for public properties (Block context → Inline, Page context → Panel
-            // would require knowing view_context; conservatively use Inline)
-            self.visibility = PropertyVisibility::Inline;
-        } else {
-            self.visibility = PropertyVisibility::System;
-        }
-        self
-    }
-
     /// Set attribute
     pub fn with_attribute(mut self, attribute: impl Into<String>) -> Self {
         self.attribute = Some(attribute.into());
-        self
-    }
-
-    /// Mark this property as read-only (or back to writable) using the legacy bool
-    /// (deprecated — use `with_mutability` instead).
-    ///
-    /// System/computed properties like `id`, `created_at`, `updated_at` are
-    /// registered with `read_only: true` in `BUILTIN_PROPERTIES`.
-    #[deprecated(note = "use with_mutability(PropertyMutability) instead")]
-    pub fn with_read_only(mut self, read_only: bool) -> Self {
-        self.read_only = read_only;
-        self.mutability = PropertyMutability::from_read_only(read_only);
         self
     }
 
@@ -345,22 +294,23 @@ impl PropertyDefinition {
     /// - else `view_context = Page` → `PropertyVisibility::Panel`
     /// - else `view_context = Never` → `PropertyVisibility::System`
     #[must_use]
-    #[allow(deprecated)]
     pub fn from_legacy_fields(
         id: Uuid,
         db_ident: impl Into<String>,
         title: impl Into<String>,
         property_type: PropertyType,
-        view_context: ViewContext,
-        public: bool,
-        queryable: bool,
-        hidden: bool,
-        read_only: bool,
+        _view_context: ViewContext,
+        _public: bool,
+        _queryable: bool,
+        _hidden: bool,
+        _read_only: bool,
     ) -> Self {
-        let visibility = if hidden {
+        // Derive visibility from view_context (per spec):
+        // hidden=true → Hidden (dominant), else Block → Inline, Page → Panel, Never → System
+        let visibility = if _hidden {
             PropertyVisibility::Hidden
         } else {
-            PropertyVisibility::from_view_context(&view_context)
+            PropertyVisibility::from_view_context(&_view_context)
         };
 
         Self {
@@ -370,12 +320,7 @@ impl PropertyDefinition {
             property_type,
             cardinality: Cardinality::One,
             closed_values: Vec::new(),
-            view_context,
-            public,
-            queryable,
-            hidden,
             attribute: None,
-            read_only,
             status: PropertyStatus::default(),
             alias_of: None,
             block_count: 0,
@@ -384,7 +329,7 @@ impl PropertyDefinition {
             last_seen_at: None,
             // ADR-0025: first-class fields derived from legacy inputs
             visibility,
-            mutability: PropertyMutability::from_read_only(read_only),
+            mutability: PropertyMutability::from_read_only(_read_only),
             derived_from: None,
             merge_policy: MergePolicy::SetIfMissing,
         }
@@ -454,23 +399,54 @@ pub enum KeyValidationError {
 mod tests {
     use super::*;
 
+    // ── visibility_to_sql_column tests (T1) ───────────────────────────────────
+
+    #[test]
+    fn visibility_to_sql_column_inline() {
+        assert_eq!(
+            PropertyDefinition::visibility_to_sql_column(PropertyVisibility::Inline),
+            "inline"
+        );
+    }
+
+    #[test]
+    fn visibility_to_sql_column_panel() {
+        assert_eq!(
+            PropertyDefinition::visibility_to_sql_column(PropertyVisibility::Panel),
+            "panel"
+        );
+    }
+
+    #[test]
+    fn visibility_to_sql_column_system() {
+        assert_eq!(
+            PropertyDefinition::visibility_to_sql_column(PropertyVisibility::System),
+            "never"
+        );
+    }
+
+    #[test]
+    fn visibility_to_sql_column_hidden() {
+        assert_eq!(
+            PropertyDefinition::visibility_to_sql_column(PropertyVisibility::Hidden),
+            "hidden"
+        );
+    }
+
     #[test]
     fn test_property_definition_builder() {
         let id = Uuid::new_v4();
         let prop = PropertyDefinition::new(id, "status", "Status", PropertyType::Text)
             .with_cardinality(Cardinality::One)
-            .with_view_context(ViewContext::Page);
+            .with_visibility(PropertyVisibility::Panel);
 
         assert_eq!(prop.db_ident, "status");
         assert_eq!(prop.title, "Status");
         assert_eq!(prop.property_type, PropertyType::Text);
         assert_eq!(prop.cardinality, Cardinality::One);
-        assert_eq!(prop.view_context, ViewContext::Page);
-        assert!(prop.public);
-        assert!(prop.queryable);
-        assert!(!prop.hidden);
-        // F9: read_only defaults to false
-        assert!(!prop.read_only);
+        assert_eq!(prop.visibility, PropertyVisibility::Panel);
+        // ADR-0025: mutability defaults to Mutable
+        assert_eq!(prop.mutability, PropertyMutability::Mutable);
     }
 
     #[test]
@@ -499,54 +475,6 @@ mod tests {
         assert!(!prop.has_closed_values());
         assert!(prop.is_value_allowed("any value"));
         assert!(prop.is_value_allowed("anything"));
-    }
-
-    // ── F9: read_only flag ──
-
-    #[test]
-    fn read_only_defaults_to_false() {
-        let prop = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text);
-        assert!(!prop.read_only);
-    }
-
-    #[test]
-    fn with_read_only_builder_sets_flag() {
-        let prop = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
-            .with_read_only(true);
-        assert!(prop.read_only);
-    }
-
-    #[test]
-    fn with_read_only_can_toggle_back() {
-        let prop = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
-            .with_read_only(true)
-            .with_read_only(false);
-        assert!(!prop.read_only);
-    }
-
-    #[test]
-    fn legacy_json_without_read_only_field_deserializes_to_false() {
-        // F9 forward-compat: a PropertyDefinition serialized before this
-        // change (no `read_only` field) must deserialize with `read_only: false`
-        // (the safe default — writable, not system).
-        // Serde uses the variant name for enums (One, Many, Block, etc.) since
-        // the types module doesn't have a custom serde representation.
-        let json = r#"{
-            "id": "550e8400-e29b-41d4-a716-446655440000",
-            "db_ident": "my-prop",
-            "title": "My Prop",
-            "property_type": "Text",
-            "cardinality": "One",
-            "closed_values": [],
-            "view_context": "Block",
-            "public": true,
-            "queryable": true,
-            "hidden": false,
-            "attribute": null
-        }"#;
-        let def: PropertyDefinition = serde_json::from_str(json).unwrap();
-        assert!(!def.read_only);
-        assert_eq!(def.db_ident, "my-prop");
     }
 
     // ── PI-2: Key normalization ──
@@ -940,41 +868,98 @@ mod tests {
         }
     }
 
-    // ── ADR-0025: T4 — legacy builders ──
+    // ── ADR-0025: T5 — from_legacy_fields 12-combo derivation ─────────────────
 
     #[test]
-    #[allow(deprecated)]
-    fn with_visibility_flags_hidden_overrides_public() {
-        // hidden=true dominates → Hidden regardless of public
-        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
-            .with_visibility_flags(true, true, true);
-        assert_eq!(def.visibility, PropertyVisibility::Hidden);
+    fn from_legacy_fields_12_combo_derivation() {
+        // 3 ViewContext × 2 hidden × 2 read_only = 12 combos
+        // Derivation rules:
+        //   visibility: hidden=true → Hidden; else Block→Inline, Page→Panel, Never→System
+        //   mutability: read_only=true → Immutable; read_only=false → Mutable
+        //   derived_from: always None
+        //   merge_policy: always SetIfMissing
+        //   closed_values: always Vec::new()
+        let combos: Vec<(ViewContext, bool, bool)> = vec![
+            // (view_context, hidden, read_only)
+            (ViewContext::Block, false, false),
+            (ViewContext::Block, false, true),
+            (ViewContext::Block, true, false),
+            (ViewContext::Block, true, true),
+            (ViewContext::Page, false, false),
+            (ViewContext::Page, false, true),
+            (ViewContext::Page, true, false),
+            (ViewContext::Page, true, true),
+            (ViewContext::Never, false, false),
+            (ViewContext::Never, false, true),
+            (ViewContext::Never, true, false),
+            (ViewContext::Never, true, true),
+        ];
+
+        for (vc, hidden, read_only) in combos {
+            // Compute expected values BEFORE moving `vc` into from_legacy_fields
+            let expected_visibility = if hidden {
+                PropertyVisibility::Hidden
+            } else {
+                PropertyVisibility::from_view_context(&vc)
+            };
+            let expected_mutability = PropertyMutability::from_read_only(read_only);
+
+            let def = PropertyDefinition::from_legacy_fields(
+                Uuid::new_v4(),
+                "x",
+                "X",
+                PropertyType::Text,
+                vc.clone(), // ViewContext is not Copy, so clone needed
+                false,      // public (unused in new model)
+                false,      // queryable (unused in new model)
+                hidden,
+                read_only,
+            );
+            assert_eq!(
+                def.visibility, expected_visibility,
+                "view_context={:?}, hidden={}, read_only={} → visibility {:?} (expected {:?})",
+                vc, hidden, read_only, def.visibility, expected_visibility
+            );
+
+            assert_eq!(
+                def.mutability, expected_mutability,
+                "view_context={:?}, hidden={}, read_only={} → mutability {:?} (expected {:?})",
+                vc, hidden, read_only, def.mutability, expected_mutability
+            );
+
+            // Invariants
+            assert!(
+                def.derived_from.is_none(),
+                "derived_from must always be None"
+            );
+            assert_eq!(
+                def.merge_policy, MergePolicy::SetIfMissing,
+                "merge_policy must always be SetIfMissing"
+            );
+            assert!(
+                def.closed_values.is_empty(),
+                "closed_values must always be empty"
+            );
+        }
     }
 
-    #[test]
-    #[allow(deprecated)]
-    fn with_visibility_flags_true_true_false_keeps_inline() {
-        // public=true, hidden=false → Inline
-        let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
-            .with_visibility_flags(true, true, false);
-        assert_eq!(def.visibility, PropertyVisibility::Inline);
-    }
+    // ── ADR-0025: T4 — mutability builder ──
 
     #[test]
-    #[allow(deprecated)]
-    fn with_read_only_true_sets_mutability_immutable() {
-        // Legacy with_read_only sets mutability
+    fn with_mutability_immutable_sets_flag() {
+        // with_mutability(PropertyMutability::Immutable) directly sets the flag
         let def = PropertyDefinition::new(Uuid::new_v4(), "x", "X", PropertyType::Text)
-            .with_read_only(true);
+            .with_mutability(PropertyMutability::Immutable);
         assert_eq!(def.mutability, PropertyMutability::Immutable);
-        assert!(def.read_only);
+        assert!(def.mutability.to_read_only());
     }
 
     // ── ADR-0025: T5 — backward-compat serde ──
 
     #[test]
     fn legacy_json_without_new_fields_defaults_all_four() {
-        // Pre-ADR-0025 JSON has no visibility/mutability/derived_from/merge_policy fields
+        // Pre-ADR-0025 JSON (with legacy fields) still deserializes cleanly
+        // because serde ignores unknown fields. The ADR-0025 fields default.
         let json = r#"{
             "id": "550e8400-e29b-41d4-a716-446655440000",
             "db_ident": "my-prop",
@@ -1010,31 +995,6 @@ mod tests {
         assert_eq!(def.mutability, restored.mutability);
         assert_eq!(def.derived_from, restored.derived_from);
         assert_eq!(def.merge_policy, restored.merge_policy);
-    }
-
-    #[test]
-    fn legacy_read_only_true_does_not_affect_mutability_default() {
-        // read_only:true in legacy JSON does NOT make mutability non-default;
-        // the two fields are independent per spec
-        let json = r#"{
-            "id": "550e8400-e29b-41d4-a716-446655440000",
-            "db_ident": "my-prop",
-            "title": "My Prop",
-            "property_type": "Text",
-            "cardinality": "One",
-            "closed_values": [],
-            "view_context": "Block",
-            "public": true,
-            "queryable": true,
-            "hidden": false,
-            "attribute": null,
-            "read_only": true
-        }"#;
-        let def: PropertyDefinition = serde_json::from_str(json).unwrap();
-        // read_only is true (legacy)
-        assert!(def.read_only);
-        // mutability is still Mutable (serde default, independent of read_only)
-        assert_eq!(def.mutability, PropertyMutability::Mutable);
     }
 }
 

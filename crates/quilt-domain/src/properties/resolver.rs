@@ -60,7 +60,7 @@ impl PropertyKeyResolver {
 mod tests {
     use super::*;
     use crate::properties::definition::PropertyDefinition;
-    use crate::properties::types::{Cardinality, PropertyType, ViewContext};
+    use crate::properties::types::{Cardinality, PropertyType, PropertyVisibility, ViewContext};
     use crate::value_objects::Uuid;
     use async_trait::async_trait;
     use std::collections::HashMap;
@@ -176,7 +176,7 @@ mod tests {
             PropertyType::Text,
         )
         .with_cardinality(Cardinality::One)
-        .with_view_context(ViewContext::Page)
+        .with_visibility(PropertyVisibility::Panel)
     }
 
     // ── F6 spec scenarios ──

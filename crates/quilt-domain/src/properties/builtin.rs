@@ -2,7 +2,7 @@
 
 use super::definition::PropertyDefinition;
 use super::types::{
-    Cardinality, ClosedValue, PropertyMutability, PropertyType, PropertyVisibility, ViewContext,
+    Cardinality, ClosedValue, PropertyMutability, PropertyType, PropertyVisibility,
 };
 use crate::value_objects::Uuid;
 use std::collections::HashMap;
@@ -130,12 +130,7 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         // Immutable with PropertyVisibility::System (not searchable, not in UI).
         // Writes via PageRepository::update_properties are rejected with
         // DomainError::PropertyReadOnly(<key>).
-        //
-        // We construct these with the new ADR-0025 fields (visibility=System,
-        // mutability=Immutable) while also setting view_context=Never to
-        // preserve the legacy field value that existing tests assert on.
         let id = PropertyDefinition {
-            view_context: ViewContext::Never,
             visibility: PropertyVisibility::System,
             mutability: PropertyMutability::Immutable,
             ..PropertyDefinition::new(Uuid::new_v4(), "id", "ID", PropertyType::Text)
@@ -144,7 +139,6 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         map.insert("id".to_string(), id);
 
         let created_at = PropertyDefinition {
-            view_context: ViewContext::Never,
             visibility: PropertyVisibility::System,
             mutability: PropertyMutability::Immutable,
             ..PropertyDefinition::new(
@@ -158,7 +152,6 @@ fn get_builtin_properties() -> &'static HashMap<String, PropertyDefinition> {
         map.insert("created_at".to_string(), created_at);
 
         let updated_at = PropertyDefinition {
-            view_context: ViewContext::Never,
             visibility: PropertyVisibility::System,
             mutability: PropertyMutability::Immutable,
             ..PropertyDefinition::new(
@@ -316,7 +309,8 @@ mod tests {
 
     #[test]
     fn test_system_properties_have_system_visibility() {
-        // ADR-0025: system properties have System visibility (not searchable, not in UI).
+        // ADR-0025: system properties have System visibility (not searchable) and
+        // Immutable mutability (not user-editable).
         for key in &["id", "created_at", "updated_at"] {
             let def = get_builtin_property(key).expect("system property exists");
             assert_eq!(
@@ -325,19 +319,10 @@ mod tests {
                 "{} must have visibility = System",
                 key
             );
-        }
-    }
-
-    #[test]
-    fn test_system_properties_have_never_view_context() {
-        // System properties are not user-editable UI properties — they
-        // are not displayed in the page properties panel.
-        for key in &["id", "created_at", "updated_at"] {
-            let def = get_builtin_property(key).expect("system property exists");
             assert_eq!(
-                def.view_context,
-                ViewContext::Never,
-                "{} must have view_context = Never",
+                def.mutability,
+                PropertyMutability::Immutable,
+                "{} must have mutability = Immutable",
                 key
             );
         }
