@@ -9,7 +9,8 @@
 
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { api } from '@core/api-client';
-import type { ProjectionView, Preset, PresetListResponse } from './types';
+import { wasmProjectionResolve } from '@core/wasm-bridge/wasm-loader';
+import type { Block, ProjectionView, Preset, PresetListResponse } from './types';
 import { projectionMetricsStore, type ProjectionMetrics } from './metrics';
 
 // ─── useProjectionMetrics (ADR-0028) ───────────────────────────────────────
@@ -38,6 +39,18 @@ export interface UseProjectionOptions {
   signal?: AbortSignal;
   /** Whether to skip fetching (e.g., while editing). */
   skip?: boolean;
+  /**
+   * Optional React-side `Block` object. When provided, the hook
+   * tries the WASM path first (no network round-trip). When the
+   * WASM path returns `null` (WASM not loaded, returned null, or
+   * threw), the hook falls back to HTTP via `api.getBlockProjection`.
+   * When `block` is undefined, the hook goes HTTP-only.
+   *
+   * This parameter is optional; consumers that don't have the
+   * block locally (e.g., test mocks) can omit it and the HTTP
+   * path runs as before.
+   */
+  block?: Block;
 }
 
 export interface UseProjectionResult {
@@ -52,13 +65,29 @@ export interface UseProjectionResult {
 /**
  * Fetch and cache a block's projection view.
  *
- * Uses the api client's TTL cache (30s) so concurrent reads are
- * deduplicated. The AbortSignal can be used to cancel stale requests.
+ * Strategy (ADR-0028): WASM-first, HTTP-fallback.
+ * 1. If a `block` is provided AND the WASM module has the
+ *    `projection_resolve` export, try WASM first (no network).
+ * 2. If WASM returns a result, use it (no HTTP call).
+ * 3. If WASM returns null (not loaded, error, or invalid block),
+ *    fall back to HTTP via `api.getBlockProjection`.
+ * 4. If `block` is undefined, go HTTP-only.
+ *
+ * Metrics: every successful resolution records into
+ * `ProjectionMetricsStore` (`recordWasm` or `recordHttp`).
+ * HTTP errors record into `recordHttpError`. The metrics are
+ * exposed via `useProjectionMetrics` (for the debug panel) and
+ * `window.__quiltProjectionMetrics` (for E2E tests).
+ *
+ * The existing 3 test mocks for `BlockRow` and `PageView.zoom`
+ * continue to work without modification (they replace
+ * `useProjection` entirely via `vi.mock`).
  */
 export function useProjection({
   blockId,
   signal,
   skip = false,
+  block,
 }: UseProjectionOptions): UseProjectionResult {
   const [projection, setProjection] = useState<ProjectionView | null>(null);
   const [loading, setLoading] = useState(!skip && !!blockId);
@@ -80,32 +109,52 @@ export function useProjection({
 
     let cancelled = false;
 
-    async function fetchProjection() {
+    async function resolveProjection() {
       setLoading(true);
       setError(null);
+
+      // 1. WASM-first path (only when the React-side block is available)
+      if (block) {
+        try {
+          const wasmResult = wasmProjectionResolve(block)
+          if (wasmResult && !cancelled && !abortRef.current?.aborted) {
+            setProjection(wasmResult.view)
+            projectionMetricsStore.recordWasm()
+            setLoading(false)
+            return // HTTP call is NOT fired
+          }
+          // WASM returned null → fall through to HTTP
+        } catch {
+          // Defensive: the bridge already swallows errors, but if
+          // something exotic happens, fall through to HTTP.
+        }
+      }
+
+      // 2. HTTP-fallback path
       try {
-        const result = await api.getBlockProjection(blockId);
-        // Check if the request was cancelled before updating state
+        const result = await api.getBlockProjection(blockId)
         if (!cancelled && !abortRef.current?.aborted) {
-          setProjection(result);
+          setProjection(result)
+          projectionMetricsStore.recordHttp()
         }
       } catch (err) {
         if (!cancelled && !abortRef.current?.aborted) {
-          setError(err instanceof Error ? err : new Error(String(err)));
+          setError(err instanceof Error ? err : new Error(String(err)))
+          projectionMetricsStore.recordHttpError()
         }
       } finally {
         if (!cancelled && !abortRef.current?.aborted) {
-          setLoading(false);
+          setLoading(false)
         }
       }
     }
 
-    fetchProjection();
+    resolveProjection();
 
     return () => {
       cancelled = true;
     };
-  }, [blockId, skip]);
+  }, [blockId, skip, block]);
 
   return { projection, loading, error };
 }
