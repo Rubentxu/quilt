@@ -14,6 +14,7 @@ export type PanelId =
   | 'sidebar'
   | 'backlinks'
   | 'agent-activity'
+  | 'agent-room'
   | 'outline'
   | 'structural-graph'
   | 'semantic-insight'

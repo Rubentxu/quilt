@@ -1814,6 +1814,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "lru",
+ "parking_lot",
  "quilt-domain",
  "quilt-test-helpers",
  "serde",
@@ -1822,6 +1823,7 @@ dependencies = [
  "tokio",
  "tokio-test",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

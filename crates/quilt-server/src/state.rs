@@ -134,6 +134,13 @@ pub struct AppState {
     pub projection_resolver: Arc<ProjectionResolver>,
     /// Preset registry for property presets
     pub preset_registry: Arc<dyn PresetRegistry>,
+    /// Agent lifecycle (CG-5). `None` in unit tests that
+    /// do not exercise the agent room surface; the HTTP
+    /// handlers treat `None` as an Internal error.
+    pub agent_lifecycle: Option<Arc<quilt_analysis::agent_room::AgentLifecycle>>,
+    /// Agent registry (CG-5). The lookup table of
+    /// registered `AgentExecutor` implementations.
+    pub agent_registry: Option<Arc<quilt_analysis::agent_room::AgentRegistry>>,
 }
 
 // ── FromRef implementations ─────────────────────────────────────────────────
@@ -235,6 +242,36 @@ impl AppState {
         projection_resolver: Arc<ProjectionResolver>,
         preset_registry: Arc<dyn PresetRegistry>,
     ) -> Self {
+        Self::new_with_repos_and_agents(
+            repos,
+            search_service,
+            search_index,
+            ref_service,
+            services,
+            projection_resolver,
+            preset_registry,
+            None,
+            None,
+        )
+    }
+
+    /// Create a new AppState with the agent room wired in
+    /// (CG-5). Pass `None` for `agent_lifecycle` and
+    /// `agent_registry` to disable the agent room surface
+    /// (the handlers return 500 in that case — a unit test
+    /// that does not exercise the surface keeps working).
+    #[allow(dead_code)]
+    pub fn new_with_repos_and_agents(
+        repos: RepositoryBundle,
+        search_service: Arc<SearchService>,
+        search_index: Arc<SearchIndexManager>,
+        ref_service: Arc<dyn RefServiceTrait>,
+        services: Arc<AppServices>,
+        projection_resolver: Arc<ProjectionResolver>,
+        preset_registry: Arc<dyn PresetRegistry>,
+        agent_lifecycle: Option<Arc<quilt_analysis::agent_room::AgentLifecycle>>,
+        agent_registry: Option<Arc<quilt_analysis::agent_room::AgentRegistry>>,
+    ) -> Self {
         // Create broadcast channel for navigation events
         let (navigation_tx, _) = broadcast::channel(100);
 
@@ -248,6 +285,8 @@ impl AppState {
             ref_service,
             projection_resolver,
             preset_registry,
+            agent_lifecycle,
+            agent_registry,
         }
     }
 

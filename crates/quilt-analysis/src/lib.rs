@@ -15,6 +15,7 @@
 //! All modules depend on `quilt-domain` for types and repository traits.
 //! Per ADR-0001, Quilt does NOT integrate AI/LLM providers — only structural analysis.
 
+pub mod agent_room;
 pub mod agent_store;
 pub mod cognitive_dashboard;
 pub mod connection_engine;
@@ -58,13 +59,17 @@ pub use agent_store::AgentStore;
 pub use cognitive_dashboard::{CognitiveDashboardService, CognitiveGraphDto};
 pub use connection_engine::ConnectionEngine;
 pub use decay_monitor::{DecayMonitorDto, DecayMonitorService, SeverityCounts};
-pub use morning_briefing::{AgendaItem, DecayAlert, MorningBriefing, MorningBriefingDto, SerendipityHighlight};
-pub use serendipity_monitor::{SerendipityHighlightDetail, SerendipityMonitorDto, SerendipityMonitorService};
+pub use morning_briefing::{
+    AgendaItem, DecayAlert, MorningBriefing, MorningBriefingDto, SerendipityHighlight,
+};
+pub use serendipity_monitor::{
+    SerendipityHighlightDetail, SerendipityMonitorDto, SerendipityMonitorService,
+};
 pub use structural_mirror::StructuralMirror;
-pub use weekly_review::{DecayTrend, WeeklyReviewDto, WeeklyReviewService};
 pub use structure_gardener::{
     Belief, BeliefSnapshot, Contradiction, DeepeningSuggestion, DefaultRegistry, DiagnosisReport,
     GardenerCare, Issue, IssueKind, MentalModel, RepairAction, RepairReport, StructureGardener,
     TemplateDoctor, TemplateState,
 };
 pub use structure_mapper::{StructureEdge, StructureGraph, StructureMapper, StructureNode};
+pub use weekly_review::{DecayTrend, WeeklyReviewDto, WeeklyReviewService};
