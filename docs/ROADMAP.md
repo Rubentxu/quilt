@@ -323,12 +323,20 @@ Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 | ID | Qué | Backend | Estado |
 |----|-----|---------|--------|
 | CG-1 | Morning Briefing end-to-end | ✅ Existe | ✅ DONE (`af8191f`, `c9bf6b9`) |
-| CG-2 | Cognitive Dashboard / Graph View | ✅ Existe | 🔲 Pendiente |
-| CG-3 | Serendipity UI | ✅ Existe | 🔲 Pendiente |
-| CG-4 | Query UI avanzada | ✅ Existe | 🔲 Pendiente |
+| CG-2 | Cognitive Dashboard / Graph View | ✅ Existe | ✅ DONE (`9c287cc`) |
+| CG-3 | Serendipity UI | ✅ Existe | ✅ DONE (`08fee0d`) |
+| CG-4 | Query UI avanzada | ✅ Existe | ✅ DONE (`962dcd0`) — see CG-4 followup below |
 | CG-5 | Agent Room multi-agente | — | 🔲 Pendiente (diseño) |
 | CG-6 | Focus mode con AI panel | — | 🔲 Pendiente (diseño) |
-| CG-7 | Decay monitor + weekly review | ✅ Existe | 🔲 Pendiente |
+| CG-7 | Decay monitor + weekly review | ✅ Existe | ✅ DONE (`a6a10c3`) |
+
+### CG-4 followup: Parser position tracking
+
+`quilt-query/src/parser.rs` currently emits `ParseError::Syntax(String)` and `ParseError::Invalid(String)` without line/column. The CG-4 error UI shows the message + a "Show in docs" link, but lacks a clickable caret for fast navigation. Two options:
+- **A**: redesign the parser to track position (separate workitem, weeks of work)
+- **B**: accept the current UX (message + docs link) — already shipped
+
+Decision: keep B; revisit A in a future workitem if user feedback requests it.
 
 ### Diferido (V3+)
 
