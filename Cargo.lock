@@ -1871,6 +1871,7 @@ dependencies = [
  "console_error_panic_hook",
  "proptest",
  "quilt-query",
+ "regex",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

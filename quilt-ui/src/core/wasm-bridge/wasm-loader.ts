@@ -230,6 +230,196 @@ export function wasmStrategyAll(): string[] {
   return Array.isArray(result) ? (result as string[]) : []
 }
 
+// ── Projection bridge (ADR-0028) ─────────────────────────────────
+//
+// The Rust `WasmProjectionResolver` (crates/quilt-core/src/projection/)
+// is exported to WASM as `projection_resolve(block_json) -> string`.
+// The bridge below adapts the JS-friendly `Block` shape (array of
+// `BlockProperty` records) into the `BlockDto` JSON the WASM function
+// expects, and coerces the WASM return value into the UI's
+// `ProjectionView` shape. The hook `useProjection` wraps this with
+// HTTP-fallback; the metrics layer records the success/failure path.
+
+/**
+ * Convert a `Block` (with `properties: BlockProperty[]`) to a
+ * `BlockDto` JSON string the WASM function expects.
+ *
+ * The Rust `BlockDto` is a flat object: `{ id, pageId, parentId,
+ * content, order, level, marker, priority, collapsed, properties:
+ * Record<string, JSON>, refs: string[], createdAt, updatedAt,
+ * createdBy }`. The front-end `Block` has a similar shape but
+ * `properties` is an array of `{ key, value, type }` records.
+ *
+ * The conversion drops `pageName` (not in BlockDto), drops `children`
+ * (UI-only, not in BlockDto), and converts each `BlockProperty` to
+ * a `key: value` entry in a JSON object map. Non-string values
+ * (numbers, booleans) are preserved as JSON natives — the WASM
+ * predicates use JSON equality, not string equality.
+ */
+function blockToWasmJson(block: {
+  id: string
+  pageId: string
+  parentId?: string | null
+  content: string
+  order?: number
+  level?: number
+  marker?: string | null
+  priority?: string | null
+  collapsed?: boolean
+  properties?: Array<{ key: string; value: string | number | boolean | null }>
+  refs?: string[]
+  createdAt?: string
+  updatedAt?: string
+  createdBy?: string | null
+}): string {
+  const props: Record<string, string | number | boolean | null> = {}
+  for (const p of block.properties ?? []) {
+    if (!p) continue
+    if (p.value == null) continue
+    props[p.key] = p.value
+  }
+  return JSON.stringify({
+    id: block.id,
+    pageId: block.pageId,
+    parentId: block.parentId ?? null,
+    content: block.content,
+    order: block.order ?? 0,
+    level: block.level ?? 1,
+    marker: block.marker ?? null,
+    priority: block.priority ?? null,
+    collapsed: block.collapsed ?? false,
+    properties: props,
+    refs: block.refs ?? [],
+    createdAt: block.createdAt ?? new Date(0).toISOString(),
+    updatedAt: block.updatedAt ?? new Date(0).toISOString(),
+    createdBy: block.createdBy ?? null,
+  })
+}
+
+/** Result of a successful WASM projection resolution. */
+export interface WasmProjectionResult {
+  /** The resolved view (byte-equal to `ProjectionView` minus the
+   *  three WASM-specific metadata fields). */
+  view: import('@features/projection/types').ProjectionView
+  /** Winning contract id (e.g., "task", "default"). */
+  contractId: string
+  /** True if a tied-score conflict was detected. */
+  hadConflict: boolean
+}
+
+/**
+ * Coerce a single JSON value from the WASM return into the UI's
+ * `string | number | boolean | null` contract.
+ *
+ * - JSON string → string (pass-through; dates are ISO 8601 strings)
+ * - JSON number → number
+ * - JSON boolean → boolean
+ * - JSON null → null
+ * - JSON array → joined with ", " (the same coercion `api.getBlockProjection`
+ *   applies to array values)
+ * - JSON object → JSON.stringify(object) (defensive; the V1 contracts
+ *   don't emit object values, but a future V2 contract might)
+ */
+function coerceValue(v: unknown): string | number | boolean | null {
+  if (v == null) return null
+  if (typeof v === 'string') return v
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  if (typeof v === 'boolean') return v
+  if (Array.isArray(v)) {
+    return v.map(coerceValue).join(', ')
+  }
+  if (typeof v === 'object') {
+    try {
+      return JSON.stringify(v)
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+/** Coerce a `WasmProjectionView` JSON object into a UI `ProjectionView`. */
+function coerceView(raw: Record<string, unknown>): import('@features/projection/types').ProjectionView {
+  const decorations = Array.isArray(raw.decorations) ? raw.decorations : []
+  const conflicts = Array.isArray(raw.conflicts) ? raw.conflicts : []
+  const links = Array.isArray(raw.links) ? raw.links : []
+  const children = Array.isArray(raw.children) ? raw.children : []
+  const properties = (raw.properties && typeof raw.properties === 'object'
+    ? raw.properties
+    : {}) as Record<string, unknown>
+
+  return {
+    text: typeof raw.text === 'string' ? raw.text : '',
+    links: links as import('@features/projection/types').LinkView[],
+    children: children.filter((c): c is string => typeof c === 'string'),
+    decorations: decorations.map((d) => {
+      const dec = d as Record<string, unknown>
+      return {
+        kind: String(dec.kind ?? 'generic-badge') as import('@features/projection/types').DecorationKind,
+        target: typeof dec.target === 'string' ? dec.target : '',
+        value: coerceValue(dec.value),
+        weight: typeof dec.weight === 'number' ? dec.weight : 0,
+      }
+    }),
+    conflicts: conflicts as import('@features/projection/types').ProjectionConflict[],
+    properties: Object.fromEntries(
+      Object.entries(properties).map(([k, v]) => [k, coerceValue(v)])
+    ) as Record<string, string | number | boolean | null>,
+  }
+}
+
+/**
+ * Resolve a block's projection view via the WASM module.
+ *
+ * Returns `null` if the WASM module is not loaded OR the
+ * `projection_resolve` export is missing. The hook treats `null`
+ * as "use HTTP fallback".
+ *
+ * Returns a `WasmProjectionResult` on success. The `view` is
+ * coerced to the UI's `ProjectionView` shape (Date strings,
+ * array join, null preservation).
+ *
+ * Catches all exceptions (TypeError, JSON.parse errors, property
+ * access errors) and returns `null` — the caller never has to
+ * wrap the call in try/catch.
+ */
+export function wasmProjectionResolve(block: {
+  id: string
+  pageId: string
+  parentId?: string | null
+  content: string
+  order?: number
+  level?: number
+  marker?: string | null
+  priority?: string | null
+  collapsed?: boolean
+  properties?: Array<{ key: string; value: string | number | boolean | null }>
+  refs?: string[]
+  createdAt?: string
+  updatedAt?: string
+  createdBy?: string | null
+}): WasmProjectionResult | null {
+  try {
+    const exportFn = getExport('projection_resolve')
+    if (!exportFn) return null
+    const blockJson = blockToWasmJson(block)
+    const raw = exportFn(blockJson)
+    // The WASM function returns a string (JSON); parse it.
+    const jsonStr = typeof raw === 'string' ? raw : JSON.stringify(raw)
+    const parsed = JSON.parse(jsonStr) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object') return null
+    const view = coerceView(parsed)
+    const contractId = typeof parsed.wasm_contract_id === 'string'
+      ? parsed.wasm_contract_id
+      : 'default'
+    const hadConflict = parsed.wasm_had_conflict === true
+    return { view, contractId, hadConflict }
+  } catch {
+    // Silent fallback — the hook will use HTTP.
+    return null
+  }
+}
+
 // ── Re-exports for the legacy page-level undo/redo (now no-ops) ───
 
 export const wasmUndo = undo
