@@ -884,16 +884,17 @@ export const api = {
   // next read sees the new state.
 
   /**
-   * List agent runs. Optional `status`, `type`, and `limit`
-   * query params narrow the result; the `total` field on the
-   * response is the full registry size regardless of the
-   * `limit` filter.
+   * List agent runs. Optional `status`, `type`, `limit`,
+   * and `contextPage` query params narrow the result;
+   * the `total` field on the response is the full
+   * registry size regardless of the `limit` filter.
    */
-  listAgents: (params?: { status?: string; type?: string; limit?: number }) => {
+  listAgents: (params?: { status?: string; type?: string; limit?: number; contextPage?: string }) => {
     const search = new URLSearchParams()
     if (params?.status) search.set('status', params.status)
     if (params?.type) search.set('type', params.type)
     if (params?.limit !== undefined) search.set('limit', String(params.limit))
+    if (params?.contextPage) search.set('context_page', params.contextPage)
     const qs = search.toString()
     return cachedFetch<AgentListResponse>('GET', `/agents${qs ? `?${qs}` : ''}`)
   },

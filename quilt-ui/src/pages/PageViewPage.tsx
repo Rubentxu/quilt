@@ -5,26 +5,40 @@ import { PageView } from '@features/outliner-tiptap/PageView'
 import { ErrorBoundary } from '@shared/components/ErrorBoundary'
 import { useTabs } from '@shared/contexts/TabsContext'
 import { useUrlParam } from '@shared/hooks/useUrlParam'
+import { usePanelVisibility } from '@features/dashboard'
+import { useFocusMode } from '@features/focus-mode/FocusModeContext'
+import { FocusModeLayout } from '@features/focus-mode/FocusModeLayout'
 
 export function PageViewPage() {
   const { name } = useParams({ from: '/page/$name' })
   const { openTab } = useTabs()
   const [zoomBlockId, setZoomBlockId] = useUrlParam('zoom')
+  const { setVisiblePanels } = usePanelVisibility()
+  const { isActive: isFocusMode } = useFocusMode()
+  const decodedName = decodeURIComponent(name)
 
   // Auto-open tab for this page
   useEffect(() => {
-    const decoded = decodeURIComponent(name)
     openTab({
-      name: decoded,
+      name: decodedName,
       type: 'page',
-      title: decoded,
+      title: decodedName,
       // params intentionally empty — the tab id is derived from `name` only.
       // Putting `name` in params would create a different identity than other
       // openTab call sites (e.g. AppShell's Ctrl+T, InlineContent's link
       // click) and break dedup.
       params: {},
     })
-  }, [name, openTab])
+  }, [name, openTab, decodedName])
+
+  // Hide sidebar and cognitive panels when focus mode is active
+  useEffect(() => {
+    if (isFocusMode) {
+      // Hide sidebar, backlinks, and all cognitive panels in focus mode
+      setVisiblePanels(new Set(['backlinks']))
+    }
+  }, [isFocusMode, setVisiblePanels])
+
   return (
     <ErrorBoundary
       fallback={
@@ -35,11 +49,13 @@ export function PageViewPage() {
         </div>
       }
     >
-      <PageView
-        pageName={decodeURIComponent(name)}
-        zoomBlockId={zoomBlockId}
-        onZoomOut={() => setZoomBlockId(null)}
-      />
+      <FocusModeLayout>
+        <PageView
+          pageName={decodedName}
+          zoomBlockId={zoomBlockId}
+          onZoomOut={() => setZoomBlockId(null)}
+        />
+      </FocusModeLayout>
     </ErrorBoundary>
   )
 }

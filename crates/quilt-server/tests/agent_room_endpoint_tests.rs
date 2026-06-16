@@ -348,3 +348,172 @@ async fn filter_by_status() -> Result<()> {
     assert_eq!(json["total"].as_u64().unwrap(), 0);
     Ok(())
 }
+
+#[tokio::test]
+async fn filter_by_context_page() -> Result<()> {
+    use quilt_analysis::agent_room::SpawnAgentRequest;
+    use quilt_server::handlers::agent_room::build_lifecycle_and_registry;
+    use std::sync::Arc;
+    init_auth();
+
+    let pool = create_pool(":memory:").await?;
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+        helpers::build_test_app_state_with_repos(pool).await;
+    let block_repo = state.repos.block.clone();
+    let page_repo = state.repos.page.clone();
+    let (lifecycle, registry) = build_lifecycle_and_registry(block_repo, page_repo);
+    let known = registry.list_types();
+
+    // Spawn two agents with different context pages
+    lifecycle
+        .spawn(
+            SpawnAgentRequest {
+                agent_type: "decay-annotator".to_string(),
+                context_page: Some("page/foo".to_string()),
+                model: None,
+                queue_mode: None,
+            },
+            &known,
+        )
+        .await?;
+
+    lifecycle
+        .spawn(
+            SpawnAgentRequest {
+                agent_type: "decay-annotator".to_string(),
+                context_page: Some("page/bar".to_string()),
+                model: None,
+                queue_mode: None,
+            },
+            &known,
+        )
+        .await?;
+
+    let state = quilt_server::state::AppState::new_with_repos_and_agents(
+        state.repos.clone(),
+        state.search_service.clone(),
+        state.search_index.clone(),
+        state.ref_service.clone(),
+        state.services.clone(),
+        state.projection_resolver.clone(),
+        state.preset_registry.clone(),
+        Some(Arc::new(lifecycle)),
+        Some(registry),
+    );
+    let app = quilt_server::routes::create_app(state);
+
+    // Filter by page/foo
+    let res = app
+        .clone()
+        .oneshot(auth_header(
+            Request::builder()
+                .uri("/api/v1/agents?context_page=page/foo")
+                .body(Body::empty())?,
+        ))
+        .await?;
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = json_body(res).await?;
+    assert_eq!(json["total"].as_u64().unwrap(), 1);
+    assert_eq!(json["agents"][0]["contextPage"].as_str().unwrap(), "page/foo");
+
+    // Filter by nonexistent page → empty
+    let res = app
+        .oneshot(auth_header(
+            Request::builder()
+                .uri("/api/v1/agents?context_page=page/nonexistent")
+                .body(Body::empty())?,
+        ))
+        .await?;
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = json_body(res).await?;
+    assert_eq!(json["total"].as_u64().unwrap(), 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn filter_by_context_page_null() -> Result<()> {
+    use quilt_analysis::agent_room::SpawnAgentRequest;
+    use quilt_server::handlers::agent_room::build_lifecycle_and_registry;
+    use std::sync::Arc;
+    init_auth();
+
+    let pool = create_pool(":memory:").await?;
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+        helpers::build_test_app_state_with_repos(pool).await;
+    let block_repo = state.repos.block.clone();
+    let page_repo = state.repos.page.clone();
+    let (lifecycle, registry) = build_lifecycle_and_registry(block_repo, page_repo);
+    let known = registry.list_types();
+
+    // One with context_page, one without
+    lifecycle
+        .spawn(
+            SpawnAgentRequest {
+                agent_type: "decay-annotator".to_string(),
+                context_page: Some("page/with".to_string()),
+                model: None,
+                queue_mode: None,
+            },
+            &known,
+        )
+        .await?;
+
+    lifecycle
+        .spawn(
+            SpawnAgentRequest {
+                agent_type: "decay-annotator".to_string(),
+                context_page: None,
+                model: None,
+                queue_mode: None,
+            },
+            &known,
+        )
+        .await?;
+
+    let state = quilt_server::state::AppState::new_with_repos_and_agents(
+        state.repos.clone(),
+        state.search_service.clone(),
+        state.search_index.clone(),
+        state.ref_service.clone(),
+        state.services.clone(),
+        state.projection_resolver.clone(),
+        state.preset_registry.clone(),
+        Some(Arc::new(lifecycle)),
+        Some(registry),
+    );
+    let app = quilt_server::routes::create_app(state);
+
+    // Filter by no context_page (null) → only matches the second agent
+    let res = app
+        .oneshot(auth_header(
+            Request::builder()
+                .uri("/api/v1/agents?context_page=")
+                .body(Body::empty())?,
+        ))
+        .await?;
+    assert_eq!(res.status(), StatusCode::OK);
+    let json = json_body(res).await?;
+    assert_eq!(json["total"].as_u64().unwrap(), 1);
+    assert!(json["agents"][0]["contextPage"].is_null());
+    Ok(())
+}
+
+#[tokio::test]
+async fn list_includes_context_page_in_response() -> Result<()> {
+    let app = empty_app().await?;
+    let res = app
+        .clone()
+        .oneshot(auth_header(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/agents")
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"agentType":"decay-annotator","contextPage":"page/test"}"#))?,
+        ))
+        .await?;
+    assert_eq!(res.status(), StatusCode::CREATED);
+    let spawned = json_body(res).await?;
+    assert_eq!(spawned["agentType"], "decay-annotator");
+    assert_eq!(spawned["contextPage"].as_str().unwrap(), "page/test");
+    Ok(())
+}

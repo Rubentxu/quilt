@@ -8,6 +8,8 @@ import { TabsProvider } from '@shared/contexts/TabsContext'
 import { ErrorBoundary } from '@shared/components/ErrorBoundary'
 import { CommandRegistryProvider } from '@features/command-center/context'
 import { PanelVisibilityProvider } from '@features/dashboard'
+import { FocusModeProvider } from '@features/focus-mode/FocusModeContext'
+import { FocusModeToggle } from '@features/focus-mode/FocusModeToggle'
 import { router } from './router'
 import './globals.css'
 
@@ -24,21 +26,24 @@ createRoot(document.getElementById('root')!).render(
         <TabsProvider>
           <CommandRegistryProvider>
             <PanelVisibilityProvider>
-              <ErrorBoundary>
-                <RouterProvider router={router} />
-                <Toaster
-                  position="bottom-right"
-                  toastOptions={{
-                    style: {
-                      background: 'var(--color-surface)',
-                      color: 'var(--color-text-primary)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-md)',
-                      fontSize: '14px',
-                    },
-                  }}
-                />
-              </ErrorBoundary>
+              <FocusModeProvider>
+                <FocusModeToggle />
+                <ErrorBoundary>
+                  <RouterProvider router={router} />
+                  <Toaster
+                    position="bottom-right"
+                    toastOptions={{
+                      style: {
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-text-primary)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-md)',
+                        fontSize: '14px',
+                      },
+                    }}
+                  />
+                </ErrorBoundary>
+              </FocusModeProvider>
             </PanelVisibilityProvider>
           </CommandRegistryProvider>
         </TabsProvider>

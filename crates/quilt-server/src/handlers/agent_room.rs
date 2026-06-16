@@ -36,6 +36,8 @@ pub struct ListAgentsQuery {
     pub status: Option<String>,
     pub r#type: Option<String>,
     pub limit: Option<usize>,
+    /// Filter agents by the page name they were spawned with.
+    pub context_page: Option<String>,
 }
 
 impl ListAgentsQuery {
@@ -44,6 +46,7 @@ impl ListAgentsQuery {
             status: self.status.as_deref().and_then(AgentStatus::parse),
             agent_type: self.r#type,
             limit: self.limit,
+            context_page: self.context_page,
         }
     }
 }
