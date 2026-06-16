@@ -9,12 +9,29 @@ use axum::http::StatusCode;
 use axum::Router;
 use quilt_infrastructure::database::sqlite::connection::create_pool;
 use std::collections::HashMap;
+use std::sync::Once;
 use tower::ServiceExt;
+
+// ── Auth setup ────────────────────────────────────────────────────────────────
+
+/// Auth key used for all tests
+const TEST_API_KEY: &str = "test-token";
+
+/// Ensures `auth::init` is called exactly once across all tests.
+static INIT_AUTH: Once = Once::new();
+
+fn init_auth() {
+    INIT_AUTH.call_once(|| {
+        quilt_server::middleware::auth::init(TEST_API_KEY.to_string());
+    });
+}
 
 // ── Test scenarios from spec.md ──────────────────────────────────────────────
 
 /// Build a test app router
 async fn build_test_router() -> Result<Router> {
+    init_auth();
+
     let pool = create_pool(":memory:").await?;
     let state = helpers::build_test_app_state(pool).await;
     let app = quilt_server::routes::create_app(state);

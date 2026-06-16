@@ -108,7 +108,7 @@ fn test_block_to_json_with_todo_marker() {
     let json = block_to_json(&block);
 
     let marker_str = json["marker"].as_str().unwrap();
-    assert!(marker_str.contains("Todo"), "marker was: {}", marker_str);
+    assert!(marker_str.contains("TODO"), "marker was: {}", marker_str);
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn test_block_to_json_with_done_marker() {
     let json = block_to_json(&block);
 
     let marker_str = json["marker"].as_str().unwrap();
-    assert!(marker_str.contains("Done"), "marker was: {}", marker_str);
+    assert!(marker_str.contains("DONE"), "marker was: {}", marker_str);
 }
 
 #[test]

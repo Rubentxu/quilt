@@ -36,6 +36,7 @@ pub fn create_app(state: AppState) -> Router {
         )
         // API v1 routes
         .nest("/api/v1/blocks", handlers::blocks::routes())
+        .nest("/api/v1/blocks", handlers::annotations::block_routes())
         .nest("/api/v1/pages", handlers::pages::routes())
         .nest("/api/v1/properties", handlers::properties::routes())
         .nest("/api/v1/relations", handlers::relations::routes())
@@ -51,6 +52,7 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/graph", handlers::graph::routes())
         .nest("/api/v1/cognitive", handlers::cognitive::routes())
         .nest("/api/v1/presets", handlers::presets::routes())
+        .nest("/api/v1/annotations", handlers::annotations::routes())
         .nest("/api/v1/agents", handlers::agent_room::routes())
         // Frontend serving (catch-all for SPA)
         .route(
@@ -71,6 +73,7 @@ pub fn create_app(state: AppState) -> Router {
     //   5. TraceLayer           — HTTP tracing (closest to handler)
     router
         .layer(axum::Extension(state.clone()))
+        .layer(axum::Extension(state.repos.annotation.clone()))
         .layer(axum::Extension(state.repos.block.clone()))
         .layer(axum::Extension(state.repos.page.clone()))
         .layer(axum::Extension(state.repos.ref_repo.clone()))
@@ -84,6 +87,7 @@ pub fn create_app(state: AppState) -> Router {
         .layer(axum::Extension(state.ref_service.clone()))
         .layer(axum::Extension(state.projection_resolver.clone()))
         .layer(axum::Extension(state.preset_registry.clone()))
+        .layer(axum::Extension(state.services.annotation.clone()))
         .layer(cors)
         .layer(middleware::from_fn(
             crate::middleware::auth::auth_middleware,

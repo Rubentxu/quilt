@@ -9,6 +9,7 @@ use quilt_application::services::ref_service::RefService;
 use quilt_application::use_cases::*;
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::*;
+use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_platform::cli::QuiltCLI;
 use quilt_search::SearchService;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ async fn main() -> Result<()> {
     let pool = connection::create_pool(&cli.db_path).await?;
     connection::run_migrations(&pool).await?;
 
+    let annotation_repo = Arc::new(SqliteAnnotationRepository::new(pool.clone()));
     let block_repo = Arc::new(SqliteBlockRepository::new(pool.clone()));
     let page_repo = Arc::new(SqlitePageRepository::new(pool.clone()));
     let tag_repo = Arc::new(SqliteTagRepository::new(pool.clone()));
@@ -29,6 +31,7 @@ async fn main() -> Result<()> {
     let tour_state_repo = Arc::new(SqliteTourStateRepository::new(pool.clone()));
 
     let services = AppServices::new(
+        Arc::new(AnnotationUseCasesImpl::new(annotation_repo)),
         Arc::new(BlockUseCasesImpl::new(
             block_repo.clone(),
             page_repo.clone(),

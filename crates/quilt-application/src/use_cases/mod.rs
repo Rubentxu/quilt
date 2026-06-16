@@ -14,6 +14,7 @@
 //! - **ResourceUseCases** exists even though REST isn't built yet — common by design.
 //! - **Dead cognitive code** — `quilt-analysis` is NOT referenced in any use case code.
 
+pub mod annotation;
 pub mod apply_preset;
 pub mod block;
 pub mod dtos;
@@ -25,9 +26,10 @@ pub mod template;
 pub mod tour_state;
 
 // Re-exports for convenience
+pub use annotation::{AnnotationUseCases, AnnotationUseCasesImpl};
 pub use apply_preset::ApplyPreset;
 pub use block::{BlockTree, BlockUseCases, BlockUseCasesImpl};
-pub use dtos::BlockDto;
+pub use dtos::{AnnotationDto, BlockDto};
 pub use page::{PageUseCases, PageUseCasesImpl, PageWithBlocks};
 pub use resource::{
     GraphSnapshot, JournalSummary, PageSummary, ResourceUseCases, ResourceUseCasesImpl, TagSummary,

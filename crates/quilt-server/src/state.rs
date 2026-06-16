@@ -5,12 +5,13 @@
 use axum::extract::FromRef;
 use quilt_application::AppServices;
 use quilt_application::services::ref_service::RefServiceTrait;
+use quilt_application::use_cases::annotation::AnnotationUseCases;
 use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_domain::repositories::{
-    BlockRepository, PageRepository, PropertyRepository, RefRepository, RelationRepository,
-    SchemaRepository, SettingsRepository, TagRepository, TourStateRepository,
+    AnnotationRepository, BlockRepository, PageRepository, PropertyRepository, RefRepository,
+    RelationRepository, SchemaRepository, SettingsRepository, TagRepository, TourStateRepository,
 };
 use quilt_search::SearchIndexManager;
 use quilt_search::SearchService;
@@ -23,6 +24,7 @@ use tokio::sync::{RwLock, broadcast};
 /// into one field, while still preserving ISP (each repository is a separate trait).
 #[derive(Clone)]
 pub struct RepositoryBundle {
+    pub annotation: Arc<dyn AnnotationRepository>,
     pub block: Arc<dyn BlockRepository>,
     pub page: Arc<dyn PageRepository>,
     pub ref_repo: Arc<dyn RefRepository>,
@@ -37,6 +39,7 @@ pub struct RepositoryBundle {
 impl RepositoryBundle {
     #[allow(dead_code)]
     pub fn new(
+        annotation: Arc<dyn AnnotationRepository>,
         block: Arc<dyn BlockRepository>,
         page: Arc<dyn PageRepository>,
         ref_repo: Arc<dyn RefRepository>,
@@ -48,6 +51,7 @@ impl RepositoryBundle {
         tour_state: Arc<dyn TourStateRepository>,
     ) -> Self {
         Self {
+            annotation,
             block,
             page,
             ref_repo,
@@ -148,6 +152,12 @@ pub struct AppState {
 // These allow handlers to extract Arc<dyn Repository> directly from AppState
 // using `Extension<Arc<dyn T>>` without depending on concrete implementations.
 
+impl FromRef<AppState> for Arc<dyn AnnotationRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.repos.annotation.clone()
+    }
+}
+
 impl FromRef<AppState> for Arc<dyn BlockRepository> {
     fn from_ref(state: &AppState) -> Self {
         state.repos.block.clone()
@@ -223,6 +233,12 @@ impl FromRef<AppState> for Arc<ProjectionResolver> {
 impl FromRef<AppState> for Arc<dyn PresetRegistry> {
     fn from_ref(state: &AppState) -> Self {
         state.preset_registry.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn AnnotationUseCases> {
+    fn from_ref(state: &AppState) -> Self {
+        state.services.annotation.clone()
     }
 }
 

@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use quilt_domain::entities::Block;
+use quilt_domain::entities::{Annotation, Block};
 
 /// Block DTO — canonical shape shared across all adapters.
 ///
@@ -57,6 +57,50 @@ impl From<Block> for BlockDto {
             refs: block.refs.into_iter().map(|r| r.to_string()).collect(),
             created_at: block.created_at.to_rfc3339(),
             updated_at: block.updated_at.to_rfc3339(),
+        }
+    }
+}
+
+/// Annotation DTO — canonical shape shared across all adapters.
+///
+/// All adapters (quilt-server, quilt-mcp, etc.) MUST use this definition.
+/// Convert from domain `Annotation` using `From` impl below.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnnotationDto {
+    pub id: String,
+    pub block_id: String,
+    pub author_type: String,
+    pub author_name: String,
+    pub content: String,
+    pub status: String,
+    pub parent_annotation_id: Option<String>,
+    pub scope: String,
+    #[serde(default)]
+    pub highlight_start: Option<u32>,
+    #[serde(default)]
+    pub highlight_end: Option<u32>,
+    pub created_at: String,
+    pub resolved_at: Option<String>,
+    pub resolved_by: Option<String>,
+}
+
+impl From<Annotation> for AnnotationDto {
+    fn from(a: Annotation) -> Self {
+        Self {
+            id: a.id.to_string(),
+            block_id: a.block_id.to_string(),
+            author_type: a.author_type.as_str().to_string(),
+            author_name: a.author_name,
+            content: a.content,
+            status: a.status.as_str().to_string(),
+            parent_annotation_id: a.parent_annotation_id.map(|p| p.to_string()),
+            scope: a.scope.as_str().to_string(),
+            highlight_start: a.highlight_start,
+            highlight_end: a.highlight_end,
+            created_at: a.created_at.to_rfc3339(),
+            resolved_at: a.resolved_at.map(|r| r.to_rfc3339()),
+            resolved_by: a.resolved_by,
         }
     }
 }

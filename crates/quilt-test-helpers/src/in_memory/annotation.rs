@@ -197,17 +197,27 @@ impl AnnotationRepository for InMemoryAnnotationRepo {
         let mut filtered: Vec<Annotation> = all
             .into_iter()
             .filter(|a| {
-                let block_ok = filters.block_id.is_none_or(|b| a.block_id == b);
-                let status_ok = filters
-                    .status
-                    .as_ref()
-                    .is_none_or(|s| a.status.as_str() == s);
-                let scope_ok = filters.scope.is_none_or(|sc| a.scope == sc);
-                let author_ok = filters
-                    .author_name
-                    .as_ref()
-                    .is_none_or(|name| a.author_name == *name);
-                block_ok && status_ok && scope_ok && author_ok
+                if let Some(ref bid) = filters.block_id {
+                    if &a.block_id != bid {
+                        return false;
+                    }
+                }
+                if let Some(ref status) = filters.status {
+                    if a.status.as_str() != status {
+                        return false;
+                    }
+                }
+                if let Some(ref scope) = filters.scope {
+                    if &a.scope != scope {
+                        return false;
+                    }
+                }
+                if let Some(ref name) = filters.author_name {
+                    if &a.author_name != name {
+                        return false;
+                    }
+                }
+                true
             })
             .collect();
         filtered.sort_by(|a, b| {

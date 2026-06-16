@@ -153,6 +153,16 @@ impl Annotation {
             ));
         }
 
+        // Inline scope requires both highlight offsets to be specified
+        if create.scope == AnnotationScope::Inline {
+            if create.highlight_start.is_none() || create.highlight_end.is_none() {
+                return Err(DomainError::InvalidData(
+                    "Inline annotation requires both highlightStart and highlightEnd offsets"
+                        .to_string(),
+                ));
+            }
+        }
+
         Ok(Self {
             id: Uuid::new_v4(),
             block_id: create.block_id,

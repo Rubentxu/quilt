@@ -271,7 +271,7 @@ pub async fn delete_annotation(
 /// produce a `400 Bad Request` so the wire contract is enforced at
 /// the boundary.
 fn build_filters(params: &ListAnnotationsQuery) -> Result<AnnotationFilters, AppError> {
-    let mut f = AnnotationFilters::new();
+    let mut f = AnnotationFilters::default();
     if let Some(ref id) = params.block_id {
         let uuid = Uuid::parse_str(id)
             .map_err(|_| AppError::BadRequest(format!("Invalid block UUID: {}", id)))?;
@@ -325,7 +325,6 @@ fn map_app_error(e: quilt_application::ApplicationError) -> AppError {
             _ => AppError::Internal(d.to_string()),
         },
         ApplicationError::Infrastructure(msg) => AppError::Internal(msg),
-        ApplicationError::Unimplemented(what) => AppError::Internal(format!("unimplemented: {}", what)),
     }
 }
 

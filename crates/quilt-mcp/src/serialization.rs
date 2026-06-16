@@ -15,6 +15,8 @@ pub fn block_to_json(block: &Block) -> Value {
         "order": block.order,
         "level": block.level,
         "collapsed": block.collapsed,
+        "created_at": block.created_at.to_rfc3339(),
+        "updated_at": block.updated_at.to_rfc3339(),
     });
 
     if let Some(parent_id) = block.parent_id {

@@ -110,11 +110,11 @@ impl<R: AnnotationRepository + 'static> AnnotationUseCases for AnnotationUseCase
     ) -> Result<Annotation, ApplicationError> {
         // 1. Parse UUIDs
         let block_id = Uuid::parse_str(block_id_str)
-            .ok_or_else(|| ApplicationError::Validation(format!("Invalid block UUID: {}", block_id_str)))?;
+            .map_err(|e| ApplicationError::Validation(format!("Invalid block UUID: {} - {}", block_id_str, e)))?;
         let parent_annotation_id = match parent_annotation_id_str {
             Some(s) if !s.is_empty() => Some(
                 Uuid::parse_str(s)
-                    .ok_or_else(|| ApplicationError::Validation(format!("Invalid parent UUID: {}", s)))?,
+                    .map_err(|e| ApplicationError::Validation(format!("Invalid parent UUID: {} - {}", s, e)))?,
             ),
             _ => None,
         };

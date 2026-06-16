@@ -166,7 +166,7 @@ async fn cancel_running_transitions() -> Result<()> {
     init_auth();
 
     let pool = create_pool(":memory:").await?;
-    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
     let block_repo = state.repos.block.clone();
     let page_repo = state.repos.page.clone();
@@ -228,7 +228,7 @@ async fn cancel_idempotent_on_completed() -> Result<()> {
     init_auth();
 
     let pool = create_pool(":memory:").await?;
-    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
     let block_repo = state.repos.block.clone();
     let page_repo = state.repos.page.clone();
@@ -286,7 +286,7 @@ async fn filter_by_status() -> Result<()> {
     init_auth();
 
     let pool = create_pool(":memory:").await?;
-    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
     let block_repo = state.repos.block.clone();
     let page_repo = state.repos.page.clone();
@@ -357,7 +357,7 @@ async fn filter_by_context_page() -> Result<()> {
     init_auth();
 
     let pool = create_pool(":memory:").await?;
-    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
     let block_repo = state.repos.block.clone();
     let page_repo = state.repos.page.clone();
@@ -438,7 +438,7 @@ async fn filter_by_context_page_null() -> Result<()> {
     init_auth();
 
     let pool = create_pool(":memory:").await?;
-    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
     let block_repo = state.repos.block.clone();
     let page_repo = state.repos.page.clone();

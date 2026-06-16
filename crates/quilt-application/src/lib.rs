@@ -42,14 +42,17 @@ pub use errors::ApplicationError;
 
 // Use case traits (re-exported for convenience)
 pub use use_cases::{
-    BlockDto, BlockTree, BlockUseCases, GraphSnapshot, JournalSummary, PageSummary, PageUseCases,
-    PageWithBlocks, QueryPlan, ResourceUseCases, SearchResult, SearchUseCases, TagSummary,
+    AnnotationDto, AnnotationUseCases, BlockDto, BlockTree, BlockUseCases, GraphSnapshot,
+    JournalSummary, PageSummary, PageUseCases, PageWithBlocks, QueryPlan, ResourceUseCases,
+    SearchResult, SearchUseCases, TagSummary,
 };
 
 // Domain types re-exported for use by presentation layers (MCP, REST)
 // This allows quilt-mcp to use domain types without a direct quilt-domain dependency
 pub use quilt_domain::entities::Block;
 pub use quilt_domain::entities::{
-    ContractError, PropertyKey, TemplateContract, TemplateContractBuilder, TemplateLayout, Version,
+    AnnotationScope, AnnotationStatus, ContractError, PropertyKey, TemplateContract,
+    TemplateContractBuilder, TemplateLayout, Version,
 };
+pub use quilt_domain::repositories::AnnotationFilters;
 pub use quilt_domain::value_objects::{JournalDay, TaskMarker, Uuid, parse_properties};

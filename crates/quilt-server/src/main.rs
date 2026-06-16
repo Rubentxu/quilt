@@ -27,8 +27,8 @@ use quilt_application::services::presets::StaticPresetRegistry;
 use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
-    BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl,
-    ResourceUseCases, ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases,
+    AnnotationUseCases, AnnotationUseCasesImpl, BlockUseCases, BlockUseCasesImpl, PageUseCases,
+    PageUseCasesImpl, ResourceUseCases, ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases,
     TemplateUseCasesImpl, TourStateUseCases, TourStateUseCasesImpl,
 };
 use quilt_application::use_cases::projection_resolver::ProjectionResolver;
@@ -39,6 +39,7 @@ use quilt_infrastructure::database::sqlite::repositories::{
     SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
     SqliteTagRepository, SqliteTourStateRepository,
 };
+use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_search::SearchService;
 
 /// Ensure the vault directory structure exists (.quilt folder and quilt.db)
@@ -99,6 +100,8 @@ async fn main() -> Result<()> {
     info!("Database pool created");
 
     // Create all repository instances as Arc<dyn Trait>
+    let annotation_repo: Arc<SqliteAnnotationRepository> =
+        Arc::new(SqliteAnnotationRepository::new(pool.clone()));
     let block_repo: Arc<SqliteBlockRepository> = Arc::new(SqliteBlockRepository::new(pool.clone()));
     let page_repo: Arc<SqlitePageRepository> = Arc::new(SqlitePageRepository::new(pool.clone()));
     let ref_repo: Arc<SqliteRefRepository> = Arc::new(SqliteRefRepository::new(pool.clone()));
@@ -130,6 +133,8 @@ async fn main() -> Result<()> {
     let ref_service: Arc<dyn RefServiceTrait> = Arc::new(ref_service);
 
     // Create use cases
+    let annotation_use_cases: Arc<dyn AnnotationUseCases> =
+        Arc::new(AnnotationUseCasesImpl::new(annotation_repo.clone()));
     let block_use_cases: Arc<dyn BlockUseCases> = Arc::new(BlockUseCasesImpl::new(
         block_repo.clone(),
         page_repo.clone(),
@@ -155,6 +160,7 @@ async fn main() -> Result<()> {
     );
 
     let services = AppServices::new(
+        annotation_use_cases,
         block_use_cases,
         page_use_cases,
         search_use_cases,
@@ -181,6 +187,7 @@ async fn main() -> Result<()> {
 
     // Bundle all repositories
     let repos = RepositoryBundle::new(
+        annotation_repo,
         block_repo,
         page_repo,
         ref_repo,

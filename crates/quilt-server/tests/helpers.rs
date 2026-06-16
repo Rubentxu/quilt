@@ -7,6 +7,7 @@ use quilt_application::bootstrap::AppServices;
 use quilt_application::services::presets::StaticPresetRegistry;
 use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
+use quilt_application::use_cases::annotation::{AnnotationUseCases, AnnotationUseCasesImpl};
 use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
@@ -20,6 +21,7 @@ use quilt_infrastructure::database::sqlite::repositories::{
     SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
     SqliteTagRepository, SqliteTourStateRepository,
 };
+use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_search::{SearchIndexManager, SearchService};
 use quilt_server::state::RepositoryBundle;
 use std::sync::Arc;
@@ -29,7 +31,7 @@ use std::sync::Arc;
 /// This creates an in-memory database, initializes all repositories,
 /// and bundles them into AppServices.
 pub async fn build_test_app_state(pool: DbPool) -> quilt_server::state::AppState {
-    let (state, _, _, _, _, _, _, _, _, _) = build_test_app_state_with_repos(pool).await;
+    let (state, _, _, _, _, _, _, _, _, _, _) = build_test_app_state_with_repos(pool).await;
     state
 }
 
@@ -51,6 +53,7 @@ pub async fn build_test_app_state_with_repos(
     Arc<SqliteSchemaRepository>,
     Arc<SqlitePropertyRepository>,
     Arc<SqliteTourStateRepository>,
+    Arc<SqliteAnnotationRepository>,
 ) {
     // Run migrations first
     run_migrations(&pool)
@@ -68,6 +71,8 @@ pub async fn build_test_app_state_with_repos(
     let ref_service: Arc<dyn RefServiceTrait> = Arc::new(ref_service);
 
     // Build repositories
+    let annotation_repo: Arc<SqliteAnnotationRepository> =
+        Arc::new(SqliteAnnotationRepository::new(pool.clone()));
     let block_repo: Arc<SqliteBlockRepository> = Arc::new(SqliteBlockRepository::new(pool.clone()));
     let page_repo: Arc<SqlitePageRepository> = Arc::new(SqlitePageRepository::new(pool.clone()));
     let tag_repo: Arc<SqliteTagRepository> = Arc::new(SqliteTagRepository::new(pool.clone()));
@@ -83,6 +88,8 @@ pub async fn build_test_app_state_with_repos(
         Arc::new(SqlitePropertyRepository::new(pool.clone()));
 
     // Build use cases
+    let annotation_use_cases: Arc<dyn AnnotationUseCases> =
+        Arc::new(AnnotationUseCasesImpl::new(annotation_repo.clone()));
     let block_use_cases: Arc<dyn BlockUseCases> = Arc::new(BlockUseCasesImpl::new(
         block_repo.clone(),
         page_repo.clone(),
@@ -109,6 +116,7 @@ pub async fn build_test_app_state_with_repos(
     );
 
     let services = AppServices::new(
+        annotation_use_cases,
         block_use_cases,
         page_use_cases,
         search_use_cases,
@@ -119,6 +127,7 @@ pub async fn build_test_app_state_with_repos(
 
     // Bundle all repositories
     let repos = RepositoryBundle::new(
+        annotation_repo.clone(),
         block_repo.clone(),
         page_repo.clone(),
         ref_repo.clone(),
@@ -151,6 +160,7 @@ pub async fn build_test_app_state_with_repos(
         schema_repo,
         property_repo,
         tour_state_repo,
+        annotation_repo,
     )
 }
 
@@ -164,7 +174,7 @@ pub async fn build_test_app_state_with_agents(
     Arc<AgentLifecycle>,
     Arc<AgentRegistry>,
 ) {
-    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _) =
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _) =
         build_test_app_state_with_repos(pool).await;
     let lifecycle = Arc::new(AgentLifecycle::new(
         state.repos.block.clone(),

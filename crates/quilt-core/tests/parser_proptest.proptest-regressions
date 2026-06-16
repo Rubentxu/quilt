@@ -13,3 +13,4 @@ cc 99a342c45a2a9be1a2eee8f0c46544720c89d6d4c89c8d539341cf1caf68384d # shrinks to
 cc 7a6987a4f458f54294a6789dfa7294e102700ae229d63753f96058c6234ee371 # shrinks to s = "\u{a0}*"
 cc fc1935c70e8cae6dd8541db44d2ca3bf3ef31e124304764942be7a11dc7586d3 # shrinks to s = "\u{85}*"
 cc bf154013b070a4970d9053f3d50817a9d0790337349e8deea8687d5a4fdfc10a # shrinks to s = "\u{b}a::"
+cc 0d58ee32a94a188fb489bd039ee2c73d26a4e6d5d2d6d809ad277cfe9ce1bf75 # shrinks to s = "\t¹::"

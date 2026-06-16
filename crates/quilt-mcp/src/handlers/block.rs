@@ -696,10 +696,11 @@ mod tests {
     fn mcp_block_handler_url_property_returns_string_in_json() {
         // Verify that a block with Url property serializes to JSON with a string value.
         // The MCP handler uses BlockDto which calls v.to_json() on each property.
+        // Note: url::Url normalizes "https://quilt.dev" to "https://quilt.dev/" (RFC 3986)
         let url = url::Url::parse("https://quilt.dev").unwrap();
         let pv = quilt_domain::value_objects::PropertyValue::url(url);
         let json = pv.to_json();
-        assert_eq!(json, serde_json::json!("https://quilt.dev"));
+        assert_eq!(json, serde_json::json!("https://quilt.dev/"));
     }
 
     #[test]
@@ -715,18 +716,19 @@ mod tests {
     fn mcp_block_handler_legacy_string_url_and_typed_url_produce_same_json() {
         // ADR-0027 backward compat: pre-ADR-0027 String URL and post-ADR-0027 Url
         // variant produce the same JSON string output (both serialize via to_json()).
+        // Note: url::Url normalizes "https://quilt.dev" to "https://quilt.dev/" (RFC 3986)
         let typed_url = quilt_domain::value_objects::PropertyValue::url(
             url::Url::parse("https://quilt.dev").unwrap(),
         );
-        let string_url = quilt_domain::value_objects::PropertyValue::string("https://quilt.dev");
+        let string_url = quilt_domain::value_objects::PropertyValue::string("https://quilt.dev/");
 
         let typed_json = serde_json::to_string(&typed_url).unwrap();
         let string_json = serde_json::to_string(&string_url).unwrap();
 
         // Both produce externally-tagged shape: {"Url":"..."} vs {"String":"..."}
-        // The JSON string VALUE is the same: "https://quilt.dev"
-        assert_eq!(typed_json, r#"{"Url":"https://quilt.dev"}"#);
-        assert_eq!(string_json, r#"{"String":"https://quilt.dev"}"#);
+        // The JSON string VALUE is the same: "https://quilt.dev/"
+        assert_eq!(typed_json, r#"{"Url":"https://quilt.dev/"}"#);
+        assert_eq!(string_json, r#"{"String":"https://quilt.dev/"}"#);
 
         // But the to_json() output (used in MCP wire format) is identical
         assert_eq!(typed_url.to_json(), string_url.to_json());
