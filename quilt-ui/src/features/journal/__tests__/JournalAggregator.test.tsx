@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React from 'react'
 
@@ -172,6 +172,10 @@ describe('JournalAggregator', () => {
     })
 
     it('shows empty state when a query returns no results', async () => {
+      // Explicitly mock getSettings so sections render (not polluted by other tests).
+      ;(api.getSettings as ReturnType<typeof vi.fn>).mockResolvedValue(
+        makeSettings({ journalAggregate: true }),
+      )
       ;(searchApi.executeQuery as ReturnType<typeof vi.fn>).mockResolvedValue(
         makeQueryResult([]),
       )
@@ -180,8 +184,8 @@ describe('JournalAggregator', () => {
 
       // Wait for the sections to load and show empty state
       await screen.findByRole('heading', { name: /now in progress/i })
-      // Match literal "(none)" text
-      const emptyStates = screen.getAllByText(/\(none\)/)
+      // Match literal "(none)" text — waitFor ensures async state has flushed.
+      const emptyStates = await waitFor(() => screen.getAllByText(/\(none\)/))
       expect(emptyStates.length).toBe(4) // All 4 sections show "(none)"
     })
 
