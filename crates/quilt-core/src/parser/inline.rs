@@ -559,6 +559,17 @@ impl InlineParser {
             .map(|(i, c)| i + c.len_utf8())
             .unwrap_or(0);
 
+        // Guard: the property key must start at or after the current
+        // parse position. If `word_start < pos`, the key begins in a
+        // region the main loop has already consumed (e.g. as plain text
+        // or another segment). Producing a segment whose range starts
+        // before `pos` would overlap previously-emitted segments and
+        // violate the proptest invariants `segments_dont_overlap` and
+        // `total_consumed_at_most_input`. Bail out instead.
+        if word_start < pos {
+            return None;
+        }
+
         // Check if there's a :: immediately after the word
         let after_word = &content[word_start..];
         // Check if after_word starts with "{key}::" pattern
