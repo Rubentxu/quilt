@@ -251,6 +251,10 @@ impl BlockRepository for InMemoryBlockRepo {
             .values()
             .filter(|b| match b.properties.get(key) {
                 Some(quilt_domain::value_objects::PropertyValue::String(s)) => s == value,
+                Some(quilt_domain::value_objects::PropertyValue::Url(u)) => u.to_string() == value,
+                Some(quilt_domain::value_objects::PropertyValue::NaiveDate(d)) => {
+                    d.format("%Y-%m-%d").to_string() == value
+                }
                 _ => false,
             })
             .cloned()
@@ -325,6 +329,16 @@ impl BlockRepository for InMemoryBlockRepo {
                     };
                     if matches_prefix && !s.is_empty() {
                         authors.insert(s.clone());
+                    }
+                } else if let quilt_domain::value_objects::PropertyValue::Url(u) = value {
+                    // URL author values are stored as typed Url but compared as strings
+                    let s = u.to_string();
+                    let matches_prefix = match prefix {
+                        Some(p) => s.starts_with(p),
+                        None => true,
+                    };
+                    if matches_prefix && !s.is_empty() {
+                        authors.insert(s);
                     }
                 }
             }

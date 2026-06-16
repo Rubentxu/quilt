@@ -145,6 +145,15 @@ fn block_type_to_str(t: &BlockType) -> &'static str {
     t.as_str()
 }
 
+/// Parse properties from a JSON blob.
+///
+/// # Lossy Round-Trip Note (ADR-0027)
+/// Typed `PropertyValue` variants (`Url`, `NaiveDate`) serialize to JSON strings
+/// via `to_json()`. On read, `from_json()` cannot distinguish these strings from
+/// plain `String` values — they come back as `PropertyValue::String(...)`. This is
+/// a **deliberate lossy round-trip**: the type info is preserved at the
+/// `PropertyDefinition` layer via `property_type` lookup. See
+/// `sqlite-row-mapper-typed/spec.md` and ADR-0027.
 fn parse_properties(blob: &[u8]) -> HashMap<String, PropertyValue> {
     if blob.is_empty() || blob == b"{}" {
         return HashMap::new();
@@ -165,6 +174,14 @@ fn parse_properties(blob: &[u8]) -> HashMap<String, PropertyValue> {
         .unwrap_or_default()
 }
 
+/// Serialize properties to a JSON blob.
+///
+/// # Lossy Round-Trip Note (ADR-0027)
+/// `PropertyValue::Url` and `PropertyValue::NaiveDate` serialize to JSON strings
+/// via their `to_json()` implementations. On read via `parse_properties`, they
+/// come back as `PropertyValue::String` — the type info is lost. This is
+/// intentional: the `PropertyDefinition.property_type` provides the type guard.
+/// See `sqlite-row-mapper-typed/spec.md` and ADR-0027.
 fn properties_to_blob(props: &HashMap<String, PropertyValue>) -> String {
     let map: HashMap<String, serde_json::Value> = props
         .iter()

@@ -91,8 +91,10 @@ impl<P: PropertyRepository> PropertyValidator<P> {
             (PropertyType::Number, PropertyValue::Integer(_)) => true,
             (PropertyType::Number, PropertyValue::Float(_)) => true,
             (PropertyType::Date, PropertyValue::Date(_)) => true,
+            (PropertyType::Date, PropertyValue::NaiveDate(_)) => true, // Canonical
             (PropertyType::DateTime, PropertyValue::Date(_)) => true,
-            (PropertyType::Url, PropertyValue::String(_)) => true, // Backward compat
+            (PropertyType::Url, PropertyValue::Url(_)) => true,        // First-class
+            (PropertyType::Url, PropertyValue::String(_)) => true,     // Backward compat
             (PropertyType::Checkbox, PropertyValue::Boolean(_)) => true, // Backward compat
             (PropertyType::Node, PropertyValue::Ref(_)) => true,   // Backward compat
             _ => false,
@@ -174,7 +176,9 @@ mod tests {
     use crate::properties::types::ClosedValue;
     use crate::value_objects::Uuid;
     use async_trait::async_trait;
+    use chrono::TimeZone;
     use std::collections::HashMap;
+    use url::Url;
 
     // Mock repository for testing
     struct MockPropertyRepository {
@@ -394,5 +398,121 @@ mod tests {
 
         let result = validator.validate(&props).await;
         assert!(result.is_ok());
+    }
+
+    // ── ADR-0027: typed PropertyValue variants ─────────────────────────────────
+
+    fn make_url_prop() -> PropertyDefinition {
+        PropertyDefinition::new(
+            Uuid::new_v4(),
+            "source-url",
+            "Source URL",
+            crate::properties::types::PropertyType::Url,
+        )
+    }
+
+    fn make_date_prop() -> PropertyDefinition {
+        PropertyDefinition::new(
+            Uuid::new_v4(),
+            "scheduled",
+            "Scheduled",
+            crate::properties::types::PropertyType::Date,
+        )
+    }
+
+    fn make_datetime_prop() -> PropertyDefinition {
+        PropertyDefinition::new(
+            Uuid::new_v4(),
+            "deadline",
+            "Deadline",
+            crate::properties::types::PropertyType::DateTime,
+        )
+    }
+
+    #[tokio::test]
+    async fn validate_url_value_for_url_property() {
+        let prop = make_url_prop();
+        let repo = MockPropertyRepository::new().with_property(prop);
+        let validator = PropertyValidator::new(Arc::new(repo));
+
+        let url = Url::parse("https://quilt.dev").unwrap();
+        let result = validator
+            .validate_property("source-url", &PropertyValue::url(url))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_string_value_for_url_property_backward_compat() {
+        let prop = make_url_prop();
+        let repo = MockPropertyRepository::new().with_property(prop);
+        let validator = PropertyValidator::new(Arc::new(repo));
+
+        // Legacy: String URL value still accepted
+        let result = validator
+            .validate_property("source-url", &PropertyValue::string("https://legacy.com"))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_naive_date_for_date_property() {
+        let prop = make_date_prop();
+        let repo = MockPropertyRepository::new().with_property(prop);
+        let validator = PropertyValidator::new(Arc::new(repo));
+
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let result = validator
+            .validate_property("scheduled", &PropertyValue::naive_date(d))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_date_for_date_property_backward_compat() {
+        let prop = make_date_prop();
+        let repo = MockPropertyRepository::new().with_property(prop);
+        let validator = PropertyValidator::new(Arc::new(repo));
+
+        // Legacy: Date value still accepted
+        let dt = chrono::Utc.with_ymd_and_hms(2026, 6, 15, 0, 0, 0).unwrap();
+        let result = validator
+            .validate_property("scheduled", &PropertyValue::date(dt))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn validate_naive_date_rejected_for_datetime_property() {
+        let prop = make_datetime_prop();
+        let repo = MockPropertyRepository::new().with_property(prop);
+        let validator = PropertyValidator::new(Arc::new(repo));
+
+        // NaiveDate is not valid for DateTime (semantic guard)
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let result = validator
+            .validate_property("deadline", &PropertyValue::naive_date(d))
+            .await;
+        assert!(result.is_err());
+        if let Err(DomainError::PropertyValidationError { error, .. }) = result {
+            assert!(error.contains("DateTime"), "error should mention expected type: {}", error);
+            assert!(error.contains("date"), "error should mention got type: {}", error);
+        }
+    }
+
+    #[tokio::test]
+    async fn validate_integer_rejected_for_url_property() {
+        let prop = make_url_prop();
+        let repo = MockPropertyRepository::new().with_property(prop);
+        let validator = PropertyValidator::new(Arc::new(repo));
+
+        let result = validator
+            .validate_property("source-url", &PropertyValue::integer(42))
+            .await;
+        assert!(result.is_err());
+        if let Err(DomainError::PropertyValidationError { error, .. }) = result {
+            assert!(error.contains("Url") || error.contains("url"), "error should mention expected type: {}", error);
+            assert!(error.contains("integer"), "error should mention got type: {}", error);
+        }
     }
 }

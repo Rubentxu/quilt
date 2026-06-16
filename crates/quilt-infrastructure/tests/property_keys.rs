@@ -20,6 +20,7 @@ use quilt_infrastructure::database::sqlite::repositories::{
     SqliteBlockRepository, SqlitePageRepository,
 };
 use std::collections::HashMap;
+use url::Url;
 
 async fn setup_test_db() -> sqlx::SqlitePool {
     let pool = sqlx::SqlitePool::connect("sqlite::memory:")
@@ -275,4 +276,128 @@ async fn list_distinct_keys_cursor_with_special_characters() {
         .await
         .unwrap();
     assert_eq!(keys, vec!["status".to_string()]);
+}
+
+// ── ADR-0027: typed PropertyValue SQLite blob round-trip ───────────────────────
+
+#[tokio::test]
+async fn sqlite_block_properties_url_value_serializes_to_string() {
+    // ADR-0027: Url variant serializes to a JSON string; read back via raw SQL.
+    let pool = setup_test_db().await;
+    let page_id = insert_page(&pool, "url-blob").await;
+    let repo = SqliteBlockRepository::new(pool.clone());
+
+    let url = url::Url::parse("https://quilt.dev").unwrap();
+    let block = make_block_with_properties(
+        page_id,
+        "has URL",
+        vec![
+            ("source-url".to_string(), PropertyValue::url(url)),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    repo.insert(&block).await.unwrap();
+
+    // Read the raw JSON blob via SQL
+    let id_bytes: Vec<u8> = block.id.as_bytes().to_vec();
+    let row: (Vec<u8>,) = sqlx::query_as("SELECT properties FROM blocks WHERE id = ?")
+        .bind(&id_bytes)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let json_str = String::from_utf8(row.0).unwrap();
+    assert!(
+        json_str.contains("https://quilt.dev"),
+        "blob should contain URL string: {}",
+        json_str
+    );
+}
+
+#[tokio::test]
+async fn sqlite_block_properties_naive_date_value_serializes_to_string() {
+    // ADR-0027: NaiveDate variant serializes to YYYY-MM-DD string.
+    let pool = setup_test_db().await;
+    let page_id = insert_page(&pool, "date-blob").await;
+    let repo = SqliteBlockRepository::new(pool.clone());
+
+    let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+    let block = make_block_with_properties(
+        page_id,
+        "has date",
+        vec![("scheduled".to_string(), PropertyValue::naive_date(d))]
+            .into_iter()
+            .collect(),
+    );
+    repo.insert(&block).await.unwrap();
+
+    // Read the raw JSON blob via SQL
+    let id_bytes: Vec<u8> = block.id.as_bytes().to_vec();
+    let row: (Vec<u8>,) = sqlx::query_as("SELECT properties FROM blocks WHERE id = ?")
+        .bind(&id_bytes)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+    let json_str = String::from_utf8(row.0).unwrap();
+    assert!(
+        json_str.contains("2026-06-15"),
+        "blob should contain ISO date string: {}",
+        json_str
+    );
+}
+
+#[tokio::test]
+async fn sqlite_block_properties_url_value_reads_back_as_string() {
+    // ADR-0027: Lossy round-trip — Url stored, comes back as String.
+    let pool = setup_test_db().await;
+    let page_id = insert_page(&pool, "url-lossy").await;
+    let repo = SqliteBlockRepository::new(pool.clone());
+
+    let url = url::Url::parse("https://quilt.dev").unwrap();
+    let block = make_block_with_properties(
+        page_id,
+        "has URL",
+        vec![("source-url".to_string(), PropertyValue::url(url))]
+            .into_iter()
+            .collect(),
+    );
+    repo.insert(&block).await.unwrap();
+
+    // Read back via repo — property should be String (lossy round-trip)
+    let loaded = repo.get_by_id(block.id).await.unwrap().unwrap();
+    let prop = loaded.properties.get("source-url");
+    assert!(
+        matches!(prop, Some(PropertyValue::String(s)) if s.contains("https://quilt.dev")),
+        "Url should round-trip as String, got: {:?}",
+        prop
+    );
+}
+
+#[tokio::test]
+async fn sqlite_block_properties_naive_date_value_reads_back_as_string() {
+    // ADR-0027: Lossy round-trip — NaiveDate stored, comes back as String.
+    let pool = setup_test_db().await;
+    let page_id = insert_page(&pool, "date-lossy").await;
+    let repo = SqliteBlockRepository::new(pool.clone());
+
+    let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+    let block = make_block_with_properties(
+        page_id,
+        "has date",
+        vec![("scheduled".to_string(), PropertyValue::naive_date(d))]
+            .into_iter()
+            .collect(),
+    );
+    repo.insert(&block).await.unwrap();
+
+    // Read back via repo — property should be String (lossy round-trip)
+    let loaded = repo.get_by_id(block.id).await.unwrap().unwrap();
+    let prop = loaded.properties.get("scheduled");
+    assert!(
+        matches!(prop, Some(PropertyValue::String(s)) if s == "2026-06-15"),
+        "NaiveDate should round-trip as String, got: {:?}",
+        prop
+    );
 }
