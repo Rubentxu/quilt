@@ -18,8 +18,9 @@ use tracing::instrument;
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_analysis::{
-    AgendaItem, DecayAlert, DecayMonitorDto, DecayMonitorService, DecayTrend, MorningBriefing,
-    MorningBriefingDto, SerendipityHighlight, WeeklyReviewDto, WeeklyReviewService,
+    morning_briefing::SerendipityHighlight as MbHighlight, AgendaItem, DecayAlert, DecayMonitorDto,
+    DecayMonitorService, DecayTrend, MorningBriefing, MorningBriefingDto, SerendipityHighlight,
+    SerendipityMonitorDto, SerendipityMonitorService, WeeklyReviewDto, WeeklyReviewService,
 };
 
 // ─── Morning Briefing (CG-1) ─────────────────────────────────────────────────
@@ -201,10 +202,64 @@ pub async fn get_weekly_review(
     Ok(Json(WeeklyReviewResponse::from(dto)))
 }
 
+// ─── Serendipity Monitor (CG-3) ─────────────────────────────────────────────
+
+/// Response envelope for the Serendipity Monitor endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SerendipityMonitorResponse {
+    /// List of discovered connections, sorted by confidence desc.
+    pub highlights: Vec<SerendipityHighlight>,
+    /// Total number of connections found.
+    pub total: usize,
+    /// When this response was generated (RFC3339).
+    pub generated_at: String,
+}
+
+impl From<SerendipityMonitorDto> for SerendipityMonitorResponse {
+    fn from(dto: SerendipityMonitorDto) -> Self {
+        Self {
+            highlights: dto
+                .highlights
+                .into_iter()
+                .map(|h| MbHighlight {
+                    block_a_id: h.block_a_id,
+                    block_b_id: h.block_b_id,
+                    block_a_preview: h.block_a_preview,
+                    block_b_preview: h.block_b_preview,
+                    explanation: h.explanation,
+                    confidence: h.confidence,
+                })
+                .collect(),
+            total: dto.total,
+            generated_at: dto.generated_at.to_rfc3339(),
+        }
+    }
+}
+
+/// GET /api/v1/cognitive/serendipity
+///
+/// Returns serendipity highlights — unexpected connections discovered
+/// between blocks in the knowledge graph. Each highlight includes
+/// confidence scores, block content previews, and explanations.
+#[instrument(skip(state))]
+pub async fn get_serendipity(
+    Extension(state): Extension<AppState>,
+) -> Result<impl IntoResponse, AppError> {
+    let block_repo = state.repos.block.clone();
+    let page_repo = state.repos.page.clone();
+
+    let service = SerendipityMonitorService::new(block_repo, page_repo);
+    let dto = service.detect_now().await;
+
+    Ok(Json(SerendipityMonitorResponse::from(dto)))
+}
+
 /// Create the cognitive routes router.
 pub fn routes() -> Router {
     Router::new()
         .route("/morning-briefing", get(get_morning_briefing))
         .route("/decay", get(get_decay))
         .route("/weekly-review", get(get_weekly_review))
+        .route("/serendipity", get(get_serendipity))
 }
