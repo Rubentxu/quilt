@@ -5,7 +5,7 @@ import { ErrorBoundary } from '@shared/components/ErrorBoundary'
 import { useTabs } from '@shared/contexts/TabsContext'
 import type { Backlink } from '@shared/types/api'
 import toast from 'react-hot-toast'
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2, Globe, FileText, GitBranch, Filter } from 'lucide-react'
 
 // ──── Types ────────────────────────────────────────────────
 
@@ -86,11 +86,11 @@ function nodeIdFromBlock(
 // reaching into CSS or class names.
 type LensType = 'all' | 'page-context' | 'block-subtree' | 'property'
 
-const LENS_OPTIONS: Array<{ id: LensType; label: string; depth: number }> = [
-  { id: 'all', label: 'All', depth: 1 },
-  { id: 'page-context', label: 'Page context', depth: 1 },
-  { id: 'block-subtree', label: 'Block subtree', depth: 2 },
-  { id: 'property', label: 'Property filter', depth: 1 },
+const LENS_OPTIONS: Array<{ id: LensType; label: string; depth: number; Icon: React.FC<{ size: number }> }> = [
+  { id: 'all', label: 'All', depth: 1, Icon: Globe },
+  { id: 'page-context', label: 'Page context', depth: 1, Icon: FileText },
+  { id: 'block-subtree', label: 'Block subtree', depth: 2, Icon: GitBranch },
+  { id: 'property', label: 'Property filter', depth: 1, Icon: Filter },
 ]
 
 // ──── Force Simulation ─────────────────────────────────────
@@ -175,6 +175,27 @@ export function GraphViewPage() {
   useEffect(() => {
     openTab({ name: 'graph', type: 'graph', title: 'Knowledge Graph', params: {} })
   }, [openTab])
+
+  // Graph Lens V2 keyboard shortcuts: 1/2/3/4 switch lenses globally.
+  // Skipped when the user is typing in an editable element.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as HTMLElement
+      const editable = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+        || target.isContentEditable
+      if (editable) return
+      const lensMap: Record<string, LensType> = {
+        '1': 'all',
+        '2': 'page-context',
+        '3': 'block-subtree',
+        '4': 'property',
+      }
+      const lens = lensMap[e.key]
+      if (lens) setActiveLens(lens)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
   // Load data
   useEffect(() => {
@@ -587,6 +608,7 @@ export function GraphViewPage() {
       >
         {LENS_OPTIONS.map(opt => {
           const isActive = opt.id === activeLens
+          const Icon = opt.Icon
           return (
             <button
               key={opt.id}
@@ -605,8 +627,11 @@ export function GraphViewPage() {
                 cursor: 'pointer',
                 fontSize: '13px',
                 fontWeight: isActive ? 600 : 400,
+                display: 'flex',
+                alignItems: 'center',
               }}
             >
+              <Icon size={14} style={{ marginRight: '4px', flexShrink: 0 }} />
               {opt.label}
             </button>
           )
