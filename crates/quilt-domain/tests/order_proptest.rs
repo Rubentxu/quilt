@@ -88,7 +88,9 @@ proptest! {
     #[test]
     fn insert_after_appends_at_end(
         max_sibling in 1.0f64..1000.0,
-        preceding_delta in 1.0f64..10.0
+        // Must be >= 2.0 to guarantee preceding >= max(siblings)=3.0
+        // since siblings are always [1.0, 2.0, 3.0]
+        preceding_delta in 2.0f64..10.0
     ) {
         let preceding = max_sibling + preceding_delta;
         let siblings: Vec<Block> = (1..=3).map(|i| make_block(i as f64)).collect();

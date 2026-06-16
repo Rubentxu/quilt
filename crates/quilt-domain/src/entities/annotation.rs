@@ -155,11 +155,14 @@ impl Annotation {
 
         // Inline scope requires both highlight offsets to be specified
         if create.scope == AnnotationScope::Inline {
-            if create.highlight_start.is_none() || create.highlight_end.is_none() {
-                return Err(DomainError::InvalidData(
-                    "Inline annotation requires both highlightStart and highlightEnd offsets"
-                        .to_string(),
-                ));
+            match (create.highlight_start, create.highlight_end) {
+                (Some(start), Some(end)) if start < end => {}
+                _ => {
+                    return Err(DomainError::InvalidData(
+                        "Inline annotation requires both highlightStart and highlightEnd offsets"
+                            .to_string(),
+                    ));
+                }
             }
         }
 

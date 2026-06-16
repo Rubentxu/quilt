@@ -16,7 +16,8 @@ use crate::value_objects::Uuid;
 /// # Example
 ///
 /// ```
-/// use quilt_domain::references::{EdgeType, GraphBuilder, RefIndex};
+/// use quilt_domain::references::{EdgeType, RefIndex};
+/// use quilt_domain::services::GraphBuilder;
 /// use quilt_domain::value_objects::Uuid;
 ///
 /// let index = RefIndex::new();

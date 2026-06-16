@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 32c748c8785a317108ee0eb4b9103408dc5406fb99702b1a6f4a2085cf28bbeb # shrinks to n = 2
 cc 6ecd4e84ec84acf729627ce30c9395ddb5c05bda9e25751cb8196a3472c01f86 # shrinks to max_sibling = 1.0, preceding_delta = 0.0
+cc 93b3156626b08ada916483eee2f7b05a6ae1254e83f7bf34c58840022e7127c6 # shrinks to max_sibling = 1.0, preceding_delta = 1.0

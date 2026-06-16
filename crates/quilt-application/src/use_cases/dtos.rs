@@ -76,9 +76,9 @@ pub struct AnnotationDto {
     pub status: String,
     pub parent_annotation_id: Option<String>,
     pub scope: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlight_start: Option<u32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlight_end: Option<u32>,
     pub created_at: String,
     pub resolved_at: Option<String>,

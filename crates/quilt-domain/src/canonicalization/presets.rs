@@ -30,7 +30,7 @@
 //!         ),
 //!     ],
 //!     PresetArgs::empty(),
-//!     "Marks a block as a TODO task".into(),
+//!     "Marks a block as a TODO task",
 //! ).unwrap();
 //! ```
 

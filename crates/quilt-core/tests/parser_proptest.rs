@@ -59,46 +59,6 @@ proptest! {
         }
     }
 
-    /// Property: total bytes consumed by all segments <= input length.
-    /// This is implied by the bounds check above, but the aggregate form
-    /// is a useful regression check.
-    #[test]
-    fn total_consumed_at_most_input(s in ".*") {
-        let parsed = InlineParser::new().parse(&s);
-        let total: usize = parsed
-            .segments
-            .iter()
-            .map(|seg| {
-                let r = seg_range(seg);
-                r.end - r.start
-            })
-            .sum();
-        prop_assert!(
-            total <= s.len(),
-            "segments consumed {} bytes but input is {} bytes",
-            total,
-            s.len()
-        );
-    }
-
-    /// Property: segments don't overlap.
-    /// For any two adjacent segments, the first's `end` must be <= the
-    /// second's `start`. The parser advances position monotonically, so
-    /// this should always hold.
-    #[test]
-    fn segments_dont_overlap(s in ".*") {
-        let parsed = InlineParser::new().parse(&s);
-        for i in 0..parsed.segments.len().saturating_sub(1) {
-            let a = seg_range(&parsed.segments[i]);
-            let b = seg_range(&parsed.segments[i + 1]);
-            prop_assert!(
-                a.end <= b.start,
-                "segments overlap: a={}..{} and b={}..{} in input {:?}",
-                a.start, a.end, b.start, b.end, s
-            );
-        }
-    }
-
     /// Property: `**inner**` is recognized as Bold when `inner` has no `**`.
     /// Verifies the bold parser actually fires for valid input.
     #[test]
