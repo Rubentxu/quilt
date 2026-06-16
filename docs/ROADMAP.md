@@ -1,7 +1,7 @@
 # Quilt — Action Roadmap
 
 > Generated: 2026-06-07
-> Last updated: 2026-06-16 (post ADR-0025 series + post-ADR-0025 cleanup)
+> Last updated: 2026-06-16 (post ADR-0025 series + post-ADR-0025 cleanup + OpenSpec cleanup)
 > Sources: auto-grill 30+ cycles, architecture review (7 candidates), git log (commits be18a7d..2abfe38)
 
 ## Changelog
@@ -12,6 +12,8 @@
   - ADR-0027: Typed PropertyValue (Url + NaiveDate variants)
   - ADR-0028: WASM client-side projection
   - ADR-0029: Pre-existing test fixes (7 tests)
+  - OpenSpec cleanup: 8 done items archived to `archive/done-2026-06-16/`; INDEX.md created
+  - OpenSpec cleanup: 6 done items archived, 16 active grouped by category → INDEX.md
 
 **Leyenda**: ✅ completado | 🚧 en progreso | 🔲 pendiente | `commit` = commit SHA
 
@@ -286,26 +288,32 @@ Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 - 🔲 Normalizar task markers casing — `roadmap-gaps/ ISSUE-003`
 - 🔲 Pre-existente: doctests en `quilt-domain` (presets, graph_builder) y errores `quilt-bin` (chrono/migrate-comments) — ajenos a ADRs
 
-### OpenSpec work items activos (en `openspec/changes/`)
+### OpenSpec work items activos
+
+> 16 items activos (2026-06-16). Ver categorization completa en [`openspec/changes/INDEX.md`](../openspec/changes/INDEX.md).
 
 | Item | Tipo | Estado |
 |------|------|--------|
-| `domain-properties-v1` | Foundation | Done (F5/F6/F8/F9) |
-| `slash-command-functional-behavior` | UX | Superseded por slice #3 (archivar cuando convenga) |
-| `dsl-aggregates` | Query | Done (PI-1) |
-| `dsl-analyze` | Query | Done (PI-1) |
-| `evidence-contract-v1` | MCP | Done |
-| `frontend-templates-v1` | UX | Done |
-| `intent-search-v3a` | Search | Pendiente (V3+ deferido) |
-| `journal-editing-and-config` | UX | Pendiente |
-| `outliner-keyboard` | UX | Pendiente |
 | `petgraph-graph-engine` | Foundation | Pendiente (Graph V2) |
 | `query-refactor-v1` | Query | Pendiente |
+| `intent-search-v3a` | Search | Pendiente (V3+ deferido) |
 | `retrieval-graph-v1` | Search | Pendiente |
-| `quilt-architecture-review*` | Docs | Pendiente (revisión arquitectural) |
-| `quilt-fase2-ux-*` | UX | Pendiente |
-| `quilt-fase3-backlog-*` | E2E | Pendiente |
-| `quilt-fase4-*` | Onboarding | Pendiente |
+| `journal-editing-and-config` | UX | ⚠️ STALE post-React migration |
+| `outliner-keyboard` | UX | ⚠️ STALE post-React migration |
+| `quilt-fase2-ux-dead-buttons` | UX | Pendiente |
+| `quilt-fase2-ux-empty-states` | UX | Pendiente |
+| `quilt-architecture-review` | Arch Review | Pendiente (umbrella) |
+| `architecture-review-2026-06-11` | Arch Review | Reporte (`reports/`) |
+| `quilt-architecture-review-c1-keyboard` | Arch Review | Pendiente |
+| `quilt-architecture-review-c3-serialize` | Arch Review | Pendiente |
+| `quilt-architecture-review-c4-slash-registry` | Arch Review | Pendiente |
+| `quilt-architecture-review-c5-template-hook` | Arch Review | Pendiente |
+| `quilt-fase3-backlog-e2e-template-flow` | E2E | Pendiente |
+| `quilt-fase3-backlog-small-fixes` | E2E | Pendiente |
+| `quilt-fase4-cross-device-tour` | Onboarding | Pendiente |
+| `quilt-fase4-onboarding-advanced` | Onboarding | Pendiente |
+
+**Archivados (2026-06-16)**: `domain-properties-v1`, `slash-command-functional-behavior`, `dsl-aggregates`, `dsl-analyze`, `evidence-contract-v1`, `frontend-templates-v1` → `openspec/changes/archive/done-2026-06-16/`
 
 ### Phase 9: UI Cognitive (propuesta — próximo)
 
