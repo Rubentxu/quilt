@@ -28,6 +28,7 @@ import { StructuralGraph } from './StructuralGraph'
 import { SemanticInsight } from './SemanticInsight'
 import { DecayMonitor } from './DecayMonitor'
 import { WeeklyReview } from './WeeklyReview'
+import { Serendipity } from './Serendipity'
 
 interface CognitivePanelsProps {
   pageName: string | null
@@ -41,6 +42,7 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
   const showSemantic = visiblePanels.has('semantic-insight')
   const showDecay = visiblePanels.has('decay-monitor')
   const showWeekly = visiblePanels.has('weekly-review')
+  const showSerendipity = visiblePanels.has('serendipity')
 
   // Skip the entire column if no cognitive panel is enabled — saves
   // a column of dead space.
@@ -49,7 +51,8 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
     !showStructural &&
     !showSemantic &&
     !showDecay &&
-    !showWeekly
+    !showWeekly &&
+    !showSerendipity
   ) {
     return null
   }
@@ -101,6 +104,14 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
       {showWeekly && (
         <section data-testid="cognitive-panel-weekly-review">
           <WeeklyReview />
+        </section>
+      )}
+      {showSerendipity && (
+        <section
+          data-testid="cognitive-panel-serendipity"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <Serendipity />
         </section>
       )}
     </aside>

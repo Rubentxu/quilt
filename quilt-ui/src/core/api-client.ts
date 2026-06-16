@@ -19,6 +19,7 @@ import type {
   MorningBriefingDto,
   DecayMonitorDto,
   WeeklyReviewDto,
+  SerendipityResponseDto,
 } from '@shared/types/api';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
@@ -835,6 +836,22 @@ export const api = {
    */
   getWeeklyReview: () =>
     cachedFetch<WeeklyReviewDto>('GET', '/cognitive/weekly-review'),
+
+  // ─── Serendipity Monitor (CG-3) ─────────────────────────────────────────────────
+  //
+  // `GET /api/v1/cognitive/serendipity` — returns unexpected connections between
+  // blocks discovered by the connection engine, with confidence scores and
+  // block content previews.
+
+  /**
+   * Get serendipity highlights — unexpected connections between blocks.
+   *
+   * Each highlight includes two block IDs, content previews, a confidence
+   * score (0–1), and a human-readable explanation of why the connection
+   * was found.
+   */
+  getSerendipity: () =>
+    cachedFetch<SerendipityResponseDto>('GET', '/cognitive/serendipity'),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────

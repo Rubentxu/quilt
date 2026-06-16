@@ -460,3 +460,12 @@ export interface WeeklyReviewDto {
   suggestions: string[];
   generatedAt: string;
 }
+
+// ─── Serendipity Monitor (CG-3) ─────────────────────────────────────────────
+
+/** Response body for `GET /api/v1/cognitive/serendipity`. */
+export interface SerendipityResponseDto {
+  highlights: SerendipityHighlight[];
+  total: number;
+  generatedAt: string;
+}
