@@ -469,3 +469,42 @@ export interface SerendipityResponseDto {
   total: number;
   generatedAt: string;
 }
+
+// ─── Cognitive Graph (CG-2) ─────────────────────────────────────────────────
+
+/** A node in the cognitive graph — represents a block. */
+export interface CognitiveGraphNode {
+  id: string;
+  blockId: string;
+  pageId: string;
+  pageName: string;
+  contentPreview: string;
+  influenceScore: number;
+  isFrontier: boolean;
+  isGap: boolean;
+  clusterId: string | null;
+}
+
+/** An edge in the cognitive graph — represents a reference between blocks. */
+export interface CognitiveGraphEdge {
+  from: string;
+  to: string;
+}
+
+/** A detected knowledge cluster. */
+export interface CognitiveGraphCluster {
+  id: string;
+  blockIds: string[];
+  theme: string | null;
+  coherenceScore: number;
+}
+
+/** Response body for `GET /api/v1/cognitive/graph`. */
+export interface CognitiveGraphDto {
+  nodes: CognitiveGraphNode[];
+  edges: CognitiveGraphEdge[];
+  clusters: CognitiveGraphCluster[];
+  frontierNodes: string[];
+  gapNodes: string[];
+  generatedAt: string;
+}

@@ -16,6 +16,7 @@
 //! Per ADR-0001, Quilt does NOT integrate AI/LLM providers — only structural analysis.
 
 pub mod agent_store;
+pub mod cognitive_dashboard;
 pub mod connection_engine;
 pub mod decay_monitor;
 pub mod morning_briefing;
@@ -54,6 +55,7 @@ pub enum AnalysisError {
 }
 
 pub use agent_store::AgentStore;
+pub use cognitive_dashboard::{CognitiveDashboardService, CognitiveGraphDto};
 pub use connection_engine::ConnectionEngine;
 pub use decay_monitor::{DecayMonitorDto, DecayMonitorService, SeverityCounts};
 pub use morning_briefing::{AgendaItem, DecayAlert, MorningBriefing, MorningBriefingDto, SerendipityHighlight};

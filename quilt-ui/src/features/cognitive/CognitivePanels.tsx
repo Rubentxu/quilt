@@ -26,6 +26,7 @@ import { usePanelVisibility } from '@features/dashboard'
 import { AgentActivityFeed } from './AgentActivityFeed'
 import { StructuralGraph } from './StructuralGraph'
 import { SemanticInsight } from './SemanticInsight'
+import { CognitiveGraph } from './CognitiveGraph'
 import { DecayMonitor } from './DecayMonitor'
 import { WeeklyReview } from './WeeklyReview'
 import { Serendipity } from './Serendipity'
@@ -40,6 +41,7 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
   const showAgentActivity = visiblePanels.has('agent-activity')
   const showStructural = visiblePanels.has('structural-graph')
   const showSemantic = visiblePanels.has('semantic-insight')
+  const showCognitiveGraph = visiblePanels.has('cognitive-graph')
   const showDecay = visiblePanels.has('decay-monitor')
   const showWeekly = visiblePanels.has('weekly-review')
   const showSerendipity = visiblePanels.has('serendipity')
@@ -50,6 +52,7 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
     !showAgentActivity &&
     !showStructural &&
     !showSemantic &&
+    !showCognitiveGraph &&
     !showDecay &&
     !showWeekly &&
     !showSerendipity
@@ -91,6 +94,14 @@ export function CognitivePanels({ pageName }: CognitivePanelsProps) {
           style={{ borderBottom: '1px solid var(--color-border)' }}
         >
           <SemanticInsight pageName={pageName} isOpen={showSemantic} />
+        </section>
+      )}
+      {showCognitiveGraph && (
+        <section
+          data-testid="cognitive-panel-cognitive-graph"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <CognitiveGraph />
         </section>
       )}
       {showDecay && (

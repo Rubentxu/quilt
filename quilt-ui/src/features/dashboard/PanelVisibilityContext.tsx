@@ -48,6 +48,7 @@ export const PANEL_LABELS: Record<PanelId, string> = {
   'decay-monitor': 'Decay monitor',
   'weekly-review': 'Weekly review',
   serendipity: 'Serendipity',
+  'cognitive-graph': 'Cognitive graph',
 }
 
 /** localStorage key for the dashboard layout. */
@@ -95,6 +96,7 @@ export const DEFAULT_PANELS: readonly PanelId[] = [
   'decay-monitor',
   'weekly-review',
   'serendipity',
+  'cognitive-graph',
 ]
 
 /** Shape of the public context. */

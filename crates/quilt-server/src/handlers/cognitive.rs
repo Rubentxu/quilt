@@ -5,6 +5,7 @@
 //! - Morning Briefing (CG-1)
 //! - Decay Monitor (CG-7)
 //! - Weekly Review (CG-7)
+//! - Cognitive Graph (CG-2)
 
 use axum::{
     extract::Extension,
@@ -18,9 +19,10 @@ use tracing::instrument;
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_analysis::{
-    morning_briefing::SerendipityHighlight as MbHighlight, AgendaItem, DecayAlert, DecayMonitorDto,
-    DecayMonitorService, DecayTrend, MorningBriefing, MorningBriefingDto, SerendipityHighlight,
-    SerendipityMonitorDto, SerendipityMonitorService, WeeklyReviewDto, WeeklyReviewService,
+    morning_briefing::SerendipityHighlight as MbHighlight, AgendaItem, CognitiveDashboardService,
+    CognitiveGraphDto, DecayAlert, DecayMonitorDto, DecayMonitorService, DecayTrend,
+    MorningBriefing, MorningBriefingDto, SerendipityHighlight, SerendipityMonitorDto,
+    SerendipityMonitorService, WeeklyReviewDto, WeeklyReviewService,
 };
 
 // ─── Morning Briefing (CG-1) ─────────────────────────────────────────────────
@@ -255,6 +257,108 @@ pub async fn get_serendipity(
     Ok(Json(SerendipityMonitorResponse::from(dto)))
 }
 
+// ─── Cognitive Graph (CG-2) ──────────────────────────────────────────────────
+
+/// Response body for the cognitive graph endpoint.
+/// Mirrors `CognitiveGraphDto` from quilt-analysis but with camelCase serde.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CognitiveGraphResponse {
+    pub nodes: Vec<CognitiveGraphNode>,
+    pub edges: Vec<CognitiveGraphEdge>,
+    pub clusters: Vec<CognitiveGraphCluster>,
+    pub frontier_nodes: Vec<String>,
+    pub gap_nodes: Vec<String>,
+    pub generated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CognitiveGraphNode {
+    pub id: String,
+    pub block_id: String,
+    pub page_id: String,
+    pub page_name: String,
+    pub content_preview: String,
+    pub influence_score: f32,
+    pub is_frontier: bool,
+    pub is_gap: bool,
+    pub cluster_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CognitiveGraphEdge {
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CognitiveGraphCluster {
+    pub id: String,
+    pub block_ids: Vec<String>,
+    pub theme: Option<String>,
+    pub coherence_score: f32,
+}
+
+impl From<CognitiveGraphDto> for CognitiveGraphResponse {
+    fn from(dto: CognitiveGraphDto) -> Self {
+        Self {
+            nodes: dto
+                .nodes
+                .into_iter()
+                .map(|n| CognitiveGraphNode {
+                    id: n.id,
+                    block_id: n.block_id,
+                    page_id: n.page_id,
+                    page_name: n.page_name,
+                    content_preview: n.content_preview,
+                    influence_score: n.influence_score,
+                    is_frontier: n.is_frontier,
+                    is_gap: n.is_gap,
+                    cluster_id: n.cluster_id,
+                })
+                .collect(),
+            edges: dto
+                .edges
+                .into_iter()
+                .map(|e| CognitiveGraphEdge { from: e.from, to: e.to })
+                .collect(),
+            clusters: dto
+                .clusters
+                .into_iter()
+                .map(|c| CognitiveGraphCluster {
+                    id: c.id,
+                    block_ids: c.block_ids,
+                    theme: c.theme,
+                    coherence_score: c.coherence_score,
+                })
+                .collect(),
+            frontier_nodes: dto.frontier_nodes,
+            gap_nodes: dto.gap_nodes,
+            generated_at: dto.generated_at,
+        }
+    }
+}
+
+/// GET /api/v1/cognitive/graph
+///
+/// Returns the global knowledge graph with clusters, frontier nodes
+/// (highly connected hubs), and gap nodes (isolated orphans).
+#[instrument(skip(state))]
+pub async fn get_cognitive_graph(
+    Extension(state): Extension<AppState>,
+) -> Result<impl IntoResponse, AppError> {
+    let block_repo = state.repos.block.clone();
+    let page_repo = state.repos.page.clone();
+
+    let service = CognitiveDashboardService::new(block_repo, page_repo);
+    let dto = service.build_graph().await;
+
+    Ok(Json(CognitiveGraphResponse::from(dto)))
+}
+
 /// Create the cognitive routes router.
 pub fn routes() -> Router {
     Router::new()
@@ -262,4 +366,5 @@ pub fn routes() -> Router {
         .route("/decay", get(get_decay))
         .route("/weekly-review", get(get_weekly_review))
         .route("/serendipity", get(get_serendipity))
+        .route("/graph", get(get_cognitive_graph))
 }

@@ -20,6 +20,7 @@ export type PanelId =
   | 'decay-monitor'
   | 'weekly-review'
   | 'serendipity'
+  | 'cognitive-graph'
 
 /**
  * Re-export of the canonical `PANEL_LABELS` from
