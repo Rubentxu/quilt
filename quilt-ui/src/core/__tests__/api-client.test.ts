@@ -552,6 +552,10 @@ describe('api surface (P0 — only mounted routes)', () => {
       'getBlockProjection',
       // Presets (ADR-0025)
       'listPresets',
+      // Cognitive (CG-1 + CG-7)
+      'getMorningBriefing',
+      'getDecayAlerts',
+      'getWeeklyReview',
     ].sort()
     expect(Object.keys(api).sort()).toEqual(expected)
   })
