@@ -318,7 +318,7 @@ Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 
 **Archivados (2026-06-16)**: `domain-properties-v1`, `slash-command-functional-behavior`, `dsl-aggregates`, `dsl-analyze`, `evidence-contract-v1`, `frontend-templates-v1` → `openspec/changes/archive/done-2026-06-16/`
 
-### Phase 9: UI Cognitive
+### Phase 9: UI Cognitive ✅ COMPLETO
 
 | ID | Qué | Backend | Estado |
 |----|-----|---------|--------|
@@ -326,8 +326,8 @@ Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 | CG-2 | Cognitive Dashboard / Graph View | ✅ Existe | ✅ DONE (`9c287cc`) |
 | CG-3 | Serendipity UI | ✅ Existe | ✅ DONE (`08fee0d`) |
 | CG-4 | Query UI avanzada | ✅ Existe | ✅ DONE (`962dcd0`) — see CG-4 followup below |
-| CG-5 | Agent Room multi-agente | — | 🔲 Pendiente (diseño) |
-| CG-6 | Focus mode con AI panel | — | 🔲 Pendiente (diseño) |
+| CG-5 | Agent Room multi-agente | — | ✅ DONE V1 (`336223b`) — see CG-5 V2 followups |
+| CG-6 | Focus mode con AI panel | — | ✅ DONE V1 (`6cd32b1`) — see CG-6 V2 followups |
 | CG-7 | Decay monitor + weekly review | ✅ Existe | ✅ DONE (`a6a10c3`) |
 
 ### CG-4 followup: Parser position tracking
@@ -337,6 +337,16 @@ Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 - **B**: accept the current UX (message + docs link) — already shipped
 
 Decision: keep B; revisit A in a future workitem if user feedback requests it.
+
+### CG-5 V2 followups
+- WebSocket/SSE migration (replace polling)
+- 2nd agent type (e.g., "Cross-Reference Finder" using Serendipity engine)
+- Historical agent persistence
+
+### CG-6 V2 followups
+- Focus mode persistence (remember per-page)
+- Visual toggle button
+- Agent status polling in the AI panel
 
 ### Diferido (V3+)
 
