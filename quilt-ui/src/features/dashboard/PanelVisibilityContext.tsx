@@ -45,6 +45,8 @@ export const PANEL_LABELS: Record<PanelId, string> = {
   outline: 'Outline',
   'structural-graph': 'Structural graph',
   'semantic-insight': 'Semantic insight',
+  'decay-monitor': 'Decay monitor',
+  'weekly-review': 'Weekly review',
 }
 
 /** localStorage key for the dashboard layout. */
@@ -89,6 +91,8 @@ export const DEFAULT_PANELS: readonly PanelId[] = [
   'outline',
   'structural-graph',
   'semantic-insight',
+  'decay-monitor',
+  'weekly-review',
 ]
 
 /** Shape of the public context. */
