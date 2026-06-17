@@ -76,11 +76,18 @@ pub async fn navigate_to_page(
     // Update last_opened_graph if graph_id is provided. The
     // `graph_id` field is treated as an absolute or relative path
     // string; the typed slot is `PathBuf` (ADR-0030 §5).
-    let graph_path = payload.graph_id.as_ref().map(|gid| PathBuf::from(gid.clone()));
+    let graph_path = payload
+        .graph_id
+        .as_ref()
+        .map(|gid| PathBuf::from(gid.clone()));
 
     if let Some(ref path) = graph_path {
         // Write-through to global state repo (best-effort)
-        if let Err(e) = state.global_state_repo.set_last_opened_graph(Some(path)).await {
+        if let Err(e) = state
+            .global_state_repo
+            .set_last_opened_graph(Some(path))
+            .await
+        {
             tracing::warn!("failed to persist last_opened_graph: {}", e);
         }
         if let Err(e) = state.global_state_repo.push_recent(path).await {
@@ -135,11 +142,18 @@ pub async fn navigate_to_block(
     Json(payload): Json<NavigateToBlockRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Update last_opened_graph if graph_id is provided
-    let graph_path = payload.graph_id.as_ref().map(|gid| PathBuf::from(gid.clone()));
+    let graph_path = payload
+        .graph_id
+        .as_ref()
+        .map(|gid| PathBuf::from(gid.clone()));
 
     if let Some(ref path) = graph_path {
         // Write-through to global state repo (best-effort)
-        if let Err(e) = state.global_state_repo.set_last_opened_graph(Some(path)).await {
+        if let Err(e) = state
+            .global_state_repo
+            .set_last_opened_graph(Some(path))
+            .await
+        {
             tracing::warn!("failed to persist last_opened_graph: {}", e);
         }
         if let Err(e) = state.global_state_repo.push_recent(path).await {

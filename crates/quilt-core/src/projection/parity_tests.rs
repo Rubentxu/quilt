@@ -34,7 +34,7 @@
 use crate::projection::resolver::WasmProjectionResolver;
 use crate::projection::view::{WasmDecorationKind, WasmProjectionView};
 use crate::types::BlockDto;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
 /// Construct a `BlockDto` from a JSON properties map (test helper).
@@ -129,23 +129,25 @@ struct ReferenceDecoration {
 }
 
 fn matches_task(p: &Value) -> bool {
-    let Some(obj) = p.as_object() else { return false };
+    let Some(obj) = p.as_object() else {
+        return false;
+    };
     obj.get("type").map_or(false, |v| v == &json!("task"))
         && obj.contains_key("status")
         && obj
             .get("status")
             .and_then(|v| v.as_str())
             .map_or(false, |s| {
-                matches!(
-                    s,
-                    "todo" | "in-progress" | "done" | "cancelled" | "waiting"
-                )
+                matches!(s, "todo" | "in-progress" | "done" | "cancelled" | "waiting")
             })
 }
 
 fn matches_heading(p: &Value) -> bool {
-    let Some(obj) = p.as_object() else { return false };
-    obj.get("block-role").map_or(false, |v| v == &json!("heading"))
+    let Some(obj) = p.as_object() else {
+        return false;
+    };
+    obj.get("block-role")
+        .map_or(false, |v| v == &json!("heading"))
         && obj
             .get("heading-level")
             .and_then(|v| v.as_i64())
@@ -153,7 +155,9 @@ fn matches_heading(p: &Value) -> bool {
 }
 
 fn matches_media(p: &Value) -> bool {
-    let Some(obj) = p.as_object() else { return false };
+    let Some(obj) = p.as_object() else {
+        return false;
+    };
     obj.get("type").map_or(false, |v| v == &json!("media"))
         && obj
             .get("media-type")
@@ -162,13 +166,13 @@ fn matches_media(p: &Value) -> bool {
 }
 
 fn matches_date(p: &Value) -> bool {
-    p.as_object()
-        .map_or(false, |o| o.contains_key("scheduled") || o.contains_key("deadline"))
+    p.as_object().map_or(false, |o| {
+        o.contains_key("scheduled") || o.contains_key("deadline")
+    })
 }
 
 fn matches_link(p: &Value) -> bool {
-    p.as_object()
-        .map_or(false, |o| o.contains_key("link"))
+    p.as_object().map_or(false, |o| o.contains_key("link"))
 }
 
 fn compute_task_decoration(p: &Value) -> Vec<ReferenceDecoration> {
@@ -304,18 +308,29 @@ fn assert_parity(
             d.kind,
             server_decs[0].kind
         );
-        assert_eq!(d.target, server_decs[0].target, "decoration target mismatch");
+        assert_eq!(
+            d.target, server_decs[0].target,
+            "decoration target mismatch"
+        );
         assert_eq!(d.value, server_decs[0].value, "decoration value mismatch");
-        assert_eq!(d.weight, server_decs[0].weight, "decoration weight mismatch");
+        assert_eq!(
+            d.weight, server_decs[0].weight,
+            "decoration weight mismatch"
+        );
     }
     if let Some((kind, target, value, weight)) = expected_decoration {
         assert_eq!(wasm_decs.len(), 1, "expected exactly 1 decoration");
-        assert_eq!(wasm_decs[0].kind, wasm_kind_from_str(kind), "decoration kind");
+        assert_eq!(
+            wasm_decs[0].kind,
+            wasm_kind_from_str(kind),
+            "decoration kind"
+        );
         assert_eq!(wasm_decs[0].target, target, "decoration target");
         // The value is parsed from the test string as either a JSON literal
         // (if it parses as JSON) or a string. Numbers like "1" parse as
         // JSON numbers — that's the WASM-side behavior.
-        let expected_value = serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_string()));
+        let expected_value =
+            serde_json::from_str(value).unwrap_or_else(|_| Value::String(value.to_string()));
         assert_eq!(
             wasm_decs[0].value, expected_value,
             "decoration value: expected {:?}, got {:?}",
@@ -371,7 +386,10 @@ fn v1_priorities_are_100_150_200_250_300_u32_max() {
     // a block that matches each one.
     let cases = [
         (json!({"type": "task", "status": "done"}), "task"),
-        (json!({"block-role": "heading", "heading-level": 1}), "heading"),
+        (
+            json!({"block-role": "heading", "heading-level": 1}),
+            "heading",
+        ),
         (json!({"type": "media", "media-type": "video"}), "media"),
         (json!({"deadline": "2026-12-31T00:00:00Z"}), "date"),
         (json!({"link": "https://example.com"}), "link"),
@@ -417,7 +435,10 @@ fn resolve_sets_wasm_source_true() {
 
 #[test]
 fn resolve_preserves_base_surface() {
-    let view = WasmProjectionResolver::v1().resolve(&block(json!({"type": "task", "status": "done"}), "Hello world"));
+    let view = WasmProjectionResolver::v1().resolve(&block(
+        json!({"type": "task", "status": "done"}),
+        "Hello world",
+    ));
     assert_eq!(view.text, "Hello world");
     assert_eq!(view.properties.get("type"), Some(&json!("task")));
     assert_eq!(view.properties.get("status"), Some(&json!("done")));
@@ -573,12 +594,7 @@ fn parity_row_15_default_empty() {
 #[test]
 fn parity_row_16_default_status_only() {
     // ADR-0025 invariant: status:: alone does NOT activate TaskProjection
-    assert_parity(
-        json!({"status": "todo"}),
-        "Just status",
-        "default",
-        None,
-    );
+    assert_parity(json!({"status": "todo"}), "Just status", "default", None);
 }
 
 // Cross-contract rows (3)

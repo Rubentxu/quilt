@@ -5,8 +5,8 @@
 mod helpers;
 
 use anyhow::Result;
-use axum::http::StatusCode;
 use axum::Router;
+use axum::http::StatusCode;
 use quilt_infrastructure::database::sqlite::connection::create_pool;
 use std::collections::HashMap;
 use std::sync::Once;
@@ -62,7 +62,12 @@ async fn presets_endpoint_returns_9_presets() -> Result<()> {
     assert!(presets.is_some(), "Expected 'presets' array in response");
 
     let presets = presets.unwrap();
-    assert_eq!(presets.len(), 9, "Expected 9 V1 presets, got: {}", presets.len());
+    assert_eq!(
+        presets.len(),
+        9,
+        "Expected 9 V1 presets, got: {}",
+        presets.len()
+    );
 
     Ok(())
 }
@@ -88,13 +93,33 @@ async fn presets_endpoint_preset_shape() -> Result<()> {
     let presets = json.get("presets").and_then(|p| p.as_array()).unwrap();
 
     for preset in presets {
-        assert!(preset.get("id").is_some(), "Each preset should have an 'id' field");
-        assert!(preset.get("label").is_some(), "Each preset should have a 'label' field");
-        assert!(preset.get("description").is_some(), "Each preset should have a 'description' field");
-        assert!(preset.get("requiredArgs").is_some(), "Each preset should have a 'requiredArgs' field");
-        assert!(preset.get("requiredArgs").and_then(|a| a.as_array()).is_some(),
-            "requiredArgs should be an array");
-        assert!(preset.get("keywords").is_some(), "Each preset should have a 'keywords' field");
+        assert!(
+            preset.get("id").is_some(),
+            "Each preset should have an 'id' field"
+        );
+        assert!(
+            preset.get("label").is_some(),
+            "Each preset should have a 'label' field"
+        );
+        assert!(
+            preset.get("description").is_some(),
+            "Each preset should have a 'description' field"
+        );
+        assert!(
+            preset.get("requiredArgs").is_some(),
+            "Each preset should have a 'requiredArgs' field"
+        );
+        assert!(
+            preset
+                .get("requiredArgs")
+                .and_then(|a| a.as_array())
+                .is_some(),
+            "requiredArgs should be an array"
+        );
+        assert!(
+            preset.get("keywords").is_some(),
+            "Each preset should have a 'keywords' field"
+        );
     }
 
     Ok(())
@@ -118,13 +143,15 @@ async fn presets_endpoint_required_args_distribution() -> Result<()> {
     let body = axum::body::to_bytes(response.into_body(), 1024 * 1024).await?;
     let json: serde_json::Value = serde_json::from_slice(&body)?;
 
-    let presets: HashMap<String, Vec<String>> = json.get("presets")
+    let presets: HashMap<String, Vec<String>> = json
+        .get("presets")
         .and_then(|p| p.as_array())
         .map(|arr| {
             arr.iter()
                 .filter_map(|p| {
                     let id = p.get("id")?.as_str()?.to_string();
-                    let args = p.get("requiredArgs")
+                    let args = p
+                        .get("requiredArgs")
                         .and_then(|a| a.as_array())
                         .map(|arr| {
                             arr.iter()
@@ -142,21 +169,34 @@ async fn presets_endpoint_required_args_distribution() -> Result<()> {
     let empty_args: Vec<String> = vec![];
     for preset_id in ["/TODO", "/DOING", "/WAITING", "/DONE", "/NOW"] {
         let args = presets.get(preset_id).unwrap_or(&empty_args);
-        assert!(args.is_empty(), "Preset {} should have empty requiredArgs, got: {:?}", preset_id, args);
+        assert!(
+            args.is_empty(),
+            "Preset {} should have empty requiredArgs, got: {:?}",
+            preset_id,
+            args
+        );
     }
 
     // /Scheduled and /Deadline should require "date"
     for preset_id in ["/Scheduled", "/Deadline"] {
         let args = presets.get(preset_id).unwrap_or(&empty_args);
-        assert!(args.contains(&"date".to_string()),
-            "Preset {} should require 'date' arg, got: {:?}", preset_id, args);
+        assert!(
+            args.contains(&"date".to_string()),
+            "Preset {} should require 'date' arg, got: {:?}",
+            preset_id,
+            args
+        );
     }
 
     // /Video and /Image should require "url"
     for preset_id in ["/Video", "/Image"] {
         let args = presets.get(preset_id).unwrap_or(&empty_args);
-        assert!(args.contains(&"url".to_string()),
-            "Preset {} should require 'url' arg, got: {:?}", preset_id, args);
+        assert!(
+            args.contains(&"url".to_string()),
+            "Preset {} should require 'url' arg, got: {:?}",
+            preset_id,
+            args
+        );
     }
 
     Ok(())
@@ -176,8 +216,11 @@ async fn presets_endpoint_401_without_auth() -> Result<()> {
         )
         .await?;
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED,
-        "Expected 401 without Authorization header");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "Expected 401 without Authorization header"
+    );
 
     Ok(())
 }
@@ -203,8 +246,11 @@ async fn presets_endpoint_cache_header() -> Result<()> {
         .headers()
         .get("cache-control")
         .and_then(|v| v.to_str().ok());
-    assert_eq!(cache_header, Some("private, max-age=300"),
-        "Expected cache-control header to be 'private, max-age=300'");
+    assert_eq!(
+        cache_header,
+        Some("private, max-age=300"),
+        "Expected cache-control header to be 'private, max-age=300'"
+    );
 
     Ok(())
 }
@@ -248,14 +294,22 @@ async fn presets_endpoint_version_param_ignored() -> Result<()> {
         )
         .await?;
 
-    assert_eq!(response.status(), StatusCode::OK, "Expected 200 OK even with ?version=v2");
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "Expected 200 OK even with ?version=v2"
+    );
 
     let body = axum::body::to_bytes(response.into_body(), 1024 * 1024).await?;
     let json: serde_json::Value = serde_json::from_slice(&body)?;
 
     // Should still return 9 presets (V1)
     let presets = json.get("presets").and_then(|p| p.as_array()).unwrap();
-    assert_eq!(presets.len(), 9, "Expected 9 V1 presets even with ?version=v2");
+    assert_eq!(
+        presets.len(),
+        9,
+        "Expected 9 V1 presets even with ?version=v2"
+    );
 
     Ok(())
 }

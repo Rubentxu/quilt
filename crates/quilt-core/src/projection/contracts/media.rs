@@ -31,9 +31,7 @@ impl WasmContract for MediaContract {
         let Some(props) = block.properties.as_object() else {
             return false;
         };
-        let type_matches = props
-            .get("type")
-            .map_or(false, |v| v == &json!("media"));
+        let type_matches = props.get("type").map_or(false, |v| v == &json!("media"));
         let media_type_in_set = props
             .get("media-type")
             .and_then(|v| v.as_str())

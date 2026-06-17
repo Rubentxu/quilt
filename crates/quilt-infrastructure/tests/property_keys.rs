@@ -41,6 +41,8 @@ async fn insert_page(pool: &sqlx::SqlitePool, name: &str) -> Uuid {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     SqlitePageRepository::new(pool.clone())
@@ -291,11 +293,9 @@ async fn sqlite_block_properties_url_value_serializes_to_string() {
     let block = make_block_with_properties(
         page_id,
         "has URL",
-        vec![
-            ("source-url".to_string(), PropertyValue::url(url)),
-        ]
-        .into_iter()
-        .collect(),
+        vec![("source-url".to_string(), PropertyValue::url(url))]
+            .into_iter()
+            .collect(),
     );
     repo.insert(&block).await.unwrap();
 

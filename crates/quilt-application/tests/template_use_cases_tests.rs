@@ -28,6 +28,8 @@ fn make_page(name: &str) -> Page {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: std::collections::HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap()
 }

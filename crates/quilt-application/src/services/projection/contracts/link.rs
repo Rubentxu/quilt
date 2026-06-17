@@ -125,9 +125,11 @@ mod tests {
         });
         let delta = LinkProjection::new().apply(&block, &ProjectionContext::page(Utc::now()));
 
-        assert!(delta.view_properties.iter().any(|(k, v)| {
-            k.as_str() == "projection" && *v == PropertyValue::string("link")
-        }));
+        assert!(
+            delta.view_properties.iter().any(|(k, v)| {
+                k.as_str() == "projection" && *v == PropertyValue::string("link")
+            })
+        );
     }
 
     #[test]

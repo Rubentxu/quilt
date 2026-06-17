@@ -26,10 +26,7 @@ pub trait GlobalAppStateRepository: Send + Sync {
     /// Persist `path` as the most recently opened graph.
     ///
     /// `None` clears the field. Does not touch `recent_graphs`.
-    async fn set_last_opened_graph(
-        &self,
-        path: Option<&Path>,
-    ) -> Result<(), DomainError>;
+    async fn set_last_opened_graph(&self, path: Option<&Path>) -> Result<(), DomainError>;
 
     /// Push `path` to the head of the recents list (deduped,
     /// most-recent-first, capped).
@@ -38,8 +35,5 @@ pub trait GlobalAppStateRepository: Send + Sync {
     /// Persist the right sidebar visibility preference.
     ///
     /// `None` clears the preference.
-    async fn set_right_sidebar_visible(
-        &self,
-        visible: Option<bool>,
-    ) -> Result<(), DomainError>;
+    async fn set_right_sidebar_visible(&self, visible: Option<bool>) -> Result<(), DomainError>;
 }

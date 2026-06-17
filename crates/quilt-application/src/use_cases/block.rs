@@ -186,6 +186,9 @@ impl BlockUseCasesImpl {
             properties: std::collections::HashMap::new(),
             format: BlockFormat::Markdown,
             file_id: None,
+            // Manually-created pages don't have a source file
+            source_path: None,
+            source_mtime: None,
         })
         .map_err(ApplicationError::Domain)?;
 

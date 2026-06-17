@@ -45,6 +45,9 @@ pub fn page_with_blocks(
         format: BlockFormat::Markdown,
         file_id: None,
         properties: std::collections::HashMap::new(),
+        // Fixture pages are test artifacts, not ingested from files
+        source_path: None,
+        source_mtime: None,
     })
     .map_err(|e| {
         DomainError::InvalidData(format!("page_with_blocks: failed to create page: {}", e))

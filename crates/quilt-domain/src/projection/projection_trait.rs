@@ -57,11 +57,7 @@ pub trait Projection: Send + Sync + 'static {
     ///
     /// The delta carries ONLY decorations, derived properties, and conflicts.
     /// The base surface (text, links, children) comes from the block itself.
-    fn apply(
-        &self,
-        block: &Block,
-        ctx: &ProjectionContext,
-    ) -> super::view::ProjectionViewDelta;
+    fn apply(&self, block: &Block, ctx: &ProjectionContext) -> super::view::ProjectionViewDelta;
 }
 
 #[cfg(test)]
@@ -83,11 +79,7 @@ mod tests {
             self.id.clone()
         }
 
-        fn apply(
-            &self,
-            _block: &Block,
-            _ctx: &ProjectionContext,
-        ) -> ProjectionViewDelta {
+        fn apply(&self, _block: &Block, _ctx: &ProjectionContext) -> ProjectionViewDelta {
             ProjectionViewDelta::default()
         }
     }
@@ -134,11 +126,7 @@ mod tests {
                 self.id.clone()
             }
 
-            fn apply(
-                &self,
-                _block: &Block,
-                _ctx: &ProjectionContext,
-            ) -> ProjectionViewDelta {
+            fn apply(&self, _block: &Block, _ctx: &ProjectionContext) -> ProjectionViewDelta {
                 ProjectionViewDelta::default()
             }
         }

@@ -13,8 +13,8 @@ use quilt_domain::repositories::{
     AnnotationFilters, AnnotationRepository, AnnotationRepositoryExt,
 };
 use quilt_domain::value_objects::Uuid;
-use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
+use quilt_infrastructure::database::sqlite::connection;
 
 /// Connect to an in-memory SQLite, run migrations, return the pool.
 async fn setup_test_db() -> SqlitePool {

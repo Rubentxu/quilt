@@ -97,6 +97,9 @@ impl<PR: PageRepository + 'static, BR: BlockRepository + 'static> PageUseCases
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            // Manually-created pages don't have a source file
+            source_path: None,
+            source_mtime: None,
         };
 
         let page = Page::new(page_create).map_err(ApplicationError::Domain)?;

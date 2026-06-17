@@ -584,7 +584,10 @@ mod tests {
     fn to_json_for_url_emits_string() {
         let url = Url::parse("https://quilt.dev/path?q=1").unwrap();
         let pv = PropertyValue::url(url);
-        assert_eq!(pv.to_json(), serde_json::json!("https://quilt.dev/path?q=1"));
+        assert_eq!(
+            pv.to_json(),
+            serde_json::json!("https://quilt.dev/path?q=1")
+        );
     }
 
     #[test]
@@ -679,7 +682,10 @@ mod tests {
     fn to_display_string_for_naive_date() {
         let d = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
         let pv = PropertyValue::naive_date(d);
-        assert_eq!(pv.to_display_string(), ("2026-06-15".to_string(), "date".to_string()));
+        assert_eq!(
+            pv.to_display_string(),
+            ("2026-06-15".to_string(), "date".to_string())
+        );
     }
 
     #[test]
@@ -699,7 +705,10 @@ mod tests {
 
         let date_json = serde_json::to_string(&date_pv).unwrap();
         let naive_json = serde_json::to_string(&naive_pv).unwrap();
-        assert_ne!(date_json, naive_json, "Date and NaiveDate must be distinguishable via serde");
+        assert_ne!(
+            date_json, naive_json,
+            "Date and NaiveDate must be distinguishable via serde"
+        );
         assert!(
             date_json.contains("+00:00") || date_json.contains("T00:00:00"),
             "Date must use RFC3339 format: got {}",

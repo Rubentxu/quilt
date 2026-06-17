@@ -7,9 +7,9 @@ use clap::Parser;
 use quilt_application::bootstrap::AppServices;
 use quilt_application::services::ref_service::RefService;
 use quilt_application::use_cases::*;
+use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::*;
-use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_platform::cli::QuiltCLI;
 use quilt_platform::init;
 use quilt_search::SearchService;
@@ -60,7 +60,11 @@ async fn main() -> Result<()> {
                 .with_search_service(Arc::new(SearchService::new(Arc::new(pool.clone()))))
                 .with_block_repo(block_repo.clone()),
         ),
-        Arc::new(ResourceUseCasesImpl::new(block_repo.clone(), page_repo.clone(), tag_repo)),
+        Arc::new(ResourceUseCasesImpl::new(
+            block_repo.clone(),
+            page_repo.clone(),
+            tag_repo,
+        )),
         Arc::new(TemplateUseCasesImpl::new(page_repo, block_repo)),
         Arc::new(TourStateUseCasesImpl::new(tour_state_repo)),
     );

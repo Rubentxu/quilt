@@ -27,6 +27,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use sqlx::Row;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -40,8 +41,8 @@ use quilt_domain::properties::types::{
 };
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
-    BlockRepository, GraphSpaceRepository, PageRepository, PropertyRepository, RefRepository, RefRow,
-    SettingsRepository, TagRepository, TourStateRepository,
+    BlockRepository, GraphSpaceRepository, PageRepository, PropertyRepository, RefRepository,
+    RefRow, SettingsRepository, TagRepository, TourStateRepository,
 };
 use quilt_domain::value_objects::{
     BlockFormat, BlockType, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
@@ -339,6 +340,10 @@ struct PageRow {
     /// doesn't exist (pre-migration databases), the field is None and the
     /// page is loaded with an empty properties map.
     properties: Option<String>,
+    /// Source file path (GS-9). NULL for manually-created pages.
+    source_path: Option<String>,
+    /// Source file mtime (GS-9). NULL for manually-created pages.
+    source_mtime: Option<i64>,
 }
 
 impl PageRow {
@@ -350,6 +355,13 @@ impl PageRow {
             .try_get::<Option<String>, _>("properties")
             .ok()
             .flatten();
+        // source_path and source_mtime added by migration 010. Pre-migration
+        // databases don't have them, so we default to None if the column is missing.
+        let source_path = row
+            .try_get::<Option<String>, _>("source_path")
+            .ok()
+            .flatten();
+        let source_mtime = row.try_get::<Option<i64>, _>("source_mtime").ok().flatten();
         Ok(Self {
             id: row.get("id"),
             name: row.get("name"),
@@ -363,6 +375,8 @@ impl PageRow {
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             properties,
+            source_path,
+            source_mtime,
         })
     }
 
@@ -379,6 +393,12 @@ impl PageRow {
             .map(|(k, v)| (k, DefaultPropertyEntry::new(v)))
             .collect();
 
+        // Parse source_path: None if NULL, Some(PathBuf) otherwise.
+        let source_path = self.source_path.as_ref().map(PathBuf::from);
+
+        // Parse source_mtime: None if NULL, Some(DateTime<Utc>) otherwise.
+        let source_mtime = self.source_mtime.map(ts_to_datetime);
+
         Ok(Page {
             id: blob_to_uuid(&self.id)?,
             name: self.name.clone(),
@@ -392,6 +412,8 @@ impl PageRow {
             created_at: ts_to_datetime(self.created_at),
             updated_at: ts_to_datetime(self.updated_at),
             properties,
+            source_path,
+            source_mtime,
         })
     }
 }
@@ -1166,6 +1188,19 @@ impl PageRepository for SqlitePageRepository {
             .map_err(|e| DomainError::Storage(format!("update_properties save: {}", e)))?;
 
         Ok(page)
+    }
+
+    async fn get_by_source_path(&self, source_path: &str) -> Result<Option<Page>, DomainError> {
+        let row = sqlx::query("SELECT * FROM pages WHERE source_path = ?")
+            .bind(source_path)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| DomainError::Storage(format!("get_by_source_path: {}", e)))?;
+
+        match row {
+            Some(r) => Ok(Some(PageRow::from_row(&r)?.to_page()?)),
+            None => Ok(None),
+        }
     }
 }
 
@@ -2035,7 +2070,10 @@ impl PropertyRepository for SqlitePropertyRepository {
         .bind(def.property_type.as_str())
         .bind(def.cardinality.as_str())
         .bind(PropertyDefinition::visibility_to_sql_column(def.visibility))
-        .bind((def.visibility == PropertyVisibility::Inline || def.visibility == PropertyVisibility::Panel) as i64)
+        .bind(
+            (def.visibility == PropertyVisibility::Inline
+                || def.visibility == PropertyVisibility::Panel) as i64,
+        )
         .bind(def.is_queryable() as i64)
         .bind((def.visibility == PropertyVisibility::Hidden) as i64)
         .bind(def.attribute.as_deref())
@@ -2088,7 +2126,10 @@ impl PropertyRepository for SqlitePropertyRepository {
         .bind(def.property_type.as_str())
         .bind(def.cardinality.as_str())
         .bind(PropertyDefinition::visibility_to_sql_column(def.visibility))
-        .bind((def.visibility == PropertyVisibility::Inline || def.visibility == PropertyVisibility::Panel) as i64)
+        .bind(
+            (def.visibility == PropertyVisibility::Inline
+                || def.visibility == PropertyVisibility::Panel) as i64,
+        )
         .bind(def.is_queryable() as i64)
         .bind((def.visibility == PropertyVisibility::Hidden) as i64)
         .bind(def.attribute.as_deref())
@@ -2850,6 +2891,8 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         };
         Page::new(create).expect("Failed to create page")
     }

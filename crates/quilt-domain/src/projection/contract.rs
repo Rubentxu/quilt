@@ -34,7 +34,10 @@ impl ProjectionContractId {
         if id.is_empty() {
             return Err(ContractIdError::Empty);
         }
-        if !id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-') {
+        if !id
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        {
             return Err(ContractIdError::InvalidCharacters(id.to_string()));
         }
         Ok(ProjectionContractId(id.to_string()))
@@ -64,7 +67,9 @@ pub enum ContractIdError {
     #[error("contract ID cannot be empty")]
     Empty,
 
-    #[error("contract ID '{0}' contains invalid characters; use only lowercase letters, digits, and dashes")]
+    #[error(
+        "contract ID '{0}' contains invalid characters; use only lowercase letters, digits, and dashes"
+    )]
     InvalidCharacters(String),
 }
 
@@ -241,7 +246,9 @@ impl fmt::Debug for ProjectionContract {
 /// for matching purposes, regardless of closure identity).
 impl PartialEq for ProjectionContract {
     fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.priority == other.priority && self.predicates == other.predicates
+        self.id == other.id
+            && self.priority == other.priority
+            && self.predicates == other.predicates
     }
 }
 
@@ -288,7 +295,9 @@ mod tests {
 
     #[test]
     fn contract_id_valid_ids_construct() {
-        for id in ["default", "task", "media", "heading", "link", "date", "video", "audio"] {
+        for id in [
+            "default", "task", "media", "heading", "link", "date", "video", "audio",
+        ] {
             ProjectionContractId::new(id).expect("valid ID should construct");
         }
     }
@@ -479,13 +488,13 @@ mod tests {
 
     #[test]
     fn score_block_negation_of_priority() {
-        let contract = ProjectionContract::new(ProjectionContractId::new("task").unwrap())
-            .with_priority(10);
+        let contract =
+            ProjectionContract::new(ProjectionContractId::new("task").unwrap()).with_priority(10);
         let block = make_block(HashMap::new());
         assert_eq!(contract.score_block(&block), -10.0);
 
-        let contract2 = ProjectionContract::new(ProjectionContractId::new("task").unwrap())
-            .with_priority(1000);
+        let contract2 =
+            ProjectionContract::new(ProjectionContractId::new("task").unwrap()).with_priority(1000);
         assert_eq!(contract2.score_block(&block), -1000.0);
     }
 
@@ -504,11 +513,11 @@ mod tests {
         // Higher score wins; with equal scores, lower priority number wins
         let block = make_block(HashMap::new());
 
-        let low_priority = ProjectionContract::new(ProjectionContractId::new("a").unwrap())
-            .with_priority(200); // score = -200
+        let low_priority =
+            ProjectionContract::new(ProjectionContractId::new("a").unwrap()).with_priority(200); // score = -200
 
-        let high_priority = ProjectionContract::new(ProjectionContractId::new("b").unwrap())
-            .with_priority(50); // score = -50
+        let high_priority =
+            ProjectionContract::new(ProjectionContractId::new("b").unwrap()).with_priority(50); // score = -50
 
         // -50 > -200, so high_priority has higher score
         assert!(high_priority.score_block(&block) > low_priority.score_block(&block));

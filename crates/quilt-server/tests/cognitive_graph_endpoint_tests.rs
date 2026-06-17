@@ -133,7 +133,10 @@ async fn cognitive_graph_response_has_correct_top_level_fields() -> Result<()> {
     assert!(json.get("nodes").is_some(), "should have nodes");
     assert!(json.get("edges").is_some(), "should have edges");
     assert!(json.get("clusters").is_some(), "should have clusters");
-    assert!(json.get("frontierNodes").is_some(), "should have frontierNodes");
+    assert!(
+        json.get("frontierNodes").is_some(),
+        "should have frontierNodes"
+    );
     assert!(json.get("gapNodes").is_some(), "should have gapNodes");
     assert!(json.get("generatedAt").is_some(), "should have generatedAt");
 
@@ -141,9 +144,15 @@ async fn cognitive_graph_response_has_correct_top_level_fields() -> Result<()> {
     assert!(json["nodes"].is_array(), "nodes should be array");
     assert!(json["edges"].is_array(), "edges should be array");
     assert!(json["clusters"].is_array(), "clusters should be array");
-    assert!(json["frontierNodes"].is_array(), "frontierNodes should be array");
+    assert!(
+        json["frontierNodes"].is_array(),
+        "frontierNodes should be array"
+    );
     assert!(json["gapNodes"].is_array(), "gapNodes should be array");
-    assert!(json["generatedAt"].is_string(), "generatedAt should be string");
+    assert!(
+        json["generatedAt"].is_string(),
+        "generatedAt should be string"
+    );
 
     Ok(())
 }

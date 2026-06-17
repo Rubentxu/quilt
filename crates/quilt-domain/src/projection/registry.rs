@@ -122,7 +122,10 @@ mod tests {
             ],
         };
 
-        let ids: Vec<_> = registry.iter().map(|rp| rp.contract.id.as_str().to_string()).collect();
+        let ids: Vec<_> = registry
+            .iter()
+            .map(|rp| rp.contract.id.as_str().to_string())
+            .collect();
         assert_eq!(ids, vec!["a", "b"]);
     }
 

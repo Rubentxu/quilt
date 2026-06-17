@@ -14,8 +14,8 @@
 //! the embedded `0001_init.sql` migration content.
 
 use async_trait::async_trait;
-use rusqlite::{params, Connection, OpenFlags};
-use serde_json::{json, Value as JsonValue};
+use rusqlite::{Connection, OpenFlags, params};
+use serde_json::{Value as JsonValue, json};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -97,9 +97,8 @@ fn load_inner(conn: &Connection) -> Result<GlobalAppState, DomainError> {
     let last_opened_graph = last_opened.map(PathBuf::from);
 
     // recent_graphs_json: Vec<PathBuf>
-    let parsed: JsonValue = serde_json::from_str(&recent_json).map_err(|e| {
-        DomainError::Storage(format!("invalid recent_graphs_json: {e}"))
-    })?;
+    let parsed: JsonValue = serde_json::from_str(&recent_json)
+        .map_err(|e| DomainError::Storage(format!("invalid recent_graphs_json: {e}")))?;
     let mut recent_graphs: Vec<PathBuf> = match parsed {
         JsonValue::Array(arr) => arr
             .into_iter()
@@ -108,7 +107,7 @@ fn load_inner(conn: &Connection) -> Result<GlobalAppState, DomainError> {
         _ => {
             return Err(DomainError::Storage(
                 "recent_graphs_json is not an array".to_string(),
-            ))
+            ));
         }
     };
     // Defensive bound: trust the schema but never let the in-memory
@@ -136,10 +135,7 @@ impl GlobalAppStateRepository for SqliteGlobalAppStateRepository {
         load_inner(&conn)
     }
 
-    async fn set_last_opened_graph(
-        &self,
-        path: Option<&Path>,
-    ) -> Result<(), DomainError> {
+    async fn set_last_opened_graph(&self, path: Option<&Path>) -> Result<(), DomainError> {
         let conn = self.conn.lock().expect("global state mutex poisoned");
         let value: Option<String> = path.map(|p| p.display().to_string());
         conn.execute(
@@ -175,17 +171,19 @@ impl GlobalAppStateRepository for SqliteGlobalAppStateRepository {
             _ => {
                 return Err(DomainError::Storage(
                     "recent_graphs_json is not an array".to_string(),
-                ))
+                ));
             }
         };
         // Dedupe (case-sensitive) and push to head.
         current.retain(|p| p.as_path() != path);
         current.insert(0, path.to_path_buf());
         current.truncate(RECENTS_CAP);
-        let new_json = serde_json::to_string(&json!(current
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect::<Vec<_>>()))
+        let new_json = serde_json::to_string(&json!(
+            current
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+        ))
         .map_err(|e| DomainError::Storage(format!("serialize recents: {e}")))?;
         tx.execute(
             "UPDATE global_app_state SET recent_graphs_json = ? WHERE id = 1",
@@ -196,10 +194,7 @@ impl GlobalAppStateRepository for SqliteGlobalAppStateRepository {
         Ok(())
     }
 
-    async fn set_right_sidebar_visible(
-        &self,
-        visible: Option<bool>,
-    ) -> Result<(), DomainError> {
+    async fn set_right_sidebar_visible(&self, visible: Option<bool>) -> Result<(), DomainError> {
         let conn = self.conn.lock().expect("global state mutex poisoned");
         let value: Option<i64> = visible.map(|b| if b { 1 } else { 0 });
         conn.execute(
@@ -236,7 +231,10 @@ mod tests {
             .await
             .unwrap();
         let s = repo.load().await.unwrap();
-        assert_eq!(s.last_opened_graph, Some(std::path::PathBuf::from("/var/data/g1")));
+        assert_eq!(
+            s.last_opened_graph,
+            Some(std::path::PathBuf::from("/var/data/g1"))
+        );
     }
 
     #[tokio::test]

@@ -8,6 +8,7 @@
 //! - Conflict materialization (block properties set via resolve_and_materialize)
 //! - Proptest: 1000 random blocks → resolver never panics, always returns a view
 
+use chrono::Utc;
 use proptest::prelude::*;
 use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::use_cases::projection_resolver::ProjectionResolver;
@@ -15,7 +16,6 @@ use quilt_domain::entities::PropertyKey;
 use quilt_domain::projection::projection_trait::ProjectionContext;
 use quilt_domain::projection::view::DecorationKind;
 use quilt_domain::value_objects::PropertyValue;
-use chrono::Utc;
 use std::collections::HashMap;
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -69,8 +69,17 @@ fn resolves_task_contract() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("task"));
-    assert!(outcome.view.decorations.iter().any(|d| d.kind == DecorationKind::TaskCheckbox));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("task")
+    );
+    assert!(
+        outcome
+            .view
+            .decorations
+            .iter()
+            .any(|d| d.kind == DecorationKind::TaskCheckbox)
+    );
 }
 
 #[test]
@@ -84,8 +93,17 @@ fn resolves_media_contract_with_video() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("media"));
-    assert!(outcome.view.decorations.iter().any(|d| d.kind == DecorationKind::MediaPreview));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("media")
+    );
+    assert!(
+        outcome
+            .view
+            .decorations
+            .iter()
+            .any(|d| d.kind == DecorationKind::MediaPreview)
+    );
 }
 
 #[test]
@@ -99,7 +117,10 @@ fn resolves_media_contract_with_image() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("media"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("media")
+    );
 }
 
 #[test]
@@ -113,8 +134,17 @@ fn resolves_heading_contract_h1() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("heading"));
-    assert!(outcome.view.decorations.iter().any(|d| d.kind == DecorationKind::HeadingAnchor));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("heading")
+    );
+    assert!(
+        outcome
+            .view
+            .decorations
+            .iter()
+            .any(|d| d.kind == DecorationKind::HeadingAnchor)
+    );
 }
 
 #[test]
@@ -128,7 +158,10 @@ fn resolves_heading_contract_h2() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("heading"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("heading")
+    );
 }
 
 #[test]
@@ -142,7 +175,10 @@ fn resolves_heading_contract_h3() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("heading"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("heading")
+    );
 }
 
 #[test]
@@ -157,7 +193,10 @@ fn heading_contract_rejects_h4() {
 
     // h4 is not in 1..=3, so it falls back to default
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("default"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("default")
+    );
 }
 
 #[test]
@@ -170,8 +209,17 @@ fn resolves_link_contract() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("link"));
-    assert!(outcome.view.decorations.iter().any(|d| d.kind == DecorationKind::LinkAffordance));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("link")
+    );
+    assert!(
+        outcome
+            .view
+            .decorations
+            .iter()
+            .any(|d| d.kind == DecorationKind::LinkAffordance)
+    );
 }
 
 #[test]
@@ -184,8 +232,17 @@ fn resolves_date_contract_with_scheduled() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("date"));
-    assert!(outcome.view.decorations.iter().any(|d| d.kind == DecorationKind::DateIndicator));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("date")
+    );
+    assert!(
+        outcome
+            .view
+            .decorations
+            .iter()
+            .any(|d| d.kind == DecorationKind::DateIndicator)
+    );
 }
 
 #[test]
@@ -198,8 +255,17 @@ fn resolves_date_contract_with_deadline() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("date"));
-    assert!(outcome.view.decorations.iter().any(|d| d.kind == DecorationKind::DateIndicator));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("date")
+    );
+    assert!(
+        outcome
+            .view
+            .decorations
+            .iter()
+            .any(|d| d.kind == DecorationKind::DateIndicator)
+    );
 }
 
 // ── Fallback ─────────────────────────────────────────────────
@@ -214,7 +280,10 @@ fn fallback_to_default_for_unknown_block() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("default"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("default")
+    );
     assert!(outcome.view.decorations.is_empty());
 }
 
@@ -224,7 +293,10 @@ fn fallback_to_default_for_empty_block() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("default"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("default")
+    );
 }
 
 #[test]
@@ -239,7 +311,10 @@ fn fallback_to_default_for_task_without_status() {
 
     // Falls back to default since task contract needs status:: set
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("default"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("default")
+    );
 }
 
 // ── Priority ordering ─────────────────────────────────────────
@@ -260,7 +335,10 @@ fn task_beats_media_when_both_match() {
 
     // task wins: type::task is exact match, media needs type::media
     assert!(!outcome.had_conflict);
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("task"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("task")
+    );
 }
 
 #[test]
@@ -274,7 +352,10 @@ fn task_priority_is_highest_in_registry() {
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
     // Task has priority 100 (lowest number = highest priority)
-    assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("task"));
+    assert_eq!(
+        outcome.winner_id.as_ref().map(|id| id.as_str()),
+        Some("task")
+    );
 }
 
 // ── Conflict surfacing ─────────────────────────────────────────
@@ -324,7 +405,9 @@ fn materialize_sets_projection_on_block() {
         p
     });
     let mut block = block;
-    let _outcome = resolver().resolve_and_materialize(&mut block, &ctx()).unwrap();
+    let _outcome = resolver()
+        .resolve_and_materialize(&mut block, &ctx())
+        .unwrap();
 
     assert_eq!(
         block.properties.get("projection"),
@@ -344,7 +427,9 @@ fn materialize_sets_conflict_properties_on_block_when_conflicted() {
         p
     });
     let mut block = block;
-    let outcome = resolver().resolve_and_materialize(&mut block, &ctx()).unwrap();
+    let outcome = resolver()
+        .resolve_and_materialize(&mut block, &ctx())
+        .unwrap();
 
     // No conflict on unambiguous resolution
     assert!(!outcome.had_conflict);
@@ -356,7 +441,9 @@ fn materialize_sets_conflict_properties_on_block_when_conflicted() {
 fn materialize_adds_projection_property_to_empty_block() {
     let block = make_block(HashMap::new());
     let mut block = block;
-    let _outcome = resolver().resolve_and_materialize(&mut block, &ctx()).unwrap();
+    let _outcome = resolver()
+        .resolve_and_materialize(&mut block, &ctx())
+        .unwrap();
 
     assert_eq!(
         block.properties.get("projection"),
@@ -384,13 +471,26 @@ fn view_carries_base_properties() {
     let block = make_block({
         let mut p = HashMap::new();
         p.insert("type".into(), PropertyValue::string("task"));
-        p.insert("my-custom-field".into(), PropertyValue::string("custom-value"));
+        p.insert(
+            "my-custom-field".into(),
+            PropertyValue::string("custom-value"),
+        );
         p
     });
     let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
-    assert!(outcome.view.properties.contains_key(&PropertyKey::new("type").unwrap()));
-    assert!(outcome.view.properties.contains_key(&PropertyKey::new("my-custom-field").unwrap()));
+    assert!(
+        outcome
+            .view
+            .properties
+            .contains_key(&PropertyKey::new("type").unwrap())
+    );
+    assert!(
+        outcome
+            .view
+            .properties
+            .contains_key(&PropertyKey::new("my-custom-field").unwrap())
+    );
 }
 
 #[test]
@@ -405,7 +505,10 @@ fn view_includes_winner_delta() {
 
     // projection:: task should be in the view's effective properties
     assert_eq!(
-        outcome.view.properties.get(&PropertyKey::new("projection").unwrap()),
+        outcome
+            .view
+            .properties
+            .get(&PropertyKey::new("projection").unwrap()),
         Some(&PropertyValue::string("task"))
     );
 }

@@ -15,13 +15,14 @@ use quilt_application::use_cases::{
     TourStateUseCases, TourStateUseCasesImpl,
 };
 use quilt_domain::canonicalization::PresetRegistry;
+use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_infrastructure::database::sqlite::connection::{DbPool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqliteGraphSpaceRepository, SqlitePageRepository, SqlitePropertyRepository,
-    SqliteRefRepository, SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
-    SqliteTagRepository, SqliteTourStateRepository,
+    SqliteBlockRepository, SqliteGraphSpaceRepository, SqlitePageRepository,
+    SqlitePropertyRepository, SqliteRefRepository, SqliteRelationRepository,
+    SqliteSchemaRepository, SqliteSettingsRepository, SqliteTagRepository,
+    SqliteTourStateRepository,
 };
-use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_search::{SearchIndexManager, SearchService};
 use quilt_server::state::RepositoryBundle;
 use std::sync::Arc;
@@ -192,10 +193,7 @@ pub async fn build_test_app_state_with_agents(
     // intentionally dropped — in production the server
     // holds it for clean shutdown; tests just need the
     // worker running.
-    let queue = quilt_analysis::agent_room::AgentQueue::new(
-        (*lifecycle).clone(),
-        registry.clone(),
-    );
+    let queue = quilt_analysis::agent_room::AgentQueue::new((*lifecycle).clone(), registry.clone());
     let _ = quilt_analysis::agent_room::queue::spawn_worker(queue);
 
     let state = quilt_server::state::AppState::new_with_repos_and_agents(

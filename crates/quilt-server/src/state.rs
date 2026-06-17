@@ -10,9 +10,9 @@ use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_domain::repositories::{
-    AnnotationRepository, BlockRepository, GlobalAppStateRepository, GraphSpaceRepository, PageRepository,
-    PropertyRepository, RefRepository, RelationRepository, SchemaRepository, SettingsRepository,
-    TagRepository, TourStateRepository,
+    AnnotationRepository, BlockRepository, GlobalAppStateRepository, GraphSpaceRepository,
+    PageRepository, PropertyRepository, RefRepository, RelationRepository, SchemaRepository,
+    SettingsRepository, TagRepository, TourStateRepository,
 };
 use quilt_search::SearchIndexManager;
 use quilt_search::SearchService;

@@ -35,9 +35,7 @@
 //! 6. **Set `view.wasm_had_conflict`** to `true` if a conflict
 //!    was detected, `false` otherwise.
 
-use crate::projection::view::{
-    WasmDecoration, WasmProjectionConflict, WasmProjectionView,
-};
+use crate::projection::view::{WasmDecoration, WasmProjectionConflict, WasmProjectionView};
 use crate::types::BlockDto;
 use std::collections::BTreeMap;
 
@@ -86,7 +84,8 @@ impl WasmProjectionResolver {
     /// unique (mirrors the server's `StaticProjectionRegistry::v1`).
     pub fn v1() -> Self {
         use crate::projection::contracts::{
-            DateContract, DefaultContract, HeadingContract, LinkContract, MediaContract, TaskContract,
+            DateContract, DefaultContract, HeadingContract, LinkContract, MediaContract,
+            TaskContract,
         };
 
         let contracts: Vec<RegisteredContract> = vec![
@@ -111,10 +110,7 @@ impl WasmProjectionResolver {
         ];
 
         // Build-time assertion: all priorities are unique.
-        let mut priorities: Vec<u32> = contracts
-            .iter()
-            .map(|rc| rc.contract.priority())
-            .collect();
+        let mut priorities: Vec<u32> = contracts.iter().map(|rc| rc.contract.priority()).collect();
         priorities.sort_unstable();
         let original_len = priorities.len();
         priorities.dedup();
@@ -154,7 +150,10 @@ impl WasmProjectionResolver {
         }
 
         // Find the highest score
-        let top_score = scored.iter().map(|(_, s)| *s).fold(f64::NEG_INFINITY, f64::max);
+        let top_score = scored
+            .iter()
+            .map(|(_, s)| *s)
+            .fold(f64::NEG_INFINITY, f64::max);
 
         // Filter to top-scoring candidates (using epsilon for f64 safety)
         const EPS: f64 = 1e-9;

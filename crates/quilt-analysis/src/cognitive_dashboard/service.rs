@@ -4,7 +4,7 @@
 //! and running the structural mirror analysis on the aggregated block set.
 
 use crate::cognitive_dashboard::types::{CognitiveGraphDto, GraphCluster, GraphEdge, GraphNode};
-use crate::structural_mirror::{build_structure_map, LightweightGraph};
+use crate::structural_mirror::{LightweightGraph, build_structure_map};
 use chrono::Utc;
 use quilt_domain::entities::Block;
 use quilt_domain::properties::entry::DefaultPropertyEntry;
@@ -131,7 +131,8 @@ impl CognitiveDashboardService {
         // Assign cluster IDs to nodes
         for node in &mut nodes {
             for (block_ids, cluster_id) in &cluster_id_map {
-                if let Ok(node_uuid) = quilt_domain::value_objects::Uuid::parse_str(&node.block_id) {
+                if let Ok(node_uuid) = quilt_domain::value_objects::Uuid::parse_str(&node.block_id)
+                {
                     if block_ids.contains(&node_uuid) {
                         node.cluster_id = Some(cluster_id.clone());
                         break;
@@ -201,10 +202,7 @@ impl CognitiveDashboardService {
             Err(_) => return HashMap::new(),
         };
 
-        pages
-            .into_iter()
-            .map(|p| (p.id, p.name))
-            .collect()
+        pages.into_iter().map(|p| (p.id, p.name)).collect()
     }
 }
 
@@ -299,7 +297,10 @@ mod tests {
         async fn search(&self, _: &str, _: usize) -> Result<Vec<Block>, DomainError> {
             Ok(vec![])
         }
-        async fn get_updated_since(&self, _: chrono::DateTime<chrono::Utc>) -> Result<Vec<Block>, DomainError> {
+        async fn get_updated_since(
+            &self,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Vec<Block>, DomainError> {
             Ok(vec![])
         }
         async fn count_by_page(&self, _: Uuid) -> Result<usize, DomainError> {
@@ -311,10 +312,19 @@ mod tests {
         async fn query_dsl(&self, _: &str, _: &[String]) -> Result<Vec<Block>, DomainError> {
             Err(DomainError::Storage("mock".to_string()))
         }
-        async fn list_by_property(&self, _: &str, _: &str, _: usize) -> Result<Vec<Block>, DomainError> {
+        async fn list_by_property(
+            &self,
+            _: &str,
+            _: &str,
+            _: usize,
+        ) -> Result<Vec<Block>, DomainError> {
             Err(DomainError::Storage("mock".to_string()))
         }
-        async fn list_distinct_keys(&self, _: Option<&str>, _: u32) -> Result<Vec<String>, DomainError> {
+        async fn list_distinct_keys(
+            &self,
+            _: Option<&str>,
+            _: u32,
+        ) -> Result<Vec<String>, DomainError> {
             Err(DomainError::Storage("mock".to_string()))
         }
         async fn list_by_property_key(&self, _: &str, _: u32) -> Result<Vec<Block>, DomainError> {
@@ -333,19 +343,31 @@ mod tests {
 
     #[async_trait]
     impl PageRepository for MockPageRepo {
-        async fn get_by_id(&self, _id: Uuid) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
+        async fn get_by_id(
+            &self,
+            _id: Uuid,
+        ) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
             Ok(None)
         }
-        async fn get_by_name(&self, _name: &str) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
+        async fn get_by_name(
+            &self,
+            _name: &str,
+        ) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
             Ok(None)
         }
-        async fn get_journal(&self, _day: quilt_domain::value_objects::JournalDay) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
+        async fn get_journal(
+            &self,
+            _day: quilt_domain::value_objects::JournalDay,
+        ) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
             Ok(None)
         }
         async fn get_all(&self) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
             Ok(self.pages.clone())
         }
-        async fn get_namespace_pages(&self, _namespace_id: Uuid) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
+        async fn get_namespace_pages(
+            &self,
+            _namespace_id: Uuid,
+        ) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
             Ok(vec![])
         }
         async fn insert(&self, _page: &quilt_domain::entities::Page) -> Result<(), DomainError> {
@@ -360,23 +382,47 @@ mod tests {
         async fn delete(&self, _id: Uuid) -> Result<(), DomainError> {
             Ok(())
         }
-        async fn get_updated_since(&self, _: chrono::DateTime<chrono::Utc>) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
+        async fn get_updated_since(
+            &self,
+            _: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
             Ok(vec![])
         }
-        async fn get_recent(&self, _limit: usize) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
+        async fn get_recent(
+            &self,
+            _limit: usize,
+        ) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
             Ok(vec![])
         }
         async fn count(&self) -> Result<usize, DomainError> {
             Ok(0)
         }
-        async fn search(&self, _: &str, _: usize) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
+        async fn search(
+            &self,
+            _: &str,
+            _: usize,
+        ) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
             Ok(vec![])
         }
-        async fn search_by_name_or_title(&self, _: &str, _: usize) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
+        async fn search_by_name_or_title(
+            &self,
+            _: &str,
+            _: usize,
+        ) -> Result<Vec<quilt_domain::entities::Page>, DomainError> {
             Ok(vec![])
         }
-        async fn update_properties(&self, _page_id: Uuid, _props: std::collections::HashMap<String, DefaultPropertyEntry<PropertyValue>>) -> Result<quilt_domain::entities::Page, DomainError> {
+        async fn update_properties(
+            &self,
+            _page_id: Uuid,
+            _props: std::collections::HashMap<String, DefaultPropertyEntry<PropertyValue>>,
+        ) -> Result<quilt_domain::entities::Page, DomainError> {
             Err(DomainError::NotImplemented("mock"))
+        }
+        async fn get_by_source_path(
+            &self,
+            _source_path: &str,
+        ) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
+            Ok(None)
         }
     }
 
@@ -425,10 +471,8 @@ mod tests {
         let mut mock_page_repo = MockPageRepo::default();
         mock_page_repo.add_pages(pages);
 
-        let service = CognitiveDashboardService::new(
-            Arc::new(mock_block_repo),
-            Arc::new(mock_page_repo),
-        );
+        let service =
+            CognitiveDashboardService::new(Arc::new(mock_block_repo), Arc::new(mock_page_repo));
         let graph = service.build_graph().await;
 
         assert_eq!(graph.nodes.len(), 3);
@@ -456,15 +500,19 @@ mod tests {
         let mut mock_page_repo = MockPageRepo::default();
         mock_page_repo.add_pages(pages);
 
-        let service = CognitiveDashboardService::new(
-            Arc::new(mock_block_repo),
-            Arc::new(mock_page_repo),
-        );
+        let service =
+            CognitiveDashboardService::new(Arc::new(mock_block_repo), Arc::new(mock_page_repo));
         let graph = service.build_graph().await;
 
         // The center node should be flagged as frontier
-        let center_node = graph.nodes.iter().find(|n| n.block_id == center.to_string());
-        assert!(center_node.map(|n| n.is_frontier).unwrap_or(false), "center should be frontier");
+        let center_node = graph
+            .nodes
+            .iter()
+            .find(|n| n.block_id == center.to_string());
+        assert!(
+            center_node.map(|n| n.is_frontier).unwrap_or(false),
+            "center should be frontier"
+        );
     }
 
     #[tokio::test]
@@ -491,10 +539,8 @@ mod tests {
         let mut mock_page_repo = MockPageRepo::default();
         mock_page_repo.add_pages(pages);
 
-        let service = CognitiveDashboardService::new(
-            Arc::new(mock_block_repo),
-            Arc::new(mock_page_repo),
-        );
+        let service =
+            CognitiveDashboardService::new(Arc::new(mock_block_repo), Arc::new(mock_page_repo));
         let graph = service.build_graph().await;
 
         // Gap nodes should be identified (a and b, which don't ref each other but share c, d)

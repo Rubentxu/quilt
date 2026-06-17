@@ -30,10 +30,7 @@ impl std::fmt::Debug for SerendipityMonitorService {
 
 impl SerendipityMonitorService {
     /// Create a new service (without a connection engine — one-shot mode).
-    pub fn new(
-        block_repo: Arc<dyn BlockRepository>,
-        page_repo: Arc<dyn PageRepository>,
-    ) -> Self {
+    pub fn new(block_repo: Arc<dyn BlockRepository>, page_repo: Arc<dyn PageRepository>) -> Self {
         Self {
             block_repo,
             page_repo,
@@ -129,6 +126,10 @@ impl SerendipityMonitorService {
     ) -> Option<String> {
         let block = self.block_repo.get_by_id(block_id).await.ok()?;
         let block = block?;
-        self.page_repo.get_by_id(block.page_id).await.ok()?.map(|p| p.name)
+        self.page_repo
+            .get_by_id(block.page_id)
+            .await
+            .ok()?
+            .map(|p| p.name)
     }
 }

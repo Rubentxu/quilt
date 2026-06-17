@@ -104,7 +104,9 @@ impl ProjectionResolver {
 
         if scored.is_empty() {
             // No contract matched — fall back to DefaultProjection
-            let default_rp = self.registry.get(&ProjectionContractId::new("default").unwrap())
+            let default_rp = self
+                .registry
+                .get(&ProjectionContractId::new("default").unwrap())
                 .expect("default contract must be present in V1 registry");
             let default_id = default_rp.projection.contract_id();
             let delta = default_rp.projection.apply(block, ctx);
@@ -119,7 +121,10 @@ impl ProjectionResolver {
         }
 
         // Find the highest score
-        let top_score = scored.iter().map(|(_, s)| *s).fold(f64::NEG_INFINITY, f64::max);
+        let top_score = scored
+            .iter()
+            .map(|(_, s)| *s)
+            .fold(f64::NEG_INFINITY, f64::max);
 
         // Filter to only top-scoring candidates
         let top_candidates: Vec<_> = scored.iter().filter(|(_, s)| *s == top_score).collect();
@@ -133,7 +138,11 @@ impl ProjectionResolver {
             winner = Some(rp.projection.contract_id());
             had_conflict = false;
 
-            Ok(ResolutionOutcome { view, winner_id: winner, had_conflict })
+            Ok(ResolutionOutcome {
+                view,
+                winner_id: winner,
+                had_conflict,
+            })
         } else {
             // Tie — pick smallest priority (lower number = higher priority)
             let (rp, _) = top_candidates
@@ -148,7 +157,11 @@ impl ProjectionResolver {
                 .collect();
 
             let conflict = ProjectionConflict {
-                reason: format!("tied score: {} contracts with score {}", top_candidates.len(), top_score),
+                reason: format!(
+                    "tied score: {} contracts with score {}",
+                    top_candidates.len(),
+                    top_score
+                ),
                 candidates: tied_ids.clone(),
                 winner: None, // V1 spec: no winner on tie, fall back to default
                 block_id: block.id,
@@ -169,7 +182,11 @@ impl ProjectionResolver {
             winner = None;
             had_conflict = true;
 
-            Ok(ResolutionOutcome { view, winner_id: winner, had_conflict })
+            Ok(ResolutionOutcome {
+                view,
+                winner_id: winner,
+                had_conflict,
+            })
         }
     }
 
@@ -194,29 +211,42 @@ impl ProjectionResolver {
         // Materialize projection property
         let projection_key = PropertyKey::new("projection").unwrap();
         let projection_value = PropertyValue::string(
-            outcome.winner_id.as_ref()
+            outcome
+                .winner_id
+                .as_ref()
                 .map(|id| id.as_str())
-                .unwrap_or("default")
+                .unwrap_or("default"),
         );
-        block.properties.insert(projection_key.to_string(), projection_value);
+        block
+            .properties
+            .insert(projection_key.to_string(), projection_value);
 
         // Materialize conflict properties if needed
         if outcome.had_conflict {
             let conflict_key = PropertyKey::new("projection-conflict").unwrap();
-            block.properties.insert(conflict_key.to_string(), PropertyValue::string("true"));
+            block
+                .properties
+                .insert(conflict_key.to_string(), PropertyValue::string("true"));
 
             // Find conflict reason from the view
             if let Some(conflict) = outcome.view.conflicts.first() {
                 let reason_key = PropertyKey::new("projection-conflict-reason").unwrap();
-                block.properties.insert(reason_key.to_string(), PropertyValue::string(&conflict.reason));
+                block.properties.insert(
+                    reason_key.to_string(),
+                    PropertyValue::string(&conflict.reason),
+                );
 
                 let candidates_key = PropertyKey::new("projection-conflict-candidates").unwrap();
-                let candidates_str = conflict.candidates
+                let candidates_str = conflict
+                    .candidates
                     .iter()
                     .map(|id| id.as_str())
                     .collect::<Vec<_>>()
                     .join(",");
-                block.properties.insert(candidates_key.to_string(), PropertyValue::string(candidates_str));
+                block.properties.insert(
+                    candidates_key.to_string(),
+                    PropertyValue::string(candidates_str),
+                );
             }
         }
 
@@ -279,11 +309,16 @@ mod tests {
         let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
         assert!(!outcome.had_conflict);
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("task"));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("task")
+        );
         // TaskCheckbox decoration should be present
-        assert!(outcome.view.decorations.iter().any(|d| {
-            d.kind == quilt_domain::projection::view::DecorationKind::TaskCheckbox
-        }));
+        assert!(
+            outcome.view.decorations.iter().any(|d| {
+                d.kind == quilt_domain::projection::view::DecorationKind::TaskCheckbox
+            })
+        );
     }
 
     #[test]
@@ -297,10 +332,15 @@ mod tests {
         let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
         assert!(!outcome.had_conflict);
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("media"));
-        assert!(outcome.view.decorations.iter().any(|d| {
-            d.kind == quilt_domain::projection::view::DecorationKind::MediaPreview
-        }));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("media")
+        );
+        assert!(
+            outcome.view.decorations.iter().any(|d| {
+                d.kind == quilt_domain::projection::view::DecorationKind::MediaPreview
+            })
+        );
     }
 
     #[test]
@@ -314,7 +354,10 @@ mod tests {
         let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
         assert!(!outcome.had_conflict);
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("heading"));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("heading")
+        );
     }
 
     #[test]
@@ -327,7 +370,10 @@ mod tests {
         let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
         assert!(!outcome.had_conflict);
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("link"));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("link")
+        );
     }
 
     #[test]
@@ -340,7 +386,10 @@ mod tests {
         let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
         assert!(!outcome.had_conflict);
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("date"));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("date")
+        );
     }
 
     // ── Fallback ─────────────────────────────────────────────────
@@ -356,7 +405,10 @@ mod tests {
 
         // No match → fallback to default (had_conflict=false, winner_id=default)
         assert!(!outcome.had_conflict);
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("default"));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("default")
+        );
         // DefaultProjection produces no decorations
         assert!(outcome.view.decorations.is_empty());
     }
@@ -367,7 +419,10 @@ mod tests {
         let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
         assert!(!outcome.had_conflict);
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("default"));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("default")
+        );
     }
 
     // ── Priority ordering ────────────────────────────────────────
@@ -387,7 +442,10 @@ mod tests {
 
         assert!(!outcome.had_conflict);
         // Task has priority 100, media has 200 — task wins (lower priority number)
-        assert_eq!(outcome.winner_id.as_ref().map(|id| id.as_str()), Some("task"));
+        assert_eq!(
+            outcome.winner_id.as_ref().map(|id| id.as_str()),
+            Some("task")
+        );
     }
 
     // ── Materialize ──────────────────────────────────────────────
@@ -401,7 +459,9 @@ mod tests {
             p
         });
         let mut block = block;
-        let outcome = resolver().resolve_and_materialize(&mut block, &ctx()).unwrap();
+        let outcome = resolver()
+            .resolve_and_materialize(&mut block, &ctx())
+            .unwrap();
 
         assert_eq!(
             block.properties.get("projection"),
@@ -423,7 +483,9 @@ mod tests {
             p
         });
         let mut block = block;
-        let _outcome = resolver().resolve_and_materialize(&mut block, &ctx()).unwrap();
+        let _outcome = resolver()
+            .resolve_and_materialize(&mut block, &ctx())
+            .unwrap();
 
         assert!(!block.properties.contains_key("projection-conflict"));
     }
@@ -453,8 +515,18 @@ mod tests {
         });
         let outcome = resolver().resolve(&block, &ctx()).unwrap();
 
-        assert!(outcome.view.properties.contains_key(&PropertyKey::new("type").unwrap()));
-        assert!(outcome.view.properties.contains_key(&PropertyKey::new("custom-field").unwrap()));
+        assert!(
+            outcome
+                .view
+                .properties
+                .contains_key(&PropertyKey::new("type").unwrap())
+        );
+        assert!(
+            outcome
+                .view
+                .properties
+                .contains_key(&PropertyKey::new("custom-field").unwrap())
+        );
     }
 
     #[test]
@@ -469,7 +541,10 @@ mod tests {
 
         // projection:: task should be in the view's effective properties
         assert_eq!(
-            outcome.view.properties.get(&PropertyKey::new("projection").unwrap()),
+            outcome
+                .view
+                .properties
+                .get(&PropertyKey::new("projection").unwrap()),
             Some(&PropertyValue::string("task"))
         );
     }

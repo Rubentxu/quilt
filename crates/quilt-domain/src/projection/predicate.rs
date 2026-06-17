@@ -37,14 +37,20 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "kind", content = "args")]
 pub enum PropertyPredicate {
     /// Property value equals the given literal exactly (type-aware).
-    Equals { key: PropertyKey, value: PropertyValue },
+    Equals {
+        key: PropertyKey,
+        value: PropertyValue,
+    },
 
     /// Property key is present in the block (even if the value is an empty string).
     /// This is NOT equivalent to "non-empty": a key with `""` as value IS set.
     IsSet { key: PropertyKey },
 
     /// Property value is one of the given literals (type-aware).
-    IsOneOf { key: PropertyKey, values: Vec<PropertyValue> },
+    IsOneOf {
+        key: PropertyKey,
+        values: Vec<PropertyValue>,
+    },
 
     /// Property value (coerced to string) matches the given regex pattern.
     /// Malformed patterns do NOT panic — they simply don't match.
@@ -52,11 +58,17 @@ pub enum PropertyPredicate {
 
     /// Property value is strictly greater than the threshold.
     /// Cross-type comparisons return `false`.
-    GreaterThan { key: PropertyKey, threshold: PropertyValue },
+    GreaterThan {
+        key: PropertyKey,
+        threshold: PropertyValue,
+    },
 
     /// Property value is strictly less than the threshold.
     /// Cross-type comparisons return `false`.
-    LessThan { key: PropertyKey, threshold: PropertyValue },
+    LessThan {
+        key: PropertyKey,
+        threshold: PropertyValue,
+    },
 
     /// Logical AND of two predicates (short-circuit evaluation).
     And(Box<PropertyPredicate>, Box<PropertyPredicate>),
@@ -80,15 +92,17 @@ impl PropertyPredicate {
     #[must_use]
     pub fn matches(&self, block: &Block) -> bool {
         match self {
-            PropertyPredicate::Equals { key, value } => {
-                block.properties.get(key.as_str()).map_or(false, |bv| bv == value)
-            }
+            PropertyPredicate::Equals { key, value } => block
+                .properties
+                .get(key.as_str())
+                .map_or(false, |bv| bv == value),
 
             PropertyPredicate::IsSet { key } => block.properties.contains_key(key.as_str()),
 
-            PropertyPredicate::IsOneOf { key, values } => {
-                block.properties.get(key.as_str()).map_or(false, |bv| values.contains(bv))
-            }
+            PropertyPredicate::IsOneOf { key, values } => block
+                .properties
+                .get(key.as_str())
+                .map_or(false, |bv| values.contains(bv)),
 
             PropertyPredicate::MatchesRegex { key, pattern } => {
                 block.properties.get(key.as_str()).map_or(false, |bv| {
@@ -131,44 +145,58 @@ impl PropertyPredicateBuilder {
     /// Build an `Equals` predicate: `key == value`.
     #[must_use]
     pub fn equals(key: PropertyKey, value: PropertyValue) -> Self {
-        Self { inner: Some(PropertyPredicate::Equals { key, value }) }
+        Self {
+            inner: Some(PropertyPredicate::Equals { key, value }),
+        }
     }
 
     /// Build an `IsSet` predicate: key is present in the block.
     #[must_use]
     pub fn is_set(key: PropertyKey) -> Self {
-        Self { inner: Some(PropertyPredicate::IsSet { key }) }
+        Self {
+            inner: Some(PropertyPredicate::IsSet { key }),
+        }
     }
 
     /// Build an `IsOneOf` predicate: key's value is in the given set.
     #[must_use]
     pub fn is_one_of(key: PropertyKey, values: Vec<PropertyValue>) -> Self {
-        Self { inner: Some(PropertyPredicate::IsOneOf { key, values }) }
+        Self {
+            inner: Some(PropertyPredicate::IsOneOf { key, values }),
+        }
     }
 
     /// Build a `MatchesRegex` predicate: key's value matches the regex pattern.
     #[must_use]
     pub fn matches(key: PropertyKey, pattern: String) -> Self {
-        Self { inner: Some(PropertyPredicate::MatchesRegex { key, pattern }) }
+        Self {
+            inner: Some(PropertyPredicate::MatchesRegex { key, pattern }),
+        }
     }
 
     /// Build a `GreaterThan` predicate.
     #[must_use]
     pub fn gt(key: PropertyKey, threshold: PropertyValue) -> Self {
-        Self { inner: Some(PropertyPredicate::GreaterThan { key, threshold }) }
+        Self {
+            inner: Some(PropertyPredicate::GreaterThan { key, threshold }),
+        }
     }
 
     /// Build a `LessThan` predicate.
     #[must_use]
     pub fn lt(key: PropertyKey, threshold: PropertyValue) -> Self {
-        Self { inner: Some(PropertyPredicate::LessThan { key, threshold }) }
+        Self {
+            inner: Some(PropertyPredicate::LessThan { key, threshold }),
+        }
     }
 
     /// Build an `And` predicate combining two existing predicates.
     #[must_use]
     pub fn and(self, other: PropertyPredicate) -> Self {
         match self.inner {
-            Some(inner) => Self { inner: Some(PropertyPredicate::And(Box::new(inner), Box::new(other))) },
+            Some(inner) => Self {
+                inner: Some(PropertyPredicate::And(Box::new(inner), Box::new(other))),
+            },
             None => Self { inner: None },
         }
     }
@@ -177,7 +205,9 @@ impl PropertyPredicateBuilder {
     #[must_use]
     pub fn or(self, other: PropertyPredicate) -> Self {
         match self.inner {
-            Some(inner) => Self { inner: Some(PropertyPredicate::Or(Box::new(inner), Box::new(other))) },
+            Some(inner) => Self {
+                inner: Some(PropertyPredicate::Or(Box::new(inner), Box::new(other))),
+            },
             None => Self { inner: None },
         }
     }
@@ -185,7 +215,9 @@ impl PropertyPredicateBuilder {
     /// Build a `Not` predicate wrapping another predicate.
     #[must_use]
     pub fn negate(predicate: PropertyPredicate) -> Self {
-        Self { inner: Some(PropertyPredicate::Not(Box::new(predicate))) }
+        Self {
+            inner: Some(PropertyPredicate::Not(Box::new(predicate))),
+        }
     }
 
     /// Consume the builder and return the constructed predicate.
@@ -349,10 +381,7 @@ mod tests {
         });
         let pred = PropertyPredicate::IsOneOf {
             key: PropertyKey::new("status").unwrap(),
-            values: vec![
-                PropertyValue::string("todo"),
-                PropertyValue::string("done"),
-            ],
+            values: vec![PropertyValue::string("todo"), PropertyValue::string("done")],
         };
         assert!(!pred.matches(&block));
     }
@@ -589,10 +618,7 @@ mod tests {
             },
             PropertyPredicate::IsOneOf {
                 key: PropertyKey::new("status").unwrap(),
-                values: vec![
-                    PropertyValue::string("todo"),
-                    PropertyValue::string("done"),
-                ],
+                values: vec![PropertyValue::string("todo"), PropertyValue::string("done")],
             },
             PropertyPredicate::MatchesRegex {
                 key: PropertyKey::new("name").unwrap(),
@@ -629,8 +655,7 @@ mod tests {
 
         for original in cases {
             let json = serde_json::to_string(&original).expect("serialize");
-            let parsed: PropertyPredicate =
-                serde_json::from_str(&json).expect("deserialize");
+            let parsed: PropertyPredicate = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(original, parsed, "round-trip failed for {original:?}");
         }
     }

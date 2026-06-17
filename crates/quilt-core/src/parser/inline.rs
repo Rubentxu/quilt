@@ -322,9 +322,7 @@ impl InlineParser {
                         && bytes[end - 1].is_ascii_alphanumeric()
                     {
                         let mut word_start = end;
-                        while word_start > start
-                            && bytes[word_start - 1].is_ascii_alphanumeric()
-                        {
+                        while word_start > start && bytes[word_start - 1].is_ascii_alphanumeric() {
                             word_start -= 1;
                         }
                         end = word_start;

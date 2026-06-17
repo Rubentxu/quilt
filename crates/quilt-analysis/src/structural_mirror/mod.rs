@@ -12,5 +12,5 @@ mod graph;
 mod types;
 
 pub use engine::{StructuralError, StructuralMirror};
-pub use graph::{build_structure_map, LightweightGraph};
+pub use graph::{LightweightGraph, build_structure_map};
 pub use types::{InfluenceScore, KnowledgeCluster, KnowledgeGap, StructureMap};

@@ -8,9 +8,8 @@
 //! Auth: required (Bearer token, enforced by the global middleware).
 
 use axum::{
+    Json, Router,
     extract::Extension,
-    Json,
-    Router,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
@@ -100,7 +99,9 @@ pub async fn list_recent(
 ) -> Result<Json<RecentGraphsResponse>, AppError> {
     let graphs = state.recent_graphs.read().await;
     let recent: Vec<String> = graphs.iter().map(|p| p.display().to_string()).collect();
-    Ok(Json(RecentGraphsResponse { recent_graphs: recent }))
+    Ok(Json(RecentGraphsResponse {
+        recent_graphs: recent,
+    }))
 }
 
 /// `POST /api/v1/graphs/create`
@@ -146,9 +147,8 @@ pub async fn create_graph(
         }
     } else {
         // Fresh create — init_graph handles idempotent creation
-        init_graph(graph_path.clone()).map_err(|e| {
-            AppError::Internal(format!("failed to create graph layout: {}", e))
-        })?;
+        init_graph(graph_path.clone())
+            .map_err(|e| AppError::Internal(format!("failed to create graph layout: {}", e)))?;
         created = true;
     }
 
@@ -191,10 +191,8 @@ mod tests {
 
     #[test]
     fn request_serde_uses_camel_case() {
-        let req: ValidateGraphRequest = serde_json::from_str(
-            r#"{"graphPath":"/var/data/g1"}"#,
-        )
-        .unwrap();
+        let req: ValidateGraphRequest =
+            serde_json::from_str(r#"{"graphPath":"/var/data/g1"}"#).unwrap();
         assert_eq!(req.graph_path, "/var/data/g1");
     }
 

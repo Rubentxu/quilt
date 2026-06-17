@@ -234,12 +234,7 @@ mod tests {
     use super::*;
     use quilt_domain::entities::{AnnotationCreate, AnnotationScope, AuthorType};
 
-    fn make_ann(
-        block_id: Uuid,
-        content: &str,
-        author: &str,
-        scope: AnnotationScope,
-    ) -> Annotation {
+    fn make_ann(block_id: Uuid, content: &str, author: &str, scope: AnnotationScope) -> Annotation {
         Annotation::new(AnnotationCreate {
             block_id,
             scope,

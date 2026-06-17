@@ -67,6 +67,8 @@ async fn app_with_n_keys(n: u32) -> Result<axum::Router> {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     page_repo.insert(&page).await.unwrap();
@@ -174,6 +176,8 @@ async fn get_keys_blocks_with_no_properties_returns_empty_array() {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     page_repo.insert(&page).await.unwrap();

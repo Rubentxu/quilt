@@ -200,6 +200,18 @@ impl PageRepository for InMemoryPageRepo {
         page.updated_at = chrono::Utc::now();
         Ok(page.clone())
     }
+
+    async fn get_by_source_path(&self, source_path: &str) -> Result<Option<Page>, DomainError> {
+        use std::borrow::Cow;
+        let repo = self.repo.read();
+        Ok(repo
+            .values()
+            .find(|p| {
+                p.source_path.as_ref().map(|s| s.to_string_lossy())
+                    == Some(Cow::Borrowed(source_path))
+            })
+            .cloned())
+    }
 }
 
 #[cfg(test)]
@@ -217,6 +229,8 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
         .unwrap()
     }

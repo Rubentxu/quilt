@@ -21,11 +21,11 @@
 
 use std::sync::Arc;
 
+use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::templates::contract::{
     ApplyTemplateWithContractUseCase, ApplyTemplateWithContractUseCaseImpl,
 };
 use quilt_application::templates::reapply::{ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl};
-use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
     ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,

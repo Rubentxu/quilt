@@ -26,10 +26,10 @@ use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
+use quilt_application::use_cases::annotation::AnnotationUseCases;
 use quilt_application::{
     AnnotationDto, AnnotationFilters, AnnotationScope, AnnotationStatus, Uuid,
 };
-use quilt_application::use_cases::annotation::AnnotationUseCases;
 use quilt_domain::entities::AuthorType;
 use quilt_domain::errors::DomainError;
 
@@ -106,9 +106,7 @@ pub async fn create_annotation(
         .get("content")
         .and_then(|v| v.as_str())
         .ok_or_else(|| AppError::BadRequest("Missing 'content'".to_string()))?;
-    let parent = payload
-        .get("parentAnnotationId")
-        .and_then(|v| v.as_str());
+    let parent = payload.get("parentAnnotationId").and_then(|v| v.as_str());
     let highlight_start = payload
         .get("highlightStart")
         .and_then(|v| v.as_u64())
@@ -144,7 +142,6 @@ pub async fn list_annotations(
     Extension(use_cases): Extension<Arc<dyn AnnotationUseCases>>,
     Query(params): Query<ListAnnotationsQuery>,
 ) -> Result<Json<Vec<AnnotationDto>>, AppError> {
-
     // Empty filters return every annotation (DESC by `created_at`).
     let filters = build_filters(&params)?;
     let annotations = use_cases
@@ -188,9 +185,8 @@ pub async fn list_annotations_for_block(
     Extension(use_cases): Extension<Arc<dyn AnnotationUseCases>>,
     Path(path): Path<BlockPath>,
 ) -> Result<Json<Vec<AnnotationDto>>, AppError> {
-    let block_uuid = Uuid::parse_str(&path.block_id).map_err(|_| {
-        AppError::BadRequest(format!("Invalid block UUID: {}", path.block_id))
-    })?;
+    let block_uuid = Uuid::parse_str(&path.block_id)
+        .map_err(|_| AppError::BadRequest(format!("Invalid block UUID: {}", path.block_id)))?;
 
     let annotations = use_cases
         .list_by_block(block_uuid)
@@ -224,13 +220,12 @@ pub async fn update_annotation_status(
         .get("status")
         .and_then(|v| v.as_str())
         .ok_or_else(|| AppError::BadRequest("Missing 'status'".to_string()))?;
-    let status = AnnotationStatus::try_from_str(status_str)
-        .ok_or_else(|| {
-            AppError::BadRequest(format!(
-                "Invalid status: '{}'. Expected pending, in_progress, resolved, dismissed",
-                status_str
-            ))
-        })?;
+    let status = AnnotationStatus::try_from_str(status_str).ok_or_else(|| {
+        AppError::BadRequest(format!(
+            "Invalid status: '{}'. Expected pending, in_progress, resolved, dismissed",
+            status_str
+        ))
+    })?;
     let resolved_by = payload
         .get("resolvedBy")
         .and_then(|v| v.as_str())
@@ -256,10 +251,7 @@ pub async fn delete_annotation(
     let uuid = Uuid::parse_str(&id)
         .map_err(|_| AppError::BadRequest(format!("Invalid annotation UUID: {}", id)))?;
 
-    use_cases
-        .delete(uuid)
-        .await
-        .map_err(map_app_error)?;
+    use_cases.delete(uuid).await.map_err(map_app_error)?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -342,8 +334,7 @@ mod tests {
     /// (empty filter → "give me everything").
     #[test]
     fn list_query_empty_is_default() {
-        let q: ListAnnotationsQuery =
-            serde_json::from_str("{}").expect("empty query must parse");
+        let q: ListAnnotationsQuery = serde_json::from_str("{}").expect("empty query must parse");
         assert!(q.block_id.is_none());
         assert!(q.status.is_none());
         assert!(q.scope.is_none());
@@ -359,7 +350,10 @@ mod tests {
             r#"{"block_id":"550e8400-e29b-41d4-a716-446655440000","status":"pending","scope":"block","author_name":"alice"}"#,
         )
         .unwrap();
-        assert_eq!(q.block_id.as_deref(), Some("550e8400-e29b-41d4-a716-446655440000"));
+        assert_eq!(
+            q.block_id.as_deref(),
+            Some("550e8400-e29b-41d4-a716-446655440000")
+        );
         assert_eq!(q.status.as_deref(), Some("pending"));
         assert_eq!(q.scope.as_deref(), Some("block"));
         assert_eq!(q.author_name.as_deref(), Some("alice"));
@@ -402,7 +396,10 @@ mod tests {
             author_name: Some("alice".into()),
         };
         let f = build_filters(&q).unwrap();
-        assert_eq!(f.block_id.unwrap().to_string(), "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(
+            f.block_id.unwrap().to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
         assert_eq!(f.status.as_deref(), Some("pending"));
         assert_eq!(f.scope, Some(AnnotationScope::Block));
         assert_eq!(f.author_name.as_deref(), Some("alice"));
@@ -434,7 +431,10 @@ mod tests {
         assert!(!json.contains("\"block_id\""), "json was: {json}");
         // enums as lowercase strings
         assert!(json.contains("\"scope\":\"block\""), "json was: {json}");
-        assert!(json.contains("\"authorType\":\"human\""), "json was: {json}");
+        assert!(
+            json.contains("\"authorType\":\"human\""),
+            "json was: {json}"
+        );
         assert!(json.contains("\"status\":\"pending\""), "json was: {json}");
     }
 }

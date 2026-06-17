@@ -71,11 +71,7 @@ pub trait AnnotationUseCases: Send + Sync {
 
     /// Convenience: resolve an annotation by id and the resolver's
     /// name. Equivalent to `update_status(id, Resolved, Some(by))`.
-    async fn resolve(
-        &self,
-        id: Uuid,
-        resolved_by: String,
-    ) -> Result<Annotation, ApplicationError>;
+    async fn resolve(&self, id: Uuid, resolved_by: String) -> Result<Annotation, ApplicationError>;
 
     /// Delete an annotation. Returns `Ok(())` whether or not the row
     /// existed — matches the underlying repository contract.
@@ -109,21 +105,23 @@ impl<R: AnnotationRepository + 'static> AnnotationUseCases for AnnotationUseCase
         highlight_end: Option<u32>,
     ) -> Result<Annotation, ApplicationError> {
         // 1. Parse UUIDs
-        let block_id = Uuid::parse_str(block_id_str)
-            .map_err(|e| ApplicationError::Validation(format!("Invalid block UUID: {} - {}", block_id_str, e)))?;
+        let block_id = Uuid::parse_str(block_id_str).map_err(|e| {
+            ApplicationError::Validation(format!("Invalid block UUID: {} - {}", block_id_str, e))
+        })?;
         let parent_annotation_id = match parent_annotation_id_str {
-            Some(s) if !s.is_empty() => Some(
-                Uuid::parse_str(s)
-                    .map_err(|e| ApplicationError::Validation(format!("Invalid parent UUID: {} - {}", s, e)))?,
-            ),
+            Some(s) if !s.is_empty() => Some(Uuid::parse_str(s).map_err(|e| {
+                ApplicationError::Validation(format!("Invalid parent UUID: {} - {}", s, e))
+            })?),
             _ => None,
         };
 
         // 2. Parse enum strings
-        let scope = AnnotationScope::try_from_str(scope_str)
-            .ok_or_else(|| ApplicationError::Validation(format!("Invalid scope: '{}'", scope_str)))?;
-        let author_type = AuthorType::try_from_str(author_type_str)
-            .ok_or_else(|| ApplicationError::Validation(format!("Invalid authorType: '{}'", author_type_str)))?;
+        let scope = AnnotationScope::try_from_str(scope_str).ok_or_else(|| {
+            ApplicationError::Validation(format!("Invalid scope: '{}'", scope_str))
+        })?;
+        let author_type = AuthorType::try_from_str(author_type_str).ok_or_else(|| {
+            ApplicationError::Validation(format!("Invalid authorType: '{}'", author_type_str))
+        })?;
 
         // 2b. Pre-validate content at the use-case layer so the API
         // gets a `Validation` error (→ 400) rather than a wrapped
@@ -245,11 +243,7 @@ impl<R: AnnotationRepository + 'static> AnnotationUseCases for AnnotationUseCase
     }
 
     #[instrument(skip(self, resolved_by))]
-    async fn resolve(
-        &self,
-        id: Uuid,
-        resolved_by: String,
-    ) -> Result<Annotation, ApplicationError> {
+    async fn resolve(&self, id: Uuid, resolved_by: String) -> Result<Annotation, ApplicationError> {
         self.update_status(id, AnnotationStatus::Resolved, Some(resolved_by))
             .await
     }
@@ -330,7 +324,10 @@ mod tests {
                 None,
             )
             .await;
-        assert!(res.is_err(), "inline scope without offsets must be rejected");
+        assert!(
+            res.is_err(),
+            "inline scope without offsets must be rejected"
+        );
     }
 
     #[tokio::test]
@@ -460,7 +457,10 @@ mod tests {
         let svc = service();
         let _a1 = create_block_annotation(&svc, Uuid::new_v4(), "x").await;
         let _a2 = create_block_annotation(&svc, Uuid::new_v4(), "y").await;
-        let list = svc.list_by_filters(&AnnotationFilters::default()).await.unwrap();
+        let list = svc
+            .list_by_filters(&AnnotationFilters::default())
+            .await
+            .unwrap();
         assert_eq!(list.len(), 2);
     }
 
@@ -525,7 +525,10 @@ mod tests {
         let res = svc
             .update_status(Uuid::new_v4(), AnnotationStatus::Resolved, Some("x".into()))
             .await;
-        assert!(matches!(res, Err(ApplicationError::NotFound("Annotation", _))));
+        assert!(matches!(
+            res,
+            Err(ApplicationError::NotFound("Annotation", _))
+        ));
     }
 
     #[tokio::test]

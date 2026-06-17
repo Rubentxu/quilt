@@ -137,11 +137,7 @@ impl ProjectionViewBuilder {
         let properties = block
             .properties
             .iter()
-            .filter_map(|(k, v)| {
-                PropertyKey::new(k)
-                    .ok()
-                    .map(|key| (key, v.clone()))
-            })
+            .filter_map(|(k, v)| PropertyKey::new(k).ok().map(|key| (key, v.clone())))
             .collect();
 
         Self {
@@ -296,7 +292,10 @@ mod tests {
             kind: LinkKind::PageRef,
         };
         let json = serde_json::to_string(&link).expect("serialize");
-        assert!(json.contains("page-ref"), "Expected kebab-case 'page-ref' in {json}");
+        assert!(
+            json.contains("page-ref"),
+            "Expected kebab-case 'page-ref' in {json}"
+        );
     }
 
     // ── Decoration ────────────────────────────────────────────────
@@ -323,14 +322,20 @@ mod tests {
         };
         let json = serde_json::to_string(&dec).expect("serialize");
         let v: serde_json::Value = serde_json::from_str(&json).expect("parse");
-        assert_eq!(v["kind"], "task-checkbox", "Expected kebab-case kind in {json}");
+        assert_eq!(
+            v["kind"], "task-checkbox",
+            "Expected kebab-case kind in {json}"
+        );
     }
 
     #[test]
     fn decoration_unknown_kind_rejected_on_deserialize() {
         let json = r#"{"kind":"made-up","target":"status","value":"todo","weight":50}"#;
         let result: Result<Decoration, _> = serde_json::from_str(json);
-        assert!(result.is_err(), "Unknown decoration kind should be rejected");
+        assert!(
+            result.is_err(),
+            "Unknown decoration kind should be rejected"
+        );
     }
 
     // ── ProjectionView ────────────────────────────────────────────
@@ -344,7 +349,10 @@ mod tests {
         assert!(view.links.is_empty());
         assert!(view.decorations.is_empty());
         assert!(view.conflicts.is_empty());
-        assert_eq!(view.properties.get(&PropertyKey::new("type").unwrap()), Some(&PropertyValue::string("task")));
+        assert_eq!(
+            view.properties.get(&PropertyKey::new("type").unwrap()),
+            Some(&PropertyValue::string("task"))
+        );
     }
 
     #[test]
@@ -421,11 +429,15 @@ mod tests {
     fn view_properties_expose_effective_set() {
         let block = make_block();
         let view = ProjectionViewBuilder::new(&block)
-            .add_property(PropertyKey::new("projection").unwrap(), PropertyValue::string("task"))
+            .add_property(
+                PropertyKey::new("projection").unwrap(),
+                PropertyValue::string("task"),
+            )
             .build();
 
         assert_eq!(
-            view.properties.get(&PropertyKey::new("projection").unwrap()),
+            view.properties
+                .get(&PropertyKey::new("projection").unwrap()),
             Some(&PropertyValue::string("task"))
         );
         assert_eq!(
@@ -496,7 +508,10 @@ mod tests {
             )
             .build();
 
-        assert!(view.properties.contains_key(&PropertyKey::new("projection").unwrap()));
+        assert!(
+            view.properties
+                .contains_key(&PropertyKey::new("projection").unwrap())
+        );
     }
 
     // ── ProjectionViewDelta ────────────────────────────────────────

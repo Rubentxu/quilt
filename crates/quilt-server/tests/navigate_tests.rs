@@ -23,6 +23,8 @@ fn make_page(name: &str, journal_day: Option<JournalDay>) -> Page {
         created_at: now,
         updated_at: now,
         properties: std::collections::HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     }
 }
 
@@ -66,6 +68,8 @@ fn test_page_dto_from_page_without_title() {
         created_at: now,
         updated_at: now,
         properties: std::collections::HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     };
     let dto = PageDto::from(page);
     assert_eq!(dto.title, None);

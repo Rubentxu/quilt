@@ -124,10 +124,7 @@ impl ProjectionRegistry for StaticProjectionRegistry {
     }
 
     fn v1_contract_ids(&self) -> Vec<ProjectionContractId> {
-        self.items
-            .iter()
-            .map(|rp| rp.contract.id.clone())
-            .collect()
+        self.items.iter().map(|rp| rp.contract.id.clone()).collect()
     }
 }
 
@@ -138,7 +135,11 @@ mod tests {
     #[test]
     fn v1_registry_contains_six_contracts() {
         let registry = StaticProjectionRegistry::v1();
-        let ids: Vec<_> = registry.v1_contract_ids().into_iter().map(|id| id.as_str().to_string()).collect();
+        let ids: Vec<_> = registry
+            .v1_contract_ids()
+            .into_iter()
+            .map(|id| id.as_str().to_string())
+            .collect();
         assert_eq!(ids.len(), 6);
     }
 
@@ -161,7 +162,9 @@ mod tests {
     #[test]
     fn v1_registry_get_returns_correct_projection() {
         let registry = StaticProjectionRegistry::v1();
-        let rp = registry.get(&ProjectionContractId::new("task").unwrap()).unwrap();
+        let rp = registry
+            .get(&ProjectionContractId::new("task").unwrap())
+            .unwrap();
         assert_eq!(rp.contract.id.as_str(), "task");
         assert_eq!(rp.projection.contract_id().as_str(), "task");
     }
@@ -169,7 +172,11 @@ mod tests {
     #[test]
     fn v1_registry_get_returns_none_for_unknown() {
         let registry = StaticProjectionRegistry::v1();
-        assert!(registry.get(&ProjectionContractId::new("nonexistent").unwrap()).is_none());
+        assert!(
+            registry
+                .get(&ProjectionContractId::new("nonexistent").unwrap())
+                .is_none()
+        );
     }
 
     #[test]
@@ -182,10 +189,8 @@ mod tests {
     #[test]
     fn v1_registry_priorities_are_unique() {
         let registry = StaticProjectionRegistry::v1();
-        let priorities: std::collections::HashSet<_> = registry
-            .iter()
-            .map(|rp| rp.contract.priority)
-            .collect();
+        let priorities: std::collections::HashSet<_> =
+            registry.iter().map(|rp| rp.contract.priority).collect();
         assert_eq!(priorities.len(), registry.iter().count());
     }
 

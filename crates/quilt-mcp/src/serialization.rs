@@ -1,7 +1,7 @@
 //! Serialization helpers for MCP types.
 
 use quilt_domain::entities::Block;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Convert a Block entity to a JSON value for MCP responses.
 ///

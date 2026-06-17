@@ -7,22 +7,17 @@
 //! - Weekly Review (CG-7)
 //! - Cognitive Graph (CG-2)
 
-use axum::{
-    extract::Extension,
-    response::IntoResponse,
-    Json, Router,
-    routing::get,
-};
+use axum::{Json, Router, extract::Extension, response::IntoResponse, routing::get};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
 use crate::error::AppError;
 use crate::state::AppState;
 use quilt_analysis::{
-    morning_briefing::SerendipityHighlight as MbHighlight, AgendaItem, CognitiveDashboardService,
-    CognitiveGraphDto, DecayAlert, DecayMonitorDto, DecayMonitorService, DecayTrend,
-    MorningBriefing, MorningBriefingDto, SerendipityHighlight, SerendipityMonitorDto,
-    SerendipityMonitorService, WeeklyReviewDto, WeeklyReviewService,
+    AgendaItem, CognitiveDashboardService, CognitiveGraphDto, DecayAlert, DecayMonitorDto,
+    DecayMonitorService, DecayTrend, MorningBriefing, MorningBriefingDto, SerendipityHighlight,
+    SerendipityMonitorDto, SerendipityMonitorService, WeeklyReviewDto, WeeklyReviewService,
+    morning_briefing::SerendipityHighlight as MbHighlight,
 };
 
 // ─── Morning Briefing (CG-1) ─────────────────────────────────────────────────
@@ -127,7 +122,9 @@ impl From<DecayMonitorDto> for DecayMonitorResponse {
 /// only the decay section as a focused DTO with precomputed
 /// per-severity counts.
 #[instrument(skip(state))]
-pub async fn get_decay(Extension(state): Extension<AppState>) -> Result<impl IntoResponse, AppError> {
+pub async fn get_decay(
+    Extension(state): Extension<AppState>,
+) -> Result<impl IntoResponse, AppError> {
     let block_repo = state.repos.block.clone();
     let page_repo = state.repos.page.clone();
 
@@ -323,7 +320,10 @@ impl From<CognitiveGraphDto> for CognitiveGraphResponse {
             edges: dto
                 .edges
                 .into_iter()
-                .map(|e| CognitiveGraphEdge { from: e.from, to: e.to })
+                .map(|e| CognitiveGraphEdge {
+                    from: e.from,
+                    to: e.to,
+                })
                 .collect(),
             clusters: dto
                 .clusters

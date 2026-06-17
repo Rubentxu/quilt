@@ -42,6 +42,8 @@ impl MockPageUseCases {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
         .unwrap();
         self.pages.lock().unwrap().push(page.clone());
@@ -64,6 +66,8 @@ impl PageUseCases for MockPageUseCases {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
         .map_err(|e| ApplicationError::Domain(e))?;
         self.pages.lock().unwrap().push(page.clone());
@@ -114,6 +118,8 @@ impl PageUseCases for MockPageUseCases {
                     format: BlockFormat::Markdown,
                     file_id: None,
                     properties: std::collections::HashMap::new(),
+                    source_path: None,
+                    source_mtime: None,
                 })
                 .unwrap()
             });
@@ -139,6 +145,8 @@ impl PageUseCases for MockPageUseCases {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
         .unwrap();
         Ok(page)

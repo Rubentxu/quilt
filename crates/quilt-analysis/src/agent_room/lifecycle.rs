@@ -426,6 +426,9 @@ impl AgentLifecycle {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            // Agent-created pages are not ingested from a file
+            source_path: None,
+            source_mtime: None,
         };
         match Page::new(create) {
             Ok(page) => {

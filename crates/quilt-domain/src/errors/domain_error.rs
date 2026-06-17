@@ -20,6 +20,8 @@ pub enum DomainError {
     // Validation errors
     /// Invalid page name (contains special characters, etc.)
     InvalidPageName(String),
+    /// Invalid source path (e.g., absolute path instead of relative)
+    InvalidPageSourcePath(String),
     /// Invalid journal day format
     InvalidJournalDay(String),
     /// Page is not a journal (when journal operation was expected)
@@ -102,6 +104,9 @@ impl fmt::Display for DomainError {
             }
             DomainError::InvalidPageName(name) => {
                 write!(f, "Invalid page name: {}", name)
+            }
+            DomainError::InvalidPageSourcePath(msg) => {
+                write!(f, "Invalid source path: {}", msg)
             }
             DomainError::InvalidJournalDay(day) => {
                 write!(f, "Invalid journal day: {}", day)

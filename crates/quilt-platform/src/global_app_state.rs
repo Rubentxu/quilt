@@ -101,8 +101,7 @@ fn open_sqlite(path: &Path) -> Result<SqliteGlobalAppStateRepository, GlobalStat
             source,
         })?;
     }
-    SqliteGlobalAppStateRepository::open(path)
-        .map_err(|e| GlobalStateError::Storage(e.to_string()))
+    SqliteGlobalAppStateRepository::open(path).map_err(|e| GlobalStateError::Storage(e.to_string()))
 }
 
 #[cfg(test)]

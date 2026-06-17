@@ -77,6 +77,8 @@ async fn app_with_n_roots(n: u32) -> Result<(axum::Router, Uuid)> {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     page_repo.insert(&page).await.unwrap();
@@ -116,6 +118,8 @@ async fn app_with_tree() -> Result<(axum::Router, Vec<Uuid>)> {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     page_repo.insert(&page).await.unwrap();
@@ -504,6 +508,8 @@ async fn get_lens_property_returns_blocks_with_that_key() -> Result<()> {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     page_repo.insert(&page).await.unwrap();

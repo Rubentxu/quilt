@@ -215,13 +215,13 @@ mod tests {
         system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
     use quilt_application::property::{PropertyService, PropertyServiceTrait};
+    use quilt_application::services::ref_service::{RefService, RefServiceTrait};
     use quilt_application::templates::contract::{
         ApplyTemplateWithContractUseCase, ApplyTemplateWithContractUseCaseImpl,
     };
     use quilt_application::templates::reapply::{
         ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl,
     };
-    use quilt_application::services::ref_service::{RefService, RefServiceTrait};
     use quilt_application::use_cases::{
         BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
         ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
@@ -229,8 +229,8 @@ mod tests {
     use quilt_domain::repositories::RefRepository;
     use quilt_infrastructure::database::sqlite::connection;
     use quilt_infrastructure::database::sqlite::repositories::{
-        SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository,
-        SqliteRefRepository, SqliteRelationRepository, SqliteSchemaRepository, SqliteTagRepository,
+        SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
+        SqliteRelationRepository, SqliteSchemaRepository, SqliteTagRepository,
     };
     use quilt_search::SearchService;
     use sqlx::SqlitePool;

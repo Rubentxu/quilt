@@ -297,8 +297,7 @@ mod tests {
             .unwrap();
         }
 
-        let cfg =
-            init_graph_validated(tmp.path().to_path_buf()).expect("valid layout should pass");
+        let cfg = init_graph_validated(tmp.path().to_path_buf()).expect("valid layout should pass");
         assert_eq!(cfg.db_path, db_path);
     }
 
@@ -312,7 +311,9 @@ mod tests {
         Connection::open(&db_path).unwrap(); // creates an empty db
 
         match init_graph_validated(tmp.path().to_path_buf()) {
-            Err(GraphError::Validation(GraphValidationError::SchemaIncompatible { path, .. })) => {
+            Err(GraphError::Validation(GraphValidationError::SchemaIncompatible {
+                path, ..
+            })) => {
                 assert_eq!(path, db_path);
             }
             other => panic!("expected SchemaIncompatible, got {other:?}"),
@@ -346,12 +347,13 @@ mod tests {
             .unwrap();
         }
 
-        init_graph_validated(tmp.path().to_path_buf())
-            .expect("valid existing graph must validate");
+        init_graph_validated(tmp.path().to_path_buf()).expect("valid existing graph must validate");
         // The DB must still be a valid SQLite file with our marker.
         let conn = Connection::open(&db_path).unwrap();
         let tz: String = conn
-            .query_row("SELECT timezone FROM user_settings WHERE id = 1", [], |r| r.get(0))
+            .query_row("SELECT timezone FROM user_settings WHERE id = 1", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(tz, "pre-existing-marker");
     }
@@ -360,7 +362,8 @@ mod tests {
     #[allow(deprecated)]
     fn deprecated_ensure_vault_exists_delegates_and_creates() {
         let tmp = tempdir().unwrap();
-        let result = ensure_vault_exists(tmp.path()).expect("deprecation wrapper should still work");
+        let result =
+            ensure_vault_exists(tmp.path()).expect("deprecation wrapper should still work");
         assert_eq!(result, tmp.path().join(".quilt").join("quilt.db"));
         assert!(result.exists());
     }

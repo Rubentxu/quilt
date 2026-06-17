@@ -93,10 +93,10 @@ impl<P: PropertyRepository> PropertyValidator<P> {
             (PropertyType::Date, PropertyValue::Date(_)) => true,
             (PropertyType::Date, PropertyValue::NaiveDate(_)) => true, // Canonical
             (PropertyType::DateTime, PropertyValue::Date(_)) => true,
-            (PropertyType::Url, PropertyValue::Url(_)) => true,        // First-class
-            (PropertyType::Url, PropertyValue::String(_)) => true,     // Backward compat
+            (PropertyType::Url, PropertyValue::Url(_)) => true, // First-class
+            (PropertyType::Url, PropertyValue::String(_)) => true, // Backward compat
             (PropertyType::Checkbox, PropertyValue::Boolean(_)) => true, // Backward compat
-            (PropertyType::Node, PropertyValue::Ref(_)) => true,   // Backward compat
+            (PropertyType::Node, PropertyValue::Ref(_)) => true, // Backward compat
             _ => false,
         };
 
@@ -495,8 +495,16 @@ mod tests {
             .await;
         assert!(result.is_err());
         if let Err(DomainError::PropertyValidationError { error, .. }) = result {
-            assert!(error.contains("DateTime"), "error should mention expected type: {}", error);
-            assert!(error.contains("date"), "error should mention got type: {}", error);
+            assert!(
+                error.contains("DateTime"),
+                "error should mention expected type: {}",
+                error
+            );
+            assert!(
+                error.contains("date"),
+                "error should mention got type: {}",
+                error
+            );
         }
     }
 
@@ -511,8 +519,16 @@ mod tests {
             .await;
         assert!(result.is_err());
         if let Err(DomainError::PropertyValidationError { error, .. }) = result {
-            assert!(error.contains("Url") || error.contains("url"), "error should mention expected type: {}", error);
-            assert!(error.contains("integer"), "error should mention got type: {}", error);
+            assert!(
+                error.contains("Url") || error.contains("url"),
+                "error should mention expected type: {}",
+                error
+            );
+            assert!(
+                error.contains("integer"),
+                "error should mention got type: {}",
+                error
+            );
         }
     }
 }

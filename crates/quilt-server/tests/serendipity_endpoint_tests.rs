@@ -126,7 +126,10 @@ async fn serendipity_endpoint_response_has_correct_top_level_fields() -> Result<
     // Verify field types
     assert!(json["highlights"].is_array(), "highlights should be array");
     assert!(json["total"].is_u64(), "total should be number");
-    assert!(json["generatedAt"].is_string(), "generatedAt should be string");
+    assert!(
+        json["generatedAt"].is_string(),
+        "generatedAt should be string"
+    );
 
     Ok(())
 }

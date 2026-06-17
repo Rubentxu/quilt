@@ -933,7 +933,8 @@ mod tests {
                 "derived_from must always be None"
             );
             assert_eq!(
-                def.merge_policy, MergePolicy::SetIfMissing,
+                def.merge_policy,
+                MergePolicy::SetIfMissing,
                 "merge_policy must always be SetIfMissing"
             );
             assert!(

@@ -26,20 +26,21 @@ use quilt_application::AppServices;
 use quilt_application::services::presets::StaticPresetRegistry;
 use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
+use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_application::use_cases::{
     AnnotationUseCases, AnnotationUseCasesImpl, BlockUseCases, BlockUseCasesImpl, PageUseCases,
     PageUseCasesImpl, ResourceUseCases, ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases,
     TemplateUseCasesImpl, TourStateUseCases, TourStateUseCasesImpl,
 };
-use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_domain::canonicalization::PresetRegistry;
+use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqliteGraphSpaceRepository, SqlitePageRepository, SqlitePropertyRepository,
-    SqliteRefRepository, SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
-    SqliteTagRepository, SqliteTourStateRepository,
+    SqliteBlockRepository, SqliteGraphSpaceRepository, SqlitePageRepository,
+    SqlitePropertyRepository, SqliteRefRepository, SqliteRelationRepository,
+    SqliteSchemaRepository, SqliteSettingsRepository, SqliteTagRepository,
+    SqliteTourStateRepository,
 };
-use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_platform::init::init_graph;
 use quilt_search::SearchService;
 
@@ -94,16 +95,13 @@ async fn main() -> Result<()> {
     // fail-open: any disk error falls back to an in-memory store
     // with a `tracing::warn!` so the server starts no matter what.
     let global_state_repo = quilt_platform::global_app_state::open_global_state().await;
-    let global_initial = global_state_repo
-        .load()
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!(
-                target: "quilt_server",
-                "failed to load global state at startup; using defaults: {e}"
-            );
-            quilt_domain::entities::GlobalAppState::default()
-        });
+    let global_initial = global_state_repo.load().await.unwrap_or_else(|e| {
+        tracing::warn!(
+            target: "quilt_server",
+            "failed to load global state at startup; using defaults: {e}"
+        );
+        quilt_domain::entities::GlobalAppState::default()
+    });
     info!(
         last_opened = ?global_initial.last_opened_graph,
         recents = global_initial.recent_graphs.len(),

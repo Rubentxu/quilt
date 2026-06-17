@@ -14,13 +14,7 @@ use crate::types::BlockDto;
 use serde_json::json;
 
 /// V1 task statuses — matches the server's `task_contract()` definition.
-const V1_STATUSES: &[&str] = &[
-    "todo",
-    "in-progress",
-    "done",
-    "cancelled",
-    "waiting",
-];
+const V1_STATUSES: &[&str] = &["todo", "in-progress", "done", "cancelled", "waiting"];
 
 /// TaskProjection — produces a task-checkbox decoration.
 #[derive(Debug, Clone, Copy, Default)]
@@ -40,9 +34,7 @@ impl WasmContract for TaskContract {
             return false;
         };
         // type:: task AND status:: (any value) AND status:: in known statuses
-        let type_matches = props
-            .get("type")
-            .map_or(false, |v| v == &json!("task"));
+        let type_matches = props.get("type").map_or(false, |v| v == &json!("task"));
         let status_set = props.contains_key("status");
         let status_known = match_status_one_of(props, "status", V1_STATUSES);
         type_matches && status_set && status_known

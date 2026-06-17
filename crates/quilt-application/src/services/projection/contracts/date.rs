@@ -157,9 +157,11 @@ mod tests {
         });
         let delta = DateProjection::new().apply(&block, &ProjectionContext::page(Utc::now()));
 
-        assert!(delta.view_properties.iter().any(|(k, v)| {
-            k.as_str() == "projection" && *v == PropertyValue::string("date")
-        }));
+        assert!(
+            delta.view_properties.iter().any(|(k, v)| {
+                k.as_str() == "projection" && *v == PropertyValue::string("date")
+            })
+        );
     }
 
     #[test]

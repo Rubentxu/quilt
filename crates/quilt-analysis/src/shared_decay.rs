@@ -155,6 +155,8 @@ mod tests {
             created_at: block.created_at,
             updated_at: block.updated_at,
             properties: HashMap::<String, DefaultPropertyEntry<PropertyValue>>::new(),
+            source_path: None,
+            source_mtime: None,
         }
     }
 
@@ -164,12 +166,8 @@ mod tests {
         let page = page_for_block(&block);
         let block_repo = InMemoryBlockRepo::new().with_blocks(vec![block.clone()]);
         let page_repo = InMemoryPageRepo::new().with_pages(vec![page]);
-        let alerts = detect_decay_alerts(
-            block_repo.as_ref(),
-            page_repo.as_ref(),
-            today_start(),
-        )
-        .await;
+        let alerts =
+            detect_decay_alerts(block_repo.as_ref(), page_repo.as_ref(), today_start()).await;
         assert_eq!(alerts.len(), 1);
         assert_eq!(alerts[0].severity, "high");
         assert!(alerts[0].days_since_update >= 30);
@@ -181,12 +179,8 @@ mod tests {
         let page = page_for_block(&block);
         let block_repo = InMemoryBlockRepo::new().with_blocks(vec![block.clone()]);
         let page_repo = InMemoryPageRepo::new().with_pages(vec![page]);
-        let alerts = detect_decay_alerts(
-            block_repo.as_ref(),
-            page_repo.as_ref(),
-            today_start(),
-        )
-        .await;
+        let alerts =
+            detect_decay_alerts(block_repo.as_ref(), page_repo.as_ref(), today_start()).await;
         assert_eq!(alerts.len(), 1);
         assert_eq!(alerts[0].severity, "medium");
         assert!(alerts[0].days_since_update >= 14 && alerts[0].days_since_update < 30);
@@ -198,12 +192,8 @@ mod tests {
         let page = page_for_block(&block);
         let block_repo = InMemoryBlockRepo::new().with_blocks(vec![block.clone()]);
         let page_repo = InMemoryPageRepo::new().with_pages(vec![page]);
-        let alerts = detect_decay_alerts(
-            block_repo.as_ref(),
-            page_repo.as_ref(),
-            today_start(),
-        )
-        .await;
+        let alerts =
+            detect_decay_alerts(block_repo.as_ref(), page_repo.as_ref(), today_start()).await;
         assert!(alerts.is_empty());
     }
 
@@ -213,12 +203,8 @@ mod tests {
         let page = page_for_block(&blocks[0]);
         let block_repo = InMemoryBlockRepo::new().with_blocks(blocks);
         let page_repo = InMemoryPageRepo::new().with_pages(vec![page]);
-        let alerts = detect_decay_alerts(
-            block_repo.as_ref(),
-            page_repo.as_ref(),
-            today_start(),
-        )
-        .await;
+        let alerts =
+            detect_decay_alerts(block_repo.as_ref(), page_repo.as_ref(), today_start()).await;
         assert_eq!(alerts.len(), 10);
     }
 
@@ -231,12 +217,8 @@ mod tests {
         // empty repo path returns no alerts.
         let block_repo = InMemoryBlockRepo::new();
         let page_repo = InMemoryPageRepo::new();
-        let alerts = detect_decay_alerts(
-            block_repo.as_ref(),
-            page_repo.as_ref(),
-            today_start(),
-        )
-        .await;
+        let alerts =
+            detect_decay_alerts(block_repo.as_ref(), page_repo.as_ref(), today_start()).await;
         assert!(alerts.is_empty());
     }
 }

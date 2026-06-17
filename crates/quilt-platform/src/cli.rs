@@ -21,7 +21,12 @@ pub struct QuiltCLI {
     /// The canonical database lives at `<graph_dir>/.quilt/quilt.db`.
     /// If the directory does not exist, the bootstrap layer will create
     /// the layout on first open.
-    #[arg(short = 'g', long = "graph-dir", env = "QUILT_GRAPH_DIR", default_value = ".")]
+    #[arg(
+        short = 'g',
+        long = "graph-dir",
+        env = "QUILT_GRAPH_DIR",
+        default_value = "."
+    )]
     pub graph_dir: PathBuf,
 
     /// **Deprecated.** Path to the graph database file.
@@ -54,7 +59,10 @@ impl QuiltCLI {
                 .map(|e| e.eq_ignore_ascii_case("db"))
                 .unwrap_or(false)
             {
-                db_path.parent().map(|p| p.to_path_buf()).unwrap_or_default()
+                db_path
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_default()
             } else {
                 db_path.clone()
             };
@@ -468,8 +476,8 @@ mod tests {
 
     #[test]
     fn test_cli_parse_graph_dir_explicit() {
-        let cli =
-            QuiltCLI::try_parse_from(["quilt", "--graph-dir", "/var/data/g1", "list-pages"]).unwrap();
+        let cli = QuiltCLI::try_parse_from(["quilt", "--graph-dir", "/var/data/g1", "list-pages"])
+            .unwrap();
         assert_eq!(cli.graph_dir.to_string_lossy(), "/var/data/g1");
         assert!(cli.db_path.is_none());
     }
@@ -487,13 +495,9 @@ mod tests {
     #[test]
     fn test_cli_resolved_graph_dir_db_path_directory() {
         // --db-path with a non-.db value is treated as a graph root.
-        let cli = QuiltCLI::try_parse_from([
-            "quilt",
-            "--db-path",
-            "/var/data/old-graph",
-            "list-pages",
-        ])
-        .unwrap();
+        let cli =
+            QuiltCLI::try_parse_from(["quilt", "--db-path", "/var/data/old-graph", "list-pages"])
+                .unwrap();
         let (gd, used) = cli.resolved_graph_dir();
         assert!(used);
         assert_eq!(gd.to_string_lossy(), "/var/data/old-graph");

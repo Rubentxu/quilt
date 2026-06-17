@@ -2,9 +2,9 @@
 //!
 //! Generates a daily briefing by aggregating data from the knowledge graph.
 
+use crate::ConnectionEngine;
 use crate::morning_briefing::types::*;
 use crate::shared_decay::detect_decay_alerts;
-use crate::ConnectionEngine;
 use chrono::{DateTime, Utc};
 use quilt_domain::repositories::{BlockRepository, PageRepository};
 use std::sync::Arc;
@@ -59,9 +59,12 @@ impl MorningBriefing {
 
         // 2. Detect decay alerts (delegated to the shared free function
         //    so the Decay Monitor service gets the same algorithm).
-        let decay_alerts =
-            detect_decay_alerts(self.block_repo.as_ref(), self.page_repo.as_ref(), today_start)
-                .await;
+        let decay_alerts = detect_decay_alerts(
+            self.block_repo.as_ref(),
+            self.page_repo.as_ref(),
+            today_start,
+        )
+        .await;
 
         // 3. Find serendipity highlights
         let serendipity_highlights = self.find_serendipity_highlights().await;
@@ -94,7 +97,10 @@ impl MorningBriefing {
         items
     }
 
-    async fn block_to_agenda_item(&self, block: &quilt_domain::entities::Block) -> Option<AgendaItem> {
+    async fn block_to_agenda_item(
+        &self,
+        block: &quilt_domain::entities::Block,
+    ) -> Option<AgendaItem> {
         let content_preview = if block.content.len() > 200 {
             block.content[..200].to_string()
         } else {
@@ -131,7 +137,12 @@ impl MorningBriefing {
     /// the shared function and is therefore byte-equivalent.
     #[allow(dead_code)]
     pub async fn detect_decay_alerts(&self, today_start: DateTime<Utc>) -> Vec<DecayAlert> {
-        detect_decay_alerts(self.block_repo.as_ref(), self.page_repo.as_ref(), today_start).await
+        detect_decay_alerts(
+            self.block_repo.as_ref(),
+            self.page_repo.as_ref(),
+            today_start,
+        )
+        .await
     }
 
     /// Find serendipitous connections from the connection engine.
@@ -190,4 +201,3 @@ impl MorningBriefing {
         }
     }
 }
-

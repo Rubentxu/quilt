@@ -33,11 +33,7 @@ impl Projection for DefaultProjection {
         ProjectionContractId::new("default").expect("'default' is a valid contract ID")
     }
 
-    fn apply(
-        &self,
-        _block: &Block,
-        _ctx: &ProjectionContext,
-    ) -> ProjectionViewDelta {
+    fn apply(&self, _block: &Block, _ctx: &ProjectionContext) -> ProjectionViewDelta {
         // DefaultProjection produces no decorations — pure base surface only
         ProjectionViewDelta::default()
     }

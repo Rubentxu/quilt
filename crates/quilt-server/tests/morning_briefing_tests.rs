@@ -148,7 +148,10 @@ async fn morning_briefing_response_has_correct_top_level_fields() -> Result<()> 
     // Verify all expected fields are present
     assert!(json.get("agendaItems").is_some(), "should have agendaItems");
     assert!(json.get("decayAlerts").is_some(), "should have decayAlerts");
-    assert!(json.get("serendipityHighlights").is_some(), "should have serendipityHighlights");
+    assert!(
+        json.get("serendipityHighlights").is_some(),
+        "should have serendipityHighlights"
+    );
     assert!(json.get("generatedAt").is_some(), "should have generatedAt");
     assert!(
         json.get("daysSinceLastJournal").is_some(),
@@ -156,10 +159,22 @@ async fn morning_briefing_response_has_correct_top_level_fields() -> Result<()> 
     );
 
     // Verify field types
-    assert!(json["agendaItems"].is_array(), "agendaItems should be array");
-    assert!(json["decayAlerts"].is_array(), "decayAlerts should be array");
-    assert!(json["serendipityHighlights"].is_array(), "serendipityHighlights should be array");
-    assert!(json["generatedAt"].is_string(), "generatedAt should be string");
+    assert!(
+        json["agendaItems"].is_array(),
+        "agendaItems should be array"
+    );
+    assert!(
+        json["decayAlerts"].is_array(),
+        "decayAlerts should be array"
+    );
+    assert!(
+        json["serendipityHighlights"].is_array(),
+        "serendipityHighlights should be array"
+    );
+    assert!(
+        json["generatedAt"].is_string(),
+        "generatedAt should be string"
+    );
     assert!(
         json["daysSinceLastJournal"].is_number(),
         "daysSinceLastJournal should be number"

@@ -311,6 +311,9 @@ pub async fn create_page(
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            // Manually-created pages don't have a source file
+            source_path: None,
+            source_mtime: None,
         })
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -572,6 +575,9 @@ pub async fn create_page_from_template(
         format: BlockFormat::Markdown,
         file_id: None,
         properties: std::collections::HashMap::new(),
+        // Pages created from templates are not ingested from files
+        source_path: None,
+        source_mtime: None,
     })
     .map_err(|e| AppError::Internal(e.to_string()))?;
 

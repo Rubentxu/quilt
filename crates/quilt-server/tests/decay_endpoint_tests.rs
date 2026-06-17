@@ -149,7 +149,10 @@ async fn decay_endpoint_response_has_correct_top_level_fields() -> Result<()> {
         json["countsBySeverity"].is_object(),
         "countsBySeverity should be object"
     );
-    assert!(json["generatedAt"].is_string(), "generatedAt should be string");
+    assert!(
+        json["generatedAt"].is_string(),
+        "generatedAt should be string"
+    );
 
     Ok(())
 }

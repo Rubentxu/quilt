@@ -80,13 +80,15 @@ impl AnnotationRow {
         // of which would destroy the row's actual values. We construct
         // the entity directly, having already validated the row's
         // column values (via `try_from_str` and `bytes_to_uuid`).
-        let scope = AnnotationScope::try_from_str(&self.scope)
-            .ok_or_else(|| DomainError::InvalidData(format!("Unknown annotation scope: {}", self.scope)))?;
+        let scope = AnnotationScope::try_from_str(&self.scope).ok_or_else(|| {
+            DomainError::InvalidData(format!("Unknown annotation scope: {}", self.scope))
+        })?;
         let author_type = AuthorType::try_from_str(&self.author_type).ok_or_else(|| {
             DomainError::InvalidData(format!("Unknown author_type: {}", self.author_type))
         })?;
-        let status = AnnotationStatus::try_from_str(&self.status)
-            .ok_or_else(|| DomainError::InvalidData(format!("Unknown annotation status: {}", self.status)))?;
+        let status = AnnotationStatus::try_from_str(&self.status).ok_or_else(|| {
+            DomainError::InvalidData(format!("Unknown annotation status: {}", self.status))
+        })?;
         let id = bytes_to_uuid(&self.id)?;
         let block_id = bytes_to_uuid(&self.block_id)?;
         let parent = match self.parent_annotation_id.as_deref() {
@@ -118,9 +120,9 @@ impl AnnotationRow {
 // ── Helpers (private to this module) ────────────────────────────────────
 
 fn bytes_to_uuid(blob: &[u8]) -> Result<Uuid, DomainError> {
-    let bytes: [u8; 16] = blob
-        .try_into()
-        .map_err(|_| DomainError::InvalidData(format!("Invalid UUID blob length: {}", blob.len())))?;
+    let bytes: [u8; 16] = blob.try_into().map_err(|_| {
+        DomainError::InvalidData(format!("Invalid UUID blob length: {}", blob.len()))
+    })?;
     Ok(Uuid::from_bytes(bytes))
 }
 
@@ -150,9 +152,7 @@ fn status_to_str(s: &AnnotationStatus) -> &'static str {
     s.as_str()
 }
 
-fn rows_to_annotations(
-    rows: Vec<sqlx::sqlite::SqliteRow>,
-) -> Result<Vec<Annotation>, DomainError> {
+fn rows_to_annotations(rows: Vec<sqlx::sqlite::SqliteRow>) -> Result<Vec<Annotation>, DomainError> {
     rows.iter()
         .map(|r| AnnotationRow::from_row(r)?.to_annotation())
         .collect()
@@ -325,19 +325,21 @@ impl AnnotationRepository for SqliteAnnotationRepository {
         // Use `QueryBuilder` for the dynamic WHERE clause. Each filter
         // is a separate `push` and bind; missing filters contribute
         // no clause.
-        let mut qb: QueryBuilder<Sqlite> =
-            QueryBuilder::new("SELECT * FROM annotations WHERE 1=1");
+        let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new("SELECT * FROM annotations WHERE 1=1");
         if let Some(block_id) = filters.block_id {
-            qb.push(" AND block_id = ").push_bind(uuid_to_blob(&block_id));
+            qb.push(" AND block_id = ")
+                .push_bind(uuid_to_blob(&block_id));
         }
         if let Some(ref status) = filters.status {
             qb.push(" AND status = ").push_bind(status.clone());
         }
         if let Some(ref scope) = filters.scope {
-            qb.push(" AND scope = ").push_bind(scope_to_str(scope).to_string());
+            qb.push(" AND scope = ")
+                .push_bind(scope_to_str(scope).to_string());
         }
         if let Some(ref author_name) = filters.author_name {
-            qb.push(" AND author_name = ").push_bind(author_name.clone());
+            qb.push(" AND author_name = ")
+                .push_bind(author_name.clone());
         }
         qb.push(" ORDER BY created_at DESC, id DESC");
 

@@ -77,6 +77,12 @@ pub trait PageRepository: Send + Sync {
         page_id: Uuid,
         props: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
     ) -> Result<Page, DomainError>;
+
+    /// Get a page by its source file path (GS-9: reindex support).
+    ///
+    /// Returns the page whose `source_path` matches the given relative path,
+    /// or `None` if no ingested page has this source path.
+    async fn get_by_source_path(&self, source_path: &str) -> Result<Option<Page>, DomainError>;
 }
 
 /// PageRepositoryExt provides additional convenience methods
@@ -179,5 +185,9 @@ impl<T: PageRepository + ?Sized> PageRepository for Arc<T> {
         props: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
     ) -> Result<Page, DomainError> {
         self.as_ref().update_properties(page_id, props).await
+    }
+
+    async fn get_by_source_path(&self, source_path: &str) -> Result<Option<Page>, DomainError> {
+        self.as_ref().get_by_source_path(source_path).await
     }
 }

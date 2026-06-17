@@ -169,6 +169,9 @@ async fn resolve_or_create_page(
         format: quilt_domain::value_objects::BlockFormat::Markdown,
         file_id: None,
         properties: std::collections::HashMap::new(),
+        // Agent-created pages are not ingested from a file
+        source_path: None,
+        source_mtime: None,
     };
     match Page::new(create) {
         Ok(page) => {

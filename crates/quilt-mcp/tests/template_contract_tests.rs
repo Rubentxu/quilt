@@ -13,11 +13,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::templates::contract::{
     ApplyTemplateWithContractUseCase, ApplyTemplateWithContractUseCaseImpl,
 };
 use quilt_application::templates::reapply::{ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl};
-use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::{
     BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, SearchUseCasesImpl,
     TemplateUseCases, TemplateUseCasesImpl,
@@ -119,6 +119,8 @@ async fn insert_template(world: &TestWorld, name: &str, block_props: Vec<(&str, 
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     let page_id = page.id;
@@ -153,6 +155,8 @@ async fn insert_target_block(world: &TestWorld, content: &str) -> Uuid {
         format: BlockFormat::Markdown,
         file_id: None,
         properties: HashMap::new(),
+        source_path: None,
+        source_mtime: None,
     })
     .unwrap();
     let page_id = page.id;

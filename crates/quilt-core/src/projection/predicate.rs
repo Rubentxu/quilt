@@ -85,9 +85,9 @@ impl WasmPropertyPredicate {
     #[must_use]
     pub fn matches(&self, properties: &serde_json::Map<String, serde_json::Value>) -> bool {
         match self {
-            WasmPropertyPredicate::Equals { key, value } => properties
-                .get(key.as_str())
-                .map_or(false, |bv| bv == value),
+            WasmPropertyPredicate::Equals { key, value } => {
+                properties.get(key.as_str()).map_or(false, |bv| bv == value)
+            }
 
             WasmPropertyPredicate::IsSet { key } => properties.contains_key(key.as_str()),
 
@@ -116,9 +116,13 @@ impl WasmPropertyPredicate {
                 less_than(properties.get(key.as_str()), threshold)
             }
 
-            WasmPropertyPredicate::And(lhs, rhs) => lhs.matches(properties) && rhs.matches(properties),
+            WasmPropertyPredicate::And(lhs, rhs) => {
+                lhs.matches(properties) && rhs.matches(properties)
+            }
 
-            WasmPropertyPredicate::Or(lhs, rhs) => lhs.matches(properties) || rhs.matches(properties),
+            WasmPropertyPredicate::Or(lhs, rhs) => {
+                lhs.matches(properties) || rhs.matches(properties)
+            }
 
             WasmPropertyPredicate::Not(inner) => !inner.matches(properties),
         }
@@ -182,7 +186,7 @@ fn is_iso8601(s: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     fn props(pairs: &[(&str, Value)]) -> serde_json::Map<String, Value> {
         pairs

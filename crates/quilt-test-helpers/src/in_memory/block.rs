@@ -396,6 +396,8 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
         .unwrap();
 
@@ -428,6 +430,8 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
         .unwrap();
 
@@ -454,6 +458,8 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
         .unwrap();
 

@@ -3,8 +3,8 @@
 //! These errors represent failures in the infrastructure layer,
 //! separate from domain errors.
 
-use thiserror::Error;
 use quilt_domain::errors::DomainError;
+use thiserror::Error;
 
 /// InfrastructureError represents errors that occur in the infrastructure layer.
 ///

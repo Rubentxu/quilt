@@ -197,10 +197,8 @@ mod tests {
     fn seed_quilt_db(db_path: &Path) {
         let conn = Connection::open(db_path).unwrap();
         // Minimum marker table (real migrations create many more).
-        conn.execute_batch(
-            "CREATE TABLE user_settings (id INTEGER PRIMARY KEY, timezone TEXT);",
-        )
-        .unwrap();
+        conn.execute_batch("CREATE TABLE user_settings (id INTEGER PRIMARY KEY, timezone TEXT);")
+            .unwrap();
     }
 
     #[test]

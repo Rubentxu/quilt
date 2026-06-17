@@ -4,6 +4,7 @@ use crate::errors::DomainError;
 use crate::properties::entry::DefaultPropertyEntry;
 use crate::value_objects::{BlockFormat, JournalDay, PropertyValue, Uuid};
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 /// Page represents a page in Quilt.
 ///
@@ -40,6 +41,12 @@ pub struct Page {
     /// `created_at`, `updated_at`) carry `read_only: true` in BUILTIN_PROPERTIES
     /// and are rejected from incoming updates by `PageRepository::update_properties`.
     pub properties: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
+    /// Source file path (relative to graph root) if this page was ingested
+    /// from a file. NULL for manually-created pages. GS-9: enables reindex.
+    pub source_path: Option<PathBuf>,
+    /// Source file modification time at ingestion or last reindex.
+    /// Stored as Unix timestamp ms. NULL if source_path is NULL.
+    pub source_mtime: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Data required to create a new page
@@ -53,6 +60,11 @@ pub struct PageCreate {
     pub file_id: Option<Uuid>,
     /// Typed properties to seed the new page with. Defaults to empty.
     pub properties: HashMap<String, DefaultPropertyEntry<PropertyValue>>,
+    /// Source file path (relative to graph root) if this page is being
+    /// created via ingestion. None for manually-created pages.
+    pub source_path: Option<PathBuf>,
+    /// Source file modification time at ingestion.
+    pub source_mtime: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl Page {
@@ -68,6 +80,16 @@ impl Page {
             ));
         }
 
+        // Validate source_path is relative (not absolute) if provided
+        let source_path = match &create.source_path {
+            Some(p) if p.is_absolute() => {
+                return Err(DomainError::InvalidPageName(
+                    "source_path must be relative, not absolute".to_string(),
+                ));
+            }
+            _ => create.source_path,
+        };
+
         Ok(Self {
             id: Uuid::new_v4(),
             name,
@@ -81,6 +103,8 @@ impl Page {
             created_at: now,
             updated_at: now,
             properties: create.properties,
+            source_path,
+            source_mtime: create.source_mtime,
         })
     }
 
@@ -110,6 +134,8 @@ impl Page {
             created_at: now,
             updated_at: now,
             properties: HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         })
     }
 
@@ -234,11 +260,15 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         };
 
         let page = Page::new(create).unwrap();
         assert_eq!(page.name, "my test page");
         assert!(!page.journal);
+        assert!(page.source_path.is_none());
+        assert!(page.source_mtime.is_none());
     }
 
     #[test]
@@ -251,6 +281,8 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         };
 
         let page = Page::new(create).unwrap();
@@ -270,6 +302,8 @@ mod tests {
                 format: BlockFormat::Markdown,
                 file_id: None,
                 properties: HashMap::new(),
+                source_path: None,
+                source_mtime: None,
             };
 
             assert!(Page::new(create).is_err());
@@ -296,6 +330,8 @@ mod tests {
                 format: BlockFormat::Markdown,
                 file_id: None,
                 properties: HashMap::new(),
+                source_path: None,
+                source_mtime: None,
             };
 
             let page = Page::new(create)
@@ -318,6 +354,8 @@ mod tests {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         };
 
         assert!(Page::new(create).is_err());
@@ -426,6 +464,80 @@ mod tests {
         assert_eq!(page.name, "X");
         assert_eq!(page.properties.len(), 1);
     }
+
+    // ── GS-9: Page source tracking ──────────────────────────────────
+
+    #[test]
+    fn new_page_with_source_path() {
+        // Pages created via ingestion carry source_path and source_mtime.
+        let mtime = chrono::DateTime::from_timestamp(1718630400, 0).unwrap(); // 2024-06-17
+        let create = PageCreate {
+            name: "Test Page".to_string(),
+            title: Some("Test Page".to_string()),
+            namespace_id: None,
+            journal_day: None,
+            format: BlockFormat::Markdown,
+            file_id: None,
+            properties: HashMap::new(),
+            source_path: Some(PathBuf::from("notes/test.md")),
+            source_mtime: Some(mtime),
+        };
+
+        let page = Page::new(create).unwrap();
+        assert!(page.source_path.is_some());
+        assert_eq!(page.source_path.unwrap(), PathBuf::from("notes/test.md"));
+        assert!(page.source_mtime.is_some());
+        assert_eq!(page.source_mtime.unwrap(), mtime);
+    }
+
+    #[test]
+    fn new_page_without_source_path() {
+        // Manually-created pages have no source tracking.
+        let create = PageCreate {
+            name: "Manual Page".to_string(),
+            title: None,
+            namespace_id: None,
+            journal_day: None,
+            format: BlockFormat::Markdown,
+            file_id: None,
+            properties: HashMap::new(),
+            source_path: None,
+            source_mtime: None,
+        };
+
+        let page = Page::new(create).unwrap();
+        assert!(page.source_path.is_none());
+        assert!(page.source_mtime.is_none());
+    }
+
+    #[test]
+    fn default_page_has_null_source_fields() {
+        // Default pages have no source tracking.
+        let page = Page::default();
+        assert!(page.source_path.is_none());
+        assert!(page.source_mtime.is_none());
+    }
+
+    #[test]
+    fn absolute_source_path_rejected() {
+        // Absolute paths are invalid for source_path.
+        let create = PageCreate {
+            name: "Test".to_string(),
+            title: None,
+            namespace_id: None,
+            journal_day: None,
+            format: BlockFormat::Markdown,
+            file_id: None,
+            properties: HashMap::new(),
+            source_path: Some(PathBuf::from("/absolute/path.md")),
+            source_mtime: None,
+        };
+
+        let result = Page::new(create);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, DomainError::InvalidPageName(_)));
+    }
 }
 
 impl Default for PageCreate {
@@ -438,6 +550,8 @@ impl Default for PageCreate {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         }
     }
 }
@@ -465,6 +579,8 @@ impl Default for Page {
             created_at: epoch,
             updated_at: epoch,
             properties: HashMap::new(),
+            source_path: None,
+            source_mtime: None,
         }
     }
 }

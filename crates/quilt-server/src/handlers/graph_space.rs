@@ -12,8 +12,7 @@ use std::sync::Arc;
 
 /// Create router for /api/v1/graph-space
 pub fn routes() -> Router {
-    Router::new()
-        .route("/", get(get_graph_space).put(update_graph_space))
+    Router::new().route("/", get(get_graph_space).put(update_graph_space))
 }
 
 /// GET /api/v1/graph-space

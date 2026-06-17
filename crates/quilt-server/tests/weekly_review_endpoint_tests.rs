@@ -113,10 +113,7 @@ async fn weekly_review_returns_empty_on_cold_graph() -> Result<()> {
     );
     assert!(
         json["suggestions"].as_array().unwrap().is_empty()
-            || !json["suggestions"]
-                .as_array()
-                .unwrap()
-                .is_empty(), // either is acceptable in V1; the spec allows either
+            || !json["suggestions"].as_array().unwrap().is_empty(), // either is acceptable in V1; the spec allows either
         "suggestions is an array"
     );
 
@@ -194,7 +191,10 @@ async fn weekly_review_response_has_correct_top_level_fields() -> Result<()> {
         json["tasksCompleted"].is_u64() || json["tasksCompleted"].is_i64(),
         "tasksCompleted should be number"
     );
-    assert!(json["decayTrend"].is_string(), "decayTrend should be string");
+    assert!(
+        json["decayTrend"].is_string(),
+        "decayTrend should be string"
+    );
     assert!(
         json["decayDelta"].is_i64() || json["decayDelta"].is_u64(),
         "decayDelta should be number"

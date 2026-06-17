@@ -518,12 +518,16 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
     )
     .execute(pool)
     .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_annotations_block ON annotations(block_id, created_at)")
-        .execute(pool)
-        .await?;
-    sqlx::query("CREATE INDEX IF NOT EXISTS idx_annotations_status ON annotations(status, created_at)")
-        .execute(pool)
-        .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_annotations_block ON annotations(block_id, created_at)",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_annotations_status ON annotations(status, created_at)",
+    )
+    .execute(pool)
+    .await?;
     sqlx::query("CREATE INDEX IF NOT EXISTS idx_annotations_parent ON annotations(parent_annotation_id, created_at)")
         .execute(pool)
         .await?;
@@ -749,6 +753,46 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
         .await?;
     sqlx::query(
         "CREATE INDEX IF NOT EXISTS idx_prop_rels_type ON property_relations(relation_type)",
+    )
+    .execute(pool)
+    .await?;
+
+    // Migration 010: page source tracking (GS-9: Manual Resource Ingestion).
+    // Adds source_path and source_mtime columns to pages for reindex support.
+    // Additive: no data backfill, no row rewriting. Pre-existing pages get
+    // NULL for both columns. The migration is idempotent: if the columns
+    // already exist, ALTER TABLE errors with "duplicate column" which we
+    // catch and ignore.
+    match sqlx::query("ALTER TABLE pages ADD COLUMN source_path TEXT")
+        .execute(pool)
+        .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+        }
+    }
+
+    match sqlx::query("ALTER TABLE pages ADD COLUMN source_mtime INTEGER")
+        .execute(pool)
+        .await
+    {
+        Ok(_) => {}
+        Err(e) => {
+            let msg = e.to_string();
+            if !msg.contains("duplicate column") {
+                return Err(e.into());
+            }
+        }
+    }
+
+    // Partial index for fast reindex lookups: only index rows with a non-null
+    // source_path. Idempotent: CREATE INDEX IF NOT EXISTS handles re-runs.
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_pages_source_path ON pages(source_path) WHERE source_path IS NOT NULL",
     )
     .execute(pool)
     .await?;

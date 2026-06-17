@@ -8,9 +8,8 @@
 //! Auth: required (Bearer token, enforced by the global middleware).
 
 use axum::{
+    Json, Router,
     extract::Extension,
-    Json,
-    Router,
     routing::{get, put},
 };
 use serde::{Deserialize, Serialize};
@@ -34,8 +33,15 @@ pub struct GlobalStateResponse {
 impl From<&GlobalAppState> for GlobalStateResponse {
     fn from(state: &GlobalAppState) -> Self {
         Self {
-            last_opened_graph: state.last_opened_graph.as_ref().map(|p| p.display().to_string()),
-            recent_graphs: state.recent_graphs.iter().map(|p| p.display().to_string()).collect(),
+            last_opened_graph: state
+                .last_opened_graph
+                .as_ref()
+                .map(|p| p.display().to_string()),
+            recent_graphs: state
+                .recent_graphs
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect(),
             right_sidebar_visible: state.right_sidebar_visible,
         }
     }
@@ -89,10 +95,17 @@ pub async fn set_last_opened(
     Extension(state): Extension<AppState>,
     Json(payload): Json<SetLastOpenedRequest>,
 ) -> Result<Json<GlobalStateResponse>, AppError> {
-    let path = payload.graph_path.as_ref().map(|s| PathBuf::from(s.as_str()));
+    let path = payload
+        .graph_path
+        .as_ref()
+        .map(|s| PathBuf::from(s.as_str()));
 
     // Write-through to global state repo (best-effort)
-    if let Err(e) = state.global_state_repo.set_last_opened_graph(path.as_deref()).await {
+    if let Err(e) = state
+        .global_state_repo
+        .set_last_opened_graph(path.as_deref())
+        .await
+    {
         tracing::warn!("failed to persist last_opened_graph: {}", e);
     }
 
@@ -164,15 +177,13 @@ mod tests {
             serde_json::from_str(r#"{"graphPath":"/var/data/g1"}"#).unwrap();
         assert_eq!(req.graph_path, Some("/var/data/g1".to_string()));
 
-        let req_null: SetLastOpenedRequest =
-            serde_json::from_str(r#"{"graphPath":null}"#).unwrap();
+        let req_null: SetLastOpenedRequest = serde_json::from_str(r#"{"graphPath":null}"#).unwrap();
         assert_eq!(req_null.graph_path, None);
     }
 
     #[test]
     fn set_right_sidebar_request_parses() {
-        let req: SetRightSidebarRequest =
-            serde_json::from_str(r#"{"visible":false}"#).unwrap();
+        let req: SetRightSidebarRequest = serde_json::from_str(r#"{"visible":false}"#).unwrap();
         assert_eq!(req.visible, Some(false));
     }
 }

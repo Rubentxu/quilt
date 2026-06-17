@@ -4,15 +4,15 @@
 
 use crate::error::AppError;
 use axum::{
+    Json,
     extract::{Extension, Path},
     http::StatusCode,
     response::IntoResponse,
-    Json,
 };
 use chrono::Utc;
+use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_domain::projection::projection_trait::ProjectionContext;
 use quilt_domain::value_objects::Uuid;
-use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -39,7 +39,8 @@ pub async fn get_projection(
     let ctx = ProjectionContext::page(Utc::now());
 
     // 3. Resolve the projection
-    let outcome = resolver.resolve(&block, &ctx)
+    let outcome = resolver
+        .resolve(&block, &ctx)
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     // 4. Emit tracing event

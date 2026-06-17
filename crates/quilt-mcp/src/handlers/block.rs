@@ -446,7 +446,9 @@ mod tests {
             _created_by: Option<&str>,
             _raw_properties: std::collections::HashMap<String, serde_json::Value>,
         ) -> Result<quilt_domain::entities::Block, quilt_application::ApplicationError> {
-            Err(quilt_application::ApplicationError::Validation("noop".into()))
+            Err(quilt_application::ApplicationError::Validation(
+                "noop".into(),
+            ))
         }
 
         async fn create_with_page(

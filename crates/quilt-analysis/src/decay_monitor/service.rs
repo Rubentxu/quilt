@@ -28,10 +28,7 @@ impl std::fmt::Debug for DecayMonitorService {
 
 impl DecayMonitorService {
     /// Create a new service.
-    pub fn new(
-        block_repo: Arc<dyn BlockRepository>,
-        page_repo: Arc<dyn PageRepository>,
-    ) -> Self {
+    pub fn new(block_repo: Arc<dyn BlockRepository>, page_repo: Arc<dyn PageRepository>) -> Self {
         Self {
             block_repo,
             page_repo,
@@ -41,16 +38,16 @@ impl DecayMonitorService {
     /// Run decay detection now and return a DTO.
     pub async fn detect_now(&self) -> DecayMonitorDto {
         let now = Utc::now();
-        let today_start = now
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
+        let today_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let today_start: chrono::DateTime<Utc> =
             chrono::DateTime::from_naive_utc_and_offset(today_start, Utc);
 
-        let alerts =
-            detect_decay_alerts(self.block_repo.as_ref(), self.page_repo.as_ref(), today_start)
-                .await;
+        let alerts = detect_decay_alerts(
+            self.block_repo.as_ref(),
+            self.page_repo.as_ref(),
+            today_start,
+        )
+        .await;
 
         let counts_by_severity = SeverityCounts::from_alerts(&alerts);
         let total_alerts = counts_by_severity.total();

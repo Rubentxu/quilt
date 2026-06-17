@@ -93,6 +93,11 @@ impl MigrationEngine {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
+            // source_path and source_mtime are set by the use-case layer
+            // when called via scan→ingest flow (GS-9); the legacy import_file
+            // path doesn't have access to this metadata.
+            source_path: None,
+            source_mtime: None,
         };
         let page = Page::new(page_create).map_err(|e| MigrationError::Import(e.to_string()))?;
 
@@ -253,7 +258,9 @@ mod tests {
     use async_trait::async_trait;
     use quilt_domain::errors::DomainError;
     use quilt_domain::properties::definition::PropertyDefinition;
-    use quilt_domain::properties::types::{Cardinality, PropertyType, PropertyVisibility, ViewContext};
+    use quilt_domain::properties::types::{
+        Cardinality, PropertyType, PropertyVisibility, ViewContext,
+    };
     use std::collections::HashMap;
 
     #[test]

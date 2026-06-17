@@ -36,6 +36,11 @@ struct PageRow {
     /// doesn't exist (pre-migration databases), the field is None and the
     /// page is loaded with an empty properties map.
     properties: Option<String>,
+    /// Source file path (relative to graph root) for ingested pages (GS-9).
+    /// NULL for manually-created pages.
+    source_path: Option<String>,
+    /// Source file modification time (Unix timestamp ms) at ingestion/reindex (GS-9).
+    source_mtime: Option<i64>,
 }
 
 impl PageRow {
@@ -45,6 +50,16 @@ impl PageRow {
         // Try to fetch it; default to None if the column is missing.
         let properties = row
             .try_get::<Option<String>, _>("properties")
+            .ok()
+            .flatten();
+        // source_path and source_mtime added by migration 010. Pre-migration
+        // databases don't have them, so we default to None if the column is missing.
+        let source_path = row
+            .try_get::<Option<String>, _>("source_path")
+            .ok()
+            .flatten();
+        let source_mtime = row
+            .try_get::<Option<i64>, _>("source_mtime")
             .ok()
             .flatten();
         Ok(Self {
@@ -60,6 +75,8 @@ impl PageRow {
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             properties,
+            source_path,
+            source_mtime,
         })
     }
 
@@ -76,6 +93,12 @@ impl PageRow {
             .map(|(k, v)| (k, DefaultPropertyEntry::new(v)))
             .collect();
 
+        // Parse source_path: None if NULL, Some(PathBuf) otherwise.
+        let source_path = self.source_path.as_ref().map(PathBuf::from);
+
+        // Parse source_mtime: None if NULL, Some(DateTime<Utc>) otherwise.
+        let source_mtime = self.source_mtime.map(ts_to_datetime);
+
         Ok(Page {
             id: blob_to_uuid(&self.id)?,
             name: self.name.clone(),
@@ -89,6 +112,8 @@ impl PageRow {
             created_at: ts_to_datetime(self.created_at),
             updated_at: ts_to_datetime(self.updated_at),
             properties,
+            source_path,
+            source_mtime,
         })
     }
 }
@@ -234,8 +259,8 @@ impl PageRepository for SqlitePageRepository {
         sqlx::query(
             r#"INSERT INTO pages
             (id, name, title, namespace_id, journal_day, format, file_id,
-             original_name, journal, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+             original_name, journal, created_at, updated_at, source_path, source_mtime)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(uuid_to_blob(&page.id))
         .bind(&page.name)
@@ -248,6 +273,8 @@ impl PageRepository for SqlitePageRepository {
         .bind(page.journal as i64)
         .bind(datetime_to_ts(&page.created_at))
         .bind(datetime_to_ts(&page.updated_at))
+        .bind(page.source_path.as_ref().map(|p| p.to_string_lossy().to_string()))
+        .bind(page.source_mtime.map(datetime_to_ts))
         .execute(&self.pool)
         .await
         .map_err(|e| map_sqlx_error("insert page", e))?;
@@ -260,7 +287,7 @@ impl PageRepository for SqlitePageRepository {
             r#"UPDATE pages SET
             name = ?, title = ?, namespace_id = ?, journal_day = ?,
             format = ?, file_id = ?, original_name = ?, journal = ?,
-            updated_at = ?
+            updated_at = ?, source_path = ?, source_mtime = ?
             WHERE id = ?"#,
         )
         .bind(&page.name)
@@ -272,6 +299,8 @@ impl PageRepository for SqlitePageRepository {
         .bind(&page.original_name)
         .bind(page.journal as i64)
         .bind(datetime_to_ts(&page.updated_at))
+        .bind(page.source_path.as_ref().map(|p| p.to_string_lossy().to_string()))
+        .bind(page.source_mtime.map(datetime_to_ts))
         .bind(uuid_to_blob(&page.id))
         .execute(&self.pool)
         .await
@@ -386,6 +415,19 @@ impl PageRepository for SqlitePageRepository {
             .map_err(|e| map_sqlx_error("update_properties save", e))?;
 
         Ok(page)
+    }
+
+    async fn get_by_source_path(&self, source_path: &str) -> Result<Option<Page>, DomainError> {
+        let row = sqlx::query("SELECT * FROM pages WHERE source_path = ?")
+            .bind(source_path)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| map_sqlx_error("get_by_source_path", e))?;
+
+        match row {
+            Some(r) => Ok(Some(PageRow::from_row(&r)?.to_page()?)),
+            None => Ok(None),
+        }
     }
 }
 

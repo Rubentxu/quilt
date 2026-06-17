@@ -106,7 +106,10 @@ mod tests {
         }
         assert_eq!(s.recent_graphs.len(), RECENTS_CAP);
         // Most-recent-first.
-        assert_eq!(s.recent_graphs[0], PathBuf::from(format!("/g{}", RECENTS_CAP + 4)));
+        assert_eq!(
+            s.recent_graphs[0],
+            PathBuf::from(format!("/g{}", RECENTS_CAP + 4))
+        );
     }
 
     #[test]

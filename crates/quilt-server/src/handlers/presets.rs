@@ -4,12 +4,7 @@
 
 use crate::error::AppError;
 use axum::{
-    extract::Extension,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-    Router,
-    routing::get,
+    Json, Router, extract::Extension, http::StatusCode, response::IntoResponse, routing::get,
 };
 use quilt_domain::canonicalization::{PresetId, PresetRegistry, PropertyPreset};
 use serde::{Deserialize, Serialize};

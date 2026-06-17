@@ -137,9 +137,11 @@ mod tests {
         });
         let delta = MediaProjection::new().apply(&block, &ProjectionContext::page(Utc::now()));
 
-        assert!(delta.view_properties.iter().any(|(k, v)| {
-            k.as_str() == "projection" && *v == PropertyValue::string("media")
-        }));
+        assert!(
+            delta.view_properties.iter().any(|(k, v)| {
+                k.as_str() == "projection" && *v == PropertyValue::string("media")
+            })
+        );
     }
 
     #[test]

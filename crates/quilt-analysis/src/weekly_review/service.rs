@@ -35,10 +35,7 @@ impl std::fmt::Debug for WeeklyReviewService {
 
 impl WeeklyReviewService {
     /// Create a new service.
-    pub fn new(
-        block_repo: Arc<dyn BlockRepository>,
-        page_repo: Arc<dyn PageRepository>,
-    ) -> Self {
+    pub fn new(block_repo: Arc<dyn BlockRepository>, page_repo: Arc<dyn PageRepository>) -> Self {
         Self {
             block_repo,
             page_repo,
@@ -85,17 +82,17 @@ impl WeeklyReviewService {
             .count() as u32;
 
         // 4. Decay trend: compare this week's decay count to last week.
-        let today_start = now
-            .date_naive()
-            .and_hms_opt(0, 0, 0)
-            .unwrap();
+        let today_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
         let today_start: DateTime<Utc> =
             chrono::DateTime::from_naive_utc_and_offset(today_start, Utc);
 
-        let this_week_decay =
-            detect_decay_alerts(self.block_repo.as_ref(), self.page_repo.as_ref(), today_start)
-                .await
-                .len() as u32;
+        let this_week_decay = detect_decay_alerts(
+            self.block_repo.as_ref(),
+            self.page_repo.as_ref(),
+            today_start,
+        )
+        .await
+        .len() as u32;
 
         // For last week, reuse the same shared function but with a
         // different `today_start` — the function only looks at
@@ -145,10 +142,7 @@ impl WeeklyReviewService {
         let mut out: Vec<String> = Vec::new();
 
         if high_decay >= 1 {
-            out.push(format!(
-                "Review {} stale blocks (high decay)",
-                high_decay
-            ));
+            out.push(format!("Review {} stale blocks (high decay)", high_decay));
         }
         if journal_days < 3 {
             out.push("Add at least 3 journal entries next week".to_string());
@@ -199,7 +193,10 @@ mod tests {
     #[test]
     fn suggestions_healthy_week() {
         let s = WeeklyReviewService::suggestions(0, 0, 5, 5, DecayTrend::Stable, 0);
-        assert_eq!(s, vec!["Keep up the rhythm — graph looks healthy".to_string()]);
+        assert_eq!(
+            s,
+            vec!["Keep up the rhythm — graph looks healthy".to_string()]
+        );
     }
 
     #[test]
@@ -285,14 +282,12 @@ mod tests {
         // (journal_days < 3) AND "Aim to complete more tasks (only 0 done)"
         // AND the high_decay rule does not fire (0 < 1).
         // The healthy fallback does not fire because 2 rules fired.
-        assert!(dto
-            .suggestions
-            .iter()
-            .any(|s| s.contains("3 journal entries")));
-        assert!(dto
-            .suggestions
-            .iter()
-            .any(|s| s.contains("only 0 done")));
+        assert!(
+            dto.suggestions
+                .iter()
+                .any(|s| s.contains("3 journal entries"))
+        );
+        assert!(dto.suggestions.iter().any(|s| s.contains("only 0 done")));
         // Avoid unused warning
         let _ = make_dto(0, 0, DecayTrend::Stable);
     }

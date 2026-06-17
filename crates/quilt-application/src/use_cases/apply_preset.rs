@@ -375,8 +375,7 @@ mod tests {
 
         let mut block = make_block();
         let video_url = url::Url::parse("https://example.com/video.mp4").unwrap();
-        let args = PresetArgs::from_vec(vec![PresetArg::Url(video_url.clone())])
-            .unwrap();
+        let args = PresetArgs::from_vec(vec![PresetArg::Url(video_url.clone())]).unwrap();
 
         let outcome = uc
             .execute(&mut block, &PresetId::new("/Video").unwrap(), &args)
@@ -429,8 +428,7 @@ mod tests {
 
         // Apply /Video preset — the typed URL should overwrite the legacy String
         let video_url = url::Url::parse("https://example.com/video.mp4").unwrap();
-        let args =
-            PresetArgs::from_vec(vec![PresetArg::Url(video_url.clone())]).unwrap();
+        let args = PresetArgs::from_vec(vec![PresetArg::Url(video_url.clone())]).unwrap();
 
         let outcome = uc
             .execute(&mut block, &PresetId::new("/Video").unwrap(), &args)

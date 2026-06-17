@@ -44,7 +44,10 @@ pub trait AnnotationRepository: Send + Sync {
     async fn get_by_status(&self, status: &str) -> Result<Vec<Annotation>, DomainError>;
     async fn get_root_annotations(&self) -> Result<Vec<Annotation>, DomainError>;
     async fn get_thread_replies(&self, parent_id: Uuid) -> Result<Vec<Annotation>, DomainError>;
-    async fn get_by_filters(&self, filters: &AnnotationFilters) -> Result<Vec<Annotation>, DomainError>;
+    async fn get_by_filters(
+        &self,
+        filters: &AnnotationFilters,
+    ) -> Result<Vec<Annotation>, DomainError>;
 }
 
 #[async_trait]

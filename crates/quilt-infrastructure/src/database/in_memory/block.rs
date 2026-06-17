@@ -170,7 +170,9 @@ impl BlockRepository for InMemoryBlockRepository {
                     .get(key)
                     .map(|v| match v {
                         quilt_domain::value_objects::PropertyValue::String(s) => s == value,
-                        quilt_domain::value_objects::PropertyValue::Url(u) => u.to_string() == value,
+                        quilt_domain::value_objects::PropertyValue::Url(u) => {
+                            u.to_string() == value
+                        }
                         quilt_domain::value_objects::PropertyValue::NaiveDate(d) => {
                             d.format("%Y-%m-%d").to_string() == value
                         }

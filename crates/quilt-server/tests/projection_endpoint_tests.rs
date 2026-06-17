@@ -5,8 +5,8 @@
 mod helpers;
 
 use anyhow::Result;
-use axum::http::StatusCode;
 use axum::Router;
+use axum::http::StatusCode;
 use chrono::Utc;
 use quilt_domain::entities::Block;
 use quilt_domain::value_objects::{PropertyValue, Uuid};
@@ -56,7 +56,8 @@ fn make_test_block(id: Uuid, properties: HashMap<String, PropertyValue>) -> Test
 }
 
 /// Build a test app router
-async fn build_test_router() -> Result<(Router, Arc<dyn quilt_domain::repositories::BlockRepository>)> {
+async fn build_test_router()
+-> Result<(Router, Arc<dyn quilt_domain::repositories::BlockRepository>)> {
     init_auth();
     let pool = create_pool(":memory:").await?;
     let state = helpers::build_test_app_state(pool).await;
@@ -94,11 +95,19 @@ async fn projection_endpoint_default_view_empty_decorations() -> Result<()> {
     let json: serde_json::Value = serde_json::from_slice(&body)?;
 
     // Decorations should be empty for default view
-    assert!(json.get("decorations").and_then(|d| d.as_array()).map_or(true, |a| a.is_empty()),
-        "Expected empty decorations for plain block, got: {}", json);
+    assert!(
+        json.get("decorations")
+            .and_then(|d| d.as_array())
+            .map_or(true, |a| a.is_empty()),
+        "Expected empty decorations for plain block, got: {}",
+        json
+    );
 
     // Text should be present
-    assert_eq!(json.get("text").and_then(|t| t.as_str()), Some("Test block content"));
+    assert_eq!(
+        json.get("text").and_then(|t| t.as_str()),
+        Some("Test block content")
+    );
 
     Ok(())
 }
@@ -135,11 +144,18 @@ async fn projection_endpoint_task_view_with_checkbox() -> Result<()> {
     let decorations = json.get("decorations").and_then(|d| d.as_array());
     assert!(decorations.is_some(), "Expected decorations array");
     let decorations = decorations.unwrap();
-    assert!(!decorations.is_empty(), "Expected at least one decoration for task block");
-    let has_task_checkbox = decorations.iter().any(|d| {
-        d.get("kind").and_then(|k| k.as_str()) == Some("task-checkbox")
-    });
-    assert!(has_task_checkbox, "Expected task-checkbox decoration, got: {}", json);
+    assert!(
+        !decorations.is_empty(),
+        "Expected at least one decoration for task block"
+    );
+    let has_task_checkbox = decorations
+        .iter()
+        .any(|d| d.get("kind").and_then(|k| k.as_str()) == Some("task-checkbox"));
+    assert!(
+        has_task_checkbox,
+        "Expected task-checkbox decoration, got: {}",
+        json
+    );
 
     Ok(())
 }
@@ -161,7 +177,11 @@ async fn projection_endpoint_404_unknown_uuid() -> Result<()> {
         )
         .await?;
 
-    assert_eq!(response.status(), StatusCode::NOT_FOUND, "Expected 404 for unknown UUID");
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "Expected 404 for unknown UUID"
+    );
 
     Ok(())
 }
@@ -181,7 +201,11 @@ async fn projection_endpoint_400_malformed_uuid() -> Result<()> {
         )
         .await?;
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST, "Expected 400 for malformed UUID");
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "Expected 400 for malformed UUID"
+    );
 
     Ok(())
 }
@@ -211,8 +235,11 @@ async fn projection_endpoint_cache_header_on_success() -> Result<()> {
         .headers()
         .get("cache-control")
         .and_then(|v| v.to_str().ok());
-    assert_eq!(cache_header, Some("private, max-age=30"),
-        "Expected cache-control header to be 'private, max-age=30'");
+    assert_eq!(
+        cache_header,
+        Some("private, max-age=30"),
+        "Expected cache-control header to be 'private, max-age=30'"
+    );
 
     Ok(())
 }
@@ -233,8 +260,11 @@ async fn projection_endpoint_401_without_auth() -> Result<()> {
         )
         .await?;
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED,
-        "Expected 401 without Authorization header");
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "Expected 401 without Authorization header"
+    );
 
     Ok(())
 }

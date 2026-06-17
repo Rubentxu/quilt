@@ -414,7 +414,10 @@ async fn filter_by_context_page() -> Result<()> {
     assert_eq!(res.status(), StatusCode::OK);
     let json = json_body(res).await?;
     assert_eq!(json["total"].as_u64().unwrap(), 1);
-    assert_eq!(json["agents"][0]["contextPage"].as_str().unwrap(), "page/foo");
+    assert_eq!(
+        json["agents"][0]["contextPage"].as_str().unwrap(),
+        "page/foo"
+    );
 
     // Filter by nonexistent page → empty
     let res = app
@@ -508,7 +511,9 @@ async fn list_includes_context_page_in_response() -> Result<()> {
                 .method("POST")
                 .uri("/api/v1/agents")
                 .header("content-type", "application/json")
-                .body(Body::from(r#"{"agentType":"decay-annotator","contextPage":"page/test"}"#))?,
+                .body(Body::from(
+                    r#"{"agentType":"decay-annotator","contextPage":"page/test"}"#,
+                ))?,
         ))
         .await?;
     assert_eq!(res.status(), StatusCode::CREATED);

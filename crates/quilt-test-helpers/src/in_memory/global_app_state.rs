@@ -63,10 +63,7 @@ impl GlobalAppStateRepository for InMemoryGlobalAppStateRepository {
         Ok(())
     }
 
-    async fn set_right_sidebar_visible(
-        &self,
-        visible: Option<bool>,
-    ) -> Result<(), DomainError> {
+    async fn set_right_sidebar_visible(&self, visible: Option<bool>) -> Result<(), DomainError> {
         let mut s = self.state.write();
         s.right_sidebar_visible = visible;
         Ok(())
