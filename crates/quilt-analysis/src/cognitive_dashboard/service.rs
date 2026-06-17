@@ -424,6 +424,14 @@ mod tests {
         ) -> Result<Option<quilt_domain::entities::Page>, DomainError> {
             Ok(None)
         }
+        async fn update_source_mtime_cas(
+            &self,
+            _page_id: Uuid,
+            _expected_mtime: chrono::DateTime<chrono::Utc>,
+            _new_mtime: chrono::DateTime<chrono::Utc>,
+        ) -> Result<bool, DomainError> {
+            Ok(true)
+        }
     }
 
     fn make_page(id: Uuid, name: &str) -> quilt_domain::entities::Page {
