@@ -22,6 +22,7 @@ export type PanelId =
   | 'weekly-review'
   | 'serendipity'
   | 'cognitive-graph'
+  | 'right-sidebar'
 
 /**
  * Re-export of the canonical `PANEL_LABELS` from
@@ -52,13 +53,14 @@ export type PresetId = 'default' | 'focus' | 'review'
  * caller is free to mutate it.
  */
 export const PRESETS: Record<PresetId, ReadonlySet<PanelId>> = {
-  default: new Set<PanelId>(['sidebar', 'backlinks']),
-  focus: new Set<PanelId>(['backlinks']),
+  default: new Set<PanelId>(['sidebar', 'backlinks', 'right-sidebar']),
+  focus: new Set<PanelId>(['backlinks', 'right-sidebar']),
   review: new Set<PanelId>([
     'sidebar',
     'backlinks',
     'agent-activity',
     'structural-graph',
+    'right-sidebar',
   ]),
 }
 

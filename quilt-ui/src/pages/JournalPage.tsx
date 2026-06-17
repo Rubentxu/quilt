@@ -48,6 +48,7 @@ export function JournalPage() {
   const [settings, setSettings] = useState<UserSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isEmpty, setIsEmpty] = useState(false)
 
   // Auto-open tab for this journal
   useEffect(() => {
@@ -80,6 +81,14 @@ export function JournalPage() {
         ])
         setPage(journalPage)
         setSettings(userSettings)
+        // Check if the journal page is empty (no blocks) — used to gate MorningBriefing
+        try {
+          const blocks = await api.getPageBlocks(journalPage.name)
+          setIsEmpty(blocks.length === 0)
+        } catch {
+          // blocks check is non-critical; treat as non-empty on error
+          setIsEmpty(false)
+        }
       } catch (e) {
         if (e instanceof QuiltApiError && e.status === 404) {
           // Fallback: backend didn't auto-create, create explicitly
@@ -91,6 +100,8 @@ export function JournalPage() {
               journalDay: date.replace(/-/g, ''), // YYYYMMDD
             })
             setPage(newPage)
+            // Newly created page is definitely empty
+            setIsEmpty(true)
             // Load settings separately (non-critical)
             try {
               const s = await api.getSettings()
@@ -127,6 +138,8 @@ export function JournalPage() {
     )
   }
 
+  const isToday = date === new Date().toISOString().slice(0, 10)
+
   return (
     <ErrorBoundary
       fallback={
@@ -147,7 +160,7 @@ export function JournalPage() {
       }
     >
       <div style={{ padding: 'var(--space-3)' }}>
-        <MorningBriefing />
+        {isToday && isEmpty && <MorningBriefing />}
       </div>
       <PageView
         pageName={page.name}

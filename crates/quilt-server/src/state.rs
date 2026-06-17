@@ -10,11 +10,13 @@ use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_domain::repositories::{
-    AnnotationRepository, BlockRepository, PageRepository, PropertyRepository, RefRepository,
-    RelationRepository, SchemaRepository, SettingsRepository, TagRepository, TourStateRepository,
+    AnnotationRepository, BlockRepository, GlobalAppStateRepository, GraphSpaceRepository, PageRepository,
+    PropertyRepository, RefRepository, RelationRepository, SchemaRepository, SettingsRepository,
+    TagRepository, TourStateRepository,
 };
 use quilt_search::SearchIndexManager;
 use quilt_search::SearchService;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::{RwLock, broadcast};
 
@@ -29,6 +31,7 @@ pub struct RepositoryBundle {
     pub page: Arc<dyn PageRepository>,
     pub ref_repo: Arc<dyn RefRepository>,
     pub settings: Arc<dyn SettingsRepository>,
+    pub graph_space: Arc<dyn GraphSpaceRepository>,
     pub tag: Arc<dyn TagRepository>,
     pub relation: Arc<dyn RelationRepository>,
     pub schema: Arc<dyn SchemaRepository>,
@@ -44,6 +47,7 @@ impl RepositoryBundle {
         page: Arc<dyn PageRepository>,
         ref_repo: Arc<dyn RefRepository>,
         settings: Arc<dyn SettingsRepository>,
+        graph_space: Arc<dyn GraphSpaceRepository>,
         tag: Arc<dyn TagRepository>,
         relation: Arc<dyn RelationRepository>,
         schema: Arc<dyn SchemaRepository>,
@@ -56,6 +60,7 @@ impl RepositoryBundle {
             page,
             ref_repo,
             settings,
+            graph_space,
             tag,
             relation,
             schema,
@@ -131,7 +136,19 @@ pub struct AppState {
     /// Broadcast sender for navigation events (WebSocket)
     pub navigation_tx: broadcast::Sender<NavigationEvent>,
     /// Last opened graph ID (for deep link navigation)
-    pub last_opened_graph: Arc<RwLock<Option<String>>>,
+    pub last_opened_graph: Arc<RwLock<Option<PathBuf>>>,
+    /// Cross-graph app state repository (ADR-0030 §5).
+    ///
+    /// Always present; the platform factory falls back to an
+    /// in-memory store on disk errors so the server never blocks
+    /// startup on global state.
+    pub global_state_repo: Arc<dyn GlobalAppStateRepository>,
+    /// Recent graphs cache, hydrated from [`Self::global_state_repo`]
+    /// at boot. Kept in sync on `push_recent`.
+    pub recent_graphs: Arc<RwLock<Vec<PathBuf>>>,
+    /// Right sidebar visibility, hydrated from [`Self::global_state_repo`]
+    /// at boot. Kept in sync on `set_right_sidebar_visible`.
+    pub right_sidebar_visible: Arc<RwLock<Option<bool>>>,
     /// Bidirectional reference service for O(1) backlink queries
     pub ref_service: Arc<dyn RefServiceTrait>,
     /// Projection resolver for block projection resolution
@@ -179,6 +196,12 @@ impl FromRef<AppState> for Arc<dyn RefRepository> {
 impl FromRef<AppState> for Arc<dyn SettingsRepository> {
     fn from_ref(state: &AppState) -> Self {
         state.repos.settings.clone()
+    }
+}
+
+impl FromRef<AppState> for Arc<dyn GraphSpaceRepository> {
+    fn from_ref(state: &AppState) -> Self {
+        state.repos.graph_space.clone()
     }
 }
 
@@ -288,8 +311,53 @@ impl AppState {
         agent_lifecycle: Option<Arc<quilt_analysis::agent_room::AgentLifecycle>>,
         agent_registry: Option<Arc<quilt_analysis::agent_room::AgentRegistry>>,
     ) -> Self {
+        Self::new_with_repos_and_agents_and_global(
+            repos,
+            search_service,
+            search_index,
+            ref_service,
+            services,
+            projection_resolver,
+            preset_registry,
+            agent_lifecycle,
+            agent_registry,
+            None,
+            quilt_domain::entities::GlobalAppState::default(),
+        )
+    }
+
+    /// Full constructor that takes the cross-graph `global_state_repo`
+    /// and an already-hydrated `initial` state.
+    ///
+    /// `global_state_repo == None` → use a default in-memory store
+    /// (the platform factory is the recommended path; this is the
+    /// test-time escape hatch). Callers should load `initial` from
+    /// the repo **before** calling this constructor (the constructor
+    /// itself is sync; loading requires an async context).
+    #[allow(dead_code)]
+    pub fn new_with_repos_and_agents_and_global(
+        repos: RepositoryBundle,
+        search_service: Arc<SearchService>,
+        search_index: Arc<SearchIndexManager>,
+        ref_service: Arc<dyn RefServiceTrait>,
+        services: Arc<AppServices>,
+        projection_resolver: Arc<ProjectionResolver>,
+        preset_registry: Arc<dyn PresetRegistry>,
+        agent_lifecycle: Option<Arc<quilt_analysis::agent_room::AgentLifecycle>>,
+        agent_registry: Option<Arc<quilt_analysis::agent_room::AgentRegistry>>,
+        global_state_repo: Option<Arc<dyn GlobalAppStateRepository>>,
+        initial: quilt_domain::entities::GlobalAppState,
+    ) -> Self {
         // Create broadcast channel for navigation events
         let (navigation_tx, _) = broadcast::channel(100);
+
+        // Resolve the global state repo (default: in-memory). The
+        // platform factory is the production path; this is the
+        // test-only fallback.
+        let repo: Arc<dyn GlobalAppStateRepository> = match global_state_repo {
+            Some(r) => r,
+            None => Arc::new(quilt_test_helpers::InMemoryGlobalAppStateRepository::default()),
+        };
 
         Self {
             repos,
@@ -297,7 +365,10 @@ impl AppState {
             services,
             search_index,
             navigation_tx,
-            last_opened_graph: Arc::new(RwLock::new(None)),
+            last_opened_graph: Arc::new(RwLock::new(initial.last_opened_graph)),
+            global_state_repo: repo,
+            recent_graphs: Arc::new(RwLock::new(initial.recent_graphs)),
+            right_sidebar_visible: Arc::new(RwLock::new(initial.right_sidebar_visible)),
             ref_service,
             projection_resolver,
             preset_registry,

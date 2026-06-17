@@ -24,6 +24,8 @@ import type {
   AgentDto,
   AgentListResponse,
   SpawnAgentRequest,
+  GraphSpace,
+  UpdateGraphSpaceRequest,
 } from '@shared/types/api';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
@@ -548,6 +550,16 @@ export const api = {
   getDateFormats: () =>
     cachedFetch<DateFormatOption[]>('GET', `/settings/formats`),
 
+  // Graph Space
+  getGraphSpace: () =>
+    cachedFetch<GraphSpace>('GET', `/graph-space`),
+
+  updateGraphSpace: (data: UpdateGraphSpaceRequest) =>
+    fetchJson<GraphSpace>(`/graph-space`, { method: 'PUT', body: JSON.stringify(data) }).then(gs => {
+      sessionCache.invalidateAll()
+      return gs
+    }),
+
   // Block Properties
   getBlockProperties: (blockId: string) =>
     cachedFetch<BlockProperty[]>('GET', `/blocks/${blockId}/properties`),
@@ -932,6 +944,86 @@ export const api = {
       sessionCache.invalidate('GET /agents')
       return dto
     }),
+
+  // ─── Graph Space (ADR-0030) ─────────────────────────────────────────────────
+  //
+  // Cross-graph state: lastOpenedGraph, recent graphs list,
+  // and sidebar visibility preference. Lives in
+  // `~/.local/share/quilt/global.db` on the server.
+
+  /**
+   * GET /api/v1/global-state
+   * Returns the cross-graph app state:
+   *   - lastOpenedGraph: path or null
+   *   - recentGraphs: string[] (most-recent-first, max 10)
+   *   - rightSidebarVisible: boolean | null
+   */
+  getGlobalState: () =>
+    cachedFetch<{
+      lastOpenedGraph: string | null;
+      recentGraphs: string[];
+      rightSidebarVisible: boolean | null;
+    }>('GET', '/global-state'),
+
+  /**
+   * PUT /api/v1/global-state/last-opened
+   * Update the lastOpenedGraph pointer.
+   * Returns the updated GlobalStateResponse.
+   */
+  setLastOpenedGraph: (graphPath: string | null) =>
+    fetchJson<{
+      lastOpenedGraph: string | null;
+      recentGraphs: string[];
+      rightSidebarVisible: boolean | null;
+    }>('/global-state/last-opened', {
+      method: 'PUT',
+      body: JSON.stringify({ graphPath }),
+    }).then(result => {
+      // The global state just changed; drop the cached GET so
+      // the next call fetches fresh data.
+      sessionCache.invalidate('GET /global-state')
+      return result
+    }),
+
+  /**
+   * GET /api/v1/graphs/recent
+   * Returns the list of recent graphs (most-recent-first).
+   */
+  listRecentGraphs: () =>
+    cachedFetch<{ recentGraphs: string[] }>('GET', '/graphs/recent'),
+
+  /**
+   * POST /api/v1/graphs/create
+   * Create a new graph or open an existing one at the given path.
+   * Returns 201 if newly created, 200 if it already existed.
+   * Throws QuiltApiError with status 422 on validation failure
+   * (e.g. corrupt graph directory).
+   */
+  createGraph: (graphPath: string) =>
+    fetchJson<{ graphPath: string; created: boolean }>('/graphs/create', {
+      method: 'POST',
+      body: JSON.stringify({ graphPath }),
+    }).then(result => {
+      // Creating a graph changes the global state (recents, lastOpened).
+      sessionCache.invalidate('GET /global-state')
+      sessionCache.invalidate('GET /graphs/recent')
+      return result
+    }),
+
+  /**
+   * POST /api/v1/graphs/validate
+   * Validate a graph layout. Returns 200 if valid.
+   * Throws QuiltApiError with status 422 on validation failure,
+   * with structured error body { code: "GRAPH_INVALID", validationError, path }.
+   */
+  validateGraph: (graphPath: string) =>
+    fetchJson<{ graphPath: string; dbPath: string; quiltDir: string; valid: boolean }>(
+      '/graphs/validate',
+      {
+        method: 'POST',
+        body: JSON.stringify({ graphPath }),
+      },
+    ),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────

@@ -563,6 +563,15 @@ describe('api surface (P0 — only mounted routes)', () => {
       'spawnAgent',
       'getAgent',
       'cancelAgent',
+      // Graph Space (ADR-0030, Slice D)
+      'getGlobalState',
+      'setLastOpenedGraph',
+      'listRecentGraphs',
+      'createGraph',
+      'validateGraph',
+      // Graph Space metadata (ADR-0030, GS-7)
+      'getGraphSpace',
+      'updateGraphSpace',
     ].sort()
     expect(Object.keys(api).sort()).toEqual(expected)
   })

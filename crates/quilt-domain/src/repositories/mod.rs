@@ -2,6 +2,8 @@
 
 mod annotation_repository;
 mod block_repository;
+pub mod global_app_state_repository;
+mod graph_space_repository;
 mod page_repository;
 mod property_repository;
 mod ref_repository;
@@ -13,6 +15,8 @@ mod tour_state_repository;
 
 pub use annotation_repository::{AnnotationFilters, AnnotationRepository, AnnotationRepositoryExt};
 pub use block_repository::{BlockRepository, BlockRepositoryExt};
+pub use global_app_state_repository::GlobalAppStateRepository;
+pub use graph_space_repository::GraphSpaceRepository;
 pub use page_repository::{PageRepository, PageRepositoryExt};
 pub use property_repository::{PropertyRepository, PropertyRepositoryExt};
 pub use ref_repository::{RefRepository, RefRow};

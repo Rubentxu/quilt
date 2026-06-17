@@ -8,6 +8,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use quilt_platform::graph_validation::GraphValidationError;
 use serde_json::json;
 
 /// Application error types
@@ -34,12 +35,43 @@ pub enum AppError {
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
+    /// 422 Unprocessable Entity — the request was well-formed but
+    /// the Graph Space layout is invalid (ADR-0030 §6).
+    /// Per the design this is the dedicated code path for
+    /// `GraphValidationError`; the response body carries
+    /// `{ code: "GRAPH_INVALID", validationError, path }` so the
+    /// frontend can render a structured message keyed off the
+    /// `validationError` field.
+    #[error("Graph validation failed: {0}")]
+    GraphInvalid(GraphValidationError),
+
     #[error("Internal server error: {0}")]
     Internal(String),
 }
 
+impl From<GraphValidationError> for AppError {
+    fn from(e: GraphValidationError) -> Self {
+        AppError::GraphInvalid(e)
+    }
+}
+
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        // 422 — typed validation error with structured body.
+        if let AppError::GraphInvalid(err) = &self {
+            let path_str = err
+                .path()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default();
+            let body = Json(json!({
+                "error": err.to_string(),
+                "code": "GRAPH_INVALID",
+                "validationError": err.code(),
+                "path": path_str,
+            }));
+            return (StatusCode::UNPROCESSABLE_ENTITY, body).into_response();
+        }
+
         let (status, code, message) = match &self {
             AppError::NotFound(msg) => (StatusCode::NOT_FOUND, "NOT_FOUND", msg.clone()),
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg.clone()),
@@ -50,6 +82,8 @@ impl IntoResponse for AppError {
                 "INTERNAL_ERROR",
                 msg.clone(),
             ),
+            // Handled above via early return.
+            AppError::GraphInvalid(_) => unreachable!(),
         };
 
         let body = Json(json!({

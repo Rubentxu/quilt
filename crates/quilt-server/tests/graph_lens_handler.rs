@@ -66,7 +66,7 @@ async fn app_with_n_roots(n: u32) -> Result<(axum::Router, Uuid)> {
     init_auth();
     let pool = create_pool(":memory:").await?;
 
-    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _) =
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {
@@ -105,7 +105,7 @@ async fn app_with_tree() -> Result<(axum::Router, Vec<Uuid>)> {
     init_auth();
     let pool = create_pool(":memory:").await?;
 
-    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _) =
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {
@@ -493,7 +493,7 @@ async fn get_lens_property_returns_blocks_with_that_key() -> Result<()> {
     init_auth();
     let pool = create_pool(":memory:").await?;
 
-    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _) =
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {

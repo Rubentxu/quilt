@@ -21,6 +21,9 @@ tracing-subscriber.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 parking_lot.workspace = true
+rusqlite = { version = "0.32", default-features = false, features = ["bundled"] }
 
 [dev-dependencies]
 url.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }

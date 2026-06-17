@@ -8,6 +8,18 @@ PKM (Personal Knowledge Management) con UI estilo Logseq que expone un MCP serve
 El conocimiento del usuario almacenado en SQLite: páginas, bloques jerárquicos, referencias, propiedades y tags. Un solo grafo por usuario.
 _Avoid_: base de datos, knowledge base, vault
 
+### Graph Space
+La identidad del espacio completo que el usuario abre y cambia: raíz de directorio, configuración del grafo, metadata del espacio y persistencia canónica en `.quilt/quilt.db`. No es el contenido interno del grafo, sino la unidad operativa completa.
+_Avoid_: workspace genérico, proyecto, vault
+
+### Graph Selector
+Superficie de recuperación y selección que aparece solo cuando no existe un `last_opened_graph` válido al arrancar. Permite abrir un Graph existente o crear uno nuevo eligiendo un directorio. No es la home principal del producto.
+_Avoid_: home screen, launcher, welcome screen
+
+### Global App State
+Estado de aplicación que vive fuera de cualquier Graph: `last_opened_graph`, lista de graphs recientes, preferencias de layout y visibilidad del panel derecho. Persiste en `~/.local/share/quilt/global.db` (XDG data dir) y utiliza fallback en memoria si el store no está disponible.
+_Avoid_: config global del graph, settings del SO, localStorage
+
 ### Bloque
 Unidad atómica de contenido en el outliner. Tiene UUID inmutable, contenido markdown, propiedades tipadas, refs a otros bloques/páginas, y posición jerárquica (parent, order, level).
 _Avoid_: nodo, item, entrada
@@ -23,6 +35,10 @@ _Avoid_: documento, archivo, nota
 ### Journal
 Página diaria identificada por `journal_day` (YYYYMMDD). Se crea automáticamente al navegar. Propiedad `journal:: true`.
 _Avoid_: daily note, diario
+
+### Entrada del Grafo
+Ruta canónica al abrir un Grafo: siempre el Journal de hoy. Si no existe, se crea automáticamente. No restaura la última ruta interna visitada. Desde ahí se navega a días anteriores, posteriores o a una fecha concreta mediante calendario.
+_Avoid_: home, landing page, restore session
 
 ### Outliner
 El modelo de interacción principal: bloques jerárquicos con indentación, colapso, reordenamiento y edición inline. Inspirado en Logseq.
@@ -67,6 +83,10 @@ _Avoid_: slot visual externo, metadata fuera del grafo, registry UI como fuente 
 ### Visibilidad de Propiedad
 Regla que define dónde se muestra una Propiedad: `inline` junto al Bloque, `panel` solo en el panel derecho, `system` oculta por defecto pero visible con “show system”, o `hidden` reservada para agentes/MCP/debug. En modo edición de Bloque, las properties del Bloque son visibles como parte de la superficie de edición, respetando su mutabilidad.
 _Avoid_: display flag genérico, CSS visibility
+
+### Panel derecho contextual
+Superficie secundaria visible por defecto en desktop, colapsable y ocultable, que reacciona al contexto activo del usuario. Prioriza selección activa sobre contexto de página y sobre contexto general del Grafo. Es la superficie principal para edición rica de properties, metadata, acciones contextuales y sugerencias.
+_Avoid_: inspector fijo, panel de properties solamente, sidebar pasivo
 
 ### Mutabilidad de Propiedad
 Regla que define si una Propiedad puede editarse desde la UI. Una property mutable puede cambiarse en el panel o en modo edición; una property inmutable se muestra como lectura y solo cambia por el sistema, importadores o reglas explícitas.
@@ -128,6 +148,10 @@ _Avoid_: estado de tarea, en ejecución, vista NOW como entidad separada
 Atajo de entrada del Outliner para aplicar un Property Preset al Bloque actual. Ejemplos: `/TODO` aplica `type:: task` y `status:: todo`; `/Video` aplica properties de media. No contiene lógica de render propia.
 _Avoid_: render command, bloque especial
 
+### Local Graph
+Vista 2D contextual del Grafo centrada en la página o bloque actual. Su primera versión expone profundidad 1/2/3 y navegación bidireccional entre la superficie principal y los nodos del grafo. No es el grafo global masivo ni una vista decorativa.
+_Avoid_: mapa global por defecto, visualización ornamental, 3D primero
+
 ### Propuesta
 Contenido creado por un agente via MCP, marcado con `created_by:: agent::nombre`. El usuario acepta, rechaza o solicita revisión. El workflow es por convención, no impuesto por Quilt.
 _Avoid_: sugerencia, recomendación, output
@@ -188,6 +212,10 @@ Preset de paneles persistible a nivel workspace. Define qué paneles son visible
 disposición. No es un "modo de trabajo" — es configuración de layout del frontend.
 Sin entidad en el dominio de Rust.
 _Avoid_: work mode, modo, vista de trabajo, layout mode
+
+### Metadata visual
+Properties persistidas que expresan identidad visual y ayudan al pensamiento visual: `icon::` desde librería curada del sistema, `emoji::` como señal expresiva o afectiva, y futuras properties visuales coherentes. Forman parte del modelo del grafo, no solo del renderer.
+_Avoid_: decoración efímera, icono embebido en el título, SVG arbitrario inline
 
 ## Frontend Concepts
 

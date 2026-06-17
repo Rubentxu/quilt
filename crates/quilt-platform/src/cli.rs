@@ -16,13 +16,53 @@ pub struct QuiltCLI {
     #[command(subcommand)]
     pub command: Command,
 
-    /// Path to the graph database
-    #[arg(short, long, default_value = "quilt.db")]
-    pub db_path: PathBuf,
+    /// Path to the graph directory (Graph Space root, ADR-0030).
+    ///
+    /// The canonical database lives at `<graph_dir>/.quilt/quilt.db`.
+    /// If the directory does not exist, the bootstrap layer will create
+    /// the layout on first open.
+    #[arg(short = 'g', long = "graph-dir", env = "QUILT_GRAPH_DIR", default_value = ".")]
+    pub graph_dir: PathBuf,
+
+    /// **Deprecated.** Path to the graph database file.
+    ///
+    /// Kept for one minor release for backwards compatibility. New code
+    /// should use `--graph-dir` / `QUILT_GRAPH_DIR`. If the value ends
+    /// in `.db`, its parent is used as the graph root; otherwise the
+    /// value is treated as a graph root.
+    #[arg(long = "db-path", env = "QUILT_DB_PATH", value_name = "PATH")]
+    pub db_path: Option<PathBuf>,
 
     /// Enable verbose output
     #[arg(short, long)]
     pub verbose: bool,
+}
+
+impl QuiltCLI {
+    /// Resolve the canonical graph root directory, applying the
+    /// deprecation mapping from `--db-path` → `--graph-dir`.
+    ///
+    /// Returns `(graph_dir, used_db_path_deprecation)`. Callers can
+    /// use the boolean to log a one-shot warning.
+    pub fn resolved_graph_dir(&self) -> (PathBuf, bool) {
+        if let Some(ref db_path) = self.db_path {
+            // Map a `.db` path to its parent (graph root); else treat
+            // the value as a graph root.
+            let candidate = if db_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.eq_ignore_ascii_case("db"))
+                .unwrap_or(false)
+            {
+                db_path.parent().map(|p| p.to_path_buf()).unwrap_or_default()
+            } else {
+                db_path.clone()
+            };
+            (candidate, true)
+        } else {
+            (self.graph_dir.clone(), false)
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -124,11 +164,18 @@ impl QuiltCLI {
 
     fn run_init(&self, name: &str) -> Result<()> {
         use std::fs;
-        if !self.db_path.exists() {
-            fs::File::create(&self.db_path)?;
+        let (graph_dir, _used_deprecation) = self.resolved_graph_dir();
+        let quilt_dir = graph_dir.join(".quilt");
+        if !quilt_dir.exists() {
+            fs::create_dir_all(&quilt_dir)?;
+        }
+        let db_path = quilt_dir.join("quilt.db");
+        if !db_path.exists() {
+            fs::File::create(&db_path)?;
         }
         println!("✓ Graph initialized: {}", name);
-        println!("  Database: {}", self.db_path.display());
+        println!("  Graph root: {}", graph_dir.display());
+        println!("  Database: {}", db_path.display());
         Ok(())
     }
 
@@ -262,10 +309,13 @@ impl QuiltCLI {
 
     async fn run_open(&self, resource_uc: &dyn ResourceUseCases, name: Option<&str>) -> Result<()> {
         let snapshot = resource_uc.graph_snapshot().await?;
+        let (graph_dir, _used_deprecation) = self.resolved_graph_dir();
+        let db_path = crate::init::ensure_graph_layout(&graph_dir);
         println!(
-            "Graph: {} (database: {})",
+            "Graph: {} (graph root: {}, database: {})",
             name.unwrap_or("quilt"),
-            self.db_path.display()
+            graph_dir.display(),
+            db_path.display()
         );
         println!("  Pages: {}", snapshot.pages_count);
         println!("  Blocks: {}", snapshot.blocks_count);
@@ -410,9 +460,57 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_parse_default_db_path() {
+    fn test_cli_parse_default_graph_dir() {
         let cli = QuiltCLI::try_parse_from(["quilt", "list-pages"]).unwrap();
-        assert_eq!(cli.db_path.to_string_lossy(), "quilt.db");
+        assert_eq!(cli.graph_dir.to_string_lossy(), ".");
+        assert!(cli.db_path.is_none());
+    }
+
+    #[test]
+    fn test_cli_parse_graph_dir_explicit() {
+        let cli =
+            QuiltCLI::try_parse_from(["quilt", "--graph-dir", "/var/data/g1", "list-pages"]).unwrap();
+        assert_eq!(cli.graph_dir.to_string_lossy(), "/var/data/g1");
+        assert!(cli.db_path.is_none());
+    }
+
+    #[test]
+    fn test_cli_parse_deprecated_db_path() {
+        let cli =
+            QuiltCLI::try_parse_from(["quilt", "--db-path", "/var/data/g1/quilt.db", "list-pages"])
+                .unwrap();
+        let (gd, used) = cli.resolved_graph_dir();
+        assert!(used, "db-path should mark the deprecation path");
+        assert_eq!(gd.to_string_lossy(), "/var/data/g1");
+    }
+
+    #[test]
+    fn test_cli_resolved_graph_dir_db_path_directory() {
+        // --db-path with a non-.db value is treated as a graph root.
+        let cli = QuiltCLI::try_parse_from([
+            "quilt",
+            "--db-path",
+            "/var/data/old-graph",
+            "list-pages",
+        ])
+        .unwrap();
+        let (gd, used) = cli.resolved_graph_dir();
+        assert!(used);
+        assert_eq!(gd.to_string_lossy(), "/var/data/old-graph");
+    }
+
+    #[test]
+    fn test_cli_resolved_graph_dir_db_path_dot_db_parent() {
+        // --db-path ending in .db takes its parent.
+        let cli = QuiltCLI::try_parse_from([
+            "quilt",
+            "--db-path",
+            "/var/data/old/.quilt/quilt.db",
+            "list-pages",
+        ])
+        .unwrap();
+        let (gd, _used) = cli.resolved_graph_dir();
+        assert_eq!(gd.to_string_lossy(), "/var/data/old/.quilt");
     }
 
     #[test]

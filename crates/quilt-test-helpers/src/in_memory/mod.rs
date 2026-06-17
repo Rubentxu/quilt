@@ -6,10 +6,12 @@
 
 pub mod annotation;
 pub mod block;
+pub mod global_app_state;
 pub mod page;
 pub mod tag;
 
 pub use annotation::InMemoryAnnotationRepo;
 pub use block::InMemoryBlockRepo;
+pub use global_app_state::InMemoryGlobalAppStateRepository;
 pub use page::InMemoryPageRepo;
 pub use tag::InMemoryTagRepo;

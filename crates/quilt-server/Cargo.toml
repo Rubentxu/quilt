@@ -43,6 +43,7 @@ quilt-search = { path = "../quilt-search" }
 quilt-platform = { path = "../quilt-platform" }
 quilt-query = { path = "../quilt-query" }
 quilt-analysis = { path = "../quilt-analysis" }
+quilt-test-helpers = { path = "../quilt-test-helpers" }
 
 # UUID
 uuid.workspace = true
@@ -61,6 +62,13 @@ metrics-exporter-prometheus = { workspace = true }
 tokio-test.workspace = true
 axum = { version = "0.7", features = ["macros", "ws"] }
 quilt-domain = { path = "../quilt-domain" }
+quilt-platform = { path = "../quilt-platform" }
+quilt-test-helpers = { path = "../quilt-test-helpers" }
 reqwest = { version = "0.12", features = ["json"] }
 tokio-tungstenite = "0.24"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tower = { version = "0.4", features = ["util"] }
+http-body-util = "0.1"
+rusqlite = { version = "0.32", default-features = false, features = ["bundled"] }
+tempfile.workspace = true
+serde_json.workspace = true

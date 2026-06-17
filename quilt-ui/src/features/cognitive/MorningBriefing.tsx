@@ -10,7 +10,7 @@
 // MorningBriefing aggregates structural data from the graph.
 
 import { useCallback, useEffect, useState } from 'react'
-import { Sun, AlertTriangle, Sparkles, Loader2 } from 'lucide-react'
+import { Sun, AlertTriangle, Sparkles, Loader2, ChevronDown } from 'lucide-react'
 import { api } from '@core/api-client'
 import type { MorningBriefingDto, AgendaItem, DecayAlert, SerendipityHighlight } from '@shared/types/api'
 
@@ -211,6 +211,7 @@ export function MorningBriefing({ onNavigate }: MorningBriefingProps) {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isExpanded, setIsExpanded] = useState(true)
 
   const load = useCallback(async (isRefresh: boolean) => {
     if (isRefresh) setRefreshing(true)
@@ -242,12 +243,13 @@ export function MorningBriefing({ onNavigate }: MorningBriefingProps) {
       }}
       role="region"
       aria-label="Morning Briefing"
+      aria-expanded={isExpanded}
     >
       {/* Header */}
       <div
         style={{
           padding: 'var(--space-3)',
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -264,33 +266,55 @@ export function MorningBriefing({ onNavigate }: MorningBriefingProps) {
             </span>
           )}
         </div>
-        <button
-          onClick={() => void load(true)}
-          disabled={refreshing}
-          aria-label="Refresh morning briefing"
-          data-testid="morning-briefing-refresh"
-          style={{
-            background: 'none',
-            border: 'none',
-            cursor: refreshing ? 'default' : 'pointer',
-            color: 'var(--color-text-muted)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            padding: '4px',
-            borderRadius: 'var(--radius-sm)',
-          }}
-        >
-          <Loader2
-            size={14}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          <button
+            onClick={() => void load(true)}
+            disabled={refreshing}
+            aria-label="Refresh morning briefing"
+            data-testid="morning-briefing-refresh"
             style={{
-              animation: refreshing ? 'spin 1s linear infinite' : 'none',
+              background: 'none',
+              border: 'none',
+              cursor: refreshing ? 'default' : 'pointer',
+              color: 'var(--color-text-muted)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '4px',
+              borderRadius: 'var(--radius-sm)',
             }}
-          />
-        </button>
+          >
+            <Loader2
+              size={14}
+              style={{
+                animation: refreshing ? 'spin 1s linear infinite' : 'none',
+              }}
+            />
+          </button>
+          <button
+            onClick={() => setIsExpanded((v) => !v)}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Collapse morning briefing' : 'Expand morning briefing'}
+            data-testid="morning-briefing-collapse"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: 'var(--color-text-muted)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              padding: '4px',
+              borderRadius: 'var(--radius-sm)',
+              transition: 'transform 0.2s',
+              transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)',
+            }}
+          >
+            <ChevronDown size={14} />
+          </button>
+        </div>
       </div>
 
       {/* Loading state */}
-      {loading && (
+      {isExpanded && loading && (
         <div data-testid="morning-briefing-loading" style={{ padding: 'var(--space-4)', textAlign: 'center' }}>
           <Loader2 size={16} color="var(--color-text-muted)" style={{ animation: 'spin 1s linear infinite' }} />
           <div style={{ color: 'var(--color-text-muted)', fontSize: '12px', marginTop: 'var(--space-2)' }}>
@@ -314,7 +338,7 @@ export function MorningBriefing({ onNavigate }: MorningBriefingProps) {
       )}
 
       {/* Content */}
-      {!loading && !error && data && (
+      {isExpanded && !loading && !error && data && (
         <div>
           {/* Today's Agenda */}
           <section aria-labelledby="morning-briefing-agenda-label">

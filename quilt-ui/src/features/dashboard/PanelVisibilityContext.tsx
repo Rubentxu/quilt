@@ -50,6 +50,7 @@ export const PANEL_LABELS: Record<PanelId, string> = {
   'weekly-review': 'Weekly review',
   serendipity: 'Serendipity',
   'cognitive-graph': 'Cognitive graph',
+  'right-sidebar': 'Right sidebar',
 }
 
 /** localStorage key for the dashboard layout. */

@@ -5,6 +5,14 @@
 //!
 //! Usage:
 //!     quilt-mcp
+//!
+//! ## Environment (ADR-0030)
+//!
+//! - `QUILT_GRAPH_DIR` — canonical, points at the graph root directory.
+//!   The canonical database is `<graph-root>/.quilt/quilt.db`.
+//! - `QUILT_DB_PATH` — **deprecated**, kept for one release. If set,
+//!   the parent of the `.db` is used as the graph root and a warning
+//!   is emitted to stderr.
 
 use anyhow::Result;
 use quilt_cognitive::{
@@ -19,6 +27,7 @@ use quilt_infrastructure::database::sqlite::repositories::{
     SqliteSettingsRepository, SqliteTagRepository,
 };
 use quilt_mcp::McpServer;
+use quilt_platform::init::init_graph;
 use quilt_platform::mcp_transport::StdioTransport;
 use quilt_search::SearchService;
 use std::path::PathBuf;
@@ -26,20 +35,47 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Default database path
-    let db_path = std::env::var("QUILT_DB_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("quilt.db"));
+    // Resolve the canonical graph root, with deprecation fallback
+    // for `QUILT_DB_PATH`. ADR-0030:
+    //   1. QUILT_GRAPH_DIR (canonical)
+    //   2. QUILT_DB_PATH  (deprecated: parent used as graph root)
+    //   3. cwd
+    let graph_path = match std::env::var("QUILT_GRAPH_DIR") {
+        Ok(v) => PathBuf::from(v),
+        Err(_) => match std::env::var("QUILT_DB_PATH") {
+            Ok(v) => {
+                eprintln!(
+                    "warning: QUILT_DB_PATH is deprecated; use QUILT_GRAPH_DIR \
+                     (will be removed in next minor release, see ADR-0030)"
+                );
+                let p = PathBuf::from(v);
+                if p.extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.eq_ignore_ascii_case("db"))
+                    .unwrap_or(false)
+                {
+                    p.parent().map(|x| x.to_path_buf()).unwrap_or(p)
+                } else {
+                    p
+                }
+            }
+            Err(_) => PathBuf::from("."),
+        },
+    };
 
-    // Check if database exists
-    if !db_path.exists() {
-        eprintln!("Error: Database not found at {}", db_path.display());
-        eprintln!("Initialize with: quilt init <name>");
-        std::process::exit(1);
-    }
+    // Canonical graph bootstrap. Per ADR-0030 the layout is created on
+    // first open (no auto-create if missing — fail explicitly).
+    let graph_config = match init_graph(graph_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Error: failed to initialize Graph Space: {e}");
+            eprintln!("Hint: ensure the graph directory exists and is writable.");
+            std::process::exit(1);
+        }
+    };
 
     // Create connection pool and run migrations
-    let pool = connection::create_pool(&db_path).await?;
+    let pool = connection::create_pool(&graph_config.db_path).await?;
     connection::run_migrations(&pool).await?;
 
     // Create repositories

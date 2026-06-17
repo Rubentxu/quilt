@@ -1,8 +1,8 @@
 //! CLI argument parsing tests using clap's try_parse_from.
 //!
 //! Covers: all commands (Init, Page, Block, Journal, Query, Search,
-//! Serve, ListPages, PageInfo), flags (--db-path, --verbose),
-//! and error cases.
+//! Serve, ListPages, PageInfo), flags (--graph-dir, --db-path deprecated,
+//! --verbose), and error cases.
 
 use clap::Parser;
 use quilt_platform::cli::{Command, QuiltCLI};
@@ -11,22 +11,29 @@ use std::path::PathBuf;
 // ── Global flags ────────────────────────────────────────────
 
 #[test]
-fn test_default_db_path() {
+fn test_default_graph_dir() {
     let cli = QuiltCLI::try_parse_from(["quilt", "list-pages"]).unwrap();
-    assert_eq!(cli.db_path, PathBuf::from("quilt.db"));
+    assert_eq!(cli.graph_dir, PathBuf::from("."));
+    assert!(cli.db_path.is_none());
 }
 
 #[test]
-fn test_custom_db_path() {
-    let cli = QuiltCLI::try_parse_from(["quilt", "-d", "mydb.db", "list-pages"]).unwrap();
-    assert_eq!(cli.db_path, PathBuf::from("mydb.db"));
+fn test_custom_graph_dir() {
+    let cli = QuiltCLI::try_parse_from(["quilt", "--graph-dir", "mydir", "list-pages"]).unwrap();
+    assert_eq!(cli.graph_dir, PathBuf::from("mydir"));
+    assert!(cli.db_path.is_none());
 }
 
 #[test]
-fn test_long_db_path_flag() {
+fn test_long_db_path_flag_is_deprecated_alias() {
+    // --db-path remains a deprecated alias; resolved_graph_dir maps
+    // a `.db` value to its parent. The raw field is now Option<PathBuf>.
     let cli =
         QuiltCLI::try_parse_from(["quilt", "--db-path", "/tmp/test.db", "list-pages"]).unwrap();
-    assert_eq!(cli.db_path, PathBuf::from("/tmp/test.db"));
+    assert_eq!(cli.db_path, Some(PathBuf::from("/tmp/test.db")));
+    let (gd, used) = cli.resolved_graph_dir();
+    assert!(used);
+    assert_eq!(gd, PathBuf::from("/tmp"));
 }
 
 #[test]
@@ -235,14 +242,15 @@ fn test_unknown_command() {
 fn test_combined_flags() {
     let cli = QuiltCLI::try_parse_from([
         "quilt",
-        "--db-path",
-        "custom.db",
+        "--graph-dir",
+        "custom-graph",
         "--verbose",
         "search",
         "--query",
         "test",
     ])
     .unwrap();
-    assert_eq!(cli.db_path, PathBuf::from("custom.db"));
+    assert_eq!(cli.graph_dir, PathBuf::from("custom-graph"));
+    assert!(cli.db_path.is_none());
     assert!(cli.verbose);
 }

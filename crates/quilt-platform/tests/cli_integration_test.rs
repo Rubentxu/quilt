@@ -33,8 +33,19 @@ fn test_cli_verbose_flag() {
 }
 
 #[test]
-fn test_cli_custom_db_path() {
+fn test_cli_custom_db_path_deprecated() {
+    // --db-path remains as a deprecated alias; resolved_graph_dir maps
+    // a `.db` file to its parent.
     let cli =
         QuiltCLI::try_parse_from(["quilt", "--db-path", "/tmp/test.db", "list-pages"]).unwrap();
-    assert_eq!(cli.db_path.to_string_lossy(), "/tmp/test.db");
+    let (gd, used) = cli.resolved_graph_dir();
+    assert!(used);
+    assert_eq!(gd.to_string_lossy(), "/tmp");
+}
+
+#[test]
+fn test_cli_custom_graph_dir() {
+    let cli = QuiltCLI::try_parse_from(["quilt", "--graph-dir", "/tmp/g1", "list-pages"]).unwrap();
+    assert_eq!(cli.graph_dir.to_string_lossy(), "/tmp/g1");
+    assert!(cli.db_path.is_none());
 }

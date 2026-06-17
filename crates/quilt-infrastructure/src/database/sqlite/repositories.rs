@@ -31,7 +31,7 @@ use std::sync::Arc;
 use tracing::instrument;
 
 use crate::database::sqlite::connection::DbPool;
-use quilt_domain::entities::{Block, Page, UserSettings};
+use quilt_domain::entities::{Block, GraphSpace, Page, UserSettings};
 use quilt_domain::errors::DomainError;
 use quilt_domain::properties::definition::PropertyDefinition;
 use quilt_domain::properties::entry::{DefaultPropertyEntry, HasValue};
@@ -40,8 +40,8 @@ use quilt_domain::properties::types::{
 };
 use quilt_domain::references::RefType;
 use quilt_domain::repositories::{
-    BlockRepository, PageRepository, PropertyRepository, RefRepository, RefRow, SettingsRepository,
-    TagRepository, TourStateRepository,
+    BlockRepository, GraphSpaceRepository, PageRepository, PropertyRepository, RefRepository, RefRow,
+    SettingsRepository, TagRepository, TourStateRepository,
 };
 use quilt_domain::value_objects::{
     BlockFormat, BlockType, JournalDay, Priority, PropertyValue, TaskMarker, Uuid,
@@ -1698,6 +1698,65 @@ impl SettingsRepository for SqliteSettingsRepository {
         .execute(&self.pool)
         .await
         .map_err(|e| DomainError::Storage(format!("update_user_settings: {}", e)))?;
+
+        Ok(())
+    }
+}
+
+// ── SqliteGraphSpaceRepository ─────────────────────────────────────
+
+/// SQLite-backed graph space repository.
+///
+/// Uses the singleton `graph_space` table (single row with id=1).
+/// If no row is found, returns [`GraphSpace::default`].
+#[derive(Clone)]
+pub struct SqliteGraphSpaceRepository {
+    pool: DbPool,
+}
+
+impl SqliteGraphSpaceRepository {
+    /// Creates a new `SqliteGraphSpaceRepository` with the given connection pool.
+    pub fn new(pool: DbPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl GraphSpaceRepository for SqliteGraphSpaceRepository {
+    async fn get_graph_space(&self) -> Result<GraphSpace, DomainError> {
+        let row = sqlx::query_as::<_, (String, String, String)>(
+            "SELECT name, description, version FROM graph_space WHERE id = 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("get_graph_space: {}", e)))?;
+
+        match row {
+            Some((name, description, version)) => Ok(GraphSpace {
+                name,
+                description,
+                version,
+            }),
+            None => Ok(GraphSpace::default()),
+        }
+    }
+
+    async fn update_graph_space(&self, graph_space: &GraphSpace) -> Result<(), DomainError> {
+        sqlx::query(
+            "INSERT INTO graph_space (id, name, description, version, created_at, updated_at) \
+             VALUES (1, ?, ?, ?, unixepoch('now'), unixepoch('now')) \
+             ON CONFLICT(id) DO UPDATE SET \
+             name = excluded.name, \
+             description = excluded.description, \
+             version = excluded.version, \
+             updated_at = excluded.updated_at",
+        )
+        .bind(&graph_space.name)
+        .bind(&graph_space.description)
+        .bind(&graph_space.version)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("update_graph_space: {}", e)))?;
 
         Ok(())
     }

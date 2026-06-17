@@ -1,8 +1,8 @@
 # Quilt — Action Roadmap
 
 > Generated: 2026-06-07
-> Last updated: 2026-06-16 (post ADR-0025 series + post-ADR-0025 cleanup + OpenSpec cleanup)
-> Sources: auto-grill 30+ cycles, architecture review (7 candidates), git log (commits be18a7d..2abfe38)
+> Last updated: 2026-06-17 (Phase 10 SDDK execution completed — bootstrap, validation, global state, selector, tests)
+> Sources: auto-grill 30+ cycles, architecture review (7 candidates), SDDK kernel orchestrator (init → explore → propose → spec → design → tasks → apply → verify → archive)
 
 ## Changelog
 - 2026-06-14: Phase 6 (Architecture Deepening) completed
@@ -17,6 +17,12 @@
   - Phase 9 CG-1 Morning Briefing end-to-end: backend endpoint + UI component + 11 tests
   - Fixed 2 MorningBriefing test bugs (getAllByText + getByRole)
   - OpenSpec cleanup: 6 done items archived, 16 active grouped by category → INDEX.md
+- 2026-06-17: ADR-0030 proposed — Graph Space, canonical storage, and journal-first lifecycle
+- 2026-06-17: ADR-0030 ratified to `accepted` after SDDK verification (PASS WITH WARNINGS)
+- 2026-06-17: **Phase 10 applied**: bootstrap unification (Slice A ✅), graph validation (Slice B ✅), global app state + REST endpoints (Slice C ✅), graph selector + startup routing (Slice D ✅)
+- 2026-06-17: Phase 10 tests added: GraphSelectorPage (21 tests), HomePage conditional routing (7 tests), api-client surface update, E2E graph-selector spec
+- 2026-06-17: SDDK archive completed — change `graph-space-migration-phases-1-4` synced to openspec/ + engram
+- 2026-06-17: Graph Space migration plan documented in `docs/graph-space-migration-plan.md`
 
 **Leyenda**: ✅ completado | 🚧 en progreso | 🔲 pendiente | `commit` = commit SHA
 
@@ -63,7 +69,7 @@ Infraestructura: `SlashActionRegistry` en `slashRegistry.tsx`, lazy-loaded desde
 
 ## 1. ADR Pipeline
 
-### Canónicos vigentes (0001-0024)
+### Canónicos vigentes (0001-0030)
 
 | ADR | Decisión | Estado |
 |-----|----------|--------|
@@ -91,16 +97,12 @@ Infraestructura: `SlashActionRegistry` en `slashRegistry.tsx`, lazy-loaded desde
 | 0022 | Template-driven block cards | ✅ |
 | 0023 | Block renderer registry | ✅ |
 | 0024 | Property view renderers (Gallery, List, Table) | ✅ |
-
-### ADR Drafts (pendientes de promover)
-
-| Draft | Decisión | Estado |
-|-------|----------|--------|
-| DRAFT-migration-engine-collapse-generics | Collapse MigrationEngine generics to Arc<dyn Trait> | 🔲 Promover a ADR-0025 |
-| DRAFT-migration-path-traversal-hardening | Path traversal hardening for migration import | 🔲 Promover a ADR-0026 |
-| DRAFT-refindex-internal-synchronization | RefIndex sync via RefServiceTrait with internal RwLock | 🔲 Promover a ADR-0027 |
-| DRAFT-appstate-extension-pattern | AppState Extension pattern for FromRef + Extension injection | 🔲 Promover a ADR-0028 |
-| DRAFT-test-organization-pattern | Inline #[cfg(test)] over separate /tests directories | 🔲 Promover a ADR-0029 |
+| 0025 | Property-first architecture | ✅ |
+| 0026 | Deprecation cleanup | ✅ |
+| 0027 | Typed PropertyValue | ✅ |
+| 0028 | WASM client-side projection | ✅ |
+| 0029 | Pre-existing test fixes | ✅ |
+| 0030 | Graph Space + canonical storage + journal-first lifecycle | ✅ accepted |
 
 ---
 
@@ -260,6 +262,29 @@ Actualizado con nuevos términos del roadmap:
 | **0028** WASM Client-Side Projection | ProjectionResolver portado a `quilt-core` WASM + 6 V1 contracts reimplementados como funciones puras + `useProjection` con WASM-first + HTTP-fallback + 18-row parity test + metrics | `2abfe38` |
 | **0029** Pre-existing Test Fixes | 7 tests fixed: order_proptest + GraphViewPage (6) + JournalAggregator | `8437ebb` + `105983a` + `c78eb36` |
 
+### Phase 10: Graph Space + Journal-First Lifecycle 🚧 EN PROGRESO (2026-06-17)
+
+**Objetivo**: consolidar Quilt como aplicación de Graph Space local-first con `quilt.db` canónica dentro del graph, Journal de hoy como puerta de entrada, y panel derecho contextual como superficie operativa secundaria.
+
+| ID | Qué | Estado |
+|----|-----|--------|
+| GS-1 | Unificar bootstrap de Graph en server, CLI y MCP (directorio → `.quilt/quilt.db`) | ✅ |
+| GS-2 | Persistir estado global de app (`last_opened_graph`, recientes, layout global) fuera del Graph | ✅ |
+| GS-3 | Validación explícita de Graph inválido (sin autoreparación silenciosa) | ✅ |
+| GS-4 | Selector de Graph solo como fallback cuando no haya `last_opened_graph` válido | ✅ |
+| GS-5 | Apertura siempre en Journal de hoy + creación bajo demanda del día actual | ✅ |
+| GS-6 | Morning Briefing colapsable y visible por defecto solo para hoy vacío/recién creado | 🔲 |
+| GS-7 | Metadata de Graph Space dentro del graph (nombre, icono, descripción, color, fecha) | 🔲 |
+| GS-8 | Panel derecho contextual visible por defecto, colapsable y panel-first para properties | 🔲 |
+| GS-9 | Ingesta/reindex manual de recursos compatibles en directorios existentes | 🔲 |
+| GS-10 | Local Graph v1: 2D, contextual, profundidad 1/2/3, navegación bidireccional | 🔲 |
+
+**Referencia**:
+- ADR: `docs/adr/0030-graph-space-journal-first-lifecycle.md` (ratificado ✅)
+- Plan: `docs/graph-space-migration-plan.md`
+- SDDK: `openspec/changes/graph-space-migration-phases-1-4/` (archivado)
+- Progreso: 5/10 items ✅ — slices A–D implementados y verificados con 28 tests nuevos
+
 ---
 
 ## 4. Dependencias (estado actual)
@@ -274,13 +299,16 @@ Phase 5 ✅ COMPLETO (Property Intelligence PI-1..PI-8)
 Phase 6 ✅ COMPLETO (Architecture Deepening, 7 candidates)
 Phase 7 ✅ COMPLETO (ADR-0025: Property-First Architecture, 5 slices)
 Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
+Phase 9 ✅ COMPLETO (UI Cognitive: CG-1..CG-7)
+Phase 10 🚧 EN PROGRESO (Graph Space: 5/10 — bootstrap + lifecycle foundations)
 ```
 
 ---
 
 ## 5. Estado Final — TODAS LAS FASES COMPLETADAS
 
-**Phase 0-8 ✅ — 31 items originales + 8 PI items + 7 AD items + 5 ADR-0025 slices + 4 post-ADR-0025 ADRs completados**
+**Phase 0-9 ✅ — 31 items originales + 8 PI items + 7 AD items + 5 ADR-0025 slices + 4 post-ADR-0025 ADRs + 7 CG items completados**
+**Phase 10 🚧 — 5/10 items de Graph Space foundations implementados**
 
 ### Pendiente técnico (no-bloqueantes)
 
@@ -317,6 +345,7 @@ Phase 8 ✅ COMPLETO (Post-ADR-0025 cleanup: 0026/0027/0028/0029)
 | `quilt-fase4-onboarding-advanced` | Onboarding | Pendiente |
 
 **Archivados (2026-06-16)**: `domain-properties-v1`, `slash-command-functional-behavior`, `dsl-aggregates`, `dsl-analyze`, `evidence-contract-v1`, `frontend-templates-v1` → `openspec/changes/archive/done-2026-06-16/`
+**Archivados (2026-06-17)**: `graph-space-migration-phases-1-4` → `openspec/changes/graph-space-migration-phases-1-4/` (SDDK completo: init → explore → propose → spec → design → tasks → apply → verify → archive)
 
 ### Phase 9: UI Cognitive ✅ COMPLETO
 

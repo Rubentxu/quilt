@@ -30,30 +30,51 @@
 ## Quick Start
 
 ```bash
-# Initialize a new graph
-quilt init my-graph
+# Initialize a new graph (Graph Space, ADR-0030)
+quilt --graph-dir /path/to/my-graph init my-graph
 
 # Open an existing graph
-quilt open my-graph.db
+quilt --graph-dir /path/to/my-graph open
 
 # Create a page
-quilt page "My Notes"
+quilt --graph-dir /path/to/my-graph page "My Notes"
 
 # Create a block
-quilt block --page "My Notes" "A task to do"
+quilt --graph-dir /path/to/my-graph block --page "My Notes" "A task to do"
 
 # Search content
-quilt search "task"
+quilt --graph-dir /path/to/my-graph search "task"
 
 # Execute a query
-quilt query "(task todo)"
+quilt --graph-dir /path/to/my-graph query "(task todo)"
 
 # Create journal entry
-quilt journal
+quilt --graph-dir /path/to/my-graph journal
 
 # Start MCP server
-quilt serve
+quilt --graph-dir /path/to/my-graph serve
 ```
+
+> The `--db-path` flag and `QUILT_DB_PATH` env var are deprecated;
+> use `--graph-dir` / `QUILT_GRAPH_DIR` (see [Graph Space](#graph-space-adr-0030) below).
+
+## Graph Space (ADR-0030)
+
+Quilt operates on a **Graph Space** model: a user-chosen directory
+(`<graph-root>`) hosts Quilt's canonical persistence under
+`<graph-root>/.quilt/quilt.db`. A Graph Space is the unit the user
+creates, opens, closes and switches between.
+
+| Surface | Canonical | Deprecated |
+| --- | --- | --- |
+| CLI flag | `--graph-dir` | `--db-path` (one-release window) |
+| Server env | `QUILT_GRAPH_DIR` | `QUILT_VAULT_PATH` |
+| MCP env | `QUILT_GRAPH_DIR` | `QUILT_DB_PATH` |
+
+The canonical bootstrap lives in `quilt_platform::init::init_graph` and
+is shared by server, CLI and MCP. See
+[`docs/adr/0030-graph-space-journal-first-lifecycle.md`](docs/adr/0030-graph-space-journal-first-lifecycle.md)
+and [`docs/graph-space-migration-plan.md`](docs/graph-space-migration-plan.md).
 
 ## CLI Commands
 

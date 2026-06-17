@@ -17,8 +17,8 @@ use quilt_application::use_cases::{
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_infrastructure::database::sqlite::connection::{DbPool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
-    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
+    SqliteBlockRepository, SqliteGraphSpaceRepository, SqlitePageRepository, SqlitePropertyRepository,
+    SqliteRefRepository, SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
     SqliteTagRepository, SqliteTourStateRepository,
 };
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
@@ -31,7 +31,7 @@ use std::sync::Arc;
 /// This creates an in-memory database, initializes all repositories,
 /// and bundles them into AppServices.
 pub async fn build_test_app_state(pool: DbPool) -> quilt_server::state::AppState {
-    let (state, _, _, _, _, _, _, _, _, _, _) = build_test_app_state_with_repos(pool).await;
+    let (state, _, _, _, _, _, _, _, _, _, _, _) = build_test_app_state_with_repos(pool).await;
     state
 }
 
@@ -49,6 +49,7 @@ pub async fn build_test_app_state_with_repos(
     Arc<SqliteRefRepository>,
     Arc<SqliteTagRepository>,
     Arc<SqliteSettingsRepository>,
+    Arc<SqliteGraphSpaceRepository>,
     Arc<SqliteRelationRepository>,
     Arc<SqliteSchemaRepository>,
     Arc<SqlitePropertyRepository>,
@@ -80,6 +81,8 @@ pub async fn build_test_app_state_with_repos(
         Arc::new(SqliteTourStateRepository::new(pool.clone()));
     let settings_repo: Arc<SqliteSettingsRepository> =
         Arc::new(SqliteSettingsRepository::new(pool.clone()));
+    let graph_space_repo: Arc<SqliteGraphSpaceRepository> =
+        Arc::new(SqliteGraphSpaceRepository::new(pool.clone()));
     let relation_repo: Arc<SqliteRelationRepository> =
         Arc::new(SqliteRelationRepository::new(pool.clone()));
     let schema_repo: Arc<SqliteSchemaRepository> =
@@ -132,6 +135,7 @@ pub async fn build_test_app_state_with_repos(
         page_repo.clone(),
         ref_repo.clone(),
         settings_repo.clone(),
+        graph_space_repo.clone(),
         tag_repo.clone(),
         relation_repo.clone(),
         schema_repo.clone(),
@@ -156,6 +160,7 @@ pub async fn build_test_app_state_with_repos(
         ref_repo,
         tag_repo,
         settings_repo,
+        graph_space_repo,
         relation_repo,
         schema_repo,
         property_repo,
@@ -174,7 +179,7 @@ pub async fn build_test_app_state_with_agents(
     Arc<AgentLifecycle>,
     Arc<AgentRegistry>,
 ) {
-    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _) =
+    let (state, _block_repo, _page_repo, _, _, _, _, _, _, _, _, _) =
         build_test_app_state_with_repos(pool).await;
     let lifecycle = Arc::new(AgentLifecycle::new(
         state.repos.block.clone(),

@@ -237,6 +237,19 @@ export interface DateFormatOption {
   example: string;
 }
 
+// ──── Graph Space ─────────────────────────────────────────────────
+
+export interface GraphSpace {
+  name: string;
+  description: string;
+  version: string;
+}
+
+export interface UpdateGraphSpaceRequest {
+  name?: string;
+  description?: string;
+}
+
 // ──── Backlinks ─────────────────────────────────────────────────
 
 export interface Backlink {

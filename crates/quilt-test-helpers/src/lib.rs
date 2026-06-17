@@ -32,7 +32,10 @@
 //! ```
 
 pub use fixtures::page_with_blocks;
-pub use in_memory::{InMemoryAnnotationRepo, InMemoryBlockRepo, InMemoryPageRepo, InMemoryTagRepo};
+pub use in_memory::{
+    InMemoryAnnotationRepo, InMemoryBlockRepo, InMemoryGlobalAppStateRepository, InMemoryPageRepo,
+    InMemoryTagRepo,
+};
 
 mod fixtures;
 mod in_memory;

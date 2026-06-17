@@ -45,6 +45,10 @@ const DashboardPage = lazyRouteComponent(
   () => import('@pages/DashboardPage'),
   'DashboardPage',
 )
+const GraphSelectorPage = lazyRouteComponent(
+  () => import('@pages/GraphSelectorPage'),
+  'GraphSelectorPage',
+)
 
 // ─── Route tree ─────────────────────────────────────────────────
 const rootRoute = createRootRoute({
@@ -105,6 +109,12 @@ const dashboardRoute = createRoute({
   component: DashboardPage,
 })
 
+const selectGraphRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/select-graph',
+  component: GraphSelectorPage,
+})
+
 const routeTree = rootRoute.addChildren([
   homeRoute,
   pageRoute,
@@ -115,6 +125,7 @@ const routeTree = rootRoute.addChildren([
   tableRoute,
   kanbanRoute,
   dashboardRoute,
+  selectGraphRoute,
 ])
 
 // ─── Router ──────────────────────────────────────────────────────

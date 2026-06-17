@@ -244,4 +244,144 @@ describe('MorningBriefing', () => {
     })
     expect(screen.getByTestId('morning-briefing-footer').textContent).toContain('Generated')
   })
+
+  // ─── Collapse / expand ─────────────────────────────────────────────────
+
+  it('renders in expanded state by default with aria-expanded="true"', async () => {
+    vi.mocked(api.getMorningBriefing).mockResolvedValue(mockMorningBriefingDto)
+
+    render(<MorningBriefing />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    })
+
+    const region = screen.getByRole('region', { name: 'Morning Briefing' })
+    expect(region).toHaveAttribute('aria-expanded', 'true')
+    // Sections are visible
+    expect(screen.getByTestId('morning-briefing-agenda-header')).toBeInTheDocument()
+    expect(screen.getByTestId('morning-briefing-decay-header')).toBeInTheDocument()
+    expect(screen.getByTestId('morning-briefing-serendipity-header')).toBeInTheDocument()
+  })
+
+  it('collapse toggle hides sections and sets aria-expanded="false"', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getMorningBriefing).mockResolvedValue(mockMorningBriefingDto)
+
+    render(<MorningBriefing />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    })
+
+    const collapseBtn = screen.getByTestId('morning-briefing-collapse')
+    await user.click(collapseBtn)
+
+    const region = screen.getByRole('region', { name: 'Morning Briefing' })
+    expect(region).toHaveAttribute('aria-expanded', 'false')
+    // data-testid stays on wrapper
+    expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    // Section headers are hidden
+    expect(screen.queryByTestId('morning-briefing-agenda-header')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('morning-briefing-decay-header')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('morning-briefing-serendipity-header')).not.toBeInTheDocument()
+  })
+
+  it('collapse toggle expands from collapsed state', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getMorningBriefing).mockResolvedValue(mockMorningBriefingDto)
+
+    render(<MorningBriefing />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    })
+
+    // Collapse
+    await user.click(screen.getByTestId('morning-briefing-collapse'))
+    expect(screen.getByRole('region', { name: 'Morning Briefing' })).toHaveAttribute('aria-expanded', 'false')
+
+    // Expand
+    await user.click(screen.getByTestId('morning-briefing-collapse'))
+    expect(screen.getByRole('region', { name: 'Morning Briefing' })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByTestId('morning-briefing-agenda-header')).toBeInTheDocument()
+  })
+
+  it('keyboard toggle (Enter) collapses the briefing', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getMorningBriefing).mockResolvedValue(mockMorningBriefingDto)
+
+    render(<MorningBriefing />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    })
+
+    const collapseBtn = screen.getByTestId('morning-briefing-collapse')
+    collapseBtn.focus()
+    await user.keyboard('{Enter}')
+
+    expect(screen.getByRole('region', { name: 'Morning Briefing' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('keyboard toggle (Space) collapses the briefing', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getMorningBriefing).mockResolvedValue(mockMorningBriefingDto)
+
+    render(<MorningBriefing />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    })
+
+    const collapseBtn = screen.getByTestId('morning-briefing-collapse')
+    collapseBtn.focus()
+    await user.keyboard(' ')
+
+    expect(screen.getByRole('region', { name: 'Morning Briefing' })).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('refresh button preserves collapsed state', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getMorningBriefing).mockResolvedValue(mockMorningBriefingDto)
+
+    render(<MorningBriefing />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    })
+
+    // Collapse
+    await user.click(screen.getByTestId('morning-briefing-collapse'))
+    expect(screen.getByRole('region', { name: 'Morning Briefing' })).toHaveAttribute('aria-expanded', 'false')
+
+    // Refresh while collapsed
+    await user.click(screen.getByTestId('morning-briefing-refresh'))
+
+    // Still collapsed after refresh triggered
+    expect(screen.getByRole('region', { name: 'Morning Briefing' })).toHaveAttribute('aria-expanded', 'false')
+    // Wrapper + testid still present
+    expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+  })
+
+  it('error state preserves wrapper and testid when collapsed', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.getMorningBriefing).mockRejectedValue(new Error('Network error'))
+
+    render(<MorningBriefing />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    })
+
+    // Collapse first
+    await user.click(screen.getByTestId('morning-briefing-collapse'))
+
+    // Error appears but wrapper + testid still present
+    await waitFor(() => {
+      expect(screen.getByTestId('morning-briefing-error')).toBeInTheDocument()
+    })
+    expect(screen.getByTestId('morning-briefing')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Morning Briefing' })).toHaveAttribute('aria-expanded', 'false')
+  })
 })

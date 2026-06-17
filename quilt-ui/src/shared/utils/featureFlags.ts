@@ -36,8 +36,6 @@
  * When OFF, the legacy rendering path is preserved for safe rollback.
  */
 
-import { vi } from 'vitest'
-
 const TRUTHY = new Set(['true', '1', 'yes', 'on'])
 
 /** Raw env-var read — exported only for tests. */
@@ -117,7 +115,3 @@ export function __setProjectionRendererEnabledForTest(value: boolean): () => voi
   }
 }
 
-// `vi` is re-exported here so test files don't have to import both
-// `vitest` AND this module to stub + restore. This is the same shape
-// the React Testing Library community uses for utility shims.
-export { vi }

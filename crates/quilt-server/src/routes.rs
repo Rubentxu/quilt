@@ -50,10 +50,13 @@ pub fn create_app(state: AppState) -> Router {
         .nest("/api/v1/migration", handlers::migration::routes())
         .nest("/api/v1/user/tour-state", handlers::tour_state::routes())
         .nest("/api/v1/graph", handlers::graph::routes())
+        .nest("/api/v1/graph-space", handlers::graph_space::routes())
         .nest("/api/v1/cognitive", handlers::cognitive::routes())
         .nest("/api/v1/presets", handlers::presets::routes())
         .nest("/api/v1/annotations", handlers::annotations::routes())
         .nest("/api/v1/agents", handlers::agent_room::routes())
+        .nest("/api/v1/graphs", handlers::graphs::routes())
+        .nest("/api/v1/global-state", handlers::global_state::routes())
         // Frontend serving (catch-all for SPA)
         .route(
             "/",
@@ -78,6 +81,7 @@ pub fn create_app(state: AppState) -> Router {
         .layer(axum::Extension(state.repos.page.clone()))
         .layer(axum::Extension(state.repos.ref_repo.clone()))
         .layer(axum::Extension(state.repos.settings.clone()))
+        .layer(axum::Extension(state.repos.graph_space.clone()))
         .layer(axum::Extension(state.repos.tag.clone()))
         .layer(axum::Extension(state.repos.relation.clone()))
         .layer(axum::Extension(state.repos.schema.clone()))

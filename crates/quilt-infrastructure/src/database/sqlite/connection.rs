@@ -555,6 +555,38 @@ pub async fn run_migrations(pool: &DbPool) -> Result<()> {
         }
     }
 
+    // Migration 009c: graph_space table (GS-7: Graph Space metadata singleton).
+    // Stores graph-level metadata including display name shown in the graph selector.
+    // Singleton: single row with id=1.
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS graph_space (
+            id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+            name TEXT NOT NULL DEFAULT 'My Graph',
+            description TEXT NOT NULL DEFAULT '',
+            version TEXT NOT NULL DEFAULT '1.0',
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // Initialize with defaults if not exists
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO graph_space (id, name, description, version, created_at, updated_at)
+        VALUES (1, 'My Graph', '', '1.0', unixepoch('now'), unixepoch('now'))
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_graph_space_id ON graph_space(id)")
+        .execute(pool)
+        .await?;
+
     // Create tour_dismissals table (B of quilt-fase4-cross-device-tour).
     // Keyed by the opaque `user_id` (V1: the api key from the
     // Authorization header) and a short tour-name slug. The composite

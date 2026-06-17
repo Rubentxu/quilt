@@ -57,7 +57,7 @@ metrics-exporter-prometheus = "0.15"
 lru = "0.13"
 
 # CLI
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 
 # Platform — Tauri shell in `quilt-platform`, React+Vite SPA in `quilt-ui/`
 

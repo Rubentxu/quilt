@@ -11,6 +11,7 @@ use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::*;
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_platform::cli::QuiltCLI;
+use quilt_platform::init;
 use quilt_search::SearchService;
 use std::sync::Arc;
 
@@ -18,8 +19,24 @@ use std::sync::Arc;
 async fn main() -> Result<()> {
     let cli = QuiltCLI::parse();
 
+    // Resolve the canonical graph root, honoring the --db-path
+    // deprecation alias when present. Emits a one-shot warning so
+    // users notice the migration.
+    let (graph_dir, used_db_path) = cli.resolved_graph_dir();
+    if used_db_path {
+        eprintln!(
+            "warning: --db-path / QUILT_DB_PATH is deprecated; \
+             use --graph-dir / QUILT_GRAPH_DIR instead \
+             (will be removed in next minor release, see ADR-0030)"
+        );
+    }
+
+    // Canonical graph bootstrap (ADR-0030) — replaces the legacy
+    // direct pool-from-db-path flow.
+    let graph_config = init::init_graph(graph_dir)?;
+
     // Composition root — wire all dependencies here
-    let pool = connection::create_pool(&cli.db_path).await?;
+    let pool = connection::create_pool(&graph_config.db_path).await?;
     connection::run_migrations(&pool).await?;
 
     let annotation_repo = Arc::new(SqliteAnnotationRepository::new(pool.clone()));

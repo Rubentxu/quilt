@@ -5,6 +5,7 @@
 use axum::{Json, extract::Extension};
 use axum::{Router, routing::post};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -72,10 +73,26 @@ pub async fn navigate_to_page(
     Extension(page_repo): Extension<Arc<dyn PageRepository>>,
     Json(payload): Json<NavigateToPageRequest>,
 ) -> Result<Json<PageDto>, AppError> {
-    // Update last_opened_graph if graph_id is provided
-    if let Some(ref gid) = payload.graph_id {
+    // Update last_opened_graph if graph_id is provided. The
+    // `graph_id` field is treated as an absolute or relative path
+    // string; the typed slot is `PathBuf` (ADR-0030 §5).
+    let graph_path = payload.graph_id.as_ref().map(|gid| PathBuf::from(gid.clone()));
+
+    if let Some(ref path) = graph_path {
+        // Write-through to global state repo (best-effort)
+        if let Err(e) = state.global_state_repo.set_last_opened_graph(Some(path)).await {
+            tracing::warn!("failed to persist last_opened_graph: {}", e);
+        }
+        if let Err(e) = state.global_state_repo.push_recent(path).await {
+            tracing::warn!("failed to push recent graph: {}", e);
+        }
+        // Also update in-memory cache
         let mut last_graph = state.last_opened_graph.write().await;
-        *last_graph = Some(gid.clone());
+        *last_graph = Some(path.clone());
+        let mut recents = state.recent_graphs.write().await;
+        recents.retain(|p| p != path);
+        recents.insert(0, path.clone());
+        recents.truncate(10);
     }
 
     // Fetch the page
@@ -118,9 +135,23 @@ pub async fn navigate_to_block(
     Json(payload): Json<NavigateToBlockRequest>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Update last_opened_graph if graph_id is provided
-    if let Some(ref gid) = payload.graph_id {
+    let graph_path = payload.graph_id.as_ref().map(|gid| PathBuf::from(gid.clone()));
+
+    if let Some(ref path) = graph_path {
+        // Write-through to global state repo (best-effort)
+        if let Err(e) = state.global_state_repo.set_last_opened_graph(Some(path)).await {
+            tracing::warn!("failed to persist last_opened_graph: {}", e);
+        }
+        if let Err(e) = state.global_state_repo.push_recent(path).await {
+            tracing::warn!("failed to push recent graph: {}", e);
+        }
+        // Also update in-memory cache
         let mut last_graph = state.last_opened_graph.write().await;
-        *last_graph = Some(gid.clone());
+        *last_graph = Some(path.clone());
+        let mut recents = state.recent_graphs.write().await;
+        recents.retain(|p| p != path);
+        recents.insert(0, path.clone());
+        recents.truncate(10);
     }
 
     // Broadcast navigation event to WebSocket subscribers

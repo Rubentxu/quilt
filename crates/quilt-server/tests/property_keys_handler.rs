@@ -55,7 +55,7 @@ async fn app_with_n_keys(n: u32) -> Result<axum::Router> {
     init_auth();
     let pool = create_pool(":memory:").await?;
 
-    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _) =
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
 
     // Create a page to host the blocks.
@@ -163,7 +163,7 @@ async fn get_keys_blocks_with_no_properties_returns_empty_array() {
     init_auth();
     let pool = create_pool(":memory:").await.unwrap();
 
-    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _) =
+    let (state, block_repo, page_repo, _, _, _, _, _, _, _, _, _) =
         helpers::build_test_app_state_with_repos(pool).await;
 
     let page = quilt_domain::entities::Page::new(PageCreate {

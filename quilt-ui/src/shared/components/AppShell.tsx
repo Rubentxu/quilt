@@ -3,8 +3,6 @@ import { Outlet, useLocation, Link, useNavigate } from '@tanstack/react-router'
 import { Toaster } from 'react-hot-toast'
 import { Menu, Sun, Moon, Settings, Link2, X, PanelRight, MoreVertical, RefreshCw, Keyboard, Sidebar as SidebarIcon } from 'lucide-react'
 import { Sidebar } from '@features/sidebar/Sidebar'
-import { BacklinksPanel } from '@features/references/BacklinksPanel'
-import { CognitivePanels } from '@features/cognitive/CognitivePanels'
 import { TabsBar } from './TabsBar'
 import { FloatingHelpButton } from './FloatingHelpButton'
 import { WelcomeTour } from './WelcomeTour'
@@ -15,6 +13,14 @@ import { useConnection } from '@shared/contexts/ConnectionContext'
 import { usePerformance } from '@shared/hooks/usePerformance'
 import { STORAGE_KEYS } from '@features/sidebar/storage-keys'
 import { api } from '@core/api-client'
+// Right sidebar — GS-8: self-registers sections via barrel import
+import {
+  SelectionProvider,
+  RightSidebarShell,
+  RIGHT_SIDEBAR_PANEL_ID,
+} from '@features/right-sidebar'
+// Side-effect: registers all right-sidebar sections
+import '@features/right-sidebar/sections'
 
 // SearchModal is only mounted when the user opens the command palette
 // (Ctrl+K). Keeping it out of the initial bundle saves ~3 KB and the
@@ -117,54 +123,35 @@ function ConnectionStatus() {
   )
 }
 
-function executeGoTo(combo: string, navigate: ReturnType<typeof useNavigate>) {
-  switch (combo) {
-    case 'gh':
-      navigate({ to: '/' })
-      break
-    case 'gj': {
-      // Journal — go to today's
-      const today = new Date().toISOString().split('T')[0]
-      navigate({ to: '/journal/$date', params: { date: today } })
-      break
-    }
-    case 'gt': {
-      // Today's journal (alias for gj)
-      const t = new Date().toISOString().split('T')[0]
-      navigate({ to: '/journal/$date', params: { date: t } })
-      break
-    }
-    case 'gn': {
-      // New page — open prompt or focus new page input
-      const name = window.prompt('New page name:')
-      if (name) navigate({ to: '/page/$name', params: { name } })
-      break
-    }
-    case 'gp':
-    case 'ga':
-      // All pages
-      navigate({ to: '/pages' })
-      break
-    case 'gg':
-      // Graph
-      navigate({ to: '/graph' })
-      break
-    case 'gs':
-      // Settings
-      navigate({ to: '/settings' })
-      break
-    default:
-      // Unknown combo — no-op
-      break
-  }
+/**
+ * Leader-key handler generalization.
+ *
+ * A "leader key" is a key that, when pressed alone, enters "wait for
+ * second key" mode. The caller provides a map of leader → record of
+ * second-keys → actions.
+ *
+ * The previous implementation hardcoded 'g' as the sole leader with
+ * executeGoTo. This generalization supports multiple leaders (e.g., 'g'
+ * for navigation, 't' for panel toggles) without adding complexity.
+ *
+ * ## Leader timeout
+ * After LEADER_TIMEOUT_MS of no second key, the leader mode resets.
+ */
+const LEADER_TIMEOUT_MS = 1500
+
+type LeaderAction = () => void
+
+interface LeadersMap {
+  [leader: string]: Record<string, LeaderAction>
 }
 
-function useGlobalShortcuts() {
-  const navigate = useNavigate()
+function useLeaderKeys(leaders: LeadersMap) {
   const [leaderKey, setLeaderKey] = useState<string | null>(null)
   const leaderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    const leaderKeys = Object.keys(leaders)
+
     function handleKeyDown(e: KeyboardEvent) {
       // Don't intercept if typing
       const target = e.target as HTMLElement
@@ -173,19 +160,23 @@ function useGlobalShortcuts() {
       // Leader key mode: waiting for second key
       if (leaderKey) {
         e.preventDefault()
-        const combo = leaderKey + e.key.toLowerCase()
-        executeGoTo(combo, navigate)
+        const secondKey = e.key.toLowerCase()
+        const action = leaders[leaderKey]?.[secondKey]
+        if (action) {
+          action()
+        }
         setLeaderKey(null)
         if (leaderTimeoutRef.current) clearTimeout(leaderTimeoutRef.current)
         return
       }
 
-      // First key: 'g' activates leader mode
-      if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Check if this key is a known leader key
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && leaderKeys.includes(e.key)) {
         e.preventDefault()
-        setLeaderKey('g')
-        // Auto-cancel after 1.5s
-        leaderTimeoutRef.current = setTimeout(() => setLeaderKey(null), 1500)
+        setLeaderKey(e.key)
+        // Auto-cancel after timeout
+        if (leaderTimeoutRef.current) clearTimeout(leaderTimeoutRef.current)
+        leaderTimeoutRef.current = setTimeout(() => setLeaderKey(null), LEADER_TIMEOUT_MS)
         return
       }
     }
@@ -195,7 +186,45 @@ function useGlobalShortcuts() {
       document.removeEventListener('keydown', handleKeyDown)
       if (leaderTimeoutRef.current) clearTimeout(leaderTimeoutRef.current)
     }
-  }, [leaderKey, navigate])
+  }, [leaderKey, leaders])
+
+  return { leaderKey }
+}
+
+function useGlobalShortcuts() {
+  const navigate = useNavigate()
+  const { togglePanel, visiblePanels } = usePanelVisibility()
+
+  // Leaders map: 'g' for navigation, 't' for toggles
+  const leaders = {
+    g: {
+      h: () => navigate({ to: '/' }),
+      j: () => {
+        const today = new Date().toISOString().split('T')[0]
+        navigate({ to: '/journal/$date', params: { date: today } })
+      },
+      t: () => {
+        const today = new Date().toISOString().split('T')[0]
+        navigate({ to: '/journal/$date', params: { date: today } })
+      },
+      n: () => {
+        const name = window.prompt('New page name:')
+        if (name) navigate({ to: '/page/$name', params: { name } })
+      },
+      p: () => navigate({ to: '/pages' }),
+      a: () => navigate({ to: '/pages' }),
+      g: () => navigate({ to: '/graph' }),
+      s: () => navigate({ to: '/settings' }),
+    },
+    t: {
+      // t r — toggle right sidebar (GS-8)
+      r: () => togglePanel('right-sidebar'),
+      // t b — toggle backlinks (keep for backwards compat)
+      b: () => togglePanel('backlinks'),
+    },
+  }
+
+  const { leaderKey } = useLeaderKeys(leaders)
 
   return { leaderKey }
 }
@@ -429,14 +458,12 @@ export function UserAvatar({ onClick }: UserAvatarProps) {
 export function AppShell() {
   // Surface any unexpectedly slow mount of the app shell itself.
   usePerformance('AppShell mount', 32)
-  // DashboardLayout — sidebar / backlinks visibility is driven by
+  // DashboardLayout — sidebar / right-sidebar visibility is driven by
   // the PanelVisibilityContext so it can be persisted across
   // reloads and switched via presets. See
   // `features/dashboard/presets.ts` for the named presets.
   const { visiblePanels, togglePanel } = usePanelVisibility()
   const sidebarOpen = visiblePanels.has('sidebar')
-  const backlinksOpen = visiblePanels.has('backlinks')
-  const [mobileBacklinksOpen, setMobileBacklinksOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('quilt-theme') === 'dark'
   })
@@ -768,17 +795,17 @@ export function AppShell() {
             </div>
           )}
 
-          {/* Backlinks toggle */}
+          {/* Right sidebar toggle (GS-8) */}
           {isMobile ? (
             <button
-              onClick={() => setMobileBacklinksOpen(!mobileBacklinksOpen)}
-              aria-label={mobileBacklinksOpen ? 'Close backlinks panel' : 'Open backlinks panel'}
-              title={mobileBacklinksOpen ? 'Close backlinks panel' : 'Open backlinks panel'}
+              onClick={() => togglePanel(RIGHT_SIDEBAR_PANEL_ID)}
+              aria-label="Toggle right sidebar"
+              title="Toggle right sidebar"
               style={{
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: mobileBacklinksOpen ? 'var(--color-link)' : 'var(--color-text-muted)',
+                color: 'var(--color-text-muted)',
                 padding: 'var(--space-1)',
                 borderRadius: 'var(--radius-md)',
                 display: 'flex',
@@ -791,14 +818,14 @@ export function AppShell() {
             </button>
           ) : (
             <button
-              onClick={() => togglePanel('backlinks')}
-              aria-label={backlinksOpen ? 'Close backlinks panel' : 'Open backlinks panel'}
-              title={backlinksOpen ? 'Close backlinks panel' : 'Open backlinks panel'}
+              onClick={() => togglePanel(RIGHT_SIDEBAR_PANEL_ID)}
+              aria-label="Toggle right sidebar"
+              title="Toggle right sidebar (t r)"
               style={{
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
-                color: backlinksOpen ? 'var(--color-link)' : 'var(--color-text-muted)',
+                color: visiblePanels.has(RIGHT_SIDEBAR_PANEL_ID) ? 'var(--color-link)' : 'var(--color-text-muted)',
                 padding: 'var(--space-1)',
                 borderRadius: 'var(--radius-md)',
                 display: 'flex',
@@ -807,7 +834,7 @@ export function AppShell() {
               }}
               className="topbar-action"
             >
-              <Link2 size={18} />
+              <PanelRight size={18} />
             </button>
           )}
 
@@ -889,59 +916,19 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* ─── Backlinks Panel ─── */}
-      {isMobile ? (
-        /* Mobile: bottom sheet */
-        mobileBacklinksOpen && (
-          <>
-            {/* Backdrop */}
-            <div
-              onClick={() => setMobileBacklinksOpen(false)}
-              style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.5)',
-                zIndex: 40,
-              }}
-            />
-            {/* Bottom sheet */}
-            <div
-              style={{
-                position: 'fixed',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                maxHeight: '60vh',
-                zIndex: 50,
-                background: 'var(--color-surface)',
-                borderTopLeftRadius: 'var(--radius-lg)',
-                borderTopRightRadius: 'var(--radius-lg)',
-                boxShadow: 'var(--shadow-lg)',
-                overflow: 'auto',
-              }}
-            >
-              <BacklinksPanel pageName={currentPageName} isOpen={true} />
-            </div>
-          </>
-        )
-      ) : (
-        <BacklinksPanel pageName={currentPageName} isOpen={backlinksOpen} />
+      {/* ─── GS-8: Unified Right Sidebar (desktop) ───
+       *
+       * The right sidebar is now a unified shell that renders
+       * registered sections based on the current SelectionContext.
+       * BacklinksPanel and CognitivePanels are migrated as sections.
+       *
+       * Mobile: individual panels still use bottom sheets for now.
+       * The RightSidebarShell mobile layout is a follow-up. */}
+      {!isMobile && (
+        <SelectionProvider routeKey={location.pathname}>
+          <RightSidebarShell />
+        </SelectionProvider>
       )}
-
-      {/* ─── Cognitive Panels (cognitivo:: family) ───
-       *
-       * Right-side column for the three cognitive panels
-       * (`docs/adr/drafts/DRAFT-cognitive-panel-family-namespace.md`).
-       * Each panel is gated by its own `PanelVisibilityContext`
-       * flag; toggling via CommandRegistry (`cog/toggle-*`) shows
-       * or hides individual sections without affecting siblings.
-       * The column itself renders only when at least one panel
-       * is visible, so it doesn't take up dead space.
-       *
-       * Hidden on mobile — the bottom-sheet pattern for the
-       * cognitive family is a follow-up; for now, mobile users
-       * toggle via the command palette or the layout menu. */}
-      {!isMobile && <CognitivePanels pageName={currentPageName} />}
 
       {/* ─── Toast notifications ─── */}
       <Toaster

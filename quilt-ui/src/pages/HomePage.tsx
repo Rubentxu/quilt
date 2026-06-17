@@ -1,12 +1,13 @@
 import { useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { api } from '@core/api-client'
 
 /**
- * HomePage — root route (`/`) is a redirect-only component.
+ * HomePage — root route (`/`) redirects based on global state.
  *
- * The / route used to render `null`, leaving the user on a blank shell.
- * Visiting `/` should land them on today's journal — the same date
- * format the `/journal/$date` route accepts (YYYY-MM-DD).
+ * Per ADR-0030 §8, the home always lands on today's journal when
+ * a valid last_opened_graph exists. If there is no valid graph
+ * (first run or invalid path), it redirects to the graph selector.
  *
  * We compute "today" in the local timezone (matches what the rest of
  * the app does — see `formatToday` in `features/sidebar/Sidebar.tsx`
@@ -18,12 +19,36 @@ export function HomePage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = String(now.getMonth() + 1).padStart(2, '0')
-    const d = String(now.getDate()).padStart(2, '0')
-    const today = `${y}-${m}-${d}`
-    navigate({ to: '/journal/$date', params: { date: today } })
+    let cancelled = false
+
+    api
+      .getGlobalState()
+      .then((state) => {
+        if (cancelled) return
+        const today = (() => {
+          const now = new Date()
+          const y = now.getFullYear()
+          const m = String(now.getMonth() + 1).padStart(2, '0')
+          const d = String(now.getDate()).padStart(2, '0')
+          return `${y}-${m}-${d}`
+        })()
+
+        if (state.lastOpenedGraph) {
+          // Valid last graph → go to today's journal
+          navigate({ to: '/journal/$date', params: { date: today } })
+        } else {
+          // No last graph → go to the selector
+          navigate({ to: '/select-graph' })
+        }
+      })
+      .catch(() => {
+        // Network/server error → go to selector (safe fallback)
+        if (!cancelled) navigate({ to: '/select-graph' })
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [navigate])
 
   return null

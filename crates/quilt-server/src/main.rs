@@ -9,7 +9,7 @@
 
 use anyhow::Result;
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -35,45 +35,18 @@ use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_infrastructure::database::sqlite::connection::{create_pool, run_migrations};
 use quilt_infrastructure::database::sqlite::repositories::{
-    SqliteBlockRepository, SqlitePageRepository, SqlitePropertyRepository, SqliteRefRepository,
-    SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
+    SqliteBlockRepository, SqliteGraphSpaceRepository, SqlitePageRepository, SqlitePropertyRepository,
+    SqliteRefRepository, SqliteRelationRepository, SqliteSchemaRepository, SqliteSettingsRepository,
     SqliteTagRepository, SqliteTourStateRepository,
 };
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
+use quilt_platform::init::init_graph;
 use quilt_search::SearchService;
-
-/// Ensure the vault directory structure exists (.quilt folder and quilt.db)
-fn ensure_vault_exists(vault_path: &Path) -> Result<PathBuf, anyhow::Error> {
-    let quilt_dir = vault_path.join(".quilt");
-    let db_path = quilt_dir.join("quilt.db");
-
-    if !quilt_dir.exists() {
-        std::fs::create_dir_all(&quilt_dir)?;
-        tracing::info!("Created .quilt directory at {:?}", quilt_dir);
-    }
-
-    if !db_path.exists() {
-        std::fs::write(&db_path, "")?;
-        tracing::info!("Created database file at {:?}", db_path);
-    }
-
-    Ok(db_path)
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Get configuration from environment
-    let vault_path = std::env::var("QUILT_GRAPH_DIR")
-        .or_else(|_| std::env::var("QUILT_VAULT_PATH"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."));
-
-    let port: u16 = std::env::var("QUILT_PORT")
-        .unwrap_or_else(|_| "3737".to_string())
-        .parse()
-        .expect("QUILT_PORT must be a valid port number");
-
-    // Initialize logging with configurable level
+    // Initialize logging FIRST so that any subsequent
+    // tracing::warn! for deprecated env-var usage is captured.
     let log_filter = std::env::var("QUILT_LOG")
         .unwrap_or_else(|_| "quilt_server=info,tower_http=info".to_string());
 
@@ -85,18 +58,64 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
+    // Get configuration from environment.
+    // Precedence (per ADR-0030, Slice A):
+    //   1. QUILT_GRAPH_DIR (canonical)
+    //   2. QUILT_VAULT_PATH (deprecated alias — emits tracing::warn! on use)
+    //   3. cwd (".")
+    let (graph_path, vault_path_was_used) = match std::env::var("QUILT_GRAPH_DIR") {
+        Ok(v) => (PathBuf::from(v), false),
+        Err(_) => match std::env::var("QUILT_VAULT_PATH") {
+            Ok(v) => {
+                tracing::warn!(
+                    target: "quilt_server::deprecation",
+                    "QUILT_VAULT_PATH is deprecated; use QUILT_GRAPH_DIR (will be removed in next minor release, see ADR-0030)"
+                );
+                (PathBuf::from(v), true)
+            }
+            Err(_) => (PathBuf::from("."), false),
+        },
+    };
+    // Quiet the warning flag — kept for observability hooks in future.
+    let _ = vault_path_was_used;
+
+    let port: u16 = std::env::var("QUILT_PORT")
+        .unwrap_or_else(|_| "3737".to_string())
+        .parse()
+        .expect("QUILT_PORT must be a valid port number");
+
     info!("Starting Quilt server initialization");
-    info!("Vault path: {:?}", vault_path);
+    info!("Graph path: {:?}", graph_path);
 
     // Initialize Prometheus metrics (if enabled)
     let _metrics_handle = metrics::init_metrics();
 
-    // Initialize vault directory and database pool
-    let db_path = ensure_vault_exists(&vault_path)?;
-    let pool = create_pool(&db_path).await?;
+    // Open the cross-graph app state (ADR-0030 §5). The factory is
+    // fail-open: any disk error falls back to an in-memory store
+    // with a `tracing::warn!` so the server starts no matter what.
+    let global_state_repo = quilt_platform::global_app_state::open_global_state().await;
+    let global_initial = global_state_repo
+        .load()
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                target: "quilt_server",
+                "failed to load global state at startup; using defaults: {e}"
+            );
+            quilt_domain::entities::GlobalAppState::default()
+        });
+    info!(
+        last_opened = ?global_initial.last_opened_graph,
+        recents = global_initial.recent_graphs.len(),
+        "Cross-graph app state loaded"
+    );
+
+    // Canonical graph bootstrap (ADR-0030). Replaces the local ensure_vault_exists.
+    let graph_config = init_graph(graph_path)?;
+    let pool = create_pool(&graph_config.db_path).await?;
     run_migrations(&pool).await?;
 
-    info!("Vault ready at {:?}", vault_path);
+    info!("Graph ready at {:?}", graph_config.graph_path);
     info!("Database pool created");
 
     // Create all repository instances as Arc<dyn Trait>
@@ -107,6 +126,8 @@ async fn main() -> Result<()> {
     let ref_repo: Arc<SqliteRefRepository> = Arc::new(SqliteRefRepository::new(pool.clone()));
     let settings_repo: Arc<SqliteSettingsRepository> =
         Arc::new(SqliteSettingsRepository::new(pool.clone()));
+    let graph_space_repo: Arc<SqliteGraphSpaceRepository> =
+        Arc::new(SqliteGraphSpaceRepository::new(pool.clone()));
     let tag_repo: Arc<SqliteTagRepository> = Arc::new(SqliteTagRepository::new(pool.clone()));
     let relation_repo: Arc<SqliteRelationRepository> =
         Arc::new(SqliteRelationRepository::new(pool.clone()));
@@ -192,6 +213,7 @@ async fn main() -> Result<()> {
         page_repo,
         ref_repo,
         settings_repo,
+        graph_space_repo,
         tag_repo,
         relation_repo,
         schema_repo,
@@ -203,9 +225,19 @@ async fn main() -> Result<()> {
     let projection_resolver = Arc::new(ProjectionResolver::new(StaticProjectionRegistry::v1()));
     let preset_registry: Arc<dyn PresetRegistry> = Arc::new(StaticPresetRegistry::v1());
 
-    let state =
-        AppState::new_with_repos(repos, search_service, search_index, ref_service, services,
-            projection_resolver, preset_registry);
+    let state = AppState::new_with_repos_and_agents_and_global(
+        repos,
+        search_service,
+        search_index,
+        ref_service,
+        services,
+        projection_resolver,
+        preset_registry,
+        None,
+        None,
+        Some(global_state_repo),
+        global_initial,
+    );
 
     // Create router
     let app = routes::create_app(state);
