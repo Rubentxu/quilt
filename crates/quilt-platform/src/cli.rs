@@ -140,6 +140,27 @@ pub enum Command {
         #[arg(short, long)]
         name: String,
     },
+    /// Scan a directory for markdown files to ingest (GS-9)
+    Scan {
+        /// Path to directory to scan
+        #[arg(short, long)]
+        path: String,
+        /// Recursive scan (default: true)
+        #[arg(short, long, default_value = "true")]
+        recursive: bool,
+    },
+    /// Ingest new pages from a scan plan (GS-9)
+    Ingest {
+        /// Path to the plan file (JSON)
+        #[arg(short, long)]
+        plan: String,
+    },
+    /// Re-index modified files from a directory (GS-9)
+    Reindex {
+        /// Path to directory to reindex
+        #[arg(short, long)]
+        path: String,
+    },
 }
 
 impl QuiltCLI {
@@ -164,6 +185,12 @@ impl QuiltCLI {
             }
             Command::ListPages => self.run_list_pages(&*services.page).await?,
             Command::PageInfo { name } => self.run_page_info(&*services.page, name).await?,
+            Command::Scan { path, recursive } => {
+                self.run_scan(&*services.migration, &path, *recursive)
+                    .await?
+            }
+            Command::Ingest { plan } => self.run_ingest(&*services.migration, &plan).await?,
+            Command::Reindex { path } => self.run_reindex(&*services.migration, &path).await?,
         }
         Ok(())
     }
@@ -327,6 +354,97 @@ impl QuiltCLI {
         );
         println!("  Pages: {}", snapshot.pages_count);
         println!("  Blocks: {}", snapshot.blocks_count);
+        Ok(())
+    }
+
+    async fn run_scan(
+        &self,
+        migration: &quilt_application::use_cases::MigrationUseCases,
+        path: &str,
+        recursive: bool,
+    ) -> Result<()> {
+        use quilt_application::migration::IngestionPlan;
+        use std::path::Path;
+
+        let depth = if recursive { u32::MAX } else { 1 };
+        let plan = migration.scan(Path::new(path), depth).await?;
+        println!("Scan results for: {}", path);
+        println!("  Total candidates: {}", plan.candidates.len());
+        println!(
+            "  New: {}",
+            plan.candidates
+                .iter()
+                .filter(|c| c.status == quilt_application::migration::CandidateStatus::New)
+                .count()
+        );
+        println!(
+            "  Modified: {}",
+            plan.candidates
+                .iter()
+                .filter(|c| c.status == quilt_application::migration::CandidateStatus::Modified)
+                .count()
+        );
+        println!(
+            "  Skipped: {}",
+            plan.candidates
+                .iter()
+                .filter(|c| c.status == quilt_application::migration::CandidateStatus::Skipped)
+                .count()
+        );
+
+        // Output plan as JSON for later use with `quilt ingest`
+        let json = serde_json::to_string_pretty(&plan)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize plan: {}", e))?;
+        println!("\n--- PLAN JSON ---");
+        println!("{}", json);
+        println!("--- END PLAN ---");
+        Ok(())
+    }
+
+    async fn run_ingest(
+        &self,
+        migration: &quilt_application::use_cases::MigrationUseCases,
+        plan_path: &str,
+    ) -> Result<()> {
+        use quilt_application::migration::IngestionPlan;
+
+        let json = std::fs::read_to_string(plan_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read plan file: {}", e))?;
+        let plan: IngestionPlan = serde_json::from_str(&json)
+            .map_err(|e| anyhow::anyhow!("Failed to parse plan: {}", e))?;
+
+        let result = migration.ingest(&plan).await?;
+        println!("Ingest complete:");
+        println!("  Pages created: {}", result.total_pages_created);
+        println!("  Blocks created: {}", result.total_blocks_created);
+        if !result.warnings.is_empty() {
+            println!("  Warnings:");
+            for w in &result.warnings {
+                println!("    - {}", w);
+            }
+        }
+        Ok(())
+    }
+
+    async fn run_reindex(
+        &self,
+        migration: &quilt_application::use_cases::MigrationUseCases,
+        path: &str,
+    ) -> Result<()> {
+        use std::path::Path;
+
+        // First scan to get the plan
+        let plan = migration.scan(Path::new(path), u32::MAX).await?;
+        let result = migration.reindex(&plan).await?;
+        println!("Reindex complete:");
+        println!("  Files updated: {}", result.total_updated);
+        println!("  Files skipped: {}", result.total_skipped);
+        if !result.warnings.is_empty() {
+            println!("  Warnings:");
+            for w in &result.warnings {
+                println!("    - {}", w);
+            }
+        }
         Ok(())
     }
 }

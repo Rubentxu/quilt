@@ -4,14 +4,15 @@
 //! all use cases through a single struct.
 
 use crate::use_cases::{
-    AnnotationUseCases, BlockUseCases, PageUseCases, ResourceUseCases, SearchUseCases,
-    TemplateUseCases, TourStateUseCases,
+    AnnotationUseCases, BlockUseCases, MigrationUseCases, PageUseCases, ResourceUseCases,
+    SearchUseCases, TemplateUseCases, TourStateUseCases,
 };
 use std::sync::Arc;
 
 /// Wired application services ready for use by presentation layers.
 ///
-/// All use cases are stored as `Arc<dyn Trait>` for dynamic dispatch.
+/// All use cases are stored as `Arc<dyn Trait>` for dynamic dispatch,
+/// except [`MigrationUseCases`] which is a concrete struct (GS-9).
 pub struct AppServices {
     /// Annotation use cases (create, list, update status, delete)
     pub annotation: Arc<dyn AnnotationUseCases>,
@@ -27,6 +28,8 @@ pub struct AppServices {
     pub template: Arc<dyn TemplateUseCases>,
     /// Tour state use cases (get/dismiss tours)
     pub tour_state: Arc<dyn TourStateUseCases>,
+    /// Migration use cases (scan, ingest, reindex) — GS-9
+    pub migration: Arc<MigrationUseCases>,
 }
 
 impl AppServices {
@@ -43,6 +46,7 @@ impl AppServices {
         resource: Arc<dyn ResourceUseCases>,
         template: Arc<dyn TemplateUseCases>,
         tour_state: Arc<dyn TourStateUseCases>,
+        migration: Arc<MigrationUseCases>,
     ) -> Self {
         Self {
             annotation,
@@ -52,6 +56,7 @@ impl AppServices {
             resource,
             template,
             tour_state,
+            migration,
         }
     }
 }

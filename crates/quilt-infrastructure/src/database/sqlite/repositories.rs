@@ -1202,6 +1202,26 @@ impl PageRepository for SqlitePageRepository {
             None => Ok(None),
         }
     }
+
+    async fn update_source_mtime_cas(
+        &self,
+        page_id: Uuid,
+        expected_mtime: chrono::DateTime<chrono::Utc>,
+        new_mtime: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, DomainError> {
+        let result = sqlx::query(
+            "UPDATE pages SET source_mtime = ?, updated_at = ? WHERE id = ? AND source_mtime = ?",
+        )
+        .bind(datetime_to_ts(&new_mtime))
+        .bind(datetime_to_ts(&Utc::now()))
+        .bind(uuid_to_blob(&page_id))
+        .bind(datetime_to_ts(&expected_mtime))
+        .execute(&self.pool)
+        .await
+        .map_err(|e| DomainError::Storage(format!("update_source_mtime_cas: {}", e)))?;
+
+        Ok(result.rows_affected() == 1)
+    }
 }
 
 // ── SqliteTagRepository ────────────────────────────────────────────────

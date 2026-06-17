@@ -241,6 +241,24 @@ impl PageRepository for InMemoryPageRepository {
             })
             .cloned())
     }
+
+    async fn update_source_mtime_cas(
+        &self,
+        page_id: Uuid,
+        expected_mtime: chrono::DateTime<chrono::Utc>,
+        new_mtime: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, DomainError> {
+        let mut pages = self.pages.write();
+        if let Some(page) = pages.get_mut(&page_id) {
+            if page.source_mtime == Some(expected_mtime) {
+                page.source_mtime = Some(new_mtime);
+                page.updated_at = chrono::Utc::now();
+                return Ok(true);
+            }
+            return Ok(false);
+        }
+        Err(DomainError::PageNotFound(page_id))
+    }
 }
 
 #[cfg(test)]

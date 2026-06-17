@@ -1,8 +1,14 @@
-//! Migration-related HTTP handlers
+//! Migration-related HTTP handlers (GS-9).
 //!
-//! Endpoints for importing Markdown files into Quilt.
+//! Endpoints for importing Markdown files into Quilt, scanning for candidates,
+//! and reindexing changed files.
 
-use axum::{Json, Router, extract::Extension, http::StatusCode, routing::post};
+use axum::{
+    Json, Router,
+    extract::{Extension, Query},
+    http::StatusCode,
+    routing::{get, post},
+};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,15 +16,22 @@ use std::sync::Arc;
 use tracing::instrument;
 
 use crate::error::AppError;
-use quilt_application::migration::MigrationEngine;
-use quilt_domain::repositories::{BlockRepository, PageRepository, PropertyRepository};
+use crate::state::AppState;
+use quilt_application::use_cases::MigrationUseCases;
+use quilt_platform::graph_validation::validate_graph_layout;
 
-/// Request body for POST /api/v1/migration/md
+// ── Request/Response DTOs ────────────────────────────────────────────────────
+
+/// Query params for GET /candidates
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportMdRequest {
-    /// Path to the directory containing Markdown files
-    pub path: String,
+pub struct CandidatesParams {
+    /// Sub-path within the graph root to scope the scan (relative path).
+    /// Defaults to the graph root itself (".").
+    pub path: Option<String>,
+    /// Maximum directory depth for the recursive scan.
+    /// Defaults to 8.
+    pub depth: Option<u32>,
 }
 
 /// Response for a single file import result
@@ -47,6 +60,14 @@ pub struct ImportMdResponse {
     pub warnings: Vec<String>,
 }
 
+/// Request body for POST /migration/reindex and refactored /migration/md
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MigrationPlanRequest {
+    /// The ingestion plan from a prior scan
+    pub plan: quilt_application::migration::IngestionPlan,
+}
+
 impl From<quilt_application::migration::ImportResult> for ImportResultDto {
     fn from(result: quilt_application::migration::ImportResult) -> Self {
         Self {
@@ -57,14 +78,35 @@ impl From<quilt_application::migration::ImportResult> for ImportResultDto {
     }
 }
 
-/// Validate a user-provided path against the vault base directory.
+// ── Graph Root Resolution ───────────────────────────────────────────────────
+
+/// Resolve the active graph root from AppState, or return 503.
+///
+/// Reads `state.last_opened_graph`, returns 503 if None.
+/// If a path exists, validates it via `validate_graph_layout` (ADR-0030 §6).
+/// Returns 422 if the layout is invalid.
+fn resolve_graph_root(state: &AppState) -> Result<PathBuf, AppError> {
+    let graph_path = state.last_opened_graph.blocking_read();
+    let path = graph_path
+        .as_ref()
+        .ok_or_else(|| AppError::ServiceUnavailable("No graph is currently open".into()))?;
+
+    // Validate the graph layout (ADR-0030 §6)
+    validate_graph_layout(path)?;
+
+    Ok(path.clone())
+}
+
+// ── Path Validation ────────────────────────────────────────────────────────
+
+/// Validate a user-provided path against the graph root.
 ///
 /// Security hardening for path traversal attacks:
 /// 1. Canonicalize the user path to resolve symlinks
-/// 2. Verify the canonical path is within the vault base
+/// 2. Verify the canonical path is within the graph root
 /// 3. Reject symlinks (DOS prevention and security)
 /// 4. Enforce a file count limit to prevent DOS
-fn validate_path(vault_base: &Path, user_path: &str) -> Result<PathBuf, AppError> {
+fn validate_path(graph_root: &Path, user_path: &str) -> Result<PathBuf, AppError> {
     // 1. Parse the user path
     let raw = PathBuf::from(user_path);
 
@@ -73,17 +115,17 @@ fn validate_path(vault_base: &Path, user_path: &str) -> Result<PathBuf, AppError
         .canonicalize()
         .map_err(|_| AppError::BadRequest("Path does not exist or is inaccessible".into()))?;
 
-    // 3. Verify the path is within the vault base
-    let base = vault_base
+    // 3. Verify the path is within the graph root
+    let base = graph_root
         .canonicalize()
-        .map_err(|_| AppError::Internal("Vault base path is invalid".into()))?;
+        .map_err(|_| AppError::Internal("Graph root path is invalid".into()))?;
     if !canonical.starts_with(&base) {
         return Err(AppError::BadRequest(
-            "Path is outside the allowed vault directory".into(),
+            "Path is outside the allowed graph directory".into(),
         ));
     }
 
-    // 4. Reject symlinks (security: prevent traversing symlinks outside vault)
+    // 4. Reject symlinks (security: prevent traversing symlinks outside graph)
     let metadata = fs::symlink_metadata(&canonical)
         .map_err(|_| AppError::Internal("Cannot read path metadata".into()))?;
     if metadata.file_type().is_symlink() {
@@ -107,71 +149,138 @@ fn validate_path(vault_base: &Path, user_path: &str) -> Result<PathBuf, AppError
     Ok(canonical)
 }
 
-/// Get the vault base directory.
+// ── Handlers ───────────────────────────────────────────────────────────────
+
+/// `GET /api/v1/migration/candidates`
 ///
-/// Uses QUILT_VAULT_BASE environment variable, defaulting to the current directory.
-fn get_vault_base() -> PathBuf {
-    std::env::var("QUILT_VAULT_BASE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("."))
-}
-
-/// POST /api/v1/migration/md
+/// Perform a read-only scan of the graph directory for `.md` files
+/// and return an ingestion plan with per-file status (new/modified/skipped).
 ///
-/// Import Markdown files from a directory into Quilt.
-///
-/// The directory should contain `.md` files in Quilt format.
-/// Each file becomes a page, and nested blocks are preserved.
-#[instrument(skip(page_repo, block_repo, property_repo))]
-pub async fn migrate_md_import(
-    Extension(page_repo): Extension<Arc<dyn PageRepository>>,
-    Extension(block_repo): Extension<Arc<dyn BlockRepository>>,
-    Extension(property_repo): Extension<Arc<dyn PropertyRepository>>,
-    Json(body): Json<ImportMdRequest>,
-) -> Result<(StatusCode, Json<ImportMdResponse>), AppError> {
-    let vault_base = get_vault_base();
-    let path = validate_path(&vault_base, &body.path)?;
+/// Returns 503 if no graph is open.
+/// Returns 422 if the graph layout is invalid.
+/// Returns 400 if the path escapes the graph root.
+#[instrument(skip(state))]
+pub async fn candidates(
+    Extension(state): Extension<Arc<AppState>>,
+    Query(params): Query<CandidatesParams>,
+) -> Result<Json<quilt_application::migration::IngestionPlan>, AppError> {
+    let graph_root = resolve_graph_root(&state)?;
 
-    if !path.is_dir() {
-        return Err(AppError::BadRequest(format!(
-            "Path is not a directory: {}",
-            body.path
-        )));
-    }
+    // Resolve the sub-path (defaults to graph root itself)
+    let scan_path = match &params.path {
+        Some(p) if p != "." => {
+            let resolved = validate_path(&graph_root, p)?;
+            // Further scope to the requested subdirectory
+            if !resolved.is_dir() {
+                return Err(AppError::BadRequest(format!(
+                    "Path is not a directory: {}",
+                    p
+                )));
+            }
+            resolved
+        }
+        _ => graph_root.clone(),
+    };
 
-    // Create migration engine with injected repositories
-    let engine = MigrationEngine::new(page_repo, block_repo, property_repo);
+    let depth = params.depth.unwrap_or(8);
 
-    // Import all files from directory
-    let results = engine
-        .import_directory(&path)
+    // Build MigrationUseCases from repos
+    let use_cases = MigrationUseCases::new(
+        state.repos.page.clone(),
+        state.repos.block.clone(),
+        state.repos.property.clone(),
+    );
+
+    let plan = use_cases
+        .scan(&scan_path, depth)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    // Convert results to DTOs
-    let result_dtos: Vec<ImportResultDto> =
-        results.into_iter().map(ImportResultDto::from).collect();
+    Ok(Json(plan))
+}
 
-    // Calculate totals
-    let total_pages_created: usize = result_dtos.iter().map(|r| r.pages_created).sum();
-    let total_blocks_created: usize = result_dtos.iter().map(|r| r.blocks_created).sum();
-    let warnings: Vec<String> = result_dtos
-        .iter()
-        .flat_map(|r| r.warnings.clone())
+/// `POST /api/v1/migration/md`
+///
+/// Ingest NEW pages from an approved ingestion plan.
+///
+/// This endpoint only processes candidates with status "new".
+/// Candidates with status "modified" or "skipped" are ignored.
+///
+/// Returns 503 if no graph is open.
+/// Returns 422 if the graph layout is invalid.
+#[instrument(skip(state))]
+pub async fn migrate_md_import(
+    Extension(state): Extension<Arc<AppState>>,
+    Json(body): Json<MigrationPlanRequest>,
+) -> Result<(StatusCode, Json<ImportMdResponse>), AppError> {
+    let _graph_root = resolve_graph_root(&state)?;
+
+    let use_cases = MigrationUseCases::new(
+        state.repos.page.clone(),
+        state.repos.block.clone(),
+        state.repos.property.clone(),
+    );
+
+    let result = use_cases
+        .ingest(&body.plan)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let results: Vec<ImportResultDto> = result
+        .results
+        .into_iter()
+        .map(|e| ImportResultDto {
+            pages_created: e.pages_created,
+            blocks_created: e.blocks_created,
+            warnings: e.warning.into_iter().collect(),
+        })
         .collect();
 
     Ok((
         StatusCode::OK,
         Json(ImportMdResponse {
-            results: result_dtos,
-            total_pages_created,
-            total_blocks_created,
-            warnings,
+            total_pages_created: result.total_pages_created,
+            total_blocks_created: result.total_blocks_created,
+            warnings: result.warnings,
+            results,
         }),
     ))
 }
 
+/// `POST /api/v1/migration/reindex`
+///
+/// Reindex MODIFIED pages from an approved ingestion plan.
+///
+/// This endpoint only processes candidates with status "modified".
+/// Candidates with status "new" or "skipped" are ignored.
+///
+/// Returns 503 if no graph is open.
+/// Returns 422 if the graph layout is invalid.
+#[instrument(skip(state))]
+pub async fn reindex(
+    Extension(state): Extension<Arc<AppState>>,
+    Json(body): Json<MigrationPlanRequest>,
+) -> Result<Json<quilt_application::migration::ReindexResult>, AppError> {
+    let _graph_root = resolve_graph_root(&state)?;
+
+    let use_cases = MigrationUseCases::new(
+        state.repos.page.clone(),
+        state.repos.block.clone(),
+        state.repos.property.clone(),
+    );
+
+    let result = use_cases
+        .reindex(&body.plan)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    Ok(Json(result))
+}
+
 /// Create router for /api/v1/migration
 pub fn routes() -> Router {
-    Router::new().route("/md", post(migrate_md_import))
+    Router::new()
+        .route("/candidates", get(candidates))
+        .route("/md", post(migrate_md_import))
+        .route("/reindex", post(reindex))
 }

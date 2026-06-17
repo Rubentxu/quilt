@@ -28,9 +28,10 @@ use quilt_application::services::projection::StaticProjectionRegistry;
 use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_application::use_cases::{
-    AnnotationUseCases, AnnotationUseCasesImpl, BlockUseCases, BlockUseCasesImpl, PageUseCases,
-    PageUseCasesImpl, ResourceUseCases, ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases,
-    TemplateUseCasesImpl, TourStateUseCases, TourStateUseCasesImpl,
+    AnnotationUseCases, AnnotationUseCasesImpl, BlockUseCases, BlockUseCasesImpl,
+    MigrationUseCases, PageUseCases, PageUseCasesImpl, ResourceUseCases, ResourceUseCasesImpl,
+    SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl, TourStateUseCases,
+    TourStateUseCasesImpl,
 };
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
@@ -178,6 +179,13 @@ async fn main() -> Result<()> {
             .with_block_repo(block_repo.clone()),
     );
 
+    // MigrationUseCases (GS-9) — concrete struct, not a trait
+    let migration_use_cases = Arc::new(MigrationUseCases::new(
+        page_repo.clone(),
+        block_repo.clone(),
+        property_repo.clone(),
+    ));
+
     let services = AppServices::new(
         annotation_use_cases,
         block_use_cases,
@@ -186,6 +194,7 @@ async fn main() -> Result<()> {
         resource_use_cases,
         template_use_cases,
         tour_state_use_cases,
+        migration_use_cases,
     );
     let services = Arc::new(services);
 

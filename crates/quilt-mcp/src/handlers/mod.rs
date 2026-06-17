@@ -52,6 +52,7 @@ pub trait ResourceProvider: Send + Sync {
 
 pub mod block;
 pub mod graph;
+pub mod migration;
 pub mod page;
 pub mod properties;
 pub mod query;

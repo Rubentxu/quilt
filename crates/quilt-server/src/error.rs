@@ -35,6 +35,11 @@ pub enum AppError {
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
+    /// 503 Service Unavailable — no graph is currently open
+    /// (GS-9: migration endpoints require an active graph).
+    #[error("Service unavailable: {0}")]
+    ServiceUnavailable(String),
+
     /// 422 Unprocessable Entity — the request was well-formed but
     /// the Graph Space layout is invalid (ADR-0030 §6).
     /// Per the design this is the dedicated code path for
@@ -77,6 +82,11 @@ impl IntoResponse for AppError {
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "BAD_REQUEST", msg.clone()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "CONFLICT", msg.clone()),
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED", msg.clone()),
+            AppError::ServiceUnavailable(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "SERVICE_UNAVAILABLE",
+                msg.clone(),
+            ),
             AppError::Internal(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",

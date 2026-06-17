@@ -10,9 +10,9 @@ use quilt_application::services::ref_service::{RefService, RefServiceTrait};
 use quilt_application::use_cases::annotation::{AnnotationUseCases, AnnotationUseCasesImpl};
 use quilt_application::use_cases::projection_resolver::ProjectionResolver;
 use quilt_application::use_cases::{
-    BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
-    ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
-    TourStateUseCases, TourStateUseCasesImpl,
+    BlockUseCases, BlockUseCasesImpl, MigrationUseCases, PageUseCases, PageUseCasesImpl,
+    ResourceUseCases, ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases,
+    TemplateUseCasesImpl, TourStateUseCases, TourStateUseCasesImpl,
 };
 use quilt_domain::canonicalization::PresetRegistry;
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
@@ -119,6 +119,13 @@ pub async fn build_test_app_state_with_repos(
             .with_block_repo(block_repo.clone()),
     );
 
+    // MigrationUseCases (GS-9) — concrete struct
+    let migration_use_cases = Arc::new(MigrationUseCases::new(
+        page_repo.clone(),
+        block_repo.clone(),
+        property_repo.clone(),
+    ));
+
     let services = AppServices::new(
         annotation_use_cases,
         block_use_cases,
@@ -127,6 +134,7 @@ pub async fn build_test_app_state_with_repos(
         resource_use_cases,
         template_use_cases,
         tour_state_use_cases,
+        migration_use_cases,
     );
 
     // Bundle all repositories

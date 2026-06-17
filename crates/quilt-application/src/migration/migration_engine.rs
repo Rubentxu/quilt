@@ -2,15 +2,19 @@
 //!
 //! Currently supports Markdown-flavored files (Quilt format).
 
+use crate::migration::{
+    CandidateStatus, IngestResultEntry, IngestionCandidate, ReindexResultEntry,
+};
 use crate::migration::{RawBlock, parse_md_import};
 use quilt_domain::entities::{Block, BlockCreate, Page, PageCreate};
 use quilt_domain::properties::resolver::PropertyKeyResolver;
 use quilt_domain::repositories::{BlockRepository, PageRepository, PropertyRepository};
 use quilt_domain::value_objects::{BlockFormat, BlockType, PropertyValue, Uuid};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::instrument;
+use walkdir::WalkDir;
 
 /// Result of a successful import operation.
 #[derive(Debug, Clone)]
@@ -37,6 +41,18 @@ pub enum MigrationError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Parse error: {0}")]
+    Parse(String),
+
+    #[error("Concurrent modification detected for {0}; reindex skipped")]
+    ConcurrentModification(String),
+}
+
+impl From<quilt_domain::errors::DomainError> for MigrationError {
+    fn from(e: quilt_domain::errors::DomainError) -> Self {
+        MigrationError::Import(e.to_string())
+    }
 }
 
 /// Migration engine - non-generic, uses trait objects for dependency injection.
@@ -66,7 +82,19 @@ impl MigrationEngine {
         source: &str,
         page_name: &str,
     ) -> Result<ImportResult, MigrationError> {
-        // Check if page already exists
+        self.import_file_with_source(source, page_name, None, None)
+            .await
+    }
+
+    /// Import a single Markdown file with optional source tracking (GS-9).
+    pub async fn import_file_with_source(
+        &self,
+        source: &str,
+        page_name: &str,
+        source_path: Option<PathBuf>,
+        source_mtime: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<ImportResult, MigrationError> {
+        // Check if page already exists by name
         if let Ok(Some(_)) = self.page_repo.get_by_name(page_name).await {
             return Ok(ImportResult {
                 pages_created: 0,
@@ -77,7 +105,7 @@ impl MigrationEngine {
 
         // Parse the Markdown import
         let (frontmatter, raw_blocks) =
-            parse_md_import(source).map_err(|e| MigrationError::Import(e.to_string()))?;
+            parse_md_import(source).map_err(|e| MigrationError::Parse(e.to_string()))?;
 
         // Create the page
         let page_id = Uuid::new_v4();
@@ -93,11 +121,8 @@ impl MigrationEngine {
             format: BlockFormat::Markdown,
             file_id: None,
             properties: std::collections::HashMap::new(),
-            // source_path and source_mtime are set by the use-case layer
-            // when called via scan→ingest flow (GS-9); the legacy import_file
-            // path doesn't have access to this metadata.
-            source_path: None,
-            source_mtime: None,
+            source_path,
+            source_mtime,
         };
         let page = Page::new(page_create).map_err(|e| MigrationError::Import(e.to_string()))?;
 
@@ -119,7 +144,7 @@ impl MigrationEngine {
         })
     }
 
-    /// Import all Markdown files from a directory.
+    /// Import all Markdown files from a directory (legacy non-recursive).
     #[instrument(skip(self))]
     pub async fn import_directory(
         &self,
@@ -154,6 +179,327 @@ impl MigrationEngine {
         }
 
         Ok(results)
+    }
+
+    /// Recursively scan a directory for `.md` files and classify each as
+    /// new/modified/skipped (GS-9 scan_directory).
+    ///
+    /// Skips:
+    /// - Hidden directories (names starting with `.`)
+    /// - `.quilt/` directory (contains quilt.db and metadata)
+    /// - Symlinks (security: prevent traversal outside graph root)
+    /// - Non-`.md` files
+    ///
+    /// Respects `depth_limit` (default 8). File cap is 10,000.
+    #[instrument(skip(self))]
+    pub async fn scan_directory(
+        &self,
+        graph_root: &Path,
+        depth_limit: u32,
+    ) -> Result<Vec<IngestionCandidate>, MigrationError> {
+        let mut candidates = Vec::new();
+        let mut file_count = 0u64;
+        const MAX_FILES: u64 = 10_000;
+
+        for entry in WalkDir::new(graph_root)
+            .max_depth(depth_limit as usize)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|e| {
+                // Skip .quilt/ directory
+                if e.path().components().any(|c| c.as_os_str() == ".quilt") {
+                    return false;
+                }
+                true
+            })
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+
+            // Skip directories
+            if path.is_dir() {
+                continue;
+            }
+
+            // Skip hidden files
+            if let Some(name) = path.file_name() {
+                if name.to_string_lossy().starts_with('.') {
+                    continue;
+                }
+            }
+
+            // Skip non-.md files
+            if path.extension().and_then(|s| s.to_str()) != Some("md") {
+                continue;
+            }
+
+            // Reject symlinks
+            match entry.metadata() {
+                Ok(meta) if meta.file_type().is_symlink() => continue,
+                Err(_) => continue,
+                _ => {}
+            }
+
+            file_count += 1;
+            if file_count > MAX_FILES {
+                return Err(MigrationError::InvalidPath(format!(
+                    "Directory contains too many files ({} > {})",
+                    file_count, MAX_FILES
+                )));
+            }
+
+            // Compute relative path from graph_root
+            let source_path = path
+                .strip_prefix(graph_root)
+                .unwrap_or(path)
+                .to_string_lossy()
+                .replace('\\', "/"); // Normalize to POSIX
+
+            // Get file mtime
+            let source_mtime = entry
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
+                .map(|dt| dt.with_timezone(&chrono::Utc));
+
+            // Classify the candidate
+            let status = self.classify_candidate(&source_path, source_mtime).await?;
+            let stored_mtime = self
+                .page_repo
+                .get_by_source_path(&source_path)
+                .await?
+                .and_then(|p| p.source_mtime);
+
+            candidates.push(IngestionCandidate {
+                source_path,
+                status,
+                source_mtime,
+                stored_mtime,
+            });
+        }
+
+        Ok(candidates)
+    }
+
+    /// Classify a candidate by comparing file mtime against stored mtime.
+    async fn classify_candidate(
+        &self,
+        source_path: &str,
+        file_mtime: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<CandidateStatus, MigrationError> {
+        match self.page_repo.get_by_source_path(source_path).await? {
+            Some(page) => {
+                let stored_mtime = page.source_mtime;
+                match (file_mtime, stored_mtime) {
+                    (Some(fm), Some(sm)) if fm > sm => Ok(CandidateStatus::Modified),
+                    _ => Ok(CandidateStatus::Skipped),
+                }
+            }
+            None => Ok(CandidateStatus::New),
+        }
+    }
+
+    /// Reindex a single file: delete existing blocks, re-parse, re-insert,
+    /// and update source_mtime with optimistic CAS (GS-9).
+    #[instrument(skip(self))]
+    pub async fn reindex_file(
+        &self,
+        source_path: &str,
+        expected_stored_mtime: chrono::DateTime<chrono::Utc>,
+    ) -> Result<ReindexResultEntry, MigrationError> {
+        // Load page by source_path
+        let page = self
+            .page_repo
+            .get_by_source_path(source_path)
+            .await?
+            .ok_or_else(|| {
+                MigrationError::InvalidPath(format!(
+                    "No ingested page found for source_path: {}",
+                    source_path
+                ))
+            })?;
+
+        // Read the file
+        let full_path = PathBuf::from(source_path);
+        let file_mtime = std::fs::metadata(&full_path)
+            .and_then(|m| m.modified())
+            .map(|t| chrono::DateTime::<chrono::Utc>::from(t))
+            .map(|dt| dt.with_timezone(&chrono::Utc))
+            .map_err(|e| MigrationError::Io(e))?;
+
+        // Skip if file mtime hasn't changed
+        if file_mtime <= expected_stored_mtime {
+            return Ok(ReindexResultEntry {
+                source_path: source_path.to_string(),
+                status: "skipped".to_string(),
+                blocks_updated: 0,
+                warning: Some("file mtime unchanged".to_string()),
+            });
+        }
+
+        // Parse the file
+        let source = std::fs::read_to_string(&full_path).map_err(|e| MigrationError::Io(e))?;
+        let (frontmatter, raw_blocks) =
+            parse_md_import(&source).map_err(|e| MigrationError::Parse(e.to_string()))?;
+
+        // Delete existing blocks for this page
+        let existing_blocks = self
+            .block_repo
+            .get_by_page(page.id)
+            .await
+            .map_err(|e| MigrationError::Import(e.to_string()))?;
+        for block in existing_blocks {
+            self.block_repo
+                .delete(block.id)
+                .await
+                .map_err(|e| MigrationError::Import(e.to_string()))?;
+        }
+
+        // Create new blocks
+        let resolver = PropertyKeyResolver::new(self.property_repo.clone());
+        let blocks_updated =
+            create_blocks_from_raw(self.block_repo.as_ref(), &resolver, &raw_blocks, page.id)
+                .await?;
+
+        // CAS update source_mtime - if another reindex raced, this will fail
+        let updated = self
+            .page_repo
+            .update_source_mtime_cas(page.id, expected_stored_mtime, file_mtime)
+            .await
+            .map_err(|e| MigrationError::Import(e.to_string()))?;
+
+        if !updated {
+            return Err(MigrationError::ConcurrentModification(
+                source_path.to_string(),
+            ));
+        }
+
+        Ok(ReindexResultEntry {
+            source_path: source_path.to_string(),
+            status: "updated".to_string(),
+            blocks_updated,
+            warning: None,
+        })
+    }
+
+    /// Ingest a single candidate from a plan (GS-9).
+    #[instrument(skip(self))]
+    pub async fn ingest_candidate(
+        &self,
+        candidate: &IngestionCandidate,
+        graph_root: &Path,
+    ) -> Result<IngestResultEntry, MigrationError> {
+        let full_path = graph_root.join(&candidate.source_path);
+
+        // Check if page already exists by name
+        let page_name = candidate
+            .source_path
+            .trim_end_matches(".md")
+            .split('/')
+            .last()
+            .unwrap_or(&candidate.source_path)
+            .to_string();
+
+        if self.page_repo.get_by_name(&page_name).await?.is_some() {
+            return Ok(IngestResultEntry {
+                source_path: candidate.source_path.clone(),
+                status: "skipped".to_string(),
+                pages_created: 0,
+                blocks_created: 0,
+                warning: Some("page already exists".to_string()),
+            });
+        }
+
+        // Read the file
+        let source = match std::fs::read_to_string(&full_path) {
+            Ok(s) => s,
+            Err(e) => {
+                return Ok(IngestResultEntry {
+                    source_path: candidate.source_path.clone(),
+                    status: "error".to_string(),
+                    pages_created: 0,
+                    blocks_created: 0,
+                    warning: Some(format!("failed to read file: {}", e)),
+                });
+            }
+        };
+
+        // Parse
+        let raw_blocks = match parse_md_import(&source) {
+            Ok((_, blocks)) => blocks,
+            Err(e) => {
+                return Ok(IngestResultEntry {
+                    source_path: candidate.source_path.clone(),
+                    status: "error".to_string(),
+                    pages_created: 0,
+                    blocks_created: 0,
+                    warning: Some(format!("parse error: {}", e)),
+                });
+            }
+        };
+
+        // Create page with source tracking
+        let page_id = Uuid::new_v4();
+        let page_create = PageCreate {
+            name: page_name,
+            title: None,
+            namespace_id: None,
+            journal_day: None,
+            format: BlockFormat::Markdown,
+            file_id: None,
+            properties: std::collections::HashMap::new(),
+            source_path: Some(PathBuf::from(&candidate.source_path)),
+            source_mtime: candidate.source_mtime,
+        };
+        let page = match Page::new(page_create) {
+            Ok(p) => p,
+            Err(e) => {
+                return Ok(IngestResultEntry {
+                    source_path: candidate.source_path.clone(),
+                    status: "error".to_string(),
+                    pages_created: 0,
+                    blocks_created: 0,
+                    warning: Some(format!("page creation error: {}", e)),
+                });
+            }
+        };
+
+        if let Err(e) = self.page_repo.insert(&page).await {
+            return Ok(IngestResultEntry {
+                source_path: candidate.source_path.clone(),
+                status: "error".to_string(),
+                pages_created: 0,
+                blocks_created: 0,
+                warning: Some(format!("insert error: {}", e)),
+            });
+        }
+
+        // Create blocks
+        let resolver = PropertyKeyResolver::new(self.property_repo.clone());
+        let blocks_created =
+            match create_blocks_from_raw(self.block_repo.as_ref(), &resolver, &raw_blocks, page.id)
+                .await
+            {
+                Ok(n) => n,
+                Err(e) => {
+                    return Ok(IngestResultEntry {
+                        source_path: candidate.source_path.clone(),
+                        status: "error".to_string(),
+                        pages_created: 0,
+                        blocks_created: 0,
+                        warning: Some(format!("blocks creation error: {}", e)),
+                    });
+                }
+            };
+
+        Ok(IngestResultEntry {
+            source_path: candidate.source_path.clone(),
+            status: "created".to_string(),
+            pages_created: 1,
+            blocks_created,
+            warning: None,
+        })
     }
 }
 

@@ -43,8 +43,14 @@ pub use errors::ApplicationError;
 // Use case traits (re-exported for convenience)
 pub use use_cases::{
     AnnotationDto, AnnotationUseCases, BlockDto, BlockTree, BlockUseCases, GraphSnapshot,
-    JournalSummary, PageSummary, PageUseCases, PageWithBlocks, QueryPlan, ResourceUseCases,
-    SearchResult, SearchUseCases, TagSummary,
+    JournalSummary, MigrationUseCases, PageSummary, PageUseCases, PageWithBlocks, QueryPlan,
+    ResourceUseCases, SearchResult, SearchUseCases, TagSummary,
+};
+
+// Migration VOs (GS-9)
+pub use migration::{
+    CandidateStatus, IngestResult, IngestResultEntry, IngestionCandidate, IngestionPlan,
+    PlanSummary, ReindexResult, ReindexResultEntry,
 };
 
 // Domain types re-exported for use by presentation layers (MCP, REST)

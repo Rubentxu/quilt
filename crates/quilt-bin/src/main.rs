@@ -6,7 +6,12 @@ use anyhow::Result;
 use clap::Parser;
 use quilt_application::bootstrap::AppServices;
 use quilt_application::services::ref_service::RefService;
-use quilt_application::use_cases::*;
+use quilt_application::use_cases::{
+    AnnotationUseCases, AnnotationUseCasesImpl, BlockUseCases, BlockUseCasesImpl,
+    MigrationUseCases, PageUseCases, PageUseCasesImpl, ResourceUseCases, ResourceUseCasesImpl,
+    SearchUseCases, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl, TourStateUseCases,
+    TourStateUseCasesImpl,
+};
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;
 use quilt_infrastructure::database::sqlite::connection;
 use quilt_infrastructure::database::sqlite::repositories::*;
@@ -46,6 +51,14 @@ async fn main() -> Result<()> {
     let ref_repo = Arc::new(SqliteRefRepository::new(pool.clone()));
     let ref_service = Arc::new(RefService::new(ref_repo));
     let tour_state_repo = Arc::new(SqliteTourStateRepository::new(pool.clone()));
+    let property_repo = Arc::new(SqlitePropertyRepository::new(pool.clone()));
+
+    // MigrationUseCases (GS-9) — concrete struct, not a trait
+    let migration_use_cases = Arc::new(MigrationUseCases::new(
+        page_repo.clone(),
+        block_repo.clone(),
+        property_repo,
+    ));
 
     let services = AppServices::new(
         Arc::new(AnnotationUseCasesImpl::new(annotation_repo)),
@@ -67,6 +80,7 @@ async fn main() -> Result<()> {
         )),
         Arc::new(TemplateUseCasesImpl::new(page_repo, block_repo)),
         Arc::new(TourStateUseCasesImpl::new(tour_state_repo)),
+        migration_use_cases,
     );
 
     // Presentation receives pre-wired services

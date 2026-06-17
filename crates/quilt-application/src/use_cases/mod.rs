@@ -18,6 +18,7 @@ pub mod annotation;
 pub mod apply_preset;
 pub mod block;
 pub mod dtos;
+pub mod migration;
 pub mod page;
 pub mod projection_resolver;
 pub mod resource;
@@ -30,6 +31,7 @@ pub use annotation::{AnnotationUseCases, AnnotationUseCasesImpl};
 pub use apply_preset::ApplyPreset;
 pub use block::{BlockTree, BlockUseCases, BlockUseCasesImpl};
 pub use dtos::{AnnotationDto, BlockDto};
+pub use migration::MigrationUseCases;
 pub use page::{PageUseCases, PageUseCasesImpl, PageWithBlocks};
 pub use resource::{
     GraphSnapshot, JournalSummary, PageSummary, ResourceUseCases, ResourceUseCasesImpl, TagSummary,

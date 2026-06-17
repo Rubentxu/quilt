@@ -83,6 +83,21 @@ pub trait PageRepository: Send + Sync {
     /// Returns the page whose `source_path` matches the given relative path,
     /// or `None` if no ingested page has this source path.
     async fn get_by_source_path(&self, source_path: &str) -> Result<Option<Page>, DomainError>;
+
+    /// Optimistic CAS update of `source_mtime` for a page (GS-9: reindex).
+    ///
+    /// Updates `source_mtime` to `new_mtime` only if the current stored value
+    /// equals `expected_mtime`. Returns `true` if exactly one row was updated,
+    /// `false` if the expected value didn't match (concurrent modification).
+    ///
+    /// This enables safe concurrent reindex: if two reindex requests race,
+    /// the second one sees the updated mtime and skips.
+    async fn update_source_mtime_cas(
+        &self,
+        page_id: Uuid,
+        expected_mtime: chrono::DateTime<chrono::Utc>,
+        new_mtime: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, DomainError>;
 }
 
 /// PageRepositoryExt provides additional convenience methods
@@ -189,5 +204,16 @@ impl<T: PageRepository + ?Sized> PageRepository for Arc<T> {
 
     async fn get_by_source_path(&self, source_path: &str) -> Result<Option<Page>, DomainError> {
         self.as_ref().get_by_source_path(source_path).await
+    }
+
+    async fn update_source_mtime_cas(
+        &self,
+        page_id: Uuid,
+        expected_mtime: chrono::DateTime<chrono::Utc>,
+        new_mtime: chrono::DateTime<chrono::Utc>,
+    ) -> Result<bool, DomainError> {
+        self.as_ref()
+            .update_source_mtime_cas(page_id, expected_mtime, new_mtime)
+            .await
     }
 }

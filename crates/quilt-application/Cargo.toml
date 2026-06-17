@@ -25,6 +25,7 @@ tracing.workspace = true
 uuid.workspace = true
 url.workspace = true
 parking_lot.workspace = true
+walkdir.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true

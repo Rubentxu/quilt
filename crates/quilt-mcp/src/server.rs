@@ -209,10 +209,11 @@ impl McpServer {
 mod tests {
     use super::*;
     use crate::handlers::{
-        block::BlockToolHandler, graph::GraphToolHandler, page::PageToolHandler,
-        properties::PropertyToolHandler, query::QueryToolHandler, relations::RelationHandler,
-        resource::GraphResourceProvider, retrieval::RetrievalToolHandler, schemas::SchemaHandler,
-        system::SystemToolHandler, template::TemplateToolHandler, temporal::TemporalToolHandler,
+        block::BlockToolHandler, graph::GraphToolHandler, migration::MigrationToolHandler,
+        page::PageToolHandler, properties::PropertyToolHandler, query::QueryToolHandler,
+        relations::RelationHandler, resource::GraphResourceProvider,
+        retrieval::RetrievalToolHandler, schemas::SchemaHandler, system::SystemToolHandler,
+        template::TemplateToolHandler, temporal::TemporalToolHandler,
     };
     use quilt_application::property::{PropertyService, PropertyServiceTrait};
     use quilt_application::services::ref_service::{RefService, RefServiceTrait};
@@ -222,6 +223,7 @@ mod tests {
     use quilt_application::templates::reapply::{
         ReapplyTemplateUseCase, ReapplyTemplateUseCaseImpl,
     };
+    use quilt_application::use_cases::MigrationUseCases;
     use quilt_application::use_cases::{
         BlockUseCases, BlockUseCasesImpl, PageUseCases, PageUseCasesImpl, ResourceUseCases,
         ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl,
@@ -308,6 +310,14 @@ mod tests {
             Arc::new(SqliteSchemaRepository::new(pool.clone())),
             Arc::new(SqlitePropertyRepository::new(pool.clone())),
         ));
+        let property_repo: Arc<dyn quilt_domain::repositories::PropertyRepository> =
+            Arc::new(SqlitePropertyRepository::new(pool.clone()));
+        let migration_use_cases = Arc::new(MigrationUseCases::new(
+            page_repo.clone(),
+            block_repo.clone(),
+            property_repo,
+        ));
+        let migration_handler = MigrationToolHandler::new(migration_use_cases);
         let resource_provider = GraphResourceProvider::new(resource_use_cases);
 
         let server = McpServer::new(
@@ -325,6 +335,7 @@ mod tests {
                     SqliteRelationRepository::new(pool.clone()),
                 ))),
                 Box::new(system_handler),
+                Box::new(migration_handler),
             ],
             vec![Box::new(resource_provider)],
         );
@@ -381,7 +392,8 @@ mod tests {
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                assert_eq!(result.tools.len(), 30);
+                // MigrationToolHandler: quilt_scan_directory, quilt_ingest_markdown, quilt_reindex (3) — GS-9
+                assert_eq!(result.tools.len(), 33);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
                 assert!(
@@ -439,6 +451,20 @@ mod tests {
                         .iter()
                         .any(|t| t.name == "quilt_get_query_capabilities")
                 );
+                // Migration tools (GS-9)
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_scan_directory")
+                );
+                assert!(
+                    result
+                        .tools
+                        .iter()
+                        .any(|t| t.name == "quilt_ingest_markdown")
+                );
+                assert!(result.tools.iter().any(|t| t.name == "quilt_reindex"));
             }
             _ => panic!("Expected ToolsList response"),
         }
