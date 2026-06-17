@@ -392,7 +392,7 @@ mod tests {
                 // TemporalToolHandler: quilt_query_temporal (1) — G3
                 // GraphToolHandler: quilt_graph_edges (1) — G4
                 // SystemToolHandler: quilt_list_property_types, quilt_get_query_capabilities (2)
-                // MigrationToolHandler: quilt_scan_directory, quilt_ingest_markdown, quilt_reindex (3) — GS-9
+                // MigrationToolHandler: quilt_migration_scan, quilt_migration_ingest, quilt_migration_reindex (3) — GS-9
                 assert_eq!(result.tools.len(), 33);
                 assert!(result.tools.iter().any(|t| t.name == "quilt_search"));
                 assert!(result.tools.iter().any(|t| t.name == "quilt_create_block"));
@@ -456,15 +456,15 @@ mod tests {
                     result
                         .tools
                         .iter()
-                        .any(|t| t.name == "quilt_scan_directory")
+                        .any(|t| t.name == "quilt_migration_scan")
                 );
                 assert!(
                     result
                         .tools
                         .iter()
-                        .any(|t| t.name == "quilt_ingest_markdown")
+                        .any(|t| t.name == "quilt_migration_ingest")
                 );
-                assert!(result.tools.iter().any(|t| t.name == "quilt_reindex"));
+                assert!(result.tools.iter().any(|t| t.name == "quilt_migration_reindex"));
             }
             _ => panic!("Expected ToolsList response"),
         }

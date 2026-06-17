@@ -74,6 +74,31 @@ impl QuiltCLI {
 }
 
 #[derive(Subcommand)]
+pub enum MigrateCommand {
+    /// Scan the graph directory for Markdown files (GS-9)
+    Scan {
+        /// Path within graph to scan (default: graph root)
+        #[arg(short, long, default_value = ".")]
+        path: String,
+        /// Recursive scan depth (default: 8)
+        #[arg(short, long, default_value = "8")]
+        depth: usize,
+    },
+    /// Ingest new pages from a scan plan (GS-9)
+    Ingest {
+        /// Path to the plan file (JSON)
+        #[arg(short, long)]
+        plan: String,
+    },
+    /// Re-index modified files (GS-9)
+    Reindex {
+        /// Path to the plan file (JSON)
+        #[arg(short, long)]
+        plan: String,
+    },
+}
+
+#[derive(Subcommand)]
 pub enum Command {
     /// Initialize a new graph database
     Init {
@@ -140,26 +165,10 @@ pub enum Command {
         #[arg(short, long)]
         name: String,
     },
-    /// Scan a directory for markdown files to ingest (GS-9)
-    Scan {
-        /// Path to directory to scan
-        #[arg(short, long)]
-        path: String,
-        /// Recursive scan (default: true)
-        #[arg(short, long, default_value = "true")]
-        recursive: bool,
-    },
-    /// Ingest new pages from a scan plan (GS-9)
-    Ingest {
-        /// Path to the plan file (JSON)
-        #[arg(short, long)]
-        plan: String,
-    },
-    /// Re-index modified files from a directory (GS-9)
-    Reindex {
-        /// Path to directory to reindex
-        #[arg(short, long)]
-        path: String,
+    /// Scan and ingest Markdown files from the graph directory (GS-9)
+    Migrate {
+        #[command(subcommand)]
+        action: MigrateCommand,
     },
 }
 
@@ -185,12 +194,17 @@ impl QuiltCLI {
             }
             Command::ListPages => self.run_list_pages(&*services.page).await?,
             Command::PageInfo { name } => self.run_page_info(&*services.page, name).await?,
-            Command::Scan { path, recursive } => {
-                self.run_scan(&*services.migration, &path, *recursive)
-                    .await?
-            }
-            Command::Ingest { plan } => self.run_ingest(&*services.migration, &plan).await?,
-            Command::Reindex { path } => self.run_reindex(&*services.migration, &path).await?,
+            Command::Migrate { action } => match action {
+                MigrateCommand::Scan { path, depth } => {
+                    self.run_scan(&*services.migration, &path, *depth).await?
+                }
+                MigrateCommand::Ingest { plan } => {
+                    self.run_ingest(&*services.migration, &plan).await?
+                }
+                MigrateCommand::Reindex { plan } => {
+                    self.run_reindex(&*services.migration, &plan).await?
+                }
+            },
         }
         Ok(())
     }
@@ -361,13 +375,12 @@ impl QuiltCLI {
         &self,
         migration: &quilt_application::use_cases::MigrationUseCases,
         path: &str,
-        recursive: bool,
+        depth: usize,
     ) -> Result<()> {
         use quilt_application::migration::IngestionPlan;
         use std::path::Path;
 
-        let depth = if recursive { u32::MAX } else { 1 };
-        let plan = migration.scan(Path::new(path), depth).await?;
+        let plan = migration.scan(Path::new(path), depth as u32).await?;
         println!("Scan results for: {}", path);
         println!("  Total candidates: {}", plan.candidates.len());
         println!(
@@ -429,12 +442,15 @@ impl QuiltCLI {
     async fn run_reindex(
         &self,
         migration: &quilt_application::use_cases::MigrationUseCases,
-        path: &str,
+        plan_path: &str,
     ) -> Result<()> {
-        use std::path::Path;
+        use quilt_application::migration::IngestionPlan;
 
-        // First scan to get the plan
-        let plan = migration.scan(Path::new(path), u32::MAX).await?;
+        let json = std::fs::read_to_string(plan_path)
+            .map_err(|e| anyhow::anyhow!("Failed to read plan file: {}", e))?;
+        let plan: IngestionPlan = serde_json::from_str(&json)
+            .map_err(|e| anyhow::anyhow!("Failed to parse plan: {}", e))?;
+
         let result = migration.reindex(&plan).await?;
         println!("Reindex complete:");
         println!("  Files updated: {}", result.total_updated);

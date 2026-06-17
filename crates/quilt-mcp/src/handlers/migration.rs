@@ -1,9 +1,13 @@
-//! Migration tool handler
+//! Migration tool handler (GS-9)
 //!
-//! Owns: quilt_scan_directory, quilt_ingest_markdown, quilt_reindex
+//! Owns: quilt_migration_scan, quilt_migration_ingest, quilt_migration_reindex
+//!
+//! All three tools enforce the two-step scan→confirm flow (INV-3):
+//! 1. quilt_migration_scan — read-only, returns IngestionPlan
+//! 2. quilt_migration_ingest — accepts plan, processes "new" candidates only
+//! 3. quilt_migration_reindex — accepts plan, processes "modified" candidates only
 
 use crate::handlers::ToolHandler;
-use crate::protocol::Evidence;
 use crate::tools::Tool;
 use crate::use_cases::MigrationUseCases;
 use async_trait::async_trait;
@@ -29,53 +33,49 @@ impl ToolHandler for MigrationToolHandler {
     fn tools(&self) -> Vec<Tool> {
         vec![
             Tool {
-                name: "quilt_scan_directory".to_string(),
-                description: "Scan a directory for markdown files and return an ingestion plan"
+                name: "quilt_migration_scan".to_string(),
+                description: "Scan the active graph directory for Markdown files and return an ingestion plan (read-only, no writes)"
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Absolute path to directory to scan"
-                        },
-                        "recursive": {
-                            "type": "boolean",
-                            "description": "Scan recursively (default: true)",
-                            "default": true
+                        "depth": {
+                            "type": "integer",
+                            "description": "Maximum directory depth (default: 8, min: 1)",
+                            "minimum": 1,
+                            "default": 8
                         }
-                    },
-                    "required": ["path"]
+                    }
                 }),
             },
             Tool {
-                name: "quilt_ingest_markdown".to_string(),
-                description: "Ingest new pages from an ingestion plan (quilt_scan_directory)"
+                name: "quilt_migration_ingest".to_string(),
+                description: "Ingest new Markdown files from an approved ingestion plan (two-step flow: scan first, then ingest)"
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
                         "plan": {
                             "type": "object",
-                            "description": "Ingestion plan from quilt_scan_directory",
+                            "description": "Ingestion plan from quilt_migration_scan — only candidates with status 'new' are processed",
                         }
                     },
                     "required": ["plan"]
                 }),
             },
             Tool {
-                name: "quilt_reindex".to_string(),
-                description: "Re-index all modified files (detect changes by mtime and re-import)"
+                name: "quilt_migration_reindex".to_string(),
+                description: "Reindex modified Markdown files from an approved ingestion plan (two-step flow: scan first, then reindex). Uses optimistic CAS on source_mtime for concurrency safety."
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Absolute path to directory to reindex"
+                        "plan": {
+                            "type": "object",
+                            "description": "Ingestion plan from quilt_migration_scan — only candidates with status 'modified' are processed",
                         }
                     },
-                    "required": ["path"]
+                    "required": ["plan"]
                 }),
             },
         ]
@@ -84,28 +84,22 @@ impl ToolHandler for MigrationToolHandler {
     #[instrument(skip(self, args))]
     async fn execute(&self, name: &str, args: &Value) -> Result<String, String> {
         match name {
-            "quilt_scan_directory" => {
-                let path = args
-                    .get("path")
-                    .and_then(|v| v.as_str())
-                    .ok_or("Missing 'path'")?;
-                let recursive = args
-                    .get("recursive")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(true);
-
-                let depth = if recursive { u32::MAX } else { 1 };
+            "quilt_migration_scan" => {
+                let depth = args
+                    .get("depth")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(8) as u32;
 
                 let plan = self
                     .migration_use_cases
-                    .scan(std::path::Path::new(path), depth)
+                    .scan(std::path::Path::new("."), depth)
                     .await
                     .map_err(|e| e.to_string())?;
 
                 Ok(serde_json::to_string_pretty(&plan).unwrap_or_else(|e| e.to_string()))
             }
 
-            "quilt_ingest_markdown" => {
+            "quilt_migration_ingest" => {
                 let plan = args.get("plan").ok_or("Missing 'plan'")?;
 
                 let plan = serde_json::from_value::<quilt_application::migration::IngestionPlan>(
@@ -122,17 +116,13 @@ impl ToolHandler for MigrationToolHandler {
                 Ok(serde_json::to_string_pretty(&result).unwrap_or_else(|e| e.to_string()))
             }
 
-            "quilt_reindex" => {
-                let path = args
-                    .get("path")
-                    .and_then(|v| v.as_str())
-                    .ok_or("Missing 'path'")?;
+            "quilt_migration_reindex" => {
+                let plan = args.get("plan").ok_or("Missing 'plan'")?;
 
-                let plan = self
-                    .migration_use_cases
-                    .scan(std::path::Path::new(path), u32::MAX)
-                    .await
-                    .map_err(|e| e.to_string())?;
+                let plan = serde_json::from_value::<quilt_application::migration::IngestionPlan>(
+                    plan.clone(),
+                )
+                .map_err(|e| format!("Invalid plan: {}", e))?;
 
                 let result = self
                     .migration_use_cases
