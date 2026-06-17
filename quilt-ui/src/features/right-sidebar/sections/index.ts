@@ -49,6 +49,12 @@ registerSection(decayMonitorSection)
 registerSection(weeklyReviewSection)
 registerSection(serendipitySection)
 
+// ─── Migration / Import (GS-9, priority 400, utility) ───────────────────────
+
+import { migrationSection } from './import/ImportSection'
+
+registerSection(migrationSection)
+
 // ─── Re-export public API ───────────────────────────────────────────────────
 
 export { getSections, getVisibleSections, registerSection, isRegistered } from './registry'

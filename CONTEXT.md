@@ -20,6 +20,26 @@ _Avoid_: home screen, launcher, welcome screen
 Estado de aplicación que vive fuera de cualquier Graph: `last_opened_graph`, lista de graphs recientes, preferencias de layout y visibilidad del panel derecho. Persiste en `~/.local/share/quilt/global.db` (XDG data dir) y utiliza fallback en memoria si el store no está disponible.
 _Avoid_: config global del graph, settings del SO, localStorage
 
+### Ingerir (Ingest)
+Operación manual que importa archivos `.md` (Quilt-flavored Markdown) desde el directorio del Graph Space hacia `quilt.db`, creando Páginas y Bloques. Es idempotente por nombre de página: re-ejecutar el ingest sobre archivos ya importados es un no-op. Requiere confirmación explícita del usuario (ver INV-3 de ADR-0030 §4).
+_Avoid_: importar automático, sync, migración silenciosa
+
+### Reindexar (Reindex)
+Operación manual que actualiza los Bloques de una Página ya ingerida cuando el archivo fuente `.md` tiene un `mtime` más reciente que el `source_mtime` almacenado. Los bloques existentes se reemplazan en una transacción (delete-all-then-insert). Si el archivo fuente fue eliminado del disco, la Página canónica en `quilt.db` no se modifica. Usa CAS optimista sobre `source_mtime` para seguridad en concurrencia.
+_Avoid_: sync bidireccional, refresco automático, merge
+
+### Recurso compatible
+En v1, archivos con extensión `.md` que contienen Quilt-flavored Markdown (YAML frontmatter + árbol de bloques por indentación + sintaxis `key:: value`). Archivos `.org`, `.txt`, `.csv` NO son recursos compatibles en v1. La detección es manual (no hay watch ni auto-detección al abrir el Graph).
+_Avoid_: archivo importable, documento válido
+
+### Plan de ingestión (IngestionPlan)
+Resultado de la operación scan: lista de candidatos (`IngestionCandidate`) con su estado relativo a `quilt.db` (`new`, `modified`, `skipped`) y un resumen agregado. Es el contrato intermedio entre scan y confirm: el usuario revisa el plan antes de ejecutar ingest o reindex.
+_Avoid_: preview, dry-run report, diff
+
+### Migración (Migration)
+Término legacy para "ingestión". El módulo `MigrationEngine` y el endpoint `POST /api/v1/migration/md` conservan el nombre por compatibilidad con la arquitectura existente (F21). En el contexto de GS-9, "migración" e "ingestión" son sinónimos funcionales.
+_Avoid_: migración de schema, database migration
+
 ### Bloque
 Unidad atómica de contenido en el outliner. Tiene UUID inmutable, contenido markdown, propiedades tipadas, refs a otros bloques/páginas, y posición jerárquica (parent, order, level).
 _Avoid_: nodo, item, entrada

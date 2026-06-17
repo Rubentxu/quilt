@@ -27,6 +27,7 @@ import type {
   GraphSpace,
   UpdateGraphSpaceRequest,
 } from '@shared/types/api';
+import type { IngestionPlan, MigrationResponse } from '@features/import/types';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
 import { blockPropertiesFromMap } from '@shared/utils/blockProperties';
 
@@ -1024,6 +1025,43 @@ export const api = {
         body: JSON.stringify({ graphPath }),
       },
     ),
+
+  // ─── Migration / Ingestion (GS-9) ─────────────────────────────────────────
+
+  /**
+   * GET /api/v1/migration/candidates
+   * Scan the active graph root for Markdown files and return an
+   * IngestionPlan with per-file status (new/modified/skipped).
+   */
+  scanForImport: (depth = 8, path?: string): Promise<IngestionPlan> => {
+    const params = new URLSearchParams()
+    params.set('depth', String(depth))
+    if (path) params.set('path', path)
+    return fetchJson<IngestionPlan>(`/migration/candidates?${params.toString()}`)
+  },
+
+  /**
+   * POST /api/v1/migration/md
+   * Ingest Markdown files from an approved IngestionPlan.
+   * Only candidates with status "new" are processed.
+   */
+  ingestMd: (plan: IngestionPlan): Promise<MigrationResponse> =>
+    fetchJson<MigrationResponse>('/migration/md', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    }),
+
+  /**
+   * POST /api/v1/migration/reindex
+   * Reindex modified files from an approved IngestionPlan.
+   * Only candidates with status "modified" are processed.
+   * Uses optimistic CAS on source_mtime for concurrency safety.
+   */
+  reindexMd: (plan: IngestionPlan): Promise<MigrationResponse> =>
+    fetchJson<MigrationResponse>('/migration/reindex', {
+      method: 'POST',
+      body: JSON.stringify({ plan }),
+    }),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────
