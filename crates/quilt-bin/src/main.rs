@@ -7,9 +7,8 @@ use clap::Parser;
 use quilt_application::bootstrap::AppServices;
 use quilt_application::services::ref_service::RefService;
 use quilt_application::use_cases::{
-    AnnotationUseCases, AnnotationUseCasesImpl, BlockUseCases, BlockUseCasesImpl,
-    MigrationUseCases, PageUseCases, PageUseCasesImpl, ResourceUseCases, ResourceUseCasesImpl,
-    SearchUseCases, SearchUseCasesImpl, TemplateUseCases, TemplateUseCasesImpl, TourStateUseCases,
+    AnnotationUseCasesImpl, BlockUseCasesImpl,
+    MigrationUseCases, PageUseCasesImpl, ResourceUseCasesImpl, SearchUseCasesImpl, TemplateUseCasesImpl,
     TourStateUseCasesImpl,
 };
 use quilt_infrastructure::database::sqlite::SqliteAnnotationRepository;

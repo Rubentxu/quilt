@@ -98,7 +98,7 @@ export function TableView({
             <thead data-testid="virtuoso-thead" {...props} />
           ),
           TableBody: (props) => (
-            <tbody data-testid="virtuoso-item-list" {...props} />
+            <tbody {...props} data-testid="virtuoso-item-list" />
           ),
         }}
         fixedHeaderContent={() => (

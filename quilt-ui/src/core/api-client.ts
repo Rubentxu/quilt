@@ -26,6 +26,10 @@ import type {
   SpawnAgentRequest,
   GraphSpace,
   UpdateGraphSpaceRequest,
+  Annotation,
+  AnnotationFilters,
+  CreateAnnotationRequest,
+  UpdateAnnotationStatusRequest,
 } from '@shared/types/api';
 import type { IngestionPlan, MigrationResponse } from '@features/import/types';
 import type { QueryAst, QueryError, QueryResult } from '@shared/types/queryAst';
@@ -1062,6 +1066,37 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ plan }),
     }),
+  // Annotations
+  listAnnotations: (filters: AnnotationFilters = {}): Promise<Annotation[]> => {
+    const params = new URLSearchParams()
+    if (filters.blockId) params.set('block_id', filters.blockId)
+    if (filters.status) params.set('status', filters.status)
+    if (filters.scope) params.set('scope', filters.scope)
+    if (filters.authorName) params.set('author_name', filters.authorName)
+    const qs = params.toString()
+    return fetchJson<Annotation[]>(`/annotations${qs ? `?${qs}` : ''}`)
+  },
+  listAnnotationsForBlock: (blockId: string): Promise<Annotation[]> =>
+    fetchJson<Annotation[]>(`/blocks/${encodeURIComponent(blockId)}/annotations`),
+  getAnnotation: (id: string): Promise<Annotation> =>
+    fetchJson<Annotation>(`/annotations/${encodeURIComponent(id)}`),
+  createAnnotation: (data: CreateAnnotationRequest): Promise<Annotation> =>
+    fetchJson<Annotation>('/annotations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateAnnotationStatus: (id: string, data: UpdateAnnotationStatusRequest): Promise<Annotation> =>
+    fetchJson<Annotation>(`/annotations/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  resolveAnnotation: (id: string, resolvedBy: string): Promise<Annotation> =>
+    fetchJson<Annotation>(`/annotations/${encodeURIComponent(id)}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'resolved', resolvedBy }),
+    }),
+  deleteAnnotation: (id: string): Promise<void> =>
+    fetchJson<void>(`/annotations/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 };
 
 // ─── TODO: Analysis DTOs (G7 Dream Cycle) ───────────────────────────────

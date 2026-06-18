@@ -7,9 +7,7 @@ use crate::cognitive_dashboard::types::{CognitiveGraphDto, GraphCluster, GraphEd
 use crate::structural_mirror::{LightweightGraph, build_structure_map};
 use chrono::Utc;
 use quilt_domain::entities::Block;
-use quilt_domain::properties::entry::DefaultPropertyEntry;
 use quilt_domain::repositories::{BlockRepository, PageRepository};
-use quilt_domain::value_objects::PropertyValue;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tracing::instrument;

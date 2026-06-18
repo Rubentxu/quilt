@@ -100,13 +100,13 @@ function DecayInsights({ pageName }: { pageName?: string }) {
     <InsightCard title="Decay Alerts" icon={<AlertTriangle size={12} />} variant="warning">
       <ul style={{ margin: 0, paddingLeft: 'var(--space-4)', fontSize: '13px' }}>
         {decay.alerts.slice(0, 3).map((alert) => (
-          <li key={alert.block_id} style={{ marginBottom: 'var(--space-1)' }}>
+          <li key={alert.blockId} style={{ marginBottom: 'var(--space-1)' }}>
             <span style={{ color: 'var(--color-text-secondary)' }}>
-              {alert.block_content_preview.slice(0, 60)}
-              {alert.block_content_preview.length > 60 ? '…' : ''}
+              {alert.contentPreview.slice(0, 60)}
+              {alert.contentPreview.length > 60 ? '…' : ''}
             </span>
             <span style={{ color: 'var(--color-text-muted)', fontSize: '11px', marginLeft: 'var(--space-2)' }}>
-              {alert.days_since_update}d old
+              {alert.daysSinceUpdate}d old
             </span>
           </li>
         ))}
@@ -177,10 +177,8 @@ function AskAI({ pageName }: { pageName?: string }) {
 
     try {
       const agent = await api.spawnAgent({
-        agent_type: 'decay-annotator', // CG-5 default agent type
-        context_page: pageName ?? null,
-        model: null,
-        queue_mode: null,
+        agentType: 'decay-annotator', // CG-5 default agent type
+        contextPage: pageName ?? undefined,
       })
       setLatestAgent(agent)
       setQuestion('')
@@ -271,9 +269,9 @@ function AskAI({ pageName }: { pageName?: string }) {
             <span style={{ color: statusColor, fontWeight: 600 }}>
               {latestAgent.status}
             </span>
-            {latestAgent.agent_type && (
+            {latestAgent.agentType && (
               <span style={{ color: 'var(--color-text-muted)' }}>
-                · {latestAgent.agent_type}
+                · {latestAgent.agentType}
               </span>
             )}
           </div>

@@ -10,7 +10,8 @@
 import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { api } from '@core/api-client';
 import { wasmProjectionResolve } from '@core/wasm-bridge/wasm-loader';
-import type { Block, ProjectionView, Preset, PresetListResponse } from './types';
+import type { Block } from '@shared/types/api';
+import type { ProjectionView, Preset, PresetListResponse } from './types';
 import { projectionMetricsStore, type ProjectionMetrics } from './metrics';
 
 // ─── useProjectionMetrics (ADR-0028) ───────────────────────────────────────

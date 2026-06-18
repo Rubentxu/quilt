@@ -42,7 +42,7 @@ interface PropertyStyle {
 }
 
 const PROPERTY_META: Record<string, PropertyStyle> = {
-  status:     { icon: CheckCircle2, iconColor: 'var(--color-success)', valueColor: 'var(--color-success)', bg: 'var(--color-success-subtle)', badge: true },
+  status:     { icon: CheckCircle2, iconColor: 'var(--color-success)', valueColor: 'var(--color-success)', valueBg: 'var(--color-success-subtle)', badge: true },
   priority:   { icon: AlertCircle, iconColor: 'var(--color-warning)', badge: true },
   deadline:   { icon: Calendar },
   scheduled:  { icon: Clock },
@@ -150,7 +150,7 @@ function PropertyRowItem({
       setEditing(false)
       // Update the local block reference
       if (onUpdate) {
-        onUpdate({ ...block, properties: [...(block.properties ?? []).filter(p => p.key !== propKey), { key: propKey, value: trimmed }] })
+        onUpdate({ ...block, properties: [...(block.properties ?? []).filter(p => p.key !== propKey), { key: propKey, value: trimmed, type: 'string' as const }] })
       }
     } catch {
       toast.error(`Failed to update ${propKey}`)

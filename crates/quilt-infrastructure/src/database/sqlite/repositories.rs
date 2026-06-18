@@ -1927,13 +1927,13 @@ impl SqlitePropertyRepository {
         let property_type = PropertyType::from_str(&property_type_str).ok_or_else(|| {
             DomainError::InvalidData(format!("Unknown property_type: {}", property_type_str))
         })?;
-        let cardinality = Cardinality::from_str(&cardinality_str).ok_or_else(|| {
+        let _cardinality = Cardinality::from_str(&cardinality_str).ok_or_else(|| {
             DomainError::InvalidData(format!("Unknown cardinality: {}", cardinality_str))
         })?;
         let view_context = ViewContext::from_str(&view_context_str).ok_or_else(|| {
             DomainError::InvalidData(format!("Unknown view_context: {}", view_context_str))
         })?;
-        let status = PropertyStatus::from_str(&status_str).ok_or_else(|| {
+        let _status = PropertyStatus::from_str(&status_str).ok_or_else(|| {
             DomainError::InvalidData(format!("Unknown property status: {}", status_str))
         })?;
 

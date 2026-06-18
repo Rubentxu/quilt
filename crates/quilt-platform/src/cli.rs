@@ -377,7 +377,7 @@ impl QuiltCLI {
         path: &str,
         depth: usize,
     ) -> Result<()> {
-        use quilt_application::migration::IngestionPlan;
+        
         use std::path::Path;
 
         let plan = migration.scan(Path::new(path), depth as u32).await?;

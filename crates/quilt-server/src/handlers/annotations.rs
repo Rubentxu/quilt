@@ -30,7 +30,6 @@ use quilt_application::use_cases::annotation::AnnotationUseCases;
 use quilt_application::{
     AnnotationDto, AnnotationFilters, AnnotationScope, AnnotationStatus, Uuid,
 };
-use quilt_domain::entities::AuthorType;
 use quilt_domain::errors::DomainError;
 
 // ── Request / Query types ─────────────────────────────────────────

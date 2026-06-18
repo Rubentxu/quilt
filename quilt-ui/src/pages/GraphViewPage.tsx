@@ -631,7 +631,9 @@ export function GraphViewPage() {
                 alignItems: 'center',
               }}
             >
-              <Icon size={14} style={{ marginRight: '4px', flexShrink: 0 }} />
+              <span style={{ marginRight: '4px', flexShrink: 0, display: 'flex', alignItems: 'center' }}>
+                <Icon size={14} />
+              </span>
               {opt.label}
             </button>
           )

@@ -22,13 +22,11 @@
 
 use chrono::NaiveDate;
 use quilt_domain::canonicalization::{
-    PresetArg, PresetArgKind, PresetArgs, PresetId, PresetRegistry, PropertyPatch,
-    PropertyPatchProvenance, PropertyPreset,
+    PresetArg, PresetArgs, PresetId, PresetRegistry, PropertyPatch, PropertyPreset,
 };
 use quilt_domain::entities::PropertyKey;
 use quilt_domain::value_objects::PropertyValue;
 use std::collections::HashMap;
-use std::sync::Arc;
 
 /// Static registry holding the 9 V1 presets.
 #[derive(Debug, Clone)]

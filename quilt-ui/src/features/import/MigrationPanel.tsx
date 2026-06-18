@@ -91,7 +91,7 @@ export const MigrationPanel = memo(function MigrationPanel() {
 
   const handleIngest = useCallback(async () => {
     if (!plan) return
-    setOperate(true)
+    setOperating(true)
     setOpError(null)
     setResult(null)
     setConfirmAction(null)
@@ -112,7 +112,7 @@ export const MigrationPanel = memo(function MigrationPanel() {
 
   const handleReindex = useCallback(async () => {
     if (!plan) return
-    setOperate(true)
+    setOperating(true)
     setOpError(null)
     setResult(null)
     setConfirmAction(null)

@@ -578,3 +578,50 @@ export interface SpawnAgentRequest {
   /** Accepted for forward compatibility; ignored in V1. */
   queueMode?: 'sequential' | 'parallel';
 }
+
+// ─── Annotations ─────────────────────────────────────────────────────────────
+
+/** Annotation status values. */
+export type AnnotationStatus = 'pending' | 'in_progress' | 'resolved' | 'dismissed';
+
+/** Annotation scope — what the annotation is anchored to. */
+export type AnnotationScope = 'block' | 'page' | 'selection';
+
+/** An annotation on a block, page, or text selection. */
+export interface Annotation {
+  id: string;
+  blockId: string;
+  scope: AnnotationScope;
+  status: AnnotationStatus;
+  content: string;
+  authorType: 'human' | 'agent';
+  authorName: string;
+  parentAnnotationId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Request body for `GET /api/v1/annotations`. */
+export interface AnnotationFilters {
+  blockId?: string;
+  pageName?: string;
+  status?: AnnotationStatus;
+  scope?: AnnotationScope;
+  authorName?: string;
+}
+
+/** Request body for `POST /api/v1/annotations`. */
+export interface CreateAnnotationRequest {
+  blockId: string;
+  scope: AnnotationScope;
+  authorType: 'human' | 'agent';
+  authorName: string;
+  content: string;
+  parentAnnotationId?: string;
+}
+
+/** Request body for `PATCH /api/v1/annotations/:id/status`. */
+export interface UpdateAnnotationStatusRequest {
+  status: AnnotationStatus;
+  resolvedBy?: string;
+}

@@ -2,7 +2,7 @@
 
 use quilt_core::parser::inline::{InlineParser, ParsedContent, Segment};
 use quilt_domain::canonicalization::{
-    CanonicalInput, CanonicalizationResult, Canonicalizer, PropertyPatch, PropertyPatchProvenance,
+    CanonicalInput, CanonicalizationResult, Canonicalizer, PropertyPatch,
 };
 use quilt_domain::entities::PropertyKey;
 use quilt_domain::value_objects::PropertyValue;

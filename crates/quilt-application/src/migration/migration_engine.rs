@@ -340,7 +340,7 @@ impl MigrationEngine {
 
         // Parse the file
         let source = std::fs::read_to_string(&full_path).map_err(|e| MigrationError::Io(e))?;
-        let (frontmatter, raw_blocks) =
+        let (_frontmatter, raw_blocks) =
             parse_md_import(&source).map_err(|e| MigrationError::Parse(e.to_string()))?;
 
         // Delete existing blocks for this page
@@ -440,7 +440,7 @@ impl MigrationEngine {
         };
 
         // Create page with source tracking
-        let page_id = Uuid::new_v4();
+        let _page_id = Uuid::new_v4();
         let page_create = PageCreate {
             name: page_name,
             title: None,

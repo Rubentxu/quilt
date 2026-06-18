@@ -36,7 +36,7 @@ export function DashboardPage() {
         // block_count is not in the Page type; skip for now
         setStats({
           pages: pages.length - journals,
-          blocks: totalBlocks,
+          blocks: 0, // block_count not available in Page type; TODO: fetch from API
           templates: templates.length,
           journals,
         })
