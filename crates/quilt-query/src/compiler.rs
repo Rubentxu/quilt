@@ -5,9 +5,8 @@
 
 use thiserror::Error;
 
-use crate::ast::{AggregateFn, AnalyzeKind, QueryAst, SortDirection, StatsFn};
-use crate::dialect::{SqlDialect, SqliteDialect};
-use crate::executor::SqlParam;
+use quilt_query_core::ast::{AggregateFn, AnalyzeKind, QueryAst, SortDirection, StatsFn, SqlParam};
+use quilt_query_core::dialect::{SqlDialect, SqliteDialect};
 
 /// Errors that can occur while compiling a `QueryAst` to SQL.
 #[derive(Debug, Error, PartialEq)]
@@ -84,7 +83,7 @@ pub trait QueryCompiler: Send + Sync + std::fmt::Debug {
     /// `Err(UnsupportedOperator { op: "Temporal" })`.
     fn compile_temporal(
         &self,
-        _range: &crate::ast::TemporalRange,
+        _range: &quilt_query_core::ast::TemporalRange,
         _inner: &QueryAst,
         _limit: usize,
     ) -> Result<CompiledQuery, CompilerError> {
@@ -99,7 +98,7 @@ pub trait QueryCompiler: Send + Sync + std::fmt::Debug {
     /// `Err(UnsupportedOperator { op: "VirtualSelect" })`.
     fn compile_virtual_select(
         &self,
-        _columns: &[crate::ast::VirtualColumn],
+        _columns: &[quilt_query_core::ast::VirtualColumn],
         _inner: &QueryAst,
         _limit: usize,
     ) -> Result<CompiledQuery, CompilerError> {
@@ -325,7 +324,7 @@ impl SqliteCompiler {
     /// Compiles `Temporal` by combining `temporal_range_sql` with inner WHERE.
     pub fn compile_temporal(
         &self,
-        range: &crate::ast::TemporalRange,
+        range: &quilt_query_core::ast::TemporalRange,
         inner: &QueryAst,
         limit: usize,
     ) -> Result<CompiledQuery, CompilerError> {
@@ -360,7 +359,7 @@ impl SqliteCompiler {
     /// Compiles `VirtualSelect` with computed columns.
     pub fn compile_virtual_select(
         &self,
-        columns: &[crate::ast::VirtualColumn],
+        columns: &[quilt_query_core::ast::VirtualColumn],
         inner: &QueryAst,
         limit: usize,
     ) -> Result<CompiledQuery, CompilerError> {
@@ -368,18 +367,18 @@ impl SqliteCompiler {
 
         for col in columns {
             let expr = match col {
-                crate::ast::VirtualColumn::WordCount => {
+                quilt_query_core::ast::VirtualColumn::WordCount => {
                     "LENGTH(b.content) - LENGTH(REPLACE(b.content, ' ', '')) + 1 AS word_count"
                         .to_string()
                 }
-                crate::ast::VirtualColumn::CharCount => {
+                quilt_query_core::ast::VirtualColumn::CharCount => {
                     "LENGTH(b.content) AS char_count".to_string()
                 }
-                crate::ast::VirtualColumn::RefCount => {
+                quilt_query_core::ast::VirtualColumn::RefCount => {
                     "(SELECT COUNT(*) FROM refs r WHERE r.block_id = b.id) AS ref_count"
                         .to_string()
                 }
-                crate::ast::VirtualColumn::BlockAgeDays => {
+                quilt_query_core::ast::VirtualColumn::BlockAgeDays => {
                     "CAST(julianday('now') - julianday(b.created_at/1000, 'unixepoch') AS INTEGER) AS block_age_days".to_string()
                 }
             };
@@ -479,13 +478,13 @@ impl QueryCompiler for SqliteCompiler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AnalyzeKind, PropertyOp};
+    use quilt_query_core::ast::{AnalyzeKind, PropertyOp};
     use crate::parser::QueryParser;
 
     // ── PropertyOp SQL fragments ──
 
     fn fragment(op: PropertyOp) -> String {
-        use crate::dialect::SqlDialect;
+        use quilt_query_core::dialect::SqlDialect;
         SqliteDialect.property_op_sql(op, "json_extract(properties, '$.count')")
     }
 
@@ -870,7 +869,7 @@ mod tests {
 
     #[test]
     fn test_compile_temporal_today_produces_date_filter() {
-        use crate::ast::TemporalRange;
+        use quilt_query_core::ast::TemporalRange;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::Temporal {
             range: TemporalRange::Today,
@@ -883,7 +882,7 @@ mod tests {
 
     #[test]
     fn test_compile_temporal_this_week_produces_week_filter() {
-        use crate::ast::TemporalRange;
+        use quilt_query_core::ast::TemporalRange;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::Temporal {
             range: TemporalRange::ThisWeek,
@@ -896,7 +895,7 @@ mod tests {
 
     #[test]
     fn test_compile_temporal_custom_date_range() {
-        use crate::ast::TemporalRange;
+        use quilt_query_core::ast::TemporalRange;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::Temporal {
             range: TemporalRange::Custom {
@@ -912,7 +911,7 @@ mod tests {
 
     #[test]
     fn test_compile_temporal_combines_with_inner() {
-        use crate::ast::TemporalRange;
+        use quilt_query_core::ast::TemporalRange;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::Temporal {
             range: TemporalRange::Today,
@@ -927,7 +926,7 @@ mod tests {
 
     #[test]
     fn test_compile_virtual_select_word_count_column() {
-        use crate::ast::VirtualColumn;
+        use quilt_query_core::ast::VirtualColumn;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::VirtualSelect {
             columns: vec![VirtualColumn::WordCount],
@@ -940,7 +939,7 @@ mod tests {
 
     #[test]
     fn test_compile_virtual_select_char_count_column() {
-        use crate::ast::VirtualColumn;
+        use quilt_query_core::ast::VirtualColumn;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::VirtualSelect {
             columns: vec![VirtualColumn::CharCount],
@@ -953,7 +952,7 @@ mod tests {
 
     #[test]
     fn test_compile_virtual_select_ref_count_column() {
-        use crate::ast::VirtualColumn;
+        use quilt_query_core::ast::VirtualColumn;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::VirtualSelect {
             columns: vec![VirtualColumn::RefCount],
@@ -966,7 +965,7 @@ mod tests {
 
     #[test]
     fn test_compile_virtual_select_block_age_days_column() {
-        use crate::ast::VirtualColumn;
+        use quilt_query_core::ast::VirtualColumn;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::VirtualSelect {
             columns: vec![VirtualColumn::BlockAgeDays],
@@ -979,7 +978,7 @@ mod tests {
 
     #[test]
     fn test_compile_virtual_select_multiple_columns() {
-        use crate::ast::VirtualColumn;
+        use quilt_query_core::ast::VirtualColumn;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::VirtualSelect {
             columns: vec![
@@ -997,7 +996,7 @@ mod tests {
 
     #[test]
     fn test_compile_virtual_select_combines_with_inner() {
-        use crate::ast::VirtualColumn;
+        use quilt_query_core::ast::VirtualColumn;
         let compiler = SqliteCompiler::new();
         let ast = QueryAst::VirtualSelect {
             columns: vec![VirtualColumn::WordCount],

@@ -4,33 +4,11 @@
 //! with properly parameterized values for safe database queries.
 
 use crate::compiler::CompilerError;
-use crate::dialect::{SqlDialect, SqliteDialect};
-use crate::parser::{QueryAst, QueryValue};
+use quilt_query_core::ast::{QueryAst, QueryValue};
+use quilt_query_core::dialect::{SqlDialect, SqliteDialect};
 
-/// SQL parameter type for safe query parameterization.
-#[derive(Debug, Clone, PartialEq)]
-pub enum SqlParam {
-    /// String parameter
-    String(String),
-    /// Integer parameter
-    Integer(i64),
-    /// Float parameter
-    Float(f64),
-    /// Boolean parameter
-    Boolean(bool),
-}
-
-impl SqlParam {
-    /// Converts the parameter to its string representation.
-    pub fn as_string(&self) -> String {
-        match self {
-            SqlParam::String(s) => s.clone(),
-            SqlParam::Integer(n) => n.to_string(),
-            SqlParam::Float(f) => f.to_string(),
-            SqlParam::Boolean(b) => b.to_string(),
-        }
-    }
-}
+// Re-export SqlParam from quilt-query-core
+pub use quilt_query_core::SqlParam;
 
 /// Result of an analyze operation.
 /// Uses JSON values since analysis types are owned by quilt-analysis.
@@ -225,13 +203,13 @@ where
                 let sql_fragment = self.dialect.property_op_sql(*op, &prop_path);
                 let val = self.value_to_param(value);
                 let bound_value = match op {
-                    crate::parser::PropertyOp::Contains => {
+                    quilt_query_core::parser::PropertyOp::Contains => {
                         SqlParam::String(format!("%{}%", val.as_string()))
                     }
                     _ => val,
                 };
                 let mut params = vec![bound_value];
-                if matches!(op, crate::parser::PropertyOp::Between) {
+                if matches!(op, quilt_query_core::parser::PropertyOp::Between) {
                     let v2 = value2.as_ref().ok_or_else(|| {
                         CompilerError::Invalid("PropertyOp::Between requires value2".to_string())
                     })?;
@@ -370,9 +348,9 @@ where
     fn build_date_predicate_where(
         &self,
         column: &str,
-        predicate: &crate::ast::DatePredicate,
+        predicate: &quilt_query_core::ast::DatePredicate,
     ) -> Result<(String, Vec<SqlParam>), CompilerError> {
-        use crate::ast::DatePredicate;
+        use quilt_query_core::ast::DatePredicate;
         use crate::executor::SqlParam;
         use chrono::Local;
 
@@ -404,20 +382,20 @@ where
             }
             DatePredicate::Relative(offset) => {
                 let base_date = match offset {
-                    crate::time_helpers::TimeOffset::Days(n) => today - chrono::Duration::days(*n),
-                    crate::time_helpers::TimeOffset::Weeks(n) => {
+                    quilt_query_core::time_helpers::TimeOffset::Days(n) => today - chrono::Duration::days(*n),
+                    quilt_query_core::time_helpers::TimeOffset::Weeks(n) => {
                         today - chrono::Duration::weeks(*n)
                     }
-                    crate::time_helpers::TimeOffset::Months(n) => {
+                    quilt_query_core::time_helpers::TimeOffset::Months(n) => {
                         today - chrono::Duration::days(n * 30)
                     }
-                    crate::time_helpers::TimeOffset::Years(n) => {
+                    quilt_query_core::time_helpers::TimeOffset::Years(n) => {
                         today - chrono::Duration::days(n * 365)
                     }
-                    crate::time_helpers::TimeOffset::Hours(n) => {
+                    quilt_query_core::time_helpers::TimeOffset::Hours(n) => {
                         today - chrono::Duration::hours(*n)
                     }
-                    crate::time_helpers::TimeOffset::Minutes(n) => {
+                    quilt_query_core::time_helpers::TimeOffset::Minutes(n) => {
                         today - chrono::Duration::minutes(*n)
                     }
                 };
@@ -598,7 +576,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::{PropertyOp, QueryAst};
+    use quilt_query_core::parser::{PropertyOp, QueryAst};
 
     #[test]
     fn test_simple_task_query() {
@@ -874,7 +852,7 @@ mod tests {
 
     #[test]
     fn test_build_analyze_sql_simple() {
-        use crate::parser::AnalyzeKind;
+        use quilt_query_core::parser::AnalyzeKind;
         let executor = QueryExecutor::new();
         let expr = QueryAst::Analyze {
             inner: Box::new(QueryAst::Task(vec!["todo".to_string()])),
@@ -890,7 +868,7 @@ mod tests {
 
     #[test]
     fn test_build_analyze_sql_page_filter() {
-        use crate::parser::AnalyzeKind;
+        use quilt_query_core::parser::AnalyzeKind;
         let executor = QueryExecutor::new();
         let expr = QueryAst::Analyze {
             inner: Box::new(QueryAst::Page("Test".to_string())),
@@ -924,7 +902,7 @@ mod tests {
         let executor = QueryExecutor::new();
         let expr = QueryAst::Stats {
             property: "count".to_string(),
-            compute: crate::parser::StatsFn::Stddev,
+            compute: quilt_query_core::parser::StatsFn::Stddev,
         };
         let result = executor.build_where(&expr);
         match result {
@@ -941,7 +919,7 @@ mod tests {
         let executor = QueryExecutor::new();
         let expr = QueryAst::Analyze {
             inner: Box::new(QueryAst::Task(vec!["todo".to_string()])),
-            kind: crate::parser::AnalyzeKind::StructuralMirror,
+            kind: quilt_query_core::parser::AnalyzeKind::StructuralMirror,
         };
         let result = executor.build_where(&expr);
         match result {

@@ -7,7 +7,7 @@
 
 use quilt_domain::entities::Block;
 use quilt_domain::repositories::BlockRepository;
-use quilt_query::ast::QueryAst;
+use quilt_query::QueryAst;
 use quilt_query::executor::QueryExecutor;
 use std::sync::Arc;
 use thiserror::Error;

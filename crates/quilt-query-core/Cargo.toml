@@ -1,0 +1,20 @@
+[package]
+name = "quilt-query-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+description = "Quilt Query DSL — Parser and AST (WASM-compatible, no runtime dependencies)"
+
+[dependencies]
+pest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+tokio-test.workspace = true

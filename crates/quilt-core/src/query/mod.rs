@@ -19,14 +19,14 @@
 //! let expr = parser.parse("(task todo)").unwrap();
 //! ```
 
-pub use quilt_query::ast::{PropertyOp, QueryAst, QueryValue, SortDirection};
-pub use quilt_query::parser::{AggregateFn, AnalyzeKind, ParseError, QueryParser, StatsFn};
+pub use quilt_query_core::ast::{PropertyOp, QueryAst, QueryValue, SortDirection};
+pub use quilt_query_core::parser::{AggregateFn, AnalyzeKind, ParseError, QueryParser, StatsFn};
 
 #[cfg(test)]
 mod tests {
     use std::any::TypeId;
 
-    use quilt_query::{
+    use quilt_query_core::{
         AggregateFn, AnalyzeKind, ParseError, PropertyOp, QueryAst, QueryValue, StatsFn,
     };
 

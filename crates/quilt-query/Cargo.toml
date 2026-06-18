@@ -8,13 +8,19 @@ license.workspace = true
 description = "Query DSL - parser, AST, and executor for Quilt-style queries"
 
 [dependencies]
-pest = "2.7"
+# Re-export core parsing/AST from quilt-query-core (WASM-compatible)
+quilt-query-core = { path = "../quilt-query-core" }
+
+# Executor and compiler need sqlx + tokio
+sqlx.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Re-exported from quilt-query-core for convenience
+pest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-sqlx.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

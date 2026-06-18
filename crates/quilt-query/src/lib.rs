@@ -5,9 +5,11 @@
 //!
 //! # Architecture
 //!
-//! - [`parser`]: Recursive descent parser for the query DSL
-//! - [`executor`]: SQL query generator from AST
-//! - [`time_helpers`]: Time offset parsing utilities
+//! - [`parser`]: Recursive descent parser for the query DSL (from `quilt-query-core`)
+//! - [`ast`]: AST types (from `quilt-query-core`)
+//! - [`compiler`]: SQL query generator from AST (sqlx-based)
+//! - [`executor`]: SQL query executor (sqlx-based)
+//! - [`time_helpers`]: Time offset parsing utilities (from `quilt-query-core`)
 //!
 //! # Query DSL Syntax
 //!
@@ -40,17 +42,23 @@
 //! let (sql, params) = executor.build_sql(&expr, 100).unwrap();
 //! ```
 
-pub mod ast;
-pub mod compiler;
-pub mod dialect;
-pub mod executor;
-pub mod merge;
-pub mod parser;
-pub mod property_op;
-pub mod time_helpers;
+// Re-export core types from quilt-query-core
+pub use quilt_query_core::ast::{PropertyOp, QueryAst, QueryValue, SortDirection, SqlParam};
+pub use quilt_query_core::dialect::{SqlDialect, SqliteDialect, WindowFnKind};
+pub use quilt_query_core::parser::{AggregateFn, AnalyzeKind, ParseError, QueryError, QueryParser, StatsFn};
+pub use quilt_query_core::time_helpers::TimeOffset;
 
-pub use ast::{PropertyOp, QueryAst, QueryValue, SortDirection};
-pub use compiler::{CompiledQuery, CompilerError, QueryCompiler, SqliteCompiler};
-pub use dialect::{SqlDialect, SqliteDialect, WindowFnKind};
-pub use executor::{AnalyzeError, AnalyzeResult, QueryExecutor, SqlParam};
-pub use parser::{AggregateFn, AnalyzeKind, ParseError, QueryError, QueryParser, StatsFn};
+// Modules that use sqlx (compiler and executor stay in this crate)
+pub mod compiler;
+pub mod executor;
+
+// Re-export QueryExecutor from executor module
+pub use executor::QueryExecutor;
+
+// Tests
+#[cfg(test)]
+mod tests {
+    // Re-export test helpers from quilt-query-core for integration tests
+    pub use quilt_query_core::ast::{PropertyOp, QueryAst, QueryValue, SortDirection};
+    pub use quilt_query_core::parser::{AggregateFn, AnalyzeKind, ParseError, QueryParser, StatsFn};
+}

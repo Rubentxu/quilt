@@ -276,14 +276,14 @@ Actualizado con nuevos términos del roadmap:
 | GS-6 | Morning Briefing colapsable y visible por defecto solo para hoy vacío/recién creado | 🔲 |
 | GS-7 | Metadata de Graph Space dentro del graph (nombre, icono, descripción, color, fecha) | 🔲 |
 | GS-8 | Panel derecho contextual visible por defecto, colapsable y panel-first para properties | 🔲 |
-| GS-9 | Ingesta/reindex manual de recursos compatibles en directorios existentes | 🔲 |
+| GS-9 | Ingesta/reindex manual de recursos compatibles en directorios existentes | ✅ |
 | GS-10 | Local Graph v1: 2D, contextual, profundidad 1/2/3, navegación bidireccional | 🔲 |
 
 **Referencia**:
 - ADR: `docs/adr/0030-graph-space-journal-first-lifecycle.md` (ratificado ✅)
 - Plan: `docs/graph-space-migration-plan.md`
 - SDDK: `openspec/changes/graph-space-migration-phases-1-4/` (archivado)
-- Progreso: 5/10 items ✅ — slices A–D implementados y verificados con 28 tests nuevos
+- Progreso: 6/10 items ✅ — GS-9 implementado y verificado (4 commits, 757 tests, ~1500 LOC)
 
 ---
 

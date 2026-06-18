@@ -3,6 +3,7 @@ members = [
     "crates/quilt-domain",
     "crates/quilt-application",
     "crates/quilt-infrastructure",
+    "crates/quilt-query-core",
     "crates/quilt-query",
     "crates/quilt-search",
     "crates/quilt-mcp",

@@ -10,7 +10,7 @@ use crate::handlers::blocks::map_app_error;
 use crate::state::AppState;
 use axum::{Json, Router, extract::Extension, routing::post};
 use quilt_domain::entities::Block;
-use quilt_query::ast::QueryAst;
+use quilt_query::QueryAst;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 use tracing::instrument;

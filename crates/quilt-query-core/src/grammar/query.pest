@@ -1,0 +1,39 @@
+// Query grammar for Quilt-style queries
+
+query = { SOI ~ expr ~ EOI }
+
+expr = { and | or | not | between | property | task | priority | page | tags | page_ref | self_ref | block_content | sample }
+
+and = { "(" ~ "and" ~ expr+ ~ ")" }
+or = { "(" ~ "or" ~ expr+ ~ ")" }
+not = { "(" ~ "not" ~ expr ~ ")" }
+
+between = { "(" ~ "between" ~ value ~ value ~ ")" }
+property = { "(" ~ "property" ~ string ~ value ~ ")" }
+task = { "(" ~ "task" ~ task_marker+ ~ ")" }
+priority = { "(" ~ "priority" ~ priority_level+ ~ ")" }
+page = { "(" ~ "page" ~ string ~ ")" }
+tags = { "(" ~ "tags" ~ string ~ ")" }
+page_ref = { "[[" ~ page_name ~ "]]" }
+self_ref = { "self" }
+block_content = { "(" ~ "full-text-search" ~ string ~ ")" }
+sample = { "(" ~ "sample" ~ integer ~ ")" }
+
+task_marker = { "now" | "later" | "todo" | "doing" | "done" | "cancelled" | "waiting" }
+priority_level = { "a" | "b" | "c" }
+
+// T5: Journal Aggregation Predicates
+scheduled_pred = { "(" ~ "scheduled" ~ (time_helper | date_keyword) ~ ")" }
+deadline_pred = { "(" ~ "deadline" ~ (time_helper | date_keyword) ~ ")" }
+overdue_pred = { "(" ~ "overdue" ~ ")" }
+in_progress_pred = { "(" ~ "in-progress" ~ ")" }
+date_keyword = { "today" | "tomorrow" | "yesterday" }
+
+value = { string | integer | date | time_helper | boolean }
+string = { "\"" ~ quoted_string ~ "\"" }
+quoted_string = { (!"\"" ~ ANY)* }
+integer = { ASCII_DIGIT+ }
+date = { integer ~ "-" ~ integer ~ "-" ~ integer }
+time_helper = { "-"? ~ integer ~ ("d" | "w" | "m" | "y" | "h" | "n") }
+boolean = { "true" | "false" }
+page_name = { (!"]]" ~ ANY)+ }
