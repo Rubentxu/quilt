@@ -10,7 +10,7 @@ import { SidebarComponent } from '../pom/sidebar.component';
 
 test.describe('Mobile Sidebar', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/');
+    await page.goto('http://localhost:5173/');
   });
 
   test('mobile sidebar opens when menu button is clicked', async ({ page }) => {
@@ -80,18 +80,18 @@ test.describe('Active Route Highlighting', () => {
 
   for (const route of routes) {
     test(`active route "${route.testId}" is highlighted on ${route.path}`, async ({ page }) => {
-      await page.goto(`http://localhost:1420${route.path}`);
+      await page.goto(`http://localhost:5173${route.path}`);
       await expect(page.locator(`[data-testid="${route.testId}"]`)).toHaveClass(/active/);
     });
   }
 
   test('journal is active on root path', async ({ page }) => {
-    await page.goto('http://localhost:1420/');
+    await page.goto('http://localhost:5173/');
     await expect(page.locator('[data-testid="nav-journal"]')).toHaveClass(/active/);
   });
 
   test('other routes are not active when on journal', async ({ page }) => {
-    await page.goto('http://localhost:1420/journal');
+    await page.goto('http://localhost:5173/journal');
 
     const sidebar = new SidebarComponent(page);
     await sidebar.expectActiveItem('nav-journal');
@@ -109,13 +109,13 @@ test.describe('Deep Linking', () => {
 
   for (const route of routes) {
     test(`direct navigation to ${route.path} works`, async ({ page }) => {
-      await page.goto(`http://localhost:1420${route.path}`);
+      await page.goto(`http://localhost:5173${route.path}`);
       await expect(page.locator(`h2:has-text("${route.heading}")`)).toBeVisible({ timeout: 10000 });
     });
   }
 
   test('journal with date parameter works', async ({ page }) => {
-    await page.goto('http://localhost:1420/journal/2024-01-15');
+    await page.goto('http://localhost:5173/journal/2024-01-15');
     // Should load journal view without error
     await expect(page.locator('.journal-date, h2:has-text("Journal")')).toBeVisible({ timeout: 10000 });
   });
@@ -123,7 +123,7 @@ test.describe('Deep Linking', () => {
 
 test.describe('Browser Back/Forward Navigation', () => {
   test('back button returns to previous route', async ({ page }) => {
-    await page.goto('http://localhost:1420/');
+    await page.goto('http://localhost:5173/');
     await expect(page.locator('[data-testid="nav-journal"]')).toHaveClass(/active/);
 
     // Navigate to Pages
@@ -139,7 +139,7 @@ test.describe('Browser Back/Forward Navigation', () => {
   });
 
   test('forward button advances to next route', async ({ page }) => {
-    await page.goto('http://localhost:1420/');
+    await page.goto('http://localhost:5173/');
 
     // Navigate to Pages
     await page.click('[data-testid="nav-pages"]');
@@ -155,7 +155,7 @@ test.describe('Browser Back/Forward Navigation', () => {
   });
 
   test('clicking multiple nav items maintains history', async ({ page }) => {
-    await page.goto('http://localhost:1420/');
+    await page.goto('http://localhost:5173/');
 
     // Navigate through several pages
     await page.click('[data-testid="nav-pages"]');

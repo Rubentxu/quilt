@@ -13,7 +13,7 @@ export class BasePage {
    * Navigate to a path within the app
    */
   async goto(path: string) {
-    await this.page.goto(`http://localhost:1420${path}`);
+    await this.page.goto(`http://localhost:5173${path}`);
   }
 
   /**

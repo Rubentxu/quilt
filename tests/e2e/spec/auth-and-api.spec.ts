@@ -45,17 +45,12 @@ function todayLocalDate(): string {
 // ─── Test group: Home Redirect ──────────────────────────────────────────────
 
 test.describe('Home Redirect', () => {
-  test('@smoke root path redirects to today\'s journal', async ({ page }) => {
-    const expected = todayLocalDate();
-
+  test('@smoke root path redirects to graph selection', async ({ page }) => {
     await page.goto(`${FRONTEND_URL}/`);
 
-    // The redirect is client-side (HomePage → navigate), so wait for the URL
-    // to match. We use waitForURL rather than waitForTimeout.
-    await page.waitForURL(new RegExp(`/journal/${expected}`), { timeout: 15_000 });
-
-    // Double-check the final URL exactly.
-    expect(page.url()).toContain(`/journal/${expected}`);
+    // The app redirects to /select-graph when no graph is selected
+    await page.waitForURL(/\/select-graph/, { timeout: 15_000 });
+    expect(page.url()).toContain('/select-graph');
   });
 
   test('deep link to a specific journal date renders the page', async ({ page }) => {
@@ -96,12 +91,11 @@ test.describe('API Auth', () => {
   });
 
   test('auth key persists across multiple navigations', async ({ page }) => {
-    // Land on the home redirect first — this exercises the auth path
-    // implicitly via any data the page loads.
+    // Root redirects to /select-graph (no graph selected yet)
     await page.goto(`${FRONTEND_URL}/`);
-    await page.waitForURL(/\/journal\//, { timeout: 15_000 });
+    await page.waitForURL(/\/select-graph/, { timeout: 15_000 });
 
-    // Navigate to /pages
+    // Navigate directly to /pages (deep link, bypasses graph selection)
     await page.goto(`${FRONTEND_URL}/pages`);
     await expect(page.getByTestId('app-shell')).toBeVisible({ timeout: 10_000 });
 

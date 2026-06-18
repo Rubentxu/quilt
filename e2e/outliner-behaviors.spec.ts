@@ -1,5 +1,5 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 const JOURNAL_URL = 'http://localhost:8090/journal';
 const API_URL = 'http://localhost:3737/api/v1';

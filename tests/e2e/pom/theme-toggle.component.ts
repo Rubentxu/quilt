@@ -20,8 +20,8 @@ export class ThemeToggleComponent extends BasePage {
    */
   async getCurrentTheme(): Promise<'light' | 'dark'> {
     const html = this.page.locator('html');
-    const classList = await html.getAttribute('class');
-    if (classList?.includes('dark')) {
+    const dataTheme = await html.getAttribute('data-theme');
+    if (dataTheme === 'dark') {
       return 'dark';
     }
     return 'light';
@@ -38,15 +38,13 @@ export class ThemeToggleComponent extends BasePage {
    * Expect theme to be dark
    */
   async expectDarkTheme() {
-    await expect(this.page.locator('html')).toHaveClass(/dark/);
+    await expect(this.page.locator('html')).toHaveAttribute('data-theme', 'dark');
   }
 
   /**
    * Expect theme to be light
    */
   async expectLightTheme() {
-    const htmlClass = await this.page.locator('html').getAttribute('class');
-    // Light theme has no dark class
-    expect(htmlClass).not.toContain('dark');
+    await expect(this.page.locator('html')).toHaveAttribute('data-theme', 'light');
   }
 }

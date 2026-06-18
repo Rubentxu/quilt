@@ -10,7 +10,7 @@ import { ThemeToggleComponent } from '../pom/theme-toggle.component';
 
 test.describe('Theme Toggle', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/');
+    await page.goto('http://localhost:5173/');
   });
 
   test('theme toggle button is visible', async ({ page }) => {

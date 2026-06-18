@@ -53,4 +53,4 @@ quilt-*.png
 .quilt-dev/
 crates/quilt-ui/
 quilt-ui/tsconfig.tsbuildinfo
-crates/quilt-server/wasm_assets/assets/
+crates/quilt-server/wasm_assets/

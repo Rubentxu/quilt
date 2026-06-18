@@ -10,7 +10,7 @@ import { SearchPage } from '../pom/search.page';
 
 test.describe('Search Input', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/search');
+    await page.goto('http://localhost:5173/search');
   });
 
   test('search input is visible and focusable', async ({ page }) => {
@@ -35,7 +35,7 @@ test.describe('Search Input', () => {
 
 test.describe('Search Results Display', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/search');
+    await page.goto('http://localhost:5173/search');
   });
 
   test('empty state shows initial prompt', async ({ page }) => {
@@ -70,7 +70,7 @@ test.describe('Search Results Display', () => {
 
 test.describe('Keyboard Navigation in Search', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/search');
+    await page.goto('http://localhost:5173/search');
   });
 
   test('arrow down navigates to results when available', async ({ page }) => {
@@ -136,7 +136,7 @@ test.describe('Keyboard Navigation in Search', () => {
 
 test.describe('Empty Search States', () => {
   test('empty input shows enter prompt', async ({ page }) => {
-    await page.goto('http://localhost:1420/search');
+    await page.goto('http://localhost:5173/search');
 
     // Don't type anything, just press enter
     await page.locator('[data-testid="search-input"]').press('Enter');
@@ -146,7 +146,7 @@ test.describe('Empty Search States', () => {
   });
 
   test('whitespace-only search shows empty state', async ({ page }) => {
-    await page.goto('http://localhost:1420/search');
+    await page.goto('http://localhost:5173/search');
 
     const searchInput = page.locator('[data-testid="search-input"]');
     await searchInput.fill('   '); // whitespace only

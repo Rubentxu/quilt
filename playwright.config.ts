@@ -1,19 +1,19 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright E2E Test Configuration for Quilt UI
+ * Playwright E2E Test Configuration for Quilt
  *
- * This config targets the React/Vite dev server running on localhost:5173.
- * Run with: npx playwright test
+ * Targets the full stack:
+ *   - Backend API server on localhost:3737 (REST + WebSocket)
+ *   - React/Vite dev server on localhost:5173 (HMR frontend)
  *
- * NOTE: Before running tests, ensure the backend server is running:
- *   cargo run -p quilt-server
+ * Run with: just test-e2e  (or: QUILT_API_KEY=<key> npx playwright test)
  *
- * And the frontend dev server is running:
- *   cd quilt-ui && npm run dev
+ * The webServer block below starts BOTH services before running tests.
+ * Tests use http://localhost:3737 for API calls and http://localhost:5173 for UI navigation.
  */
 export default defineConfig({
-  testDir: './e2e',
+  testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -21,7 +21,7 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:5173',
+    baseURL: 'http://localhost:5173',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -45,10 +45,15 @@ export default defineConfig({
     },
   ],
 
+  // Start the full dev stack (backend + frontend) before running tests.
+  // dev-react.sh starts: backend (3737), WASM watcher, asset watcher, then Vite (5173).
+  // We wait for the frontend (5173) to be ready since that's what tests navigate to.
   webServer: {
-    command: 'cd quilt-ui && npm run dev',
+    command: './scripts/dev-react.sh',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
-    timeout: 30000,
+    timeout: 180_000, // Full dev stack takes time to compile
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
 });

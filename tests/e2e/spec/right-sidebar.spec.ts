@@ -10,7 +10,7 @@ import { RightSidebarComponent } from '../pom/right-sidebar.component';
 
 test.describe('Right Sidebar Open/Close', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/pages');
+    await page.goto('http://localhost:5173/pages');
   });
 
   test('right sidebar toggle button is visible', async ({ page }) => {
@@ -58,7 +58,7 @@ test.describe('Right Sidebar Open/Close', () => {
 
 test.describe('Right Sidebar Tab Switching', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/pages');
+    await page.goto('http://localhost:5173/pages');
     const sidebar = new RightSidebarComponent(page);
     await sidebar.open();
     await expect(page.locator('.right-sidebar')).toBeVisible();
@@ -117,7 +117,7 @@ test.describe('Right Sidebar Tab Switching', () => {
 
 test.describe('Right Sidebar Content', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:1420/pages');
+    await page.goto('http://localhost:5173/pages');
     const sidebar = new RightSidebarComponent(page);
     await sidebar.open();
     await expect(page.locator('.right-sidebar')).toBeVisible();

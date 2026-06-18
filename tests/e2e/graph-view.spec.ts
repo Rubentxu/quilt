@@ -5,7 +5,7 @@
  * Run with: npx playwright test graph-view
  *
  * Prerequisites:
- * - Dev server running on http://localhost:1420
+ * - Dev server running on http://localhost:5173
  * - Run `cd crates/quilt-ui && trunk serve --port 1420` before these tests
  */
 
